@@ -18,7 +18,7 @@ jobs:
         run: |
           cd harness/node
           npm install -g pnpm
-          pnpm install
+          pnpm install --ignore-scripts
       - name: Install Python dependencies
         run: pip install -r requirements-dev.txt
       - name: Run CI
