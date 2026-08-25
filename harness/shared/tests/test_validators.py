@@ -153,7 +153,7 @@ def mock_repo(tmp_path: Path):
     (docs / "PROJECT-CHARTER.md").write_text("# Charter v1.0\n")
 
     # GOVERNANCE_SKILL.md
-    today = dt.datetime.now(tz=dt.UTC).date().isoformat()
+    today = dt.datetime.now(tz=dt.timezone.utc).date().isoformat()  # noqa: UP017
     (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2020-01-01\nDEC-123")
 
     return tmp_path
