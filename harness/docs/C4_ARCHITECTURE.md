@@ -1,0 +1,134 @@
+# C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
+
+**System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
+**Version:** 2.1.1 (2026 Standards)  
+**Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.0
+
+---
+
+## 1. System Context Diagram (Level 1)
+
+The System Context diagram illustrates the high-level actors, the Autonomous Mango Multi-Agent Ecosystem, and external cloud infrastructure.
+
+```mermaid
+graph TD
+    User([Developer / Player]) -->|Commands, Gameplay & Prompts| Platform[Agentic SSD & Nemotron Platform]
+    
+    subgraph "External Cloud Services & PDP"
+        NIM[NVIDIA NIM Cloud API<br/>integrate.api.nvidia.com]
+        ExtPDP[External Tool Broker / PDP<br/>Policy Decision Point]
+        GitServer[Remote Git Server<br/>GitHub / GitLab]
+    end
+
+    Platform -->|HTTPS /v1/chat/completions| NIM
+    Platform -->|Action Authorization Request| ExtPDP
+    Platform -->|Verified Push / Audit| GitServer
+```
+
+---
+
+## 2. Container Diagram (Level 2)
+
+The Container diagram shows the runtime environments, repositories, tools, and execution processes.
+
+```mermaid
+graph TD
+    User([Developer / Engineer]) --> CLI[Terminal CLI / PowerShell / Bash]
+    User --> Browser[Web Browser<br/>HTML5 Canvas 2D UI]
+
+    subgraph "Repository Runtime Containers"
+        subgraph ".mango Agent Runtime"
+            MA[Mango Agent Core]
+            SubAgents[Subagents: nemotron-reasoner, planner, verifier]
+            Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart]
+            Skills[Skills: nemotron-reasoner, harness-engineering]
+            MA --> SubAgents
+            MA --> Hooks
+            MA --> Skills
+        end
+
+        subgraph "Node.js Container (harness/node)"
+            TSClient[NemotronClient<br/>TypeScript Adapter]
+            PongEngine[Pong Game Engine<br/>Physics, FSM, Renderers]
+            VitestRunner[Vitest Test Runner<br/>80 Tests / 7 Tiers]
+            PongCli[Pong CLI Runner<br/>Autoplay & Tournament]
+        end
+
+        subgraph "Python Shared Runtime (harness/shared)"
+            PyBridge[nemotron_bridge.py<br/>Python Adapter]
+            HarnessTests[test_harness.py<br/>19 Self-Tests]
+            GovGuards[pretooluse_guard.py<br/>Policy Guards]
+        end
+    end
+
+    CLI --> PongCli
+    CLI --> TSClient
+    CLI --> PyBridge
+    Browser --> PongEngine
+
+    SubAgents --> TSClient
+    SubAgents --> PyBridge
+    Hooks --> GovGuards
+
+    TSClient -->|HTTPS POST| NIM[NVIDIA Nemotron Ultra API]
+    PyBridge -->|HTTPS POST| NIM
+```
+
+---
+
+## 3. Component Diagram (Level 3)
+
+### 3.1 NVIDIA Nemotron AI Subsystem (`harness/node/src/ai/nemotron/`)
+
+```mermaid
+graph TD
+    Caller[Mango Subagent / CLI / App] --> Client[NemotronClient]
+    
+    subgraph "Nemotron Module Components"
+        Client --> Config[Config & Secret Resolver]
+        Client --> Masker[SecretMasker Utility]
+        Client --> Backoff[Exponential Backoff & Jitter Engine]
+        Client --> CB[3-State Circuit Breaker]
+        Client --> SSE[SSE Streaming Parser]
+        Client --> Telemetry[Token & Latency Accounting]
+    end
+    
+    Config -.-> EnvVar[(.env / Process Env<br/>NVIDIA_API_KEY)]
+    Client -->|Authorized HTTPS POST| Cloud[NVIDIA NIM Endpoint]
+```
+
+### 3.2 Deterministic Pong Engine Subsystem (`harness/node/src/pong/`)
+
+```mermaid
+graph TD
+    GL[Fixed-Timestep GameLoop<br/>60Hz Accumulator] --> GE[GameEngine Orchestrator]
+    Input[InputManager & KeyboardDriver] --> GE
+    AI[AIOpponent<br/>Predictive Raycaster] --> GE
+
+    subgraph "Deterministic Core"
+        GE --> Vec[Pure 2D Vector Math]
+        GE --> Phys[Continuous Collision Detection]
+        GE --> FSM[6-State Finite State Machine]
+    end
+
+    GE --> Audio[AudioManager -> WebAudioDriver / NullAudioDriver]
+    GE --> Render[RenderManager -> CanvasRenderer / TerminalRenderer / NullRenderer]
+```
+
+---
+
+## 4. Code & Governance Diagram (Level 4)
+
+### 4.1 Fail-Closed Invariants & Governance Gates
+
+```mermaid
+flowchart TD
+    Commit[Pre-PR Git Commit] --> Secrets[INV-1: Full Working Tree & History Secret Scan]
+    Secrets --> ZeroSkip[INV-2: Zero-Skip Test Verification]
+    ZeroSkip --> Remotes[INV-3: Canonical Remote URL Normalizer & Allowlist]
+    Remotes --> Hooks[INV-4: Non-Destructive Effective Git Hook Installer]
+    Hooks --> SpecTrace[Traceability: 15 Bidirectional Requirements]
+    SpecTrace --> Policy[INV-6: External Root of Trust Digest Verification]
+    Policy --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
+    Delegation --> Pass[PR Approved for Merge]
+```

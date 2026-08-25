@@ -1,0 +1,36 @@
+# Agentic SSD Gate Harness Contract — v2.0
+
+## Core rule
+
+**Gate names and security semantics are cross-stack contracts.** Stack-specific implementation is permitted only when the runtime requires it; security-critical parsing/policy logic is shared byte-for-byte.
+
+## Authority model
+
+1. **External tool broker / PDP** — authoritative for agent network, write, destructive, secret, permission and production actions. It is administered independently of the governed repository.
+2. **Native pre-push + PreToolUse guards** — execution-time fast controls. They fail closed for the dangerous command families they model, but are not claimed to be impossible to bypass.
+3. **Project CI** — authoritative evidence that the evaluated commit conforms to policy. CI is not described as preventing an earlier off-policy network transfer.
+4. **Organization required workflow/ruleset** — independently pins the expected governance bundle and protects governance paths.
+
+## Target contract
+
+`install format lint types test cov secrets specs audit remotes projections traceability governance guard-probe pre-pr clean`
+
+`pre-pr` order is exactly: `install lint types cov secrets specs audit remotes projections traceability governance`.
+
+## Invariants
+
+- **INV-1:** secret scan covers working tree and full history and fails closed when tooling/config is absent.
+- **INV-2:** skipped tests are failures unless the individual test has a live, decision-backed exemption. Node verifies Vitest JSON; JVM listener records evidence and Gradle performs the failing assertion.
+- **INV-3:** one shared remote URL normalizer/checker is used by Node, JVM, PreToolUse, pre-push and CI. Host is lowercased; path case and significant ports are preserved.
+- **INV-4:** Git hooks install into Git's effective hooks path and never overwrite an unrelated hook silently.
+- **INV-5:** CI invokes every policy-required gate by Make target; meta/self-tests detect omissions and raw reconstructions.
+- **INV-6:** the project repository is not its own root of trust. High-risk agent authority and the expected policy digest live outside it.
+- **INV-7:** agent delegation is bounded and does not transfer authority; every side effect has actor/trace/policy evidence.
+
+## Supply chain
+
+Node requires a committed frozen `pnpm-lock.yaml`. JVM enables `lockAllConfigurations()` with `LockMode.STRICT` and requires both `gradle.lockfile` and reviewed `gradle/verification-metadata.xml`. Missing security scanners or lock state is a failure, never a clean/no-op pass.
+
+## Template adoption blockers
+
+CI examples intentionally contain `PIN_FULL_COMMIT_SHA`; adopters must replace each with a reviewed full action SHA in the independently protected onboarding change. JVM wrapper, lockfile and verification metadata must also be generated and reviewed. These are explicit blockers rather than silently insecure defaults.

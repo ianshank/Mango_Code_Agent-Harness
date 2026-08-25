@@ -1,0 +1,105 @@
+{
+  "schema_version": "2.0.0",
+  "policy_id": "agentic-ssd-governance",
+  "authority_model": {
+    "execution_enforcement": "external-tool-broker-and-native-pre-push",
+    "repository_conformance": "ci-required-workflow",
+    "rule": "CI verifies repository state and evidence; it is not described as preventing a network transfer that already occurred."
+  },
+  "target_contract": [
+    "install",
+    "format",
+    "lint",
+    "types",
+    "test",
+    "cov",
+    "secrets",
+    "specs",
+    "audit",
+    "remotes",
+    "projections",
+    "traceability",
+    "governance",
+    "guard-probe",
+    "pre-pr",
+    "clean"
+  ],
+  "pre_pr_order": [
+    "install",
+    "lint",
+    "types",
+    "cov",
+    "secrets",
+    "specs",
+    "audit",
+    "remotes",
+    "projections",
+    "traceability",
+    "governance"
+  ],
+  "ci_required_targets": [
+    "cov",
+    "lint",
+    "types",
+    "secrets",
+    "specs",
+    "audit",
+    "remotes",
+    "projections",
+    "traceability",
+    "governance"
+  ],
+  "coverage": {
+    "lines": 90,
+    "statements": 90,
+    "functions": 90,
+    "branches": 80,
+    "per_file": true
+  },
+  "decision_id_pattern": "^(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\\.[0-9]+)$",
+  "agent_defaults": {
+    "max_delegation_depth": 2,
+    "max_parallel_subagents": 6,
+    "max_tool_calls_per_task": 100,
+    "deny_unclassified_side_effects": true,
+    "human_approval_required": [
+      "external_write",
+      "destructive",
+      "secret_access",
+      "permission_change",
+      "production_change"
+    ],
+    "evidence_required_for": [
+      "write",
+      "network",
+      "destructive",
+      "secret_access",
+      "permission_change"
+    ]
+  },
+  "protected_paths": [
+    ".governance/**",
+    ".github/workflows/**",
+    ".github/CODEOWNERS",
+    "Makefile",
+    "agents/**",
+    "docs/PROJECT-CHARTER.md",
+    "scripts/remotes.py",
+    "scripts/pretooluse_guard.py",
+    "scripts/pretooluse_guard.sh",
+    "scripts/pre_push_scan.sh",
+    "scripts/install_hooks.sh",
+    "scripts/verify_zero_skips.py",
+    "scripts/validate_specs.sh",
+    "scripts/validate_policy.py",
+    "scripts/validate_agent_policy.py",
+    "scripts/validate_governance_docs.py",
+    "scripts/validate_adoption.py",
+    "scripts/check_traceability.py",
+    "scripts/check_projections.py"
+  ],
+  "external_root_of_trust_required": true,
+  "charter_version": "2.0",
+  "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
+  "skill_max_age_days": 90
+}

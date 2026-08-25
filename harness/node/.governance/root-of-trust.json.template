@@ -1,0 +1,4 @@
+{
+  "external_policy_ref": "REPLACE_ORG/REPLACE_GOVERNANCE_REPO@PINNED_COMMIT",
+  "policy_sha256": "12fe788a8024dc62c51d8e6de2f44e22134389452a49f82f5ab66c041eacb7bd"
+}

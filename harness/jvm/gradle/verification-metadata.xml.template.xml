@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generate with make lockfiles, review every checksum, then commit as verification-metadata.xml. -->
+<verification-metadata xmlns="https://schema.gradle.org/dependency-verification"><configuration><verify-metadata>true</verify-metadata><verify-signatures>false</verify-signatures></configuration><components/></verification-metadata>

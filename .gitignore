@@ -1,0 +1,24 @@
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Coverage Artifacts
+dist/
+build/
+coverage/
+.governance/vitest-results.json
+.governance/coverage/
+.mango/.state/
+
+# IDE & System
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

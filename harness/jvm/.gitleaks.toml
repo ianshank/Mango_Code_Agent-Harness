@@ -1,0 +1,3 @@
+title = "Agentic SSD Gitleaks baseline"
+[allowlist]
+description = "No blanket path allowlists."

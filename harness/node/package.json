@@ -1,0 +1,27 @@
+{
+  "name": "agentic-ssd-governance-node-template",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "bash scripts/run_vitest.sh",
+    "test:coverage": "bash scripts/run_vitest.sh --coverage",
+    "prepare": "bash scripts/install_hooks.sh"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@vitest/coverage-v8": "4.1.11",
+    "eslint": "10.9.0",
+    "knip": "6.32.2",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.11"
+  },
+  "dependencies": {}
+}

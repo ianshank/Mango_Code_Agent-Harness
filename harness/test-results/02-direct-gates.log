@@ -1,0 +1,16 @@
+== node ==
+policy: passed
+agent-policy: passed
+governance-docs: passed
+specs: WARNING strict validator 'openspec' unavailable; structural tier remains mandatory
+specs: structural validation passed (1 documents)
+projections: explicitly not applicable under DEC-000
+traceability: passed (2 requirements)
+== jvm ==
+policy: passed
+agent-policy: passed
+governance-docs: passed
+specs: WARNING strict validator 'openspec' unavailable; structural tier remains mandatory
+specs: structural validation passed (1 documents)
+projections: explicitly not applicable under DEC-000
+traceability: passed (2 requirements)

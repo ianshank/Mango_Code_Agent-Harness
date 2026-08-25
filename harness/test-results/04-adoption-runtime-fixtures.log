@@ -1,0 +1,58 @@
+== raw template adoption must fail closed ==
+adoption: BLOCKED
+  - third-party action SHAs are not pinned yet
+  - allowed-remotes.txt has no approved destination
+  - root-of-trust.json missing (external policy reference/digest required)
+  - pnpm-lock.yaml missing
+node raw template blocked as expected rc=1
+adoption: BLOCKED
+  - third-party action SHAs are not pinned yet
+  - allowed-remotes.txt has no approved destination
+  - root-of-trust.json missing (external policy reference/digest required)
+  - gradlew missing
+  - gradle.lockfile missing
+  - gradle/verification-metadata.xml missing
+jvm raw template blocked as expected rc=1
+== node instantiated fixture ==
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/node'
+cd /tmp/tmp.5ZmqRgiCkE/node && python3 scripts/validate_policy.py && python3 scripts/validate_agent_policy.py && python3 scripts/validate_governance_docs.py && python3 scripts/validate_adoption.py
+policy: passed
+agent-policy: passed
+governance-docs: passed
+adoption: passed
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/node'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/node'
+python3 /tmp/tmp.5ZmqRgiCkE/node/scripts/remotes.py --check-current-remotes --repo /tmp/tmp.5ZmqRgiCkE/node --allowlist /tmp/tmp.5ZmqRgiCkE/node/.governance/allowed-remotes.txt
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/node'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/node'
+verdict: ALLOW
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/node'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/node'
+BLOCKED: explicit: destination evil.example/Org/Repo is not on the allowlist
+Remediation: use an allowlisted destination or record an independently approved policy change.
+verdict: BLOCK
+make: *** [Makefile:55: guard-probe] Error 2
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/node'
+node deny probe blocked as expected rc=2
+== jvm instantiated fixture ==
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+cd /tmp/tmp.5ZmqRgiCkE/jvm && python3 scripts/validate_policy.py && python3 scripts/validate_agent_policy.py && python3 scripts/validate_governance_docs.py && python3 scripts/validate_adoption.py
+policy: passed
+agent-policy: passed
+governance-docs: passed
+adoption: passed
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+python3 /tmp/tmp.5ZmqRgiCkE/jvm/scripts/remotes.py --check-current-remotes --repo /tmp/tmp.5ZmqRgiCkE/jvm --allowlist /tmp/tmp.5ZmqRgiCkE/jvm/.governance/allowed-remotes.txt
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+verdict: ALLOW
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+make: Entering directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+BLOCKED: explicit: destination evil.example/Org/Repo is not on the allowlist
+Remediation: use an allowlisted destination or record an independently approved policy change.
+verdict: BLOCK
+make: *** [Makefile:59: guard-probe] Error 2
+make: Leaving directory '/tmp/tmp.5ZmqRgiCkE/jvm'
+jvm deny probe blocked as expected rc=2
+ADOPTION_AND_RUNTIME_FIXTURES_OK

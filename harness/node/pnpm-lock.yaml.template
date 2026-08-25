@@ -1,0 +1,2 @@
+# Generate and review with: corepack enable && pnpm install --lockfile-only
+# Commit the resulting file as pnpm-lock.yaml before enabling CI.

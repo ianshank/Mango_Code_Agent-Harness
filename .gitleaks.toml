@@ -1,0 +1,9 @@
+title = "Agentic SSD Gitleaks Root Policy"
+
+[allowlist]
+description = "Strict allowlist: only explicitly reviewed non-secret fixture identifiers are permitted."
+paths = [
+  '''.*\.example.*''',
+  '''tests/ai/unit/nemotron-client\.test\.ts''',
+  '''tests/ai/security/secret-safety\.test\.ts'''
+]

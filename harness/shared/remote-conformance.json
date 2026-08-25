@@ -1,0 +1,42 @@
+{
+  "allowlist": [
+    "github.com/ExampleOrg/*",
+    "git.example.com:2222/Team/Repo"
+  ],
+  "cases": [
+    {
+      "url": "git@github.com:ExampleOrg/Repo.git",
+      "canonical": "github.com/ExampleOrg/Repo",
+      "allowed": true
+    },
+    {
+      "url": "ssh://git@github.com:22/ExampleOrg/Repo.git",
+      "canonical": "github.com/ExampleOrg/Repo",
+      "allowed": true
+    },
+    {
+      "url": "https://github.com/ExampleOrg/Repo",
+      "canonical": "github.com/ExampleOrg/Repo",
+      "allowed": true
+    },
+    {
+      "url": "https://github.com/exampleorg/Repo",
+      "canonical": "github.com/exampleorg/Repo",
+      "allowed": false
+    },
+    {
+      "url": "ssh://git@git.example.com:2222/Team/Repo.git",
+      "canonical": "git.example.com:2222/Team/Repo",
+      "allowed": true
+    },
+    {
+      "url": "ssh://git@git.example.com:2200/Team/Repo.git",
+      "canonical": "git.example.com:2200/Team/Repo",
+      "allowed": false
+    },
+    {
+      "url": "https://user:token@github.com/ExampleOrg/Repo",
+      "error": "embedded password/token"
+    }
+  ]
+}

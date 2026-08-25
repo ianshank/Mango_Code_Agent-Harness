@@ -1,0 +1,14 @@
+# Docker Ignore Policy
+.git/
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+node_modules/
+dist/
+coverage/
+.governance/vitest-results.json
+.governance/coverage/
+__pycache__/
+*.pyc

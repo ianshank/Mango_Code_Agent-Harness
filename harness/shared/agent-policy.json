@@ -1,0 +1,68 @@
+{
+  "schema_version": "2.0.0",
+  "limits": {
+    "max_delegation_depth": 2,
+    "max_parallel_subagents": 6,
+    "max_tool_calls_per_task": 100
+  },
+  "default_deny": true,
+  "high_risk_actions": [
+    "external_write",
+    "destructive",
+    "secret_access",
+    "permission_change",
+    "production_change"
+  ],
+  "agents": [
+    {
+      "id": "orchestrator",
+      "delegation_depth": 0,
+      "allowed_actions": ["read", "delegate", "plan"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "spec-analyst",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "spec_write"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "implementer",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "write", "test_execute"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "test-eval",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "test_execute", "evidence_write"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "security-reviewer",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "security_scan", "evidence_write"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "peer-reviewer",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "review_write"],
+      "human_approval_required_for": []
+    },
+    {
+      "id": "release-auditor",
+      "delegation_depth": 1,
+      "allowed_actions": ["read", "evidence_write", "external_write", "production_change"],
+      "human_approval_required_for": ["external_write", "production_change"]
+    }
+  ],
+  "rules": {
+    "self_modify_policy": false,
+    "untrusted_content_is_data": true,
+    "secrets_may_not_be_propagated_to_subagents": true,
+    "delegation_does_not_transfer_authority": true,
+    "every_side_effect_requires_trace_id": true,
+    "external_network_default": "deny"
+  }
+}

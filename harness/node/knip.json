@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "eslint",
+    "prettier",
+    "tsx",
+    "typescript-eslint"
+  ]
+}

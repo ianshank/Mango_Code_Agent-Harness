@@ -1,0 +1,46 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+        with: { distribution: temurin, java-version: '21' }
+      - run: make remotes
+      - run: make projections
+      - run: make traceability
+      - run: make governance
+      # Authoritative repository-conformance evidence only; execution authority is external.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+        with: { distribution: temurin, java-version: '21' }
+      - run: bash scripts/install_hooks.sh
+      - run: make cov
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+        with: { distribution: temurin, java-version: '21' }
+      - run: make lint
+      - run: make types
+      - run: REQUIRE_STRICT_SPEC_VALIDATOR=1 make specs
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - name: Install pinned scanners
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.28.0
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.2.3
+      - run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
+      - run: PATH="$(go env GOPATH)/bin:$PATH" make audit

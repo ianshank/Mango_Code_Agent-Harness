@@ -1,0 +1,10 @@
+== node strict validator absent must fail ==
+specs: strict validator 'definitely-not-installed' is required in this environment; failing closed
+expected failure rc=1
+== jvm strict validator absent must fail ==
+specs: strict validator 'definitely-not-installed' is required in this environment; failing closed
+expected failure rc=1
+== node strict validator present must pass ==
+specs: structural validation passed (1 documents)
+== jvm strict validator present must pass ==
+specs: structural validation passed (1 documents)

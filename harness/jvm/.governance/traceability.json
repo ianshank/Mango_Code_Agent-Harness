@@ -1,0 +1,11 @@
+{
+  "spec_globs": [
+    "docs/specs/**/*.md"
+  ],
+  "implementation_globs": [
+    "src/main/**/*.*"
+  ],
+  "test_globs": [
+    "src/test/**/*.*"
+  ]
+}

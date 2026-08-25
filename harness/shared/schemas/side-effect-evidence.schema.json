@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Side Effect Evidence",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "agent_id",
+    "action",
+    "resource",
+    "policy_id",
+    "policy_version",
+    "decision",
+    "timestamp"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "parent_trace_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "string"
+    },
+    "destination": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policy_id": {
+      "type": "string"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "allow",
+        "deny",
+        "human-approved"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

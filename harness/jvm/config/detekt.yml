@@ -1,0 +1,57 @@
+# detekt.yml — the static-analysis half of `make lint`.
+#
+# DESIGN RULES:
+# 1. Build upon the default config (set in build.gradle.kts) and OVERRIDE only
+#    what needs a reason. A wholesale copy of detekt's defaults into this file
+#    goes stale silently on every detekt upgrade.
+# 2. Every rule here is active: `ignoreFailures = false` in the build script
+#    means a finding fails the build. A "warning" nobody fails on is a comment.
+# 3. Every threshold and every exclusion carries its reasoning. An unexplained
+#    exclusion is indistinguishable from a mistake.
+
+build:
+  # No weighting games. One finding of any severity fails the gate.
+  maxIssues: 0
+
+complexity:
+  LongMethod:
+    active: true
+    threshold: 60
+    # Reason for 60 rather than detekt's default: the governance entry points
+    # are deliberately linear top-to-bottom procedures with a comment per step.
+    # Splitting them into helpers to satisfy a linter makes the control harder
+    # to audit, which is the opposite of the point.
+  TooManyFunctions:
+    active: true
+    excludes:
+      # A conformance suite is legitimately a long list of small assertions.
+      - '**/governance/GovernanceMetaTest.kt'
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+    # The guard's outermost handler catches Throwable ON PURPOSE — an
+    # unexpected crash in a gate must produce a BLOCK, never a fall-through to
+    # allow. That single site is annotated with @Suppress and a comment.
+  SwallowedException:
+    active: true
+  # An empty catch block is how a fail-closed control silently becomes
+  # fail-open. This is the most important rule in this file.
+  EmptyCatchBlock:
+    active: true
+    allowedExceptionNameRegex: '_|(ignore|expected).*'
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true
+  IgnoredReturnValue:
+    active: true
+    # A discarded verdict is a gate that ran and then did nothing with the
+    # result — the exact defect shape this whole harness exists to catch.
+
+naming:
+  FunctionNaming:
+    active: true
+    excludes:
+      # Test names read as sentences; that is a feature, not a violation.
+      - '**/src/test/**'

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agentic SSD Agent Policy",
+  "type": "object",
+  "required": ["schema_version", "limits", "default_deny", "high_risk_actions", "agents", "rules"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "default_deny": {"const": true},
+    "high_risk_actions": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+    "limits": {
+      "type": "object",
+      "required": ["max_delegation_depth", "max_parallel_subagents", "max_tool_calls_per_task"],
+      "properties": {
+        "max_delegation_depth": {"type": "integer", "minimum": 0},
+        "max_parallel_subagents": {"type": "integer", "minimum": 1},
+        "max_tool_calls_per_task": {"type": "integer", "minimum": 1}
+      }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "delegation_depth", "allowed_actions", "human_approval_required_for"],
+        "properties": {
+          "id": {"type": "string"},
+          "delegation_depth": {"type": "integer", "minimum": 0},
+          "allowed_actions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "human_approval_required_for": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    },
+    "rules": {"type": "object"}
+  }
+}
