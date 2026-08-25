@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.3 — Python AQA Framework, Code Hygiene & CI Wiring
+## v2.1.4 — Python AQA Framework, Code Hygiene & CI Wiring
 
 - **Python AQA Test Engine (`harness/shared/tests/`):**
   - Implemented full `pytest` test suite: **133 tests, 98.44% coverage** across 10 governance scripts.

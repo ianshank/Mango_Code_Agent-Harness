@@ -1,7 +1,7 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.3 (2026 Standards)  
+**Version:** 2.1.4 (2026 Standards)  
 **Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.0
 
 ---

@@ -11,7 +11,7 @@
 | Verification Target | Scope | Result | Coverage / Metric |
 | :--- | :--- | :---: | :--- |
 | **Vitest Automated Test Suite** | Full 7-tier matrix (AI + Pong) | **80 / 80 PASS** | 100% Pass Rate (30 test suites) |
-| **V8 Code Coverage** | Whole Node workspace | **PASS** | **95.9% Stmts | 85.4% Branch | 94.48% Funcs | 96.46% Lines** |
+| **V8 Code Coverage** | Whole Node workspace | **PASS** | **95.9% Stmts \| 85.4% Branch \| 94.48% Funcs \| 96.46% Lines** |
 | **Pytest Automated Test Suite** | Python Governance & Bridge Scripts | **133 / 133 PASS** | 100% Pass Rate (5 test suites) |
 | **Python Code Coverage** | `harness/shared/` | **PASS** | **98.44% Overall (504/512 statements)** |
 | **Zero-Skip Invariant (`INV-2`)** | `verify_zero_skips.py` | **PASS** | **0 skips / 0 waivers** |

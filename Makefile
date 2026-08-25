@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.3 — Root Makefile
+# Agentic SSD v2.1.4 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -40,7 +40,7 @@ validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
 	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections check_traceability; do \
 		echo "  → $$script.py"; \
-		cd harness/node && $(PYTHON) ../shared/$$script.py || exit 1; \
+		(cd harness/node && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
 	@echo "--- All governance validators passed ---"
 
