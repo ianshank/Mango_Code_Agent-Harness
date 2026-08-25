@@ -24,7 +24,7 @@ Usage:
 Options:
   --prompt <string>       Prompt to send to Nemotron Ultra
   --system <string>       System instruction prompt
-  --model <string>        Target model identifier (default: nvidia/llama-3.1-nemotron-70b-instruct)
+  --model <string>        Target model identifier (default: nvidia/llama-3.3-nemotron-super-49b-v1)
   --temperature <number>  Sampling temperature (0.0 - 2.0, default: 0.2)
   --stream                Enable streaming response output
   --json                  Output full JSON response with telemetry

@@ -17,8 +17,21 @@ coverage/
 .governance/coverage/
 .mango/.state/
 
+# Python Testing & Tooling
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+htmlcov/
+
 # IDE & System
 .DS_Store
 Thumbs.db
 __pycache__/
 *.pyc
+
+# Pong Engine Artifacts
+harness/node/src/pong/web/dist/
+*.pongrec
+

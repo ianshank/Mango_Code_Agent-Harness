@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.1.3 — Python AQA Framework, Code Hygiene & CI Wiring
+
+- **Python AQA Test Engine (`harness/shared/tests/`):**
+  - Implemented full `pytest` test suite: **133 tests, 98.44% coverage** across 10 governance scripts.
+  - Achieved in-process coverage via `runpy.run_path()` executor, eliminating subprocess coverage gaps.
+  - Added `conftest.py` with reusable fixtures (`project_root`, `api_key`, `tmp_git_repo`).
+  - Test suites: `test_validators.py`, `test_remotes.py`, `test_nemotron_bridge.py`, `test_verify_zero_skips.py`, `test_pretooluse_guard.py`.
+- **Code Hygiene Remediation:**
+  - Resolved all `ruff` lint violations in test code (unused imports, duplicate import blocks, unsorted imports).
+  - Added `[tool.ruff]` and `[tool.mypy]` configuration to `pyproject.toml`.
+  - Created `__init__.py` package markers for `harness/shared` and `tests/` — resolves mypy module resolution.
+  - Fixed non-deterministic `datetime.now()` (added UTC timezone) and implicit `Optional` type hints.
+  - Governance validator scripts excluded from ruff style enforcement via `per-file-ignores` (intentionally compact).
+- **DevOps & Infrastructure:**
+  - Created root `Makefile` with parameterized targets: `lint`, `test`, `coverage`, `validate`, `ci`, `pre-pr`, `clean`.
+  - Updated `.gitignore` and `.dockerignore` with Python artifact exclusions (`.coverage`, `.pytest_cache`, etc.).
+  - Updated `.gitleaks.toml` allowlist with Python test files containing mock API keys.
+- **Documentation:**
+  - Updated C4 Architecture (Level 2) with Python AQA Engine container and `runpy` execution strategy.
+  - Updated `TEST-REPORT.md` with Python test suite metrics.
+  - Updated `NEXT_STEPS.md` — fixed deprecated model reference, added completed milestones.
+
+---
+
+## v2.1.2 — Nemotron Live Integration Smoke Tests & Model Migration
+
+- **Model Migration:**
+  - Migrated default model from deprecated `nvidia/llama-3.1-nemotron-70b-instruct` (HTTP 404) to `nvidia/llama-3.3-nemotron-super-49b-v1`.
+  - Updated TypeScript client, Python bridge, CLI help text, `.env.example`, and specification.
+- **Live Smoke Test Tier (`tests/ai/smoke/`):**
+  - Added shared test fixtures (`_fixtures.ts`) with `.env` resolution, cost-conscious client factory, and `assertNoSecretLeakage()` post-test assertion.
+  - Added `nemotron-live.test.ts`: Live API completion, streaming SSE, error sanitization, and timeout validation.
+  - Added `cli-live.test.ts`: CLI subprocess validation (`--json`, `--stream`, `--help`).
+  - Added `mango-agent-live.test.ts`: .mango agent delegation tests exercising planner, nemotron-reasoner, and verifier system prompts against the live API.
+  - Added `test_nemotron_bridge_live.py`: Python bridge live validation with wire parity contract test.
+  - All live tests gated behind `NVIDIA_API_KEY` — auto-skipped in CI.
+- **ESLint TypeScript Parser:**
+  - Configured `typescript-eslint` parser in `eslint.config.js` to fix `interface` reserved keyword errors.
+  - Updated `knip.json` schema to v6 and removed stale `ignoreDependencies`.
+- **Specification Update:**
+  - Updated nemotron spec to v1.1.0 with smoke test tier in acceptance criteria matrix.
+
+---
+
 ## v2.1.1 — Mango Multi-Agent Platform Migration
 
 - **Mango Multi-Agent Migration (`.mango/`):**

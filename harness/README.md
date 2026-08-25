@@ -5,10 +5,12 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 ## Package layout
 
 - `shared/` — byte-identical policy kernel, canonical agent policy, schemas and adversarial self-tests.
-- `node/` — Node/TypeScript adapter.
+  - `shared/tests/` — **Python AQA Engine** (133 Tests / 98.44% Coverage) executing governance rules in-process.
+- `node/` — Node/TypeScript adapter and full 7-tier test matrix.
 - `jvm/` — JVM/Gradle/Kotlin adapter.
 - `control-plane/` — verifier, policy bundle, required-workflow example and reference PDP intended for an independently protected governance repository/service.
 - `diagrams/` — C4 Mermaid, Lucid-importable draw.io, SVG and PNG renders.
+- `docs/` — **`BENCHMARK_REPORT.md`** and other architectural documentation.
 
 ## Trust boundary
 

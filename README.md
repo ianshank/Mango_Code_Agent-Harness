@@ -1,9 +1,9 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.1 (2026 Standards)  
+**Version:** 2.1.4 (2026 Standards)  
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.0 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (80 tests passing, 0 skips, >95% coverage) and fail-closed governance invariants.
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (213 tests passing, 0 skips, >95% coverage) and fail-closed governance invariants.
 
 ---
 
@@ -51,7 +51,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
 │   │   ├── pretooluse_guard.py          # Native command-level PreToolUse guard
-│   │   └── tests/test_harness.py        # 19 Adversarial governance self-tests
+│   │   └── tests/                       # Python AQA Engine (133 Tests / 98.44% Coverage)
+│   │       ├── conftest.py              # Reusable Pytest fixtures
+│   │       └── test_harness.py          # 19 Adversarial governance self-tests
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │
@@ -59,7 +61,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ├── .gitignore                           # Git ignore rules protecting local secrets
 ├── .gitleaks.toml                       # Gitleaks security scan configuration
 ├── .dockerignore                        # Docker build context policy (includes .mango)
-└── Dockerfile                           # Multi-stage production container image
+├── Dockerfile                           # Multi-stage production container image
+├── Makefile                             # Unified root Makefile for CI/CD targets
+├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest)
+└── requirements-dev.txt                 # Python development dependencies
 ```
 
 ---
@@ -67,7 +72,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ## 2. Key Subsystems
 
 ### 2.1 Mango Multi-Agent Ecosystem (`.mango/`)
-- **`nemotron-reasoner` Subagent:** Dispatches complex chain-of-thought analysis, mathematical proofs, and adversarial security audits to NVIDIA Nemotron Ultra (`nvidia/llama-3.1-nemotron-70b-instruct`).
+- **`nemotron-reasoner` Subagent:** Dispatches complex chain-of-thought analysis, mathematical proofs, and adversarial security audits to NVIDIA Nemotron Ultra (`nvidia/llama-3.3-nemotron-super-49b-v1`).
 - **`planner` Subagent:** Decomposes non-trivial tasks into sequentially verifiable steps before code changes begin.
 - **`verifier` Subagent:** Executes deterministic tests, linters, and typecheckers before marking tasks complete.
 - **Fail-Closed Hooks:** Intercepts dangerous bash commands (`rm -rf /`, raw disk writes), detects edit loops, and enforces test verification on stop.
@@ -101,8 +106,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **80 / 80 passing** (30 test suites)
-- **Code Coverage (V8):** **95.9% Statements \| 85.4% Branches \| 94.48% Functions \| 96.46% Lines**
+- **Total Automated Tests:** **213 / 213 passing** (80 Vitest + 133 Pytest tests)
+- **Node Code Coverage (V8):** **95.9% Statements \| 85.4% Branches \| 94.48% Functions \| 96.46% Lines**
+- **Python AQA Coverage:** **98.44% Statements** (504/512 covered)
 - **Requirements Traceability:** **15 / 15 specifications** traced bidirectionally (`check_traceability.py`)
 
 ---
@@ -139,25 +145,25 @@ python harness/shared/nemotron_bridge.py --prompt "Audit INV-1 secret scan rules
 
 ### 4.4 Running Automated Verification
 ```bash
+# 1. Install dependencies
 cd harness/node
-
-# Run full Vitest test matrix (80 tests)
-pnpm vitest run
-
-# Run whole-project static typecheck
-pnpm exec tsc --noEmit
-
-# Run dead code / dependency analysis
-pnpm exec knip
-
-# Run governance validation gates
-python scripts/check_traceability.py
-python scripts/validate_policy.py
-python scripts/validate_agent_policy.py
-python scripts/validate_governance_docs.py
-python scripts/verify_zero_skips.py --vitest-json .governance/vitest-results.json
-
-# Run root adversarial harness self-tests
+pnpm install
 cd ../..
+pip install -r requirements-dev.txt
+
+# 2. Run Node/Vitest test matrix (80 tests)
+cd harness/node
+pnpm vitest run
+pnpm exec tsc --noEmit
+pnpm exec knip
+cd ../..
+
+# 3. Run Python AQA Engine & Governance Validators
+make ci         # Runs lint -> coverage -> validate sequentially
+make lint       # Runs ruff and mypy on all Python sources
+make test       # Runs the 133-test Pytest suite
+make validate   # Runs all 6 governance execution invariants
+
+# 4. Run root adversarial harness self-tests
 python harness/shared/tests/test_harness.py
 ```

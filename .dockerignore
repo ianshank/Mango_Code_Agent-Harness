@@ -12,3 +12,15 @@ coverage/
 .governance/coverage/
 __pycache__/
 *.pyc
+
+# Python Tooling (not needed in container)
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+htmlcov/
+
+# IDE & System
+.DS_Store
+Thumbs.db

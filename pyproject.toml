@@ -1,0 +1,44 @@
+[tool.pytest.ini_options]
+testpaths = ["harness/shared/tests"]
+markers = [
+    "live: requires live NVIDIA_API_KEY credentials (deselect with -m 'not live')",
+    "slow: tests that take > 5s",
+    "security: security and secret sanitization tests",
+    "governance: governance invariant validation",
+]
+addopts = "--strict-markers -v --tb=short"
+
+[tool.coverage.run]
+source = ["harness/shared"]
+omit = [
+    "harness/shared/tests/*",
+    "harness/shared/__pycache__/*",
+    "harness/shared/install_hooks.sh",
+    "harness/shared/pre_push_scan.sh",
+    "harness/shared/pretooluse_guard.sh",
+    "harness/shared/run_vitest.sh",
+    "harness/shared/validate_specs.sh"
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+# Governance validator scripts are intentionally compact CLI scripts.
+# Exclude them from ruff enforcement to preserve their character.
+per-file-ignores = { "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401"], "harness/shared/tests/*.py" = ["E501"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["harness"]
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true

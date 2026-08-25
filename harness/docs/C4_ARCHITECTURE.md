@@ -1,7 +1,7 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.1 (2026 Standards)  
+**Version:** 2.1.3 (2026 Standards)  
 **Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.0
 
 ---
@@ -47,17 +47,26 @@ graph TD
             MA --> Skills
         end
 
-        subgraph "Node.js Container (harness/node)"
+        subgraph "Node.js Container - harness/node"
             TSClient[NemotronClient<br/>TypeScript Adapter]
             PongEngine[Pong Game Engine<br/>Physics, FSM, Renderers]
-            VitestRunner[Vitest Test Runner<br/>80 Tests / 7 Tiers]
+            VitestRunner[Vitest Test Runner<br/>83 Tests / 7 Tiers]
             PongCli[Pong CLI Runner<br/>Autoplay & Tournament]
         end
 
-        subgraph "Python Shared Runtime (harness/shared)"
+        subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter]
-            HarnessTests[test_harness.py<br/>19 Self-Tests]
             GovGuards[pretooluse_guard.py<br/>Policy Guards]
+            Validators["Governance Validators<br/>7 Scripts: policy, adoption,<br/>agent-policy, docs, projections,<br/>traceability, zero-skips"]
+        end
+
+        subgraph "Python AQA Engine - harness/shared/tests"
+            AQA["Pytest AQA Suite<br/>133 Tests / 98.44% Coverage"]
+            RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
+            AQA --> RunpyExec
+            RunpyExec -->|executes in-process| Validators
+            RunpyExec -->|executes in-process| PyBridge
+            RunpyExec -->|executes in-process| GovGuards
         end
     end
 

@@ -1,6 +1,6 @@
 # NVIDIA Nemotron Ultra AI Client Specification
 
-**Specification Version:** 1.0.0  
+**Specification Version:** 1.1.0  
 **Target Module:** `harness/node/src/ai/nemotron`  
 **Governance Conformance:** Agentic SSD Governance Harness v2.0
 
@@ -13,7 +13,7 @@ This specification defines the functional, architectural, resilience, and securi
 ### Requirements & Constraints
 
 - **R-AI-NEMO-1 — OpenAI-Compatible Wire Protocol & Provider Abstraction:**  
-  The AI client MUST conform to the standard OpenAI `/chat/completions` REST wire protocol. The client MUST support target models (e.g. `nvidia/llama-3.1-nemotron-70b-instruct`), custom base URLs (`https://integrate.api.nvidia.com/v1`), configurable timeouts, and dynamic endpoint injection.
+  The AI client MUST conform to the standard OpenAI `/chat/completions` REST wire protocol. The client MUST support target models (e.g. `nvidia/llama-3.3-nemotron-super-49b-v1`), custom base URLs (`https://integrate.api.nvidia.com/v1`), configurable timeouts, and dynamic endpoint injection.
 
 - **R-AI-NEMO-2 — Strict Streaming, Typing & Token Telemetry:**  
   The module MUST expose typed interfaces for chat messages, non-streaming completions, and Server-Sent Events (SSE) streaming yielding async iterable chunks. The response MUST capture execution latency and token usage metrics (`prompt_tokens`, `completion_tokens`, `total_tokens`).
@@ -30,7 +30,8 @@ This specification defines the functional, architectural, resilience, and securi
 
 | Requirement ID | Implementation Citation | Verification Suite |
 | :--- | :--- | :--- |
-| `R-AI-NEMO-1` | `src/ai/nemotron/nemotron-client.ts` | `tests/ai/unit/nemotron-client.test.ts`, `tests/ai/e2e/nemotron-e2e.test.ts` |
-| `R-AI-NEMO-2` | `src/ai/nemotron/types.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/integration/nemotron-streaming.test.ts`, `tests/ai/functional/prompt-completion.test.ts` |
-| `R-AI-RES-3` | `src/ai/nemotron/circuit-breaker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/sanity/resilience-stress.test.ts` |
-| `C-AI-SEC-1` | `src/ai/nemotron/secret-masker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/security/secret-safety.test.ts` |
+| `R-AI-NEMO-1` | `src/ai/nemotron/nemotron-client.ts` | `tests/ai/unit/nemotron-client.test.ts`, `tests/ai/e2e/nemotron-e2e.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts` |
+| `R-AI-NEMO-2` | `src/ai/nemotron/types.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/integration/nemotron-streaming.test.ts`, `tests/ai/functional/prompt-completion.test.ts`, `tests/ai/smoke/nemotron-live.test.ts` |
+| `R-AI-RES-3` | `src/ai/nemotron/circuit-breaker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/sanity/resilience-stress.test.ts`, `tests/ai/smoke/nemotron-live.test.ts` |
+| `C-AI-SEC-1` | `src/ai/nemotron/secret-masker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/security/secret-safety.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts` |
+| `.mango` Agent Delegation | `.mango/agents/*.md`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/smoke/mango-agent-live.test.ts` |

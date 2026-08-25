@@ -21,7 +21,7 @@ import * as path from 'node:path';
 
 export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
-  defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+  defaultModel: 'nvidia/llama-3.3-nemotron-super-49b-v1',
   timeoutMs: 30000,
   maxRetries: 3,
   baseBackoffMs: 500,
