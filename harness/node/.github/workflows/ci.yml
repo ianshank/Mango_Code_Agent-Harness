@@ -1,0 +1,50 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@PIN_FULL_COMMIT_SHA
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: make remotes
+      - run: make projections
+      - run: make traceability
+      - run: make governance
+      # This job is authoritative evidence of repository conformance.
+      # Network/write authority belongs to the external tool broker/PDP.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@PIN_FULL_COMMIT_SHA
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: bash scripts/install_hooks.sh
+      - run: make cov
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+      - uses: actions/setup-node@PIN_FULL_COMMIT_SHA
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: make lint
+      - run: make types
+      - run: REQUIRE_STRICT_SPEC_VALIDATOR=1 make specs
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+        with: { fetch-depth: 0 }
+      - name: Install pinned scanners
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.28.0
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.2.3
+      - run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
+      - run: PATH="$(go env GOPATH)/bin:$PATH" make audit
