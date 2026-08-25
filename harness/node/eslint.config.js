@@ -1,12 +1,28 @@
-export default [
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
   {
-    files: ['**/*.ts', '**/*.js'],
+    ignores: ['coverage/**', 'node_modules/**', '.governance/**', 'dist/**'],
+  },
+  {
+    files: ['**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
       'no-unused-vars': 'off',
       'no-undef': 'off',
     },
   },
   {
-    ignores: ['coverage/**', 'node_modules/**', '.governance/**', 'dist/**'],
+    files: ['**/*.js'],
+    rules: {
+      'no-unused-vars': 'off',
+      'no-undef': 'off',
+    },
   },
-];
+);

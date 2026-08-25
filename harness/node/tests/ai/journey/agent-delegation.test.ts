@@ -9,28 +9,28 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NemotronClient } from '../../../src/ai/nemotron/nemotron-client.js';
 
-export interface SubagentFinding {
+interface SubagentFinding {
   readonly id: string;
   readonly severity: string;
   readonly description: string;
 }
 
-export interface SubagentReviewOutput {
+interface SubagentReviewOutput {
   readonly status: string;
   readonly findings: readonly SubagentFinding[];
   readonly formalProof: string;
 }
 
-export interface PlannerOutput {
+interface PlannerOutput {
   readonly steps: readonly string[];
 }
 
-export interface VerifierOutput {
+interface VerifierOutput {
   readonly verified: boolean;
   readonly invariantEvidence: string;
 }
 
-export interface RetryOutput {
+interface RetryOutput {
   readonly status: string;
   readonly retrySuccessful: boolean;
 }
