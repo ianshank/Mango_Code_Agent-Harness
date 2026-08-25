@@ -9,28 +9,30 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NemotronClient } from '../../../src/ai/nemotron/nemotron-client.js';
 
-interface SubagentReviewOutput {
-  status: string;
-  findings: Array<{
-    id: string;
-    severity: string;
-    description: string;
-  }>;
-  formalProof: string;
+export interface SubagentFinding {
+  readonly id: string;
+  readonly severity: string;
+  readonly description: string;
 }
 
-interface PlannerOutput {
-  steps: string[];
+export interface SubagentReviewOutput {
+  readonly status: string;
+  readonly findings: readonly SubagentFinding[];
+  readonly formalProof: string;
 }
 
-interface VerifierOutput {
-  verified: boolean;
-  invariantEvidence: string;
+export interface PlannerOutput {
+  readonly steps: readonly string[];
 }
 
-interface RetryOutput {
-  status: string;
-  retrySuccessful: boolean;
+export interface VerifierOutput {
+  readonly verified: boolean;
+  readonly invariantEvidence: string;
+}
+
+export interface RetryOutput {
+  readonly status: string;
+  readonly retrySuccessful: boolean;
 }
 
 describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)', () => {
