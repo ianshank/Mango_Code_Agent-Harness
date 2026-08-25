@@ -6,9 +6,9 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0 }
-      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+      - uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with: { distribution: temurin, java-version: '21' }
       - run: make remotes
       - run: make projections
@@ -18,17 +18,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0 }
-      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+      - uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with: { distribution: temurin, java-version: '21' }
       - run: bash scripts/install_hooks.sh
       - run: make cov
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
-      - uses: actions/setup-java@PIN_FULL_COMMIT_SHA
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with: { distribution: temurin, java-version: '21' }
       - run: make lint
       - run: make types
@@ -36,7 +36,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@PIN_FULL_COMMIT_SHA
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0 }
       - name: Install pinned scanners
         run: |

@@ -1,6 +1,7 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
 **Version:** 2.1.4 (2026 Standards)  
+**Author:** Ian Cruickshank  
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.0 (`harness/CONTRACT.md`)
 
 A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (213 tests passing, 0 skips, >95% coverage) and fail-closed governance invariants.
@@ -159,11 +160,44 @@ pnpm exec knip
 cd ../..
 
 # 3. Run Python AQA Engine & Governance Validators
-make ci         # Runs lint -> coverage -> validate sequentially
+make ci         # Runs lint -> coverage -> test-node -> zero-skips -> validate
 make lint       # Runs ruff and mypy on all Python sources
-make test       # Runs the 133-test Pytest suite
+make test       # Runs full test suite (Pytest + Vitest + Zero-Skips)
 make validate   # Runs all 6 governance execution invariants
 
 # 4. Run root adversarial harness self-tests
 python harness/shared/tests/test_harness.py
 ```
+
+---
+
+## 5. Utilizing This Platform for Code Development
+
+This platform is engineered as an **Agentic Software Security & Development (SSD) Harness**. It provides a hardened foundation for building deterministic, AI-orchestrated, and highly compliant software systems.
+
+### 5.1 Multi-Agent Autonomous Development Workflow
+The `.mango/` ecosystem enables specialized subagent collaboration during development:
+1. **Planning (`planner.md`):** Before executing large features or refactors, invoke the Planner subagent to generate sequentially ordered implementation plans with explicit verification criteria.
+2. **Deep Reasoning & Auditing (`nemotron-reasoner.md`):** Delegate architectural analysis, mathematical invariant verification, and adversarial threat modeling to NVIDIA Nemotron Ultra (`nvidia/llama-3.3-nemotron-super-49b-v1`).
+3. **Automated Verification (`verifier.md`):** Ensure every code change is validated through deterministic test runners (`pytest`, `vitest`), typecheckers (`mypy`, `tsc`), and linters (`ruff`, `eslint`) before marking work complete.
+
+### 5.2 Test-Driven Development (TDD) via the 7-Tier Pyramid
+When introducing new features or modules:
+- **Write Tests Across All 7 Tiers:** Ensure coverage spans Unit, Integration, Functional, E2E, User Journey, Security, and Stress/Sanity tiers.
+- **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. Any temporary waiver must be formally declared in `.governance/skip-waivers.json` citing an approved decision from `decision-log.md`.
+- **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code and test docstrings, ensuring `python harness/shared/check_traceability.py` validates 100% requirement coverage.
+
+### 5.3 Local Development & Gate Validation
+Use the unified root `Makefile` to enforce enterprise quality gates locally prior to committing:
+```bash
+make lint       # Static analysis, formatting checks, and strict typing
+make coverage   # Enforce >=80% code coverage threshold
+make test-node  # Execute TypeScript/Node engine tests
+make validate   # Execute all 6 governance invariants (adoption, policy, remotes, traceability)
+make pre-pr     # Full pre-submission validation pipeline
+```
+
+### 5.4 Secret Sanitization & Security Scanning
+- **Invariant `INV-1` Enforcement:** Never output raw API tokens or credentials in logs or test assertions. Use `SecretMasker` and the native Python regex masks.
+- **Pre-Push Allowlist (`remotes.py`):** Push targets are strictly validated against `.governance/allowed-remotes.txt` to prevent code leakage to unauthorized repositories.
+- **Automated Gitleaks & OSV Scanners:** Run `gitleaks` and `osv-scanner` locally and in CI to catch hardcoded secrets or compromised third-party dependencies before code review.
