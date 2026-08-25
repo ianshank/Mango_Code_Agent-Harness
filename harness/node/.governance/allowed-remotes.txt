@@ -1,3 +1,2 @@
-# Configure canonical destinations. Host is case-insensitive; path is case-preserved.
-github.com/ianshank/*
+# Approved remote destinations for external operations
 github.com/ianshank/Mango_Code_Agent-Harness

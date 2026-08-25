@@ -5,5 +5,7 @@ description = "Strict allowlist: only explicitly reviewed non-secret fixture ide
 paths = [
   '''.*\.example.*''',
   '''tests/ai/unit/nemotron-client\.test\.ts''',
-  '''tests/ai/security/secret-safety\.test\.ts'''
+  '''tests/ai/security/secret-safety\.test\.ts''',
+  '''harness/shared/tests/test_nemotron_bridge\.py''',
+  '''harness/shared/tests/test_nemotron_bridge_live\.py'''
 ]

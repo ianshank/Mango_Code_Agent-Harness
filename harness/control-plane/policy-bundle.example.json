@@ -16,7 +16,7 @@
       "marker": "package.json",
       "protected_files": {
         "Makefile": "fe100f73e697df38b3fbef705025c78affea6e38007537d3b27652e014e614f4",
-        ".github/workflows/ci.yml": "283ff46885572b4600bc12c19bb3950e9a4fa4390697082d6224b7cf27f16d3b",
+        ".github/workflows/ci.yml": "51c053f51e33a915a51a5c4c21bdc18f2db18e8c0ed6051110371b14699c89ae",
         "scripts/remotes.py": "8be5795a3ac0de5e3f023dd90b426bf24971252def0b5a693d13c931a844637f",
         "scripts/pretooluse_guard.py": "bc0d02b4c0e127c5aa194245128d81277a3c3fa0ac932d4ac297c119df9b9828",
         "scripts/pretooluse_guard.sh": "ef86fb2474ecc66b254e0a5b8d9f32557dd1a11eed914967640ab6f43f17160e",
@@ -40,7 +40,7 @@
       "marker": "build.gradle.kts",
       "protected_files": {
         "Makefile": "822c54d458ae9f4a6aa0c7b9197a79ec090d5dc47535d53af9ffbbc603593f40",
-        ".github/workflows/ci.yml": "067a8562e4a27e69499081db672537d6743c21312a6325086e22ef875b88b544",
+        ".github/workflows/ci.yml": "6011c8b5e9ed8d92023ebe53e82aeb8bb8f904ef91cdcb8f33cc4a020fec5db3",
         "scripts/remotes.py": "8be5795a3ac0de5e3f023dd90b426bf24971252def0b5a693d13c931a844637f",
         "scripts/pretooluse_guard.py": "bc0d02b4c0e127c5aa194245128d81277a3c3fa0ac932d4ac297c119df9b9828",
         "scripts/pretooluse_guard.sh": "ef86fb2474ecc66b254e0a5b8d9f32557dd1a11eed914967640ab6f43f17160e",

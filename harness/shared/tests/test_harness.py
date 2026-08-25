@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, unittest
+
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
 from pathlib import Path
+
 HARNESS=Path(__file__).resolve().parents[2]
 SHARED=HARNESS/'shared'
 def load(path,name):
