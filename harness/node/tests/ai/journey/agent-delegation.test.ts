@@ -9,8 +9,45 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NemotronClient } from '../../../src/ai/nemotron/nemotron-client.js';
 
+interface SubagentReviewOutput {
+  status: string;
+  findings: Array<{
+    id: string;
+    severity: string;
+    description: string;
+  }>;
+  formalProof: string;
+}
+
+interface PlannerOutput {
+  steps: string[];
+}
+
+interface VerifierOutput {
+  verified: boolean;
+  invariantEvidence: string;
+}
+
+interface RetryOutput {
+  status: string;
+  retrySuccessful: boolean;
+}
+
 describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)', () => {
   it('simulates Mango Agent delegating an architectural review task to Nemotron and receiving structured output', async () => {
+    const reviewData: SubagentReviewOutput = {
+      status: 'APPROVED',
+      findings: [
+        {
+          id: 'ARCH-01',
+          severity: 'LOW',
+          description: 'Consider adding jitter to exponential backoff delay.',
+        },
+      ],
+      formalProof:
+        'All 6 state transitions in FSM are deterministic and acyclic.',
+    };
+
     const mockReviewResponse = {
       id: 'nemo-review-999',
       model: 'nvidia/llama-3.1-nemotron-70b-instruct',
@@ -19,19 +56,7 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
           index: 0,
           message: {
             role: 'assistant',
-            content: JSON.stringify({
-              status: 'APPROVED',
-              findings: [
-                {
-                  id: 'ARCH-01',
-                  severity: 'LOW',
-                  description:
-                    'Consider adding jitter to exponential backoff delay.',
-                },
-              ],
-              formalProof:
-                'All 6 state transitions in FSM are deterministic and acyclic.',
-            }),
+            content: JSON.stringify(reviewData),
           },
           finish_reason: 'stop',
         },
@@ -43,16 +68,16 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
       },
     };
 
-    const mockFetch: typeof fetch = vi.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return new Response(JSON.stringify(mockReviewResponse), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }) as unknown as typeof fetch;
+    });
 
     const client = new NemotronClient(
       { apiKey: 'nvapi-mock-key-1234567890' },
-      mockFetch,
+      mockFetch as unknown as typeof fetch,
     );
 
     // Step 1: Mango Agent prepares subagent task payload
@@ -76,16 +101,17 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     });
 
     // Step 3: Parse and verify structured response
-    const parsed = JSON.parse(result.content);
+    const parsed = JSON.parse(result.content) as SubagentReviewOutput;
     expect(parsed.status).toBe('APPROVED');
     expect(parsed.findings.length).toBe(1);
     expect(parsed.formalProof).toContain('deterministic');
     expect(result.usage.totalTokens).toBe(215);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('simulates multi-agent reasoning chain (Planner -> Nemotron Reasoner -> Verifier)', async () => {
     let callCount = 0;
-    const mockFetch: typeof fetch = vi.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       callCount++;
       const payload =
         callCount === 1
@@ -103,7 +129,7 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
                         'Synthesize FSM invariants',
                         'Execute tests',
                       ],
-                    }),
+                    } satisfies PlannerOutput),
                   },
                   finish_reason: 'stop',
                 },
@@ -125,7 +151,7 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
                     content: JSON.stringify({
                       verified: true,
                       invariantEvidence: 'INV-1 through INV-7 satisfied.',
-                    }),
+                    } satisfies VerifierOutput),
                   },
                   finish_reason: 'stop',
                 },
@@ -141,11 +167,11 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }) as unknown as typeof fetch;
+    });
 
     const client = new NemotronClient(
       { apiKey: 'nvapi-mock-key-multiagent' },
-      mockFetch,
+      mockFetch as unknown as typeof fetch,
     );
 
     // Stage 1: Planning Phase
@@ -158,7 +184,7 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
         { role: 'user', content: 'Generate implementation roadmap for Pong.' },
       ],
     });
-    const plan = JSON.parse(planRes.content);
+    const plan = JSON.parse(planRes.content) as PlannerOutput;
     expect(plan.steps).toHaveLength(3);
 
     // Stage 2: Verification Phase
@@ -175,9 +201,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
         },
       ],
     });
-    const verification = JSON.parse(verifyRes.content);
+    const verification = JSON.parse(verifyRes.content) as VerifierOutput;
     expect(verification.verified).toBe(true);
     expect(callCount).toBe(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('simulates streaming reasoning delegation with real-time token accumulation', async () => {
@@ -188,25 +215,26 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
       'data: [DONE]\n\n',
     ];
 
+    const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
         for (const chunk of sseChunks) {
-          controller.enqueue(new TextEncoder().encode(chunk));
+          controller.enqueue(encoder.encode(chunk));
         }
         controller.close();
       },
     });
 
-    const mockFetch: typeof fetch = vi.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return new Response(stream, {
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
       });
-    }) as unknown as typeof fetch;
+    });
 
     const client = new NemotronClient(
       { apiKey: 'nvapi-mock-streaming-stream' },
-      mockFetch,
+      mockFetch as unknown as typeof fetch,
     );
 
     let accumulatedText = '';
@@ -221,16 +249,20 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     expect(accumulatedText).toBe(
       'Analyzing state transitions... Verified PASS.',
     );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('recovers gracefully when subagent outputs malformed JSON on first try and retries', async () => {
     let attempts = 0;
-    const mockFetch: typeof fetch = vi.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       attempts++;
       const content =
         attempts === 1
           ? 'Here is my review: status=APPROVED (not valid JSON)'
-          : JSON.stringify({ status: 'APPROVED', retrySuccessful: true });
+          : JSON.stringify({
+              status: 'APPROVED',
+              retrySuccessful: true,
+            } satisfies RetryOutput);
 
       return new Response(
         JSON.stringify({
@@ -251,14 +283,16 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
-    }) as unknown as typeof fetch;
+    });
 
     const client = new NemotronClient(
       { apiKey: 'nvapi-mock-retry-key' },
-      mockFetch,
+      mockFetch as unknown as typeof fetch,
     );
 
-    async function executeWithJsonRetry(maxTries = 2) {
+    async function executeWithJsonRetry(
+      maxTries = 2,
+    ): Promise<RetryOutput> {
       for (let i = 0; i < maxTries; i++) {
         const res = await client.complete({
           messages: [
@@ -269,16 +303,20 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
           ],
         });
         try {
-          return JSON.parse(res.content);
+          return JSON.parse(res.content) as RetryOutput;
         } catch {
-          if (i === maxTries - 1) throw new Error('Failed to obtain JSON');
+          if (i === maxTries - 1) {
+            throw new Error('Failed to obtain JSON');
+          }
         }
       }
+      throw new Error('Failed to obtain JSON');
     }
 
     const finalOutput = await executeWithJsonRetry(2);
     expect(finalOutput.status).toBe('APPROVED');
     expect(finalOutput.retrySuccessful).toBe(true);
     expect(attempts).toBe(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
