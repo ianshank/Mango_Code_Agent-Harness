@@ -7,7 +7,9 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    # Stacked/phase branches must also be gated, otherwise a PR targeting an
+    # integration branch merges without ever running `make ci`.
+    branches: ["main", "chore/**", "phase*/**", "feature/**"]
 
 permissions:
   contents: read
@@ -39,6 +41,17 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
 
+      # pnpm must be on PATH *before* actions/setup-node runs, because
+      # `cache: pnpm` resolves the pnpm store via the pnpm binary. Installing it
+      # afterwards fails the "Set up Node" step with "Unable to locate
+      # executable file: pnpm".
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Read the pinned version from `packageManager` in the Node package
+          # manifest (single source of truth) rather than duplicating it here.
+          package_json_file: harness/node/package.json
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -46,12 +59,16 @@ jobs:
           cache: pnpm
           cache-dependency-path: harness/node/pnpm-lock.yaml
 
-      - name: Install pnpm
-        run: npm install -g pnpm
-
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
         working-directory: harness/node
 
       - name: Run unified CI gate (make ci)
+        # The protected-path invariant fails closed on infrastructure changes
+        # (Makefile, .github/**, .mango/agents/**, governance policy). A human
+        # applying the `infra-reviewed` label IS the per-change review
+        # attestation required by harness/CONTRACT.md; without the label the
+        # gate stays fail-closed. Never set this unconditionally.
+        env:
+          ALLOW_GITHUB_CHANGES: ${{ contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci
