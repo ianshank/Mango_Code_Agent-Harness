@@ -62,8 +62,13 @@ graph TD
 
         subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter]
-            GovGuards[pretooluse_guard.py<br/>Policy Guards]
-            Validators["Governance Validators<br/>7 Scripts: policy, adoption,<br/>agent-policy, docs, projections,<br/>traceability, zero-skips"]
+            Orchestrator[mango_mas_orchestrator.py<br/>MAS Orchestrator]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools]
+            subgraph "governance/"
+                GovGuards[pretooluse_guard.py<br/>Policy Guards]
+                Validators["Governance Validators<br/>traceability, zero-skips, remotes"]
+            end
+            RootValidators["Root Validators<br/>policy, adoption, agent-policy"]
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"

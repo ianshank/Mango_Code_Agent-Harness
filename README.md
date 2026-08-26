@@ -50,11 +50,15 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── docs/specs/                  # 15 Bidirectionally-traced formal specifications
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
+│   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator
+│   │   ├── meta_tools.py                # Meta-learning and context state tools
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
-│   │   ├── pretooluse_guard.py          # Native command-level PreToolUse guard
+│   │   ├── governance/                  # Extracted fail-closed policy mechanisms
+│   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
+│   │   │   └── check_traceability.py    # Requirement specification tracing
 │   │   └── tests/                       # Python AQA Engine (133 Tests / 98.44% Coverage)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
-│   │       └── test_harness.py          # 19 Adversarial governance self-tests
+│   │       └── test_harness.py          # Adversarial governance self-tests
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │

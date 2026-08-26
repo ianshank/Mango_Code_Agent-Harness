@@ -1,13 +1,16 @@
 import fnmatch
 import json
+import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
-def main():
-    print("Running Repo Invariants Check...")
+def main() -> None:
+    logger.info("Running Repo Invariants Check...")
     failed = False
 
     workspace_dir = Path(__file__).resolve().parent.parent.parent
@@ -18,7 +21,7 @@ def main():
         policy = json.loads(gov_policy_path.read_text(encoding="utf-8"))
         protected_patterns = policy.get("protected_paths", [".github/**"])
     except Exception as e:
-        print(f"[FAIL] Could not load governance policy: {e}")
+        logger.error(f"Could not load governance policy: {e}")
         sys.exit(1)
 
     # 1. Protected Paths check
@@ -45,20 +48,27 @@ def main():
                     break
 
         if policy_modifications and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":
-            print(
-                f"[FAIL] Protected Paths: Unauthorized modifications to protected paths detected: {policy_modifications}"
+            logger.error(
+                "Protected Paths: Unauthorized modifications to protected paths "
+                f"detected: {policy_modifications}"
             )
             failed = True
         else:
-            print("[PASS] Protected Paths: No unauthorized modifications to protected systems.")
+            logger.info("Protected Paths: No unauthorized modifications to protected systems.")
     except Exception as e:
-        print(f"[FAIL] Protected Paths: Could not run git diff: {e}")
+        logger.error(f"Protected Paths: Could not run git diff: {e}")
         failed = True
 
     # 2. Hardcoded Secrets check
     # Let's search the workspace for "API_KEY = " or similar patterns (naively).
 
     # Simple naive scan
+    secret_patterns = [
+        "OPENAI_API_KEY =",
+        "ANTHROPIC_API_KEY =",
+        "NVIDIA_API_KEY =",
+        "API_SERVER_KEY =",
+    ]
     for py_file in workspace_dir.rglob("*.py"):
         if ".venv" in py_file.parts or ".mypy_cache" in py_file.parts or ".pytest_cache" in py_file.parts:
             continue
@@ -66,22 +76,18 @@ def main():
             continue
         try:
             content = py_file.read_text(encoding="utf-8")
-            if (
-                "OPENAI_API_KEY =" in content
-                or "ANTHROPIC_API_KEY =" in content
-                or "NVIDIA_API_KEY =" in content
-                or "API_SERVER_KEY =" in content
-            ):
-                print(f"[FAIL] Hardcoded secret found in {py_file}")
+            if any(secret in content for secret in secret_patterns):
+                logger.error(f"Hardcoded secret found in {py_file}")
                 failed = True
         except Exception:
             pass
 
     if not failed:
-        print("[PASS] Secrets: No hardcoded API keys detected.")
+        logger.info("Secrets: No hardcoded API keys detected.")
 
     # 3. Size budget / Coverage check
     size_budget_failed = False
+    max_size = int(os.environ.get("MAX_FILE_LINES", 500))
     for py_file in workspace_dir.rglob("*.py"):
         if ".venv" in py_file.parts or ".mypy_cache" in py_file.parts or ".pytest_cache" in py_file.parts:
             continue
@@ -89,21 +95,21 @@ def main():
             continue
         try:
             lines = py_file.read_text(encoding="utf-8").splitlines()
-            if len(lines) > 500:
-                print(f"[FAIL] Size Budget: File {py_file.name} exceeds 500 lines ({len(lines)} lines).")
+            if len(lines) > max_size:
+                logger.error(f"Size Budget: File {py_file.name} exceeds {max_size} lines ({len(lines)} lines).")
                 failed = True
                 size_budget_failed = True
         except Exception:
             pass
 
     if not size_budget_failed:
-        print("[PASS] Size Budget: All files under 500 lines.")
+        logger.info(f"Size Budget: All files under {max_size} lines.")
 
     if failed:
-        print("\nRepo Invariants Check FAILED.")
+        logger.error("Repo Invariants Check FAILED.")
         sys.exit(1)
     else:
-        print("\nRepo Invariants Check PASSED.")
+        logger.info("Repo Invariants Check PASSED.")
         sys.exit(0)
 
 

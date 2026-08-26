@@ -24,3 +24,6 @@ htmlcov/
 # IDE & System
 .DS_Store
 Thumbs.db
+
+# Mango Subsystem
+.mango/
