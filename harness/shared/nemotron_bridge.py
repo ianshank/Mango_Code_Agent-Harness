@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 from harness.shared.json_logging import setup_json_logging
 
@@ -76,14 +76,14 @@ def resolve_api_key() -> str:
 
 def complete_chat(
     messages: list[dict[str, Any]],
-    model: str | None = None,
-    api_key: str | None = None,
-    base_url: str | None = None,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
     temperature: float = 0.2,
     max_tokens: int = 4096,
     timeout_sec: int = 30,
-    tools: list[dict[str, Any]] | None = None,
-    tool_choice: Any | None = None,
+    tools: Optional[list[dict[str, Any]]] = None,
+    tool_choice: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Execute a chat completion request against NVIDIA Nemotron API."""
     env_config = resolve_environment()
