@@ -8,4 +8,4 @@ This includes Vitest setups, React/Vite frontends, and any external WebSockets/N
 ## Key Invariants
 - **Strict TypeScript**: All `.ts` and `.tsx` files must pass strict type checking.
 - **Testing**: Maintain full Vitest coverage for components.
-- **Ecosystem**: Use `npm` for dependency management. No global installs.
+- **Ecosystem**: Use `pnpm` for dependency management. No global installs.

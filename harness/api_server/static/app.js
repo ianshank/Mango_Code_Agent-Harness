@@ -22,7 +22,8 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
         const response = await fetch('/api/orchestrate', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-API-Key': 'default-dev-key'
             },
             body: JSON.stringify({ task })
         });
@@ -51,11 +52,28 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
                 timeline.appendChild(el);
             });
         } else {
-            timeline.innerHTML = `<div class="placeholder">No history returned. Final Result:<br>${data.result}</div>`;
+            const placeholder = document.createElement('div');
+            placeholder.className = 'placeholder';
+            placeholder.textContent = 'No history returned. Final Result:\n' + data.result;
+            timeline.appendChild(placeholder);
         }
         
     } catch (error) {
-        timeline.innerHTML = `<div class="timeline-item"><div class="role" style="color: #ef4444;">Error</div><div class="content">${error.message}</div></div>`;
+        const el = document.createElement('div');
+        el.className = 'timeline-item';
+        
+        const role = document.createElement('div');
+        role.className = 'role';
+        role.style.color = '#ef4444';
+        role.textContent = 'Error';
+        
+        const content = document.createElement('div');
+        content.className = 'content';
+        content.textContent = error.message;
+        
+        el.appendChild(role);
+        el.appendChild(content);
+        timeline.appendChild(el);
     } finally {
         submitBtn.disabled = false;
         btnText.classList.remove('hidden');

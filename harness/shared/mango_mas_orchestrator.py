@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -85,8 +87,9 @@ class MangoMASOrchestrator:
                     check=True,
                     timeout=self.tool_timeout
                 )
-            except Exception as e:
-                logger.error(f"Hook {hook_name} failed: {e}")
+            except Exception:
+                logger.exception(f"Hook {hook_name} failed")
+                raise
 
     def load_agent_prompt(self, agent_name: str) -> str:
         """Dynamically loads the agent instructions from the .mango directory."""
@@ -128,7 +131,7 @@ class MangoMASOrchestrator:
         Executes a single agent's reasoning loop using ReAct (Reasoning and Acting).
         Returns the final string output from the agent.
         """
-        self._run_hook(f"pre-{agent_name}-run", task=task)
+        self._run_hook("pre-nemotron-run", task=task, agent=agent_name)
         logger.info(f"Executing agent [{agent_name}] with task: {task[:100]}...")
 
         messages = [

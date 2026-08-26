@@ -14,6 +14,7 @@ COV_MIN  ?= 80
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
+API_TESTS    := harness/api_server/tests
 NODE_DIR     := harness/node
 
 # --- Help ---
@@ -24,8 +25,8 @@ help: ## Show available targets
 # --- Linting & Static Analysis ---
 .PHONY: lint-python
 lint-python: ## Run ruff check + mypy on Python sources and tests
-	$(RUFF) check $(SHARED_TESTS)/
-	$(MYPY) $(SHARED_SRC) --explicit-package-bases
+	$(RUFF) check $(SHARED_TESTS)/ $(API_TESTS)/
+	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
 
 .PHONY: lint-node
 lint-node: ## Run ESLint, Prettier, and Knip on Node stack
@@ -37,11 +38,11 @@ lint: lint-python ## Run code style & static analysis gates
 # --- Python Testing & Coverage ---
 .PHONY: test-python
 test-python: ## Run full pytest suite (excludes live tests)
-	$(PYTEST) $(SHARED_TESTS)/ -m "not live" -v
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest with coverage gate (default: 80%)
-	$(PYTEST) $(SHARED_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov-report=term-missing --cov-fail-under=$(COV_MIN)
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov-report=term-missing --cov-fail-under=$(COV_MIN)
 
 # --- Node Testing & Zero-Skip Verification ---
 .PHONY: test-node

@@ -1,4 +1,6 @@
+import contextlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -17,6 +19,29 @@ def _ensure_memory_files() -> None:
         HYPOTHESES_FILE.write_text("[]", encoding="utf-8")
 
 
+@contextlib.contextmanager
+def _file_lock(filepath: Path):
+    lockfile = filepath.with_suffix(".lock")
+    timeout = 10.0
+    start = time.time()
+    while True:
+        try:
+            fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            break
+        except (FileExistsError, OSError):
+            if time.time() - start > timeout:
+                raise TimeoutError(f"Could not acquire lock for {filepath}")
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        try:
+            lockfile.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -> str:
     """
     Record a knowledge gap: something the agent could not answer or do, and what would be needed to fill the gap.
@@ -31,9 +56,14 @@ def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -
         "proposed_approach": proposed_approach,
     }
 
-    gaps = json.loads(GAPS_FILE.read_text(encoding="utf-8"))
-    gaps.append(entry)
-    GAPS_FILE.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
+    with _file_lock(GAPS_FILE):
+        gaps = json.loads(GAPS_FILE.read_text(encoding="utf-8"))
+        gaps.append(entry)
+
+        # Write to a temp file first for atomic replacement
+        temp_file = GAPS_FILE.with_suffix(".tmp")
+        temp_file.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
+        os.replace(temp_file, GAPS_FILE)
 
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
@@ -53,9 +83,13 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
         "status": "provisional",
     }
 
-    hypotheses = json.loads(HYPOTHESES_FILE.read_text(encoding="utf-8"))
-    hypotheses.append(entry)
-    HYPOTHESES_FILE.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
+    with _file_lock(HYPOTHESES_FILE):
+        hypotheses = json.loads(HYPOTHESES_FILE.read_text(encoding="utf-8"))
+        hypotheses.append(entry)
+
+        temp_file = HYPOTHESES_FILE.with_suffix(".tmp")
+        temp_file.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
+        os.replace(temp_file, HYPOTHESES_FILE)
 
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
