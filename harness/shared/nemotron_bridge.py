@@ -98,6 +98,9 @@ def complete_chat(
         )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
+    if not (url.startswith("https://") or url.startswith("http://")):
+        raise ValueError(f"Invalid URL scheme in endpoint: {endpoint}")
+
     payload = {
         "model": target_model,
         "messages": messages,
@@ -125,7 +128,7 @@ def complete_chat(
 
     start_time = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # nosec B310
             body = resp.read().decode("utf-8")
             data = cast(dict[str, Any], json.loads(body))
             latency_ms = int((time.time() - start_time) * 1000)

@@ -226,7 +226,7 @@ class HarnessTests(unittest.TestCase):
             vitest = {
                 "testResults": [
                     {
-                        "name": "/tmp/project/" + vfile,
+                        "name": str(r / vfile),
                         "assertionResults": [
                             {"status": "pending", "ancestorTitles": ["suite"], "title": "individual skip"}
                         ],
