@@ -19,6 +19,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, cast
 
+from harness.shared.logging import setup_json_logging
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -157,10 +159,7 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    setup_json_logging(level=logging.DEBUG if args.debug else logging.INFO)
 
     messages = [
         {"role": "system", "content": args.system},

@@ -49,7 +49,7 @@ graph TD
             Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
-            MetaTools[Continuous Learning: knowledge_gap_log, hypothesis_register]
+            MetaTools[Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7)]
             Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
             MA --> SubAgents
             SubAgents --> Personas

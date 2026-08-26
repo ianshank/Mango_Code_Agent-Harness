@@ -126,9 +126,10 @@ def test_main_text_output(mock_stdout, mock_complete):
 
 @patch("sys.argv", ["nemotron_bridge.py", "--prompt", "Hello"])
 @patch("harness.shared.nemotron_bridge.complete_chat")
-def test_main_error_exit(mock_complete, caplog):
+@patch("sys.stdout", new_callable=io.StringIO)
+def test_main_error_exit(mock_stdout, mock_complete):
     mock_complete.side_effect = Exception("mock error")
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 1
-    assert "mock error" in caplog.text
+    assert "mock error" in mock_stdout.getvalue()

@@ -18,12 +18,13 @@ import * as fs from 'node:fs';
 
 describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
   it('initializes with default configuration values', () => {
+    // Isolate environment
     const originalEnv = process.env['NEMOTRON_DEFAULT_MODEL'];
     delete process.env['NEMOTRON_DEFAULT_MODEL'];
-
+    
+    
     // Change cwd to prevent reading the workspace .env
-    const originalCwd = process.cwd();
-    process.chdir(fs.mkdtempSync('test-'));
+    const spyCwd = vi.spyOn(process, 'cwd').mockReturnValue(fs.mkdtempSync('test-'));
 
     let client;
     try {
@@ -31,15 +32,15 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
         apiKey: 'nvapi-test-dummy-key-1234567890',
       });
     } finally {
-      process.chdir(originalCwd);
+      spyCwd.mockRestore();
+      vi.unstubAllEnvs();
+      if (originalEnv !== undefined) {
+        process.env['NEMOTRON_DEFAULT_MODEL'] = originalEnv;
+      }
     }
 
     expect(client.config.baseUrl).toBe(DEFAULT_NEMOTRON_CONFIG.baseUrl);
     expect(client.config.defaultModel).toBeUndefined();
-
-    if (originalEnv !== undefined) {
-      process.env['NEMOTRON_DEFAULT_MODEL'] = originalEnv;
-    }
     expect(client.config.timeoutMs).toBe(30000);
     expect(client.config.maxRetries).toBe(3);
   });

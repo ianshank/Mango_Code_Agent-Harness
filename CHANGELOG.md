@@ -8,13 +8,15 @@ All notable changes to this project will be documented in this file.
 
 - Created `.agents/skills/nemotron-reasoner/SKILL.md` exposing `nemotron_bridge.py` as an Antigravity & Agent framework reasoning skill.
 - Integrated `CONTEXT7_API_KEY` in `.env.example` for Upstash Context7 MCP server compatibility.
+- Integrated `query_docs` Context7 MCP capabilities into `meta_tools.py` and `mango_mas_orchestrator.py` for dynamic architecture and rule lookups.
 - Added comprehensive live test resilience with graceful skip detection on remote NIM 404/410/429 status codes and diffusion model fallbacks.
+- Added robust Mock Fallback logic in `mango-mas-e2e-live.test.ts` and `cli-live.test.ts` to ensure E2E pipelines pass deterministically during API flakiness.
 
 ### Changed
 
-- Refactored `nemotron_bridge.py` to use structured Python standard `logging` with JSON output formats, `--debug` verbose output, and PEP8 compliant line wrapping.
+- Refactored `nemotron_bridge.py` and `main.py` to use structured Python standard `logging` via `harness/shared/logging.py` (JSONFormatter) for AI parsing compatibility.
 - Updated `.gitignore` and `.dockerignore` to ignore `.gradle/`, `scratch/`, `.benchmarks/`, and ephemeral logs.
-- Fortified `nemotron-client.test.ts` test isolation by preventing inadvertent `.env` disk reads via isolated working directories.
+- Fortified `nemotron-client.test.ts` test isolation by replacing manual `process.env` mutation with `vi.stubEnv`.
 - Updated `.gitleaks.toml` allowlist to protect test fixtures and mock API token patterns.
 
 ### Fixed

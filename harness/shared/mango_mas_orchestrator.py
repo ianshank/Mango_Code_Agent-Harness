@@ -285,6 +285,11 @@ class MangoMASOrchestrator:
                     tool_result = hypothesis_register(
                         args.get("claim", ""), args.get("reasoning", ""), args.get("confidence", 0.5)
                     )
+                elif func_name == "query_docs":
+                    from harness.shared.meta_tools import query_docs
+                    tool_result = query_docs(
+                        args.get("query", ""), args.get("library_id", None)
+                    )
                 else:
                     tool_result = f"Error: Unknown tool '{func_name}'"
 
