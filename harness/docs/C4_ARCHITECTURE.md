@@ -40,11 +40,17 @@ graph TD
         subgraph ".mango Agent Runtime"
             MA[Mango Agent Core]
             SubAgents[Subagents: nemotron-reasoner, planner, verifier]
+            Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart]
-            Skills[Skills: nemotron-reasoner, harness-engineering]
+            Skills[Skills: repo-invariant-review, openspec-peer-review]
+            MetaTools[Continuous Learning: knowledge_gap_log, hypothesis_register]
+            Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
             MA --> SubAgents
+            SubAgents --> Personas
             MA --> Hooks
             MA --> Skills
+            MA --> MetaTools
+            MetaTools --> Memory
         end
 
         subgraph "Node.js Container - harness/node"
@@ -61,7 +67,7 @@ graph TD
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>133 Tests / 98.44% Coverage"]
+            AQA["Pytest AQA Suite<br/>138 Tests / 85.37% Coverage"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators

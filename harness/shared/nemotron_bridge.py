@@ -13,10 +13,9 @@ import json
 import os
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
-
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
@@ -63,20 +62,16 @@ def complete_chat(
     temperature=0.2,
     max_tokens=4096,
     timeout_sec=30,
+    tools=None,
+    tool_choice=None,
 ):
     """Execute a chat completion request against NVIDIA Nemotron API."""
     key = api_key or resolve_api_key()
     if not key:
-        raise ValueError(
-            "NVIDIA_API_KEY is not configured. Set environment variable or define in .env."
-        )
+        raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
     endpoint = base_url or os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
-    target_model = (
-        model
-        or os.environ.get("NEMOTRON_DEFAULT_MODEL")
-        or DEFAULT_MODEL
-    )
+    target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL") or DEFAULT_MODEL
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
     payload = {
@@ -86,6 +81,10 @@ def complete_chat(
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if tools:
+        payload["tools"] = tools
+    if tool_choice:
+        payload["tool_choice"] = tool_choice
 
     req_data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(

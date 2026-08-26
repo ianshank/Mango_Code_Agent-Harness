@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Independent repository verifier; deploy/run this from the protected control plane."""
 from __future__ import annotations
-import argparse, hashlib, json
+
+import argparse
+import hashlib
+import json
 from pathlib import Path
+
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
