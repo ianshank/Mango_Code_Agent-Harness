@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from harness.shared.logging import setup_json_logging
+from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
 setup_json_logging(level=logging.INFO)

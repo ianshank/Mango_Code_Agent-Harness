@@ -58,8 +58,8 @@ class ExecutionBroker:
             )
 
         return ExecutionResult(
-            status="SUCCESS",
-            stdout="Mock execution complete.",
-            stderr="",
-            exit_code=0
+            status="FAILED",
+            stdout="",
+            stderr="FAILED: Execution engine not fully implemented.",
+            exit_code=1
         )

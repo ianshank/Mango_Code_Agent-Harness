@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, cast
 
-from harness.shared.logging import setup_json_logging
+from harness.shared.json_logging import setup_json_logging
 
 logger = logging.getLogger(__name__)
 

@@ -144,10 +144,13 @@ class MangoMASOrchestrator:
                 import json
 
                 payload = json.dumps({"tool": "run_command", "args": {"command": command}})
+                env = os.environ.copy()
+                env["PYTHONPATH"] = str(self.workspace_dir)
                 guard_result = subprocess.run(
                     ["python", str(guard_script)],
                     input=payload,
                     cwd=self.workspace_dir,
+                    env=env,
                     capture_output=True,
                     text=True,
                     timeout=self.tool_timeout,
@@ -285,11 +288,7 @@ class MangoMASOrchestrator:
                     tool_result = hypothesis_register(
                         args.get("claim", ""), args.get("reasoning", ""), args.get("confidence", 0.5)
                     )
-                elif func_name == "query_docs":
-                    from harness.shared.meta_tools import query_docs
-                    tool_result = query_docs(
-                        args.get("query", ""), args.get("library_id", None)
-                    )
+
                 else:
                     tool_result = f"Error: Unknown tool '{func_name}'"
 

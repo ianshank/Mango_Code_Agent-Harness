@@ -27,7 +27,6 @@ Thumbs.db
 *.log
 
 # Mango & Agent Subsystem
-.mango/
 .agents/
 
 # Build & Scratch Artifacts

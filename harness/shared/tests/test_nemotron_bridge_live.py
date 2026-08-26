@@ -65,17 +65,12 @@ class TestCompleteChatLive(unittest.TestCase):
             {"role": "user", "content": "Reply with exactly: BRIDGE OK"},
         ]
 
-        try:
-            result = complete_chat(
-                messages,
-                temperature=0.0,
-                max_tokens=SMOKE_MAX_TOKENS,
-                timeout_sec=30,
-            )
-        except RuntimeError as e:
-            if "HTTP 404 Error" in str(e) or "HTTP 410 Error" in str(e):
-                self.skipTest(f"Model not available for this API key: {e}")
-            raise
+        result = complete_chat(
+            messages,
+            temperature=0.0,
+            max_tokens=SMOKE_MAX_TOKENS,
+            timeout_sec=30,
+        )
 
         # Structural assertions
         self.assertIn("choices", result)
@@ -116,17 +111,12 @@ class TestCompleteChatLive(unittest.TestCase):
             {"role": "user", "content": "Reply with exactly: PARITY OK"},
         ]
 
-        try:
-            result = complete_chat(
-                messages,
-                temperature=0.1,
-                max_tokens=SMOKE_MAX_TOKENS,
-                timeout_sec=30,
-            )
-        except RuntimeError as e:
-            if "HTTP 404 Error" in str(e) or "HTTP 410 Error" in str(e):
-                self.skipTest(f"Model not available for this API key: {e}")
-            raise
+        result = complete_chat(
+            messages,
+            temperature=0.1,
+            max_tokens=SMOKE_MAX_TOKENS,
+            timeout_sec=30,
+        )
 
         # If we got a valid response, the wire format was accepted by the API
         self.assertIn("choices", result)

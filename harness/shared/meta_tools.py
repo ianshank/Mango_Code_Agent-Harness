@@ -1,7 +1,6 @@
 import contextlib
 import json
 import os
-import subprocess
 import time
 import typing
 import uuid
@@ -96,20 +95,6 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
 
-def query_docs(query: str, library_id: str | None = None) -> str:
-    """
-    Query the Context7 MCP for documentation.
-    Requires CONTEXT7_API_KEY environment variable.
-    """
-    api_key = os.environ.get("CONTEXT7_API_KEY")
-    if not api_key or api_key == "ctx7sk-dummy-key":
-        return "Error: CONTEXT7_API_KEY is not configured or is a dummy key. Please set a valid Upstash Context7 API key."
-
-    # Using the npx approach to call the Context7 MCP server for a single query.
-    # Note: A real MCP client implementation would communicate over stdio via JSON-RPC.
-    # For now, we simulate the interaction or provide a helpful message that it requires full integration.
-    return "Error: Standalone Context7 MCP invocation via Python requires full JSON-RPC over stdio handling. Please use the Antigravity IDE native Context7 MCP connection."
-
 
 META_TOOLS_SCHEMA = [
     {
@@ -159,23 +144,5 @@ META_TOOLS_SCHEMA = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_docs",
-            "description": (
-                "Query up-to-date documentation and code examples from Context7 MCP "
-                "for any programming library or framework."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "What to look up in the library's documentation."},
-                    "library_id": {"type": "string", "description": "Optional Context7-compatible library ID (e.g. /vercel/next.js)"},
-                },
-                "required": ["query"],
-                "additionalProperties": False,
-            },
-        },
-    },
+
 ]

@@ -29,8 +29,11 @@ describe.skipIf(!IS_LIVE)(
           });
           if (!response1.content) throw new Error("Empty response");
         } catch (err: any) {
-          // Fallback to deterministic mock on API outage or empty response
-          response1 = { content: '1. Plan to output HELLO_MANGO.' };
+          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+            ctx.skip();
+            return;
+          }
+          throw err;
         }
 
         expect(response1.content).toBeTruthy();
@@ -50,8 +53,11 @@ describe.skipIf(!IS_LIVE)(
              throw new Error("Invalid or empty response");
           }
         } catch (err: any) {
-          // Fallback to deterministic mock
-          response2 = { content: 'HELLO_MANGO executed successfully.' };
+          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+            ctx.skip();
+            return;
+          }
+          throw err;
         }
 
         expect(response2.content).toBeTruthy();
@@ -69,8 +75,11 @@ describe.skipIf(!IS_LIVE)(
           });
           if (!response3.content) throw new Error("Empty response");
         } catch (err: any) {
-          // Fallback to deterministic mock
-          response3 = { content: 'PASS: Verified HELLO_MANGO is present.' };
+          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+            ctx.skip();
+            return;
+          }
+          throw err;
         }
 
         expect(response3.content).toBeTruthy();

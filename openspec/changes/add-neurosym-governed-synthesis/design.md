@@ -59,6 +59,8 @@ from typing import TypedDict, Literal, Protocol
 class PolicyDecision(TypedDict):
     verdict: Literal["ALLOW", "DENY", "BLOCKED"]
     policy_bundle_digest: str
+    candidate_digest: str
+    timestamp: str
     violations: list[dict[str, object]]
     evidence_id: str
 

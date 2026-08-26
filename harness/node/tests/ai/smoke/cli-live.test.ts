@@ -95,13 +95,11 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          // Fallback to deterministic mock on API outage or empty response
-          stdout = JSON.stringify({
-            content: "CLI OK",
-            usage: { total_tokens: 10 },
-            latencyMs: 10
-          });
-          stderr = "";
+          if (err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+            ctx.skip();
+            return;
+          }
+          throw err;
         }
 
         // Secret leakage check on all output
@@ -141,9 +139,11 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          // Fallback to deterministic mock
-          stdout = "Nemotron Streaming Response\n\nSTREAM CLI OK";
-          stderr = "";
+          if (err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+            ctx.skip();
+            return;
+          }
+          throw err;
         }
 
         // Secret leakage check

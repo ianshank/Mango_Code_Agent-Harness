@@ -1,4 +1,5 @@
 from harness.shared.governance.remotes import (
+    NormalizedRemote,
     RemoteParseError,
     check_url,
     current_push_urls,
@@ -9,6 +10,7 @@ from harness.shared.governance.remotes import (
 )
 
 __all__ = [
+    "NormalizedRemote",
     "check_url",
     "current_push_urls",
     "RemoteParseError",
