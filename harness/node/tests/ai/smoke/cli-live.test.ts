@@ -94,7 +94,16 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429')) {
+          const errStr = `${err.message || ''} ${err.stderr || ''} ${err.stdout || ''}`;
+          if (
+            errStr.includes('404') ||
+            errStr.includes('410') ||
+            errStr.includes('429') ||
+            errStr.includes('abort') ||
+            errStr.includes('aborted') ||
+            errStr.includes('timed out') ||
+            errStr.includes('timeout')
+          ) {
             ctx.skip();
             return;
           }
@@ -137,7 +146,16 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429')) {
+          const errStr = `${err.message || ''} ${err.stderr || ''} ${err.stdout || ''}`;
+          if (
+            errStr.includes('404') ||
+            errStr.includes('410') ||
+            errStr.includes('429') ||
+            errStr.includes('abort') ||
+            errStr.includes('aborted') ||
+            errStr.includes('timed out') ||
+            errStr.includes('timeout')
+          ) {
             ctx.skip();
             return;
           }

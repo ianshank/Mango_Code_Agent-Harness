@@ -1,16 +1,20 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.4 (2026 Standards)  
+**Version:** 2.1.6 (2026 Standards)  
 **Author:** Ian Cruickshank  
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.0 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (213 tests passing, 0 skips, >95% coverage) and fail-closed governance invariants.
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (243+ tests passing, 0 unapproved skips, >85% coverage) and fail-closed governance invariants.
 
 ---
 
 ## 1. Repository Layout
 
 ```
+├── .agents/                             # Native Antigravity Agent Skill Registry
+│   └── skills/
+│       └── nemotron-reasoner/SKILL.md   # NVIDIA Nemotron AI operational skill
+│
 ├── .mango/                              # Mango Multi-Agent Ecosystem
 │   ├── agents/
 │   │   ├── nemotron-reasoner.md         # NVIDIA Nemotron Ultra reasoning subagent

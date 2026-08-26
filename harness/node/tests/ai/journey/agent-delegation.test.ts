@@ -292,9 +292,7 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
       mockFetch as unknown as typeof fetch,
     );
 
-    async function executeWithJsonRetry(
-      maxTries = 2,
-    ): Promise<RetryOutput> {
+    async function executeWithJsonRetry(maxTries = 2): Promise<RetryOutput> {
       for (let i = 0; i < maxTries; i++) {
         const res = await client.complete({
           messages: [

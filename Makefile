@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.4 — Root Makefile
+# Agentic SSD v2.1.6 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash

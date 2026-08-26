@@ -1,7 +1,7 @@
 # Pong Engine User & Developer Guide
 
 **Module:** `harness/node/src/pong`  
-**Standard:** 2026 Modular Engine  
+**Standard:** 2026 Modular Engine
 
 ---
 
@@ -30,13 +30,13 @@ Open `src/pong/web/index.html` in any modern web browser or serve it locally wit
 
 ## 2. Controls
 
-| Action | Player 1 (Left Paddle) | Player 2 (Right Paddle) |
-| :--- | :--- | :--- |
-| Move Up | `W` or `ArrowUp` (in Single Player) | `ArrowUp` (in 2P mode) |
-| Move Down | `S` or `ArrowDown` (in Single Player) | `ArrowDown` (in 2P mode) |
-| Serve / Start | `Space` / `Enter` | `Space` / `Enter` |
-| Pause / Resume | `P` / `Escape` | `P` / `Escape` |
-| Reset Match | `R` | `R` |
+| Action         | Player 1 (Left Paddle)                | Player 2 (Right Paddle)  |
+| :------------- | :------------------------------------ | :----------------------- |
+| Move Up        | `W` or `ArrowUp` (in Single Player)   | `ArrowUp` (in 2P mode)   |
+| Move Down      | `S` or `ArrowDown` (in Single Player) | `ArrowDown` (in 2P mode) |
+| Serve / Start  | `Space` / `Enter`                     | `Space` / `Enter`        |
+| Pause / Resume | `P` / `Escape`                        | `P` / `Escape`           |
+| Reset Match    | `R`                                   | `R`                      |
 
 ---
 
@@ -45,7 +45,12 @@ Open `src/pong/web/index.html` in any modern web browser or serve it locally wit
 The game engine accepts dynamic configuration overrides:
 
 ```typescript
-import { createGameConfig, GameEngine, CanvasRenderer, AudioManager } from './src/pong/index.js';
+import {
+  createGameConfig,
+  GameEngine,
+  CanvasRenderer,
+  AudioManager,
+} from './src/pong/index.js';
 
 // Load preset profile or customize parameters
 const config = createGameConfig('fast', {
@@ -59,7 +64,7 @@ const config = createGameConfig('fast', {
     difficulty: 'expert',
     reactionDelayTicks: 2,
     predictionAccuracy: 0.98,
-  }
+  },
 });
 ```
 

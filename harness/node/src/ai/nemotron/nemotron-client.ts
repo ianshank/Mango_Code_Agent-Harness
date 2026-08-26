@@ -122,7 +122,9 @@ export class NemotronClient {
 
     const model = options.model || this.config.defaultModel;
     if (!model) {
-      throw new Error('NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.');
+      throw new Error(
+        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
+      );
     }
     const body = {
       model,
@@ -202,7 +204,9 @@ export class NemotronClient {
 
     const model = options.model || this.config.defaultModel;
     if (!model) {
-      throw new Error('NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.');
+      throw new Error(
+        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
+      );
     }
     const body = {
       model,

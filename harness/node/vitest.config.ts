@@ -12,7 +12,13 @@ export default defineConfig({
       // uncovered files to appear at 0%.
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.d.ts'],
-      thresholds: { lines: 90, statements: 90, branches: 80, functions: 90, perFile: true },
+      thresholds: {
+        lines: 90,
+        statements: 90,
+        branches: 80,
+        functions: 90,
+        perFile: true,
+      },
     },
   },
 });

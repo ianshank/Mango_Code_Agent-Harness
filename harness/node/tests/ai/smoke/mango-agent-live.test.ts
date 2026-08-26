@@ -56,7 +56,12 @@ describe.skipIf(!IS_LIVE)(
             max_tokens: AGENT_MAX_TOKENS,
           });
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+          if (
+            err.message?.includes('404') ||
+            err.message?.includes('410') ||
+            err.message?.includes('429') ||
+            err.name === 'AbortError'
+          ) {
             ctx.skip();
             return;
           }
@@ -106,7 +111,12 @@ describe.skipIf(!IS_LIVE)(
             max_tokens: AGENT_MAX_TOKENS,
           });
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+          if (
+            err.message?.includes('404') ||
+            err.message?.includes('410') ||
+            err.message?.includes('429') ||
+            err.name === 'AbortError'
+          ) {
             ctx.skip();
             return;
           }
@@ -158,7 +168,12 @@ describe.skipIf(!IS_LIVE)(
             max_tokens: AGENT_MAX_TOKENS,
           });
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+          if (
+            err.message?.includes('404') ||
+            err.message?.includes('410') ||
+            err.message?.includes('429') ||
+            err.name === 'AbortError'
+          ) {
             ctx.skip();
             return;
           }
@@ -170,8 +185,9 @@ describe.skipIf(!IS_LIVE)(
         expect(response.usage.totalTokens).toBeGreaterThan(0);
 
         // The verifier system prompt instructs PASS/FAIL verdict
-        const hasVerdict =
-          /pass|fail|verdict|requirement|tests|lint/i.test(response.content);
+        const hasVerdict = /pass|fail|verdict|requirement|tests|lint/i.test(
+          response.content,
+        );
         expect(hasVerdict).toBe(true);
 
         // Secret leakage check

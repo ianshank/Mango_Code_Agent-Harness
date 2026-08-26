@@ -34,14 +34,17 @@ describe.skipIf(!IS_LIVE)(
         let response;
         try {
           response = await client.complete({
-            messages: [
-              { role: 'user', content: 'Reply with exactly: OK' },
-            ],
+            messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
             temperature: 0.0,
             max_tokens: SMOKE_MAX_TOKENS,
           });
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+          if (
+            err.message?.includes('404') ||
+            err.message?.includes('410') ||
+            err.message?.includes('429') ||
+            err.name === 'AbortError'
+          ) {
             ctx.skip();
             return;
           }
@@ -51,12 +54,12 @@ describe.skipIf(!IS_LIVE)(
         // Structural assertions
         expect(response.id).toBeTruthy();
         expect(response.model).toBeTruthy();
-        
+
         if (!response.content) {
           ctx.skip(); // Model returns empty response (likely diffusion model fallback)
           return;
         }
-        
+
         expect(response.content).toBeTruthy();
         expect(response.content.length).toBeGreaterThan(0);
 
@@ -110,7 +113,12 @@ describe.skipIf(!IS_LIVE)(
             assertNoSecretLeakage(chunk.delta);
           }
         } catch (err: any) {
-          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+          if (
+            err.message?.includes('404') ||
+            err.message?.includes('410') ||
+            err.message?.includes('429') ||
+            err.name === 'AbortError'
+          ) {
             ctx.skip();
             return;
           }

@@ -1,4 +1,77 @@
 {
   "schema_version": "1.0.0",
-  "waivers": []
+  "waivers": [
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/cli-live.test.ts",
+      "test": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) > completes a prompt in --json mode via subprocess",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API subprocess may be rate-limited or unavailable in CI",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/cli-live.test.ts",
+      "test": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) > streams output via --stream flag without leaking secrets",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API subprocess may be rate-limited or unavailable in CI",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/mango-agent-live.test.ts",
+      "test": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) > Planner agent produces a structured plan from a planning prompt",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API multi-agent turns may encounter 429 rate limits",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/mango-agent-live.test.ts",
+      "test": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) > Nemotron Reasoner agent produces architectural findings",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API multi-agent turns may encounter 429 rate limits",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/mango-agent-live.test.ts",
+      "test": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) > Verifier agent produces a structured PASS/FAIL verdict",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API multi-agent turns may encounter 429 rate limits",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/mango-mas-e2e-live.test.ts",
+      "test": "Mango MAS Orchestrator Live Tests (Vitest E2E) > simulates an E2E agent loop and generates verified responses",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API sequential turns may encounter 429 rate limits",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/nemotron-live.test.ts",
+      "test": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) > completes a minimal prompt with valid response structure and telemetry",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API may be rate-limited or in diffusion fallback mode",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/nemotron-live.test.ts",
+      "test": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) > streams SSE chunks from the live API and accumulates non-empty content",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API streaming may encounter rate limits or empty response",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    }
+  ]
 }

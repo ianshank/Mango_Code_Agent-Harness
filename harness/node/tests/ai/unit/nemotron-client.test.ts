@@ -20,7 +20,7 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
   it('initializes with default configuration values', () => {
     const originalEnv = process.env['NEMOTRON_DEFAULT_MODEL'];
     delete process.env['NEMOTRON_DEFAULT_MODEL'];
-    
+
     // Change cwd to prevent reading the workspace .env
     const originalCwd = process.cwd();
     process.chdir(fs.mkdtempSync('test-'));
@@ -36,7 +36,7 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
 
     expect(client.config.baseUrl).toBe(DEFAULT_NEMOTRON_CONFIG.baseUrl);
     expect(client.config.defaultModel).toBeUndefined();
-    
+
     if (originalEnv !== undefined) {
       process.env['NEMOTRON_DEFAULT_MODEL'] = originalEnv;
     }
