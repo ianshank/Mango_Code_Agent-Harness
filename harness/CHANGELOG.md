@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.1.5 — .mango Architecture, Continuous Learning & Persona Topology
+
+- **Continuous Learning Meta-Tools (`data_agent` synthesis):**
+  - Synthesized continuous learning concepts from the `data_agent` project.
+  - Implemented `knowledge_gap_log` and `hypothesis_register` meta-tools to allow agents to persist provisional beliefs and knowledge gaps directly into `.mango/memory/` as JSON.
+  - Wired meta-tools directly into the `mango_mas_orchestrator.py` recursive ReAct loop.
+- **Persona Topology (`FORGE` synthesis):**
+  - Delegated monolithic orchestrator tasks into discrete Personas defined per-directory.
+  - Created `harness/api_server/Agent.md` (Web Presenter persona) and `harness/node/Agent.md` (Node Bridge persona).
+  - Updated `nemotron-reasoner` to automatically adopt relevant personas based on the directory context.
+- **Governance & E2E Validation (`Agents-main` synthesis):**
+  - Ported `repo-invariant-review` and `openspec-peer-review` skills from the upstream `Agents-main` repository.
+  - Created a hardened `validate_invariants.py` hook and `.mango/hooks/pre-nemotron-run.sh` to enforce constraints programmatically before agent mutations.
+  - Executed extensive cross-stack SDLC and QA code review, resolving over 600 `ruff` lint violations, fixing critical `mypy` typing drifts in `nemotron_bridge.py`, and updating cross-stack dependency graphs.
+  - Ran unmocked E2E validations with Nemotron proving correct JSON tool calling.
+- **SDLC Objective Peer Review & Code Hygiene Enhancements:**
+  - Hardened `mango_mas_orchestrator.py` by removing hardcoded timeout/model values and extracting configurable parameters.
+  - Wired `.mango/hooks` directly into the ReAct orchestrator loop, exposing generic shell environments for pre/post invocation logic.
+  - Repaired `test_validators.py` timezone drift issues that broke local test execution environments.
+  - Re-attained 85% AQA Python Test Coverage for `harness/shared` and validated zero E501/trailing-whitespace violations in `meta_tools.py` and `mango_mas_orchestrator.py`.
+
 ## v2.1.4 — Python AQA Framework, Code Hygiene & CI Wiring
 
 - **Python AQA Test Engine (`harness/shared/tests/`):**

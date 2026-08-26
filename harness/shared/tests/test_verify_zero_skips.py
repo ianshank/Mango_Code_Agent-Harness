@@ -53,19 +53,23 @@ def test_files(tmp_path: Path):
     d_log.write_text("Decision DEC-123\n")
 
     waivers = tmp_path / "waivers.json"
-    waivers.write_text(json.dumps({
-        "waivers": [
+    waivers.write_text(
+        json.dumps(
             {
-                "framework": "vitest",
-                "file": "some.test.ts",
-                "test": "My test",
-                "decision_id": "DEC-123",
-                "reason": "Wait for API",
-                "owner": "test",
-                "expires": "2099-12-31",
+                "waivers": [
+                    {
+                        "framework": "vitest",
+                        "file": "some.test.ts",
+                        "test": "My test",
+                        "decision_id": "DEC-123",
+                        "reason": "Wait for API",
+                        "owner": "test",
+                        "expires": "2099-12-31",
+                    }
+                ]
             }
-        ]
-    }))
+        )
+    )
 
     v_json = tmp_path / "vitest.json"
     v_json.write_text(json.dumps({"testResults": []}))
@@ -83,120 +87,203 @@ def test_files(tmp_path: Path):
 
 def test_all_passed_returns_zero(tmp_path, test_files):
     test_files["v_json"] = str(tmp_path / "vitest_pass.json")
-    Path(test_files["v_json"]).write_text(json.dumps({
-        "testResults": [{
-            "name": "some.test.ts",
-            "assertionResults": [{"title": "My test", "status": "passed"}],
-        }]
-    }))
+    Path(test_files["v_json"]).write_text(
+        json.dumps(
+            {
+                "testResults": [
+                    {
+                        "name": "some.test.ts",
+                        "assertionResults": [{"title": "My test", "status": "passed"}],
+                    }
+                ]
+            }
+        )
+    )
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode == 0
+
 
 def test_skipped_test_fails(tmp_path, test_files):
     test_files["v_json"] = str(tmp_path / "vitest_skip.json")
-    Path(test_files["v_json"]).write_text(json.dumps({
-        "testResults": [{
-            "name": "other.test.ts",
-            "assertionResults": [{"title": "Other test", "status": "skipped"}],
-        }]
-    }))
+    Path(test_files["v_json"]).write_text(
+        json.dumps(
+            {
+                "testResults": [
+                    {
+                        "name": "other.test.ts",
+                        "assertionResults": [{"title": "Other test", "status": "skipped"}],
+                    }
+                ]
+            }
+        )
+    )
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "unapproved Vitest skip" in res.stderr
 
+
 def test_waivered_skip_allowed(tmp_path, test_files):
     test_files["v_json"] = str(tmp_path / "vitest_waiver.json")
-    Path(test_files["v_json"]).write_text(json.dumps({
-        "testResults": [{
-            "name": "some.test.ts",
-            "assertionResults": [{"title": "My test", "status": "skipped"}],
-        }]
-    }))
+    Path(test_files["v_json"]).write_text(
+        json.dumps(
+            {
+                "testResults": [
+                    {
+                        "name": "some.test.ts",
+                        "assertionResults": [{"title": "My test", "status": "skipped"}],
+                    }
+                ]
+            }
+        )
+    )
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode == 0
 
-def test_invalid_waiver_rejected(tmp_path, test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [
-            {
-                "framework": "vitest",
-                "file": "some.test.ts",
-                "test": "My test",
-                "decision_id": "UNKNOWN-999",
-                "reason": "Wait for API",
-                "owner": "test",
-                "expires": "2099-12-31",
-            }
-        ]
-    }))
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+def test_invalid_waiver_rejected(tmp_path, test_files):
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "vitest",
+                        "file": "some.test.ts",
+                        "test": "My test",
+                        "decision_id": "UNKNOWN-999",
+                        "reason": "Wait for API",
+                        "owner": "test",
+                        "expires": "2099-12-31",
+                    }
+                ]
+            }
+        )
+    )
+
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "unknown decision UNKNOWN-999" in res.stderr
 
+
 def test_missing_json_fails_closed(tmp_path, test_files):
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", str(tmp_path / "does-not-exist.json"),
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            str(tmp_path / "does-not-exist.json"),
+        ],
+    )
     assert res.returncode != 0
+
 
 def test_malformed_json_fails_closed(tmp_path, test_files):
     test_files["v_json"] = str(tmp_path / "vitest_bad.json")
     Path(test_files["v_json"]).write_text("not json")
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
 
+
 def test_empty_results_passes(tmp_path, test_files):
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode == 0
+
 
 def test_multiple_skips_all_reported(tmp_path, test_files):
     test_files["v_json"] = str(tmp_path / "vitest_skip.json")
-    Path(test_files["v_json"]).write_text(json.dumps({
-        "testResults": [{
-            "name": "other.test.ts",
-            "assertionResults": [
-                {"title": "Other test 1", "status": "skipped"},
-                {"title": "Other test 2", "status": "todo"},
-            ],
-        }]
-    }))
+    Path(test_files["v_json"]).write_text(
+        json.dumps(
+            {
+                "testResults": [
+                    {
+                        "name": "other.test.ts",
+                        "assertionResults": [
+                            {"title": "Other test 1", "status": "skipped"},
+                            {"title": "Other test 2", "status": "todo"},
+                        ],
+                    }
+                ]
+            }
+        )
+    )
 
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "Other test 1" in res.stderr
     assert "Other test 2" in res.stderr
@@ -204,133 +291,306 @@ def test_multiple_skips_all_reported(tmp_path, test_files):
 
 # --- Coverage gap tests ---
 def test_decision_log_missing(tmp_path, test_files):
-    res = run_script(Path("."), [
-        "--decision-log", str(tmp_path / "missing.md"),
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            str(tmp_path / "missing.md"),
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "decision log missing/unreadable or contains no IDs" in res.stderr
 
+
 def test_waiver_cannot_read(test_files, tmp_path):
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", str(tmp_path / "missing.json"),
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            str(tmp_path / "missing.json"),
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "cannot read waiver registry" in res.stderr
 
+
 def test_malformed_waiver_entry(test_files):
     Path(test_files["waivers"]).write_text(json.dumps({"waivers": [{}]}))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "malformed waiver entry" in res.stderr
 
+
 def test_unsupported_framework(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "mocha", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2099-12-31"}],
-    }))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "mocha",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2099-12-31",
+                    }
+                ],
+            }
+        )
+    )
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "unsupported waiver framework" in res.stderr
 
+
 def test_vitest_missing_file_test(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "vitest", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2099-12-31"}],
-    }))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "vitest",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2099-12-31",
+                    }
+                ],
+            }
+        )
+    )
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "Vitest waiver requires exact file and test" in res.stderr
 
+
 def test_junit_missing_fields(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "junit", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2099-12-31"}],
-    }))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "junit",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2099-12-31",
+                    }
+                ],
+            }
+        )
+    )
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "JUnit waiver requires exact unique_id and test" in res.stderr
 
+
 def test_invalid_expiry(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "vitest", "file": "f", "test": "t", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "invalid"}],
-    }))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "vitest",
+                        "file": "f",
+                        "test": "t",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "invalid",
+                    }
+                ],
+            }
+        )
+    )
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "invalid expiry 'invalid'" in res.stderr
 
+
 def test_expired_waiver(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "vitest", "file": "f", "test": "t", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2000-01-01"}],
-    }))
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--vitest-json", test_files["v_json"],
-    ])
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "vitest",
+                        "file": "f",
+                        "test": "t",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2000-01-01",
+                    }
+                ],
+            }
+        )
+    )
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--vitest-json",
+            test_files["v_json"],
+        ],
+    )
     assert res.returncode != 0
     assert "expired waiver for f::t" in res.stderr
 
+
 def test_no_test_evidence(test_files):
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+        ],
+    )
     assert res.returncode != 0
     assert "no test evidence supplied; refusing a vacuous pass" in res.stderr
 
 
 # --- JUnit tests ---
 def test_junit_evidence_missing(test_files, tmp_path):
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--junit-events", str(tmp_path / "missing.events"),
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--junit-events",
+            str(tmp_path / "missing.events"),
+        ],
+    )
     assert res.returncode != 0
     assert "JUnit skip evidence missing" in res.stderr
 
+
 def test_junit_waivered_allowed(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "junit", "unique_id": "id1", "test": "t", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2099-12-31"}],
-    }))
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "junit",
+                        "unique_id": "id1",
+                        "test": "t",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2099-12-31",
+                    }
+                ],
+            }
+        )
+    )
     Path(test_files["j_events"]).write_text("id1\tt\tskip DEC-123")
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--junit-events", test_files["j_events"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--junit-events",
+            test_files["j_events"],
+        ],
+    )
     assert res.returncode == 0
 
+
 def test_junit_unapproved_skip(test_files):
-    Path(test_files["waivers"]).write_text(json.dumps({
-        "waivers": [{"framework": "junit", "unique_id": "id1", "test": "t", "decision_id": "DEC-123", "reason": "a", "owner": "a", "expires": "2099-12-31"}],
-    }))
+    Path(test_files["waivers"]).write_text(
+        json.dumps(
+            {
+                "waivers": [
+                    {
+                        "framework": "junit",
+                        "unique_id": "id1",
+                        "test": "t",
+                        "decision_id": "DEC-123",
+                        "reason": "a",
+                        "owner": "a",
+                        "expires": "2099-12-31",
+                    }
+                ],
+            }
+        )
+    )
     Path(test_files["j_events"]).write_text("id2\tt2\tno reason\nshortline")
-    res = run_script(Path("."), [
-        "--decision-log", test_files["log"],
-        "--waivers", test_files["waivers"],
-        "--junit-events", test_files["j_events"],
-    ])
+    res = run_script(
+        Path("."),
+        [
+            "--decision-log",
+            test_files["log"],
+            "--waivers",
+            test_files["waivers"],
+            "--junit-events",
+            test_files["j_events"],
+        ],
+    )
     assert res.returncode != 0
     assert "unapproved JUnit skip" in res.stderr

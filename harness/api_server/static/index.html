@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mango MAS Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Mango MAS Orchestrator</h1>
+            <p>Autonomous Multi-Agent Sequential Thinking</p>
+        </header>
+        
+        <main>
+            <div class="card input-section">
+                <h2>Define Task</h2>
+                <form id="taskForm">
+                    <textarea id="taskInput" placeholder="e.g., Write a python function to compute fibonacci numbers and test it..." required></textarea>
+                    <button type="submit" id="submitBtn">
+                        <span id="btnText">Execute MAS Sequence</span>
+                        <div class="loader hidden" id="btnLoader"></div>
+                    </button>
+                </form>
+            </div>
+
+            <div class="card output-section">
+                <h2>Sequential Reasoning Trace</h2>
+                <div class="timeline" id="timeline">
+                    <div class="placeholder">Submit a task to begin the orchestration...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

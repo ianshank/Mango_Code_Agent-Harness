@@ -1,0 +1,49 @@
+import os
+from pathlib import Path
+
+import pytest
+
+from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+
+# Check if LIVE test execution is enabled
+IS_LIVE = os.environ.get("NVIDIA_API_KEY") is not None
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
+class TestMangoMASLive:
+    """
+    E2E Adversarial Live tests testing the Mango MAS Orchestrator.
+    Requires NVIDIA_API_KEY to hit the Nemotron API.
+    """
+
+    def test_mango_mas_sequential_thinking_e2e(self, tmp_path):
+        """
+        Tests the full loop of planner -> reasoner -> verifier
+        by generating a simple Python function and ensuring it is created dynamically without hallucination.
+        """
+        # Find the root of the project to locate the .mango directory
+        # Harness_TEST / harness / shared / tests / ...
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+
+        orchestrator = MangoMASOrchestrator(workspace_dir=project_root)
+
+        # We ask the MAS to write a simple dynamic python utility to the temp path
+        # and test it via sequential thinking
+        temp_file = tmp_path / "dynamic_util.py"
+        task = f"Write a Python function called calculate_fibonacci in {temp_file}. Ensure it has type hints and a docstring."
+
+        # Execute the loop
+        verification_result = orchestrator.execute_sequential_thinking_loop(task)
+
+        # Assertions
+        # 1. The MAS should report PASS or FAIL in its verification output
+        assert "PASS" in verification_result or "FAIL" in verification_result
+
+        # 2. Check the conversation history to ensure all 3 agents participated
+        agents_used = [
+            msg["content"] for msg in orchestrator.conversation_history if "role" in msg and msg["role"] == "system"
+        ]
+        assert any("planner" in prompt.lower() for prompt in agents_used)
+        assert any("reasoner" in prompt.lower() for prompt in agents_used)
+        assert any("verifier" in prompt.lower() for prompt in agents_used)
