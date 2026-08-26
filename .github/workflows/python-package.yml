@@ -49,5 +49,9 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: harness/node
+
       - name: Run unified CI gate (make ci)
         run: make ci
