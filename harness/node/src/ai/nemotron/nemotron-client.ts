@@ -21,7 +21,6 @@ import * as path from 'node:path';
 
 export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
-  defaultModel: 'nvidia/llama-3.3-nemotron-super-49b-v1',
   timeoutMs: 30000,
   maxRetries: 3,
   baseBackoffMs: 500,
@@ -44,10 +43,7 @@ export class NemotronClient {
         resolvedEnv.baseUrl ||
         DEFAULT_NEMOTRON_CONFIG.baseUrl,
       apiKey: customConfig.apiKey ?? resolvedEnv.apiKey,
-      defaultModel:
-        customConfig.defaultModel ||
-        resolvedEnv.defaultModel ||
-        DEFAULT_NEMOTRON_CONFIG.defaultModel,
+      defaultModel: customConfig.defaultModel || resolvedEnv.defaultModel,
       timeoutMs: customConfig.timeoutMs ?? DEFAULT_NEMOTRON_CONFIG.timeoutMs,
       maxRetries: customConfig.maxRetries ?? DEFAULT_NEMOTRON_CONFIG.maxRetries,
       baseBackoffMs:
@@ -125,6 +121,9 @@ export class NemotronClient {
     }
 
     const model = options.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error('NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.');
+    }
     const body = {
       model,
       messages: options.messages,
@@ -202,6 +201,9 @@ export class NemotronClient {
     }
 
     const model = options.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error('NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.');
+    }
     const body = {
       model,
       messages: options.messages,

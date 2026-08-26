@@ -22,9 +22,7 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
     });
 
     expect(client.config.baseUrl).toBe(DEFAULT_NEMOTRON_CONFIG.baseUrl);
-    expect(client.config.defaultModel).toBe(
-      DEFAULT_NEMOTRON_CONFIG.defaultModel,
-    );
+    expect(client.config.defaultModel).toBe(process.env['NEMOTRON_DEFAULT_MODEL'] || undefined);
     expect(client.config.timeoutMs).toBe(30000);
     expect(client.config.maxRetries).toBe(3);
   });

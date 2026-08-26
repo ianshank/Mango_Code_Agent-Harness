@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, cast
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
 
 
 def mask_secret(secret: str) -> str:
@@ -72,7 +71,9 @@ def complete_chat(
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
     endpoint = base_url or os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
-    target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL") or DEFAULT_MODEL
+    target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL")
+    if not target_model:
+        raise ValueError("Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or pass explicitly.")
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
     payload = {
@@ -125,7 +126,7 @@ def main() -> None:
         default="You are an expert AI architect and reasoning assistant.",
         help="System instruction prompt",
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Target model ID")
+    parser.add_argument("--model", default=None, help="Target model ID")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     parser.add_argument("--json", action="store_true", help="Output raw JSON response")
     args = parser.parse_args()
