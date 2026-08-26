@@ -15,7 +15,9 @@ build/
 coverage/
 .governance/vitest-results.json
 .governance/coverage/
+.mango/memory/
 .mango/.state/
+.mango/FAILURE_MEMORY.md
 
 # Python Testing & Tooling
 .coverage

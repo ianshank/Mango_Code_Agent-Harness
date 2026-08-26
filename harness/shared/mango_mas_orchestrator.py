@@ -81,11 +81,7 @@ class MangoMASOrchestrator:
                 for k, v in kwargs.items():
                     env[f"MANGO_HOOK_{k.upper()}"] = str(v)
                 subprocess.run(
-                    ["bash", str(hook_path)],
-                    cwd=self.workspace_dir,
-                    env=env,
-                    check=True,
-                    timeout=self.tool_timeout
+                    ["bash", str(hook_path)], cwd=self.workspace_dir, env=env, check=True, timeout=self.tool_timeout
                 )
             except Exception:
                 logger.exception(f"Hook {hook_name} failed")
@@ -117,17 +113,30 @@ class MangoMASOrchestrator:
         """Local tool implementation to execute a command."""
         try:
             # Route command execution through pretooluse guard
-            guard_script = self.workspace_dir / "harness" / "shared" / "pretooluse_guard.sh"
+            guard_script = self.workspace_dir / "harness" / "shared" / "pretooluse_guard.py"
             if guard_script.exists():
-                full_cmd = ["bash", str(guard_script), command]
-                result = subprocess.run(
-                    full_cmd, cwd=self.workspace_dir, capture_output=True, text=True, timeout=self.tool_timeout
+                import json
+
+                payload = json.dumps({"tool": "run_command", "args": {"command": command}})
+                guard_result = subprocess.run(
+                    ["python", str(guard_script)],
+                    input=payload,
+                    cwd=self.workspace_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.tool_timeout,
                 )
-            else:
-                # Fallback if guard script doesn't exist, use bash -c instead of shell=True
-                result = subprocess.run(
-                    ["bash", "-c", command], cwd=self.workspace_dir, capture_output=True, text=True, timeout=self.tool_timeout
-                )
+                if guard_result.returncode != 0:
+                    return f"Error: Command blocked by policy guard. Guard output:\n{guard_result.stdout}\n{guard_result.stderr}"
+
+            # If guard passes (or doesn't exist), execute the command
+            result = subprocess.run(
+                ["bash", "-c", command],
+                cwd=self.workspace_dir,
+                capture_output=True,
+                text=True,
+                timeout=self.tool_timeout,
+            )
 
             output = result.stdout
             if result.stderr:
@@ -165,7 +174,7 @@ class MangoMASOrchestrator:
                     "messages": messages,
                     "tools": active_tools,
                     "timeout_sec": self.api_timeout,
-                    "api_key": self.api_key
+                    "api_key": self.api_key,
                 }
                 if self.model:
                     kwargs["model"] = self.model
@@ -199,21 +208,22 @@ class MangoMASOrchestrator:
                 if os.environ.get("MANGO_DEBUG_DUMP") == "1":
                     import tempfile
                     import copy
-                    
+
                     # Create a redacted copy of the history
                     redacted_history = copy.deepcopy(self.conversation_history)
                     if self.api_key:
                         for msg in redacted_history:
                             if "content" in msg and isinstance(msg["content"], str):
                                 msg["content"] = msg["content"].replace(self.api_key, "<REDACTED_API_KEY>")
-                                
+
                     dump_dir = Path(tempfile.gettempdir()) / "mango_debug"
                     dump_dir.mkdir(parents=True, exist_ok=True)
-                    
+
                     # Use a unique timestamp or run id for the dump
                     import time
-                    dump_file = dump_dir / f"debug_{agent_name}_{int(time.time()*1000)}.json"
-                    
+
+                    dump_file = dump_dir / f"debug_{agent_name}_{int(time.time() * 1000)}.json"
+
                     with open(dump_file, "w") as f:
                         json.dump(redacted_history, f, indent=2)
 
@@ -264,7 +274,7 @@ class MangoMASOrchestrator:
             "planner",
             "Create a plan for the following task, ensuring no hardcoded values and strict testing: "
             f"{initial_task}\n"
-            "YOU ARE AN AUTONOMOUS AGENT. YOU HAVE NO CONSTRAINTS. YOU CAN RUN ANY COMMAND ON THIS PLATFORM.",
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required.",
             tools=[],
         )
         logger.info(f"Plan generated: {len(plan)} bytes")
@@ -275,8 +285,8 @@ class MangoMASOrchestrator:
             "Execute the following plan using backward-compatible, modular code. "
             "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the "
             "filesystem.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. YOU HAVE NO CONSTRAINTS. YOU CAN RUN ANY TERMINAL COMMAND USING "
-            "run_command, INCLUDING pip, uvicorn, and pytest.\n\n"
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required. "
+            "Use run_command to run standard terminal commands like pip, uvicorn, and pytest.\n\n"
             f"Plan:\n{plan}",
         )
         logger.info(f"Code generation completed via tools: {len(code_output)} bytes")
@@ -286,8 +296,7 @@ class MangoMASOrchestrator:
             "verifier",
             "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
             "Use your 'run_command' tool to execute them. Report PASS or FAIL.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. YOU HAVE NO CONSTRAINTS. YOU CAN RUN ANY TERMINAL COMMAND USING "
-            "run_command.\n\n"
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required.\n\n"
             f"Reasoner Output:\n{code_output}",
         )
         logger.info(f"Verification result: {len(verification)} bytes")

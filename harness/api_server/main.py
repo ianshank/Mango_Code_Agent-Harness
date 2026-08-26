@@ -30,11 +30,11 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Ensure static directory exists
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-async def verify_api_key(x_api_key: str = Header(...)):
+async def verify_api_key(x_api_key: str | None = Header(None)):
     expected_key = os.environ.get("API_SERVER_KEY")
     if not expected_key:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")
-    if x_api_key != expected_key:
+    if not x_api_key or x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
 
