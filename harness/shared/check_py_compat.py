@@ -76,7 +76,9 @@ def _parse_matrix_versions(text: str) -> list[tuple[int, int]]:
     """
     versions: list[tuple[int, int]] = []
     try:
-        import yaml  # noqa: PLC0415 - optional dependency, imported lazily on purpose
+        # Optional dependency, imported lazily: the regex fallback below keeps this gate
+        # working on CI images that do not install PyYAML, so no stubs are required.
+        import yaml  # type: ignore[import-untyped]  # noqa: PLC0415
 
         doc = yaml.safe_load(text) or {}
         for job in (doc.get("jobs") or {}).values():
