@@ -78,7 +78,7 @@ graph TD
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>138 Tests / 85.37% Coverage"]
+            AQA["Pytest AQA Suite<br/>149 Tests / 81.42% Coverage"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators
