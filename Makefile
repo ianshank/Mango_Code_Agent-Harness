@@ -10,7 +10,9 @@ PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 PM       ?= pnpm
-COV_MIN  ?= 80
+# Coverage threshold is sourced from the governance policy (single source of truth)
+# so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
+COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -68,17 +70,23 @@ validate: ## Run all governance validation scripts
 
 # --- Drift Detection ---
 .PHONY: check-dedup
-check-dedup: ## Fail if node/jvm governance script copies drift from harness/shared (single source of truth)
-	@echo "--- Checking governance script parity (shared == node == jvm) ---"
+check-dedup: ## Fail if node/jvm governance scripts are not thin delegating shims to harness/shared (single source of truth)
+	@echo "--- Checking governance scripts delegate to $(SHARED_SRC) (single source of truth) ---"
 	@for script in check_projections check_traceability pretooluse_guard remotes validate_adoption validate_agent_policy validate_governance_docs validate_policy verify_zero_skips; do \
-		if ! diff -q $(SHARED_SRC)/$$script.py $(NODE_DIR)/scripts/$$script.py >/dev/null 2>&1; then \
-			echo "[FAIL] $$script.py drifted: $(NODE_DIR)/scripts differs from $(SHARED_SRC)"; exit 1; \
-		fi; \
-		if ! diff -q $(SHARED_SRC)/$$script.py harness/jvm/scripts/$$script.py >/dev/null 2>&1; then \
-			echo "[FAIL] $$script.py drifted: harness/jvm/scripts differs from $(SHARED_SRC)"; exit 1; \
-		fi; \
+		for dir in $(NODE_DIR)/scripts harness/jvm/scripts; do \
+			shim=$$dir/$$script.py; \
+			if [ ! -f "$$shim" ]; then \
+				echo "[FAIL] missing delegating shim: $$shim"; exit 1; \
+			fi; \
+			if ! grep -q "runpy" "$$shim" || ! grep -q "runpy.run_path" "$$shim"; then \
+				echo "[FAIL] $$shim is not a delegating shim: must import runpy and call runpy.run_path (logic lives only in $(SHARED_SRC))"; exit 1; \
+			fi; \
+			if ! grep -q "shared" "$$shim" || ! grep -q "$$script.py" "$$shim"; then \
+				echo "[FAIL] $$shim does not resolve the shared module $(SHARED_SRC)/$$script.py"; exit 1; \
+			fi; \
+		done; \
 	done
-	@echo "[PASS] All governance script copies match harness/shared (single source of truth)."
+	@echo "[PASS] All node/jvm governance scripts are thin delegating shims to $(SHARED_SRC) (logic lives only in shared/)."
 
 # --- Composite Targets ---
 .PHONY: test

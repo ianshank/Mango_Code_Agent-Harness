@@ -76,6 +76,21 @@ def test_git_modified_files_detects_staged(temp_repo: Path):
     assert "src.py" in vi.git_modified_files(temp_repo)
 
 
+def test_git_modified_files_detects_untracked(temp_repo: Path):
+    # Untracked (never staged) files must be caught so a new file in a protected
+    # path cannot slip through before being staged (fail-closed).
+    (temp_repo / "Makefile").write_text("all:\n", encoding="utf-8")
+    assert "Makefile" in vi.git_modified_files(temp_repo)
+
+
+def test_git_modified_files_ignores_gitignored(temp_repo: Path):
+    (temp_repo / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=temp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "gi"], cwd=temp_repo, check=True, capture_output=True)
+    (temp_repo / "noise.log").write_text("noise\n", encoding="utf-8")
+    assert "noise.log" not in vi.git_modified_files(temp_repo)
+
+
 # --- check_protected_paths ---
 
 def test_check_protected_paths_pass_when_clean(temp_repo: Path, capsys):

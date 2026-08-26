@@ -39,13 +39,15 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(rem.normalize_remote_url(c["url"]).canonical, c["canonical"])
                 self.assertEqual(rem.check_url(c["url"], allow)[0], c["allowed"])
 
-    def test_shared_kernel_byte_identical(self):
-        files = [
+    def test_shared_kernel_scripts_delegate_to_shared(self):
+        # The governance LOGIC lives only in harness/shared/*.py (single source of
+        # truth). The node/jvm copies are thin delegating shims (they import runpy
+        # and run the shared module as __main__), NOT byte-identical copies -- so
+        # that `python harness/<stack>/scripts/<name>.py` behaves identically to
+        # `python harness/shared/<name>.py`. Shell helpers remain byte-identical.
+        py_scripts = [
             "remotes.py",
             "pretooluse_guard.py",
-            "pretooluse_guard.sh",
-            "pre_push_scan.sh",
-            "install_hooks.sh",
             "verify_zero_skips.py",
             "check_projections.py",
             "check_traceability.py",
@@ -53,9 +55,22 @@ class HarnessTests(unittest.TestCase):
             "validate_policy.py",
             "validate_governance_docs.py",
             "validate_adoption.py",
+        ]
+        shell_files = [
+            "pretooluse_guard.sh",
+            "pre_push_scan.sh",
+            "install_hooks.sh",
             "validate_specs.sh",
         ]
-        for f in files:
+        for f in py_scripts:
+            self.assertTrue((SHARED / f).is_file(), f"shared source of truth missing: {f}")
+            for stack in ("node", "jvm"):
+                shim = (HARNESS / stack / "scripts" / f).read_text()
+                self.assertIn("import runpy", shim, f"{stack}/{f} is not a delegating shim")
+                self.assertIn("runpy.run_path", shim, f"{stack}/{f} must call runpy.run_path")
+                self.assertIn("shared", shim, f"{stack}/{f} must resolve the shared module")
+                self.assertIn(f, shim, f"{stack}/{f} must delegate to shared/{f}")
+        for f in shell_files:
             expected = (SHARED / f).read_bytes()
             for stack in ("node", "jvm"):
                 self.assertEqual(expected, (HARNESS / stack / "scripts" / f).read_bytes(), f"{stack}/{f} drifted")
