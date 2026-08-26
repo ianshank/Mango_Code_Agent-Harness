@@ -2,6 +2,7 @@ import contextlib
 import json
 import os
 import time
+import typing
 import uuid
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def _ensure_memory_files() -> None:
 
 
 @contextlib.contextmanager
-def _file_lock(filepath: Path):
+def _file_lock(filepath: Path) -> typing.Iterator[None]:
     lockfile = filepath.with_suffix(".lock")
     timeout = 10.0
     start = time.time()
@@ -94,12 +95,17 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
 
+
 META_TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
             "name": "knowledge_gap_log",
-            "description": "Record a knowledge gap: something the agent could not answer or do, and what would be needed to fill the gap. This is the explicit alternative to hallucinating an answer.",
+            "description": (
+                "Record a knowledge gap: something the agent could not answer or do, "
+                "and what would be needed to fill the gap. This is the explicit "
+                "alternative to hallucinating an answer."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -122,7 +128,10 @@ META_TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "hypothesis_register",
-            "description": "Record a provisional belief: 'I think X is true because Y.' Hypotheses can be updated or falsified later as evidence arrives.",
+            "description": (
+                "Record a provisional belief: 'I think X is true because Y.' "
+                "Hypotheses can be updated or falsified later as evidence arrives."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -135,4 +144,5 @@ META_TOOLS_SCHEMA = [
             },
         },
     },
+
 ]

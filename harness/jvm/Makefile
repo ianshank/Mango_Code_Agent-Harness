@@ -47,13 +47,13 @@ audit: ## Locked dependency vulnerability scan
 audit-install:
 	go install github.com/google/osv-scanner/v2/cmd/osv-scanner@$(OSV_VERSION)
 remotes: ## Verify every configured Git push URL against the allowlist
-	python3 $(ROOT)/scripts/remotes.py --check-current-remotes --repo $(ROOT) --allowlist $(ROOT)/.governance/allowed-remotes.txt
+	PYTHONPATH=$(ROOT)/../.. python3 $(ROOT)/scripts/remotes.py --check-current-remotes --repo $(ROOT) --allowlist $(ROOT)/.governance/allowed-remotes.txt
 projections: ## Projection applicability/drift gate
-	cd $(ROOT) && python3 scripts/check_projections.py
+	cd $(ROOT) && PYTHONPATH=../.. python3 scripts/check_projections.py
 traceability: ## Requirement traceability gate
-	cd $(ROOT) && python3 scripts/check_traceability.py
+	cd $(ROOT) && PYTHONPATH=../.. python3 scripts/check_traceability.py
 governance: ## Policy and agent/sub-agent governance conformance
-	cd $(ROOT) && python3 scripts/validate_policy.py && python3 scripts/validate_agent_policy.py && python3 scripts/validate_governance_docs.py && python3 scripts/validate_adoption.py
+	cd $(ROOT) && PYTHONPATH=../.. python3 scripts/validate_policy.py && PYTHONPATH=../.. python3 scripts/validate_agent_policy.py && PYTHONPATH=../.. python3 scripts/validate_governance_docs.py && PYTHONPATH=../.. python3 scripts/validate_adoption.py
 guard-probe: ## Probe PreToolUse decision; CMD is required
 	@test -n "$(CMD)" || { echo 'usage: make guard-probe CMD="<command>"'; exit 2; }
 	@set +e; printf '%s' "$(CMD)" | python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.stdin.read()}}))' | CLAUDE_PROJECT_DIR=$(ROOT) bash $(ROOT)/scripts/pretooluse_guard.sh; rc=$$?; set -e; if [ $$rc -eq 0 ]; then echo 'verdict: ALLOW'; elif [ $$rc -eq 2 ]; then echo 'verdict: BLOCK'; exit 2; else echo "verdict: ERROR (rc=$$rc)"; exit $$rc; fi

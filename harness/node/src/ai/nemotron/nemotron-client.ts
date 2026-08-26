@@ -21,7 +21,6 @@ import * as path from 'node:path';
 
 export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
-  defaultModel: 'nvidia/llama-3.3-nemotron-super-49b-v1',
   timeoutMs: 30000,
   maxRetries: 3,
   baseBackoffMs: 500,
@@ -44,11 +43,11 @@ export class NemotronClient {
         resolvedEnv.baseUrl ||
         DEFAULT_NEMOTRON_CONFIG.baseUrl,
       apiKey: customConfig.apiKey ?? resolvedEnv.apiKey,
-      defaultModel:
-        customConfig.defaultModel ||
-        resolvedEnv.defaultModel ||
-        DEFAULT_NEMOTRON_CONFIG.defaultModel,
-      timeoutMs: customConfig.timeoutMs ?? DEFAULT_NEMOTRON_CONFIG.timeoutMs,
+      defaultModel: customConfig.defaultModel || resolvedEnv.defaultModel,
+      timeoutMs:
+        customConfig.timeoutMs ??
+        resolvedEnv.timeoutMs ??
+        DEFAULT_NEMOTRON_CONFIG.timeoutMs,
       maxRetries: customConfig.maxRetries ?? DEFAULT_NEMOTRON_CONFIG.maxRetries,
       baseBackoffMs:
         customConfig.baseBackoffMs ?? DEFAULT_NEMOTRON_CONFIG.baseBackoffMs,
@@ -66,10 +65,14 @@ export class NemotronClient {
     baseUrl?: string | undefined;
     apiKey?: string | undefined;
     defaultModel?: string | undefined;
+    timeoutMs?: number | undefined;
   } {
     let apiKey = process.env['NVIDIA_API_KEY'];
     let baseUrl = process.env['NVIDIA_BASE_URL'];
     let defaultModel = process.env['NEMOTRON_DEFAULT_MODEL'];
+    let timeoutMs = process.env['NEMOTRON_TIMEOUT_MS']
+      ? parseInt(process.env['NEMOTRON_TIMEOUT_MS'], 10)
+      : undefined;
 
     if (!apiKey) {
       // Look for .env in current working dir or parent directory
@@ -107,7 +110,7 @@ export class NemotronClient {
       }
     }
 
-    return { baseUrl, apiKey, defaultModel };
+    return { baseUrl, apiKey, defaultModel, timeoutMs };
   }
 
   /**
@@ -125,6 +128,11 @@ export class NemotronClient {
     }
 
     const model = options.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error(
+        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
+      );
+    }
     const body = {
       model,
       messages: options.messages,
@@ -202,6 +210,11 @@ export class NemotronClient {
     }
 
     const model = options.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error(
+        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
+      );
+    }
     const body = {
       model,
       messages: options.messages,
@@ -218,22 +231,26 @@ export class NemotronClient {
       ...(options.stop ? { stop: options.stop } : {}),
     };
 
-    const response = await this.doFetch('/chat/completions', {
-      method: 'POST',
-      headers: this.buildHeaders(),
-      body: JSON.stringify(body),
+    const response = await this.executeWithRetry(async () => {
+      const resp = await this.doFetch('/chat/completions', {
+        method: 'POST',
+        headers: this.buildHeaders(),
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        const sanitized = SecretMasker.sanitize(errorText, [
+          this.config.apiKey,
+        ]);
+        const err = new Error(
+          `Nemotron API Stream Error HTTP ${resp.status}: ${sanitized}`,
+        );
+        (err as any).statusCode = resp.status;
+        throw err;
+      }
+      return resp;
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const sanitized = SecretMasker.sanitize(errorText, [this.config.apiKey]);
-      this.circuitBreaker.recordFailure();
-      throw new Error(
-        `Nemotron API Stream Error HTTP ${response.status}: ${sanitized}`,
-      );
-    }
-
-    this.circuitBreaker.recordSuccess();
 
     if (!response.body) {
       return;
@@ -305,6 +322,15 @@ export class NemotronClient {
         ...init,
         signal: controller.signal,
       });
+    } catch (fetchErr: any) {
+      if (fetchErr.name === 'AbortError') {
+        const timeoutErr = new Error(
+          `Request to ${url} timed out after ${this.config.timeoutMs}ms`,
+        );
+        (timeoutErr as any).name = 'TimeoutError';
+        throw timeoutErr;
+      }
+      throw fetchErr;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -319,7 +345,18 @@ export class NemotronClient {
         return result;
       } catch (err: any) {
         attempt++;
+        const isNetworkError =
+          err.name === 'AbortError' ||
+          err.name === 'TimeoutError' ||
+          err.code === 'ECONNRESET' ||
+          err.code === 'ETIMEDOUT' ||
+          err.code === 'ENOTFOUND' ||
+          err.message?.includes('aborted') ||
+          err.message?.includes('timed out') ||
+          err.message?.includes('fetch failed');
+
         const isRetryable =
+          isNetworkError ||
           err.statusCode === 429 ||
           (err.statusCode >= 500 && err.statusCode < 600);
 

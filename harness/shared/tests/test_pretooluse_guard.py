@@ -228,7 +228,7 @@ def test_main_unknown_segment(mock_stderr, mock_stdin, tmp_git_repo):
     with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_git_repo)}):
         mock_stdin.write(json.dumps({"tool_input": {"command": "git log ; git push origin main"}}))
         mock_stdin.seek(0)
-        with patch("harness.shared.pretooluse_guard.destinations", return_value=[]):
+        with patch("harness.shared.governance.pretooluse_guard.destinations", return_value=[]):
             assert main() == 2
             assert "dangerous-shaped segment could not be attributed" in mock_stderr.getvalue()
 
@@ -240,7 +240,7 @@ def test_main_remote_allowed(mock_run, mock_stdin, tmp_git_repo):
     with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_git_repo)}):
         mock_stdin.write(json.dumps({"tool_input": {"command": "git push origin main"}}))
         mock_stdin.seek(0)
-        with patch("harness.shared.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
+        with patch("harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
             assert main() == 0
 
 
@@ -252,5 +252,5 @@ def test_main_remote_blocked(mock_stderr, mock_run, mock_stdin, tmp_git_repo):
     with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_git_repo)}):
         mock_stdin.write(json.dumps({"tool_input": {"command": "git push origin main"}}))
         mock_stdin.seek(0)
-        with patch("harness.shared.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
+        with patch("harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
             assert main() == 2

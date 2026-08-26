@@ -1,12 +1,5 @@
 {
-  "spec_globs": [
-    "docs/specs/**/*.md"
-  ],
-  "implementation_globs": [
-    "src/**/*.*"
-  ],
-  "test_globs": [
-    "tests/**/*.*",
-    "src/test/**/*.*"
-  ]
+  "spec_globs": ["docs/specs/**/*.md"],
+  "implementation_globs": ["src/**/*.*"],
+  "test_globs": ["tests/**/*.*", "src/test/**/*.*"]
 }

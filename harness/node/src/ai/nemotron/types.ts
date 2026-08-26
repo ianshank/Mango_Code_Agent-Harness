@@ -13,7 +13,7 @@ export interface NemotronConfig {
   /** API key for authorization (loaded from NVIDIA_API_KEY env or .env) */
   readonly apiKey?: string | undefined;
   /** Default model identifier */
-  readonly defaultModel: string;
+  readonly defaultModel?: string | undefined;
   /** Request timeout in milliseconds (default: 30000) */
   readonly timeoutMs: number;
   /** Maximum number of retry attempts on 429/5xx (default: 3) */

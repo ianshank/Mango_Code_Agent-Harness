@@ -18,6 +18,8 @@ coverage/
 .mango/memory/
 .mango/.state/
 .mango/FAILURE_MEMORY.md
+.gradle/
+**/.gradle/
 
 # Python Testing & Tooling
 .coverage
@@ -26,12 +28,15 @@ coverage/
 .ruff_cache/
 *.egg-info/
 htmlcov/
+.benchmarks/
+scratch/
 
 # IDE & System
 .DS_Store
 Thumbs.db
 __pycache__/
 *.pyc
+*.log
 
 # Pong Engine Artifacts
 harness/node/src/pong/web/dist/

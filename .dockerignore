@@ -24,3 +24,13 @@ htmlcov/
 # IDE & System
 .DS_Store
 Thumbs.db
+*.log
+
+# Mango & Agent Subsystem
+.agents/
+
+# Build & Scratch Artifacts
+.gradle/
+**/.gradle/
+scratch/
+.benchmarks/

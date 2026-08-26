@@ -157,7 +157,7 @@ class HarnessTests(unittest.TestCase):
             subprocess.run(
                 ["git", "-C", str(r), "remote", "add", "origin", "git@github.com:ExampleOrg/Repo.git"], check=True
             )
-            env = {**os.environ, "CLAUDE_PROJECT_DIR": str(r)}
+            env = {**os.environ, "CLAUDE_PROJECT_DIR": str(r), "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}
             safe = subprocess.run(
                 [sys.executable, str(r / "scripts/pretooluse_guard.py")],
                 input=json.dumps({"tool_input": {"command": "git status"}}),
@@ -226,7 +226,7 @@ class HarnessTests(unittest.TestCase):
             vitest = {
                 "testResults": [
                     {
-                        "name": "/tmp/project/" + vfile,
+                        "name": str(r / vfile),
                         "assertionResults": [
                             {"status": "pending", "ancestorTitles": ["suite"], "title": "individual skip"}
                         ],
@@ -243,10 +243,10 @@ class HarnessTests(unittest.TestCase):
                 "--waivers",
                 str(r / ".governance/skip-waivers.json"),
             ]
-            self.assertEqual(subprocess.run([*base, "--vitest-json", str(r / "vitest.json")]).returncode, 0)
-            self.assertEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")]).returncode, 0)
+            self.assertEqual(subprocess.run([*base, "--vitest-json", str(r / "vitest.json")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
+            self.assertEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
             (r / "junit.tsv").write_text(f"{uid}\t{jname}\tDEC-999 fabricated\n", encoding="utf-8")
-            self.assertNotEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")]).returncode, 0)
+            self.assertNotEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
 
     def test_agent_role_contracts_and_policy_identity(self):
         roles = (

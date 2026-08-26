@@ -53,14 +53,18 @@ def test_complete_chat_success(mock_urlopen):
     mock_urlopen.return_value = mock_resp
 
     messages = [{"role": "user", "content": "hello"}]
-    res = complete_chat(messages, api_key="secret-key", timeout_sec=1)
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}):
+        res = complete_chat(messages, api_key="secret-key", timeout_sec=1)
 
     assert res["choices"][0]["message"]["content"] == "mock response"
     assert "latency_ms" in res
     mock_urlopen.assert_called_once()
 
 
-@patch("harness.shared.nemotron_bridge.resolve_api_key", return_value="")
+@patch(
+    "harness.shared.nemotron_bridge.resolve_environment",
+    return_value={"api_key": "", "base_url": "", "default_model": ""},
+)
 @patch("urllib.request.urlopen")
 def test_complete_chat_missing_key(mock_urlopen, mock_resolve):
     with pytest.raises(ValueError, match="NVIDIA_API_KEY is not configured"):
@@ -73,7 +77,8 @@ def test_complete_chat_http_error(mock_urlopen):
     mock_urlopen.side_effect = err
 
     with pytest.raises(RuntimeError) as exc:
-        complete_chat([], api_key="my_secret_key")
+        with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}):
+            complete_chat([], api_key="my_secret_key")
 
     # Assert secret is masked
     assert "my_secret_key" not in str(exc.value)
@@ -85,7 +90,8 @@ def test_complete_chat_connection_error(mock_urlopen):
     mock_urlopen.side_effect = Exception("Connection failed due to token my_secret_key")
 
     with pytest.raises(RuntimeError) as exc:
-        complete_chat([], api_key="my_secret_key")
+        with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}):
+            complete_chat([], api_key="my_secret_key")
 
     assert "my_secret_key" not in str(exc.value)
     assert mask_secret("my_secret_key") in str(exc.value)
@@ -120,10 +126,10 @@ def test_main_text_output(mock_stdout, mock_complete):
 
 @patch("sys.argv", ["nemotron_bridge.py", "--prompt", "Hello"])
 @patch("harness.shared.nemotron_bridge.complete_chat")
-@patch("sys.stderr", new_callable=io.StringIO)
-def test_main_error_exit(mock_stderr, mock_complete):
+@patch("sys.stdout", new_callable=io.StringIO)
+def test_main_error_exit(mock_stdout, mock_complete):
     mock_complete.side_effect = Exception("mock error")
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 1
-    assert "mock error" in mock_stderr.getvalue()
+    assert "mock error" in mock_stdout.getvalue()

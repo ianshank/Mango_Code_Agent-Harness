@@ -6,7 +6,7 @@
  * - C-AI-SEC-1: Secret sanitization and fail-closed configuration contracts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   NemotronClient,
   DEFAULT_NEMOTRON_CONFIG,
@@ -14,17 +14,33 @@ import {
 import { SecretMasker } from '../../../src/ai/nemotron/secret-masker.js';
 import { CircuitBreaker } from '../../../src/ai/nemotron/circuit-breaker.js';
 import { runNemotronCli } from '../../../src/ai/nemotron/cli.js';
+import * as fs from 'node:fs';
 
 describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
   it('initializes with default configuration values', () => {
-    const client = new NemotronClient({
-      apiKey: 'nvapi-test-dummy-key-1234567890',
-    });
+    // Isolate environment
+    const originalEnv = process.env['NEMOTRON_DEFAULT_MODEL'];
+    delete process.env['NEMOTRON_DEFAULT_MODEL'];
+    
+    
+    // Change cwd to prevent reading the workspace .env
+    const spyCwd = vi.spyOn(process, 'cwd').mockReturnValue(fs.mkdtempSync('test-'));
+
+    let client;
+    try {
+      client = new NemotronClient({
+        apiKey: 'nvapi-test-dummy-key-1234567890',
+      });
+    } finally {
+      spyCwd.mockRestore();
+      vi.unstubAllEnvs();
+      if (originalEnv !== undefined) {
+        process.env['NEMOTRON_DEFAULT_MODEL'] = originalEnv;
+      }
+    }
 
     expect(client.config.baseUrl).toBe(DEFAULT_NEMOTRON_CONFIG.baseUrl);
-    expect(client.config.defaultModel).toBe(
-      DEFAULT_NEMOTRON_CONFIG.defaultModel,
-    );
+    expect(client.config.defaultModel).toBeUndefined();
     expect(client.config.timeoutMs).toBe(30000);
     expect(client.config.maxRetries).toBe(3);
   });

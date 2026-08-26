@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.4 — Root Makefile
+# Agentic SSD v2.1.6 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -51,7 +51,7 @@ test-node: ## Run Vitest test suite and generate test results JSON
 
 .PHONY: verify-zero-skips
 verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
-	$(PYTHON) $(SHARED_SRC)/verify_zero_skips.py \
+	$(PYTHON) $(SHARED_SRC)/governance/verify_zero_skips.py \
 		--vitest-json $(NODE_DIR)/.governance/vitest-results.json \
 		--decision-log $(NODE_DIR)/.governance/decision-log.md \
 		--waivers $(NODE_DIR)/.governance/skip-waivers.json
@@ -60,10 +60,14 @@ verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
-	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections check_traceability; do \
+	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections; do \
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
+	@echo "  → governance/check_traceability.py"
+	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
+	@echo "  → validate_invariants.py"
+	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
 
 # --- Composite Targets ---

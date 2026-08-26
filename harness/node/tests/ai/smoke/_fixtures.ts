@@ -64,8 +64,8 @@ export const SMOKE_MAX_TOKENS = 50;
 /** Token budget for agent delegation tests — needs more room for structured responses. */
 export const AGENT_MAX_TOKENS = 128;
 
-/** Maximum acceptable latency in milliseconds for a single API call. */
-export const LATENCY_CEILING_MS = 60_000;
+/** Maximum acceptable latency in milliseconds for a single API call in smoke tests. */
+export const LATENCY_CEILING_MS = 25_000;
 
 /** Timeout for individual test cases (ms). */
 export const LIVE_TEST_TIMEOUT_MS = 90_000;
@@ -133,4 +133,24 @@ export function loadAgentSystemPrompt(agentFilePath: string): string {
     return content.slice(frontmatterEnd + 3).trim();
   }
   return content.trim();
+}
+
+/**
+ * Checks if an error represents a transient NIM error covered by DEC-001 (e.g. rate limit, unavailable).
+ */
+export function isTransientError(err: any): boolean {
+  const code = err.statusCode;
+  const msg = err.message || '';
+  if (code === 404 || code === 410 || code === 429 || code === 502 || code === 503 || code === 504) return true;
+  if (
+    msg.includes('404') ||
+    msg.includes('410') ||
+    msg.includes('429') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('504')
+  ) {
+    return true;
+  }
+  return false;
 }

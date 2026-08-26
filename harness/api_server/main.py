@@ -6,9 +6,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
-logging.basicConfig(level=logging.INFO)
+setup_json_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Mango MAS E2E API")
