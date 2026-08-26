@@ -26,9 +26,9 @@ This specification defines the functional, structural, performance, and governan
 
 - **R-PONG-AI-5 — Multi-Tier Predictive AI Controllers:**  
   The AI system MUST support multiple selectable difficulty tiers:
-  1. *Easy (Reactive Tracker):* Direct ball tracking with simulated human reaction latency and positional jitter.
-  2. *Medium (Trajectory Estimator):* Raycasted trajectory projection calculating wall bounces to arrive at the predicted intercept point.
-  3. *Hard/Expert (Adaptive Interceptor):* Trajectory calculation combined with paddle-edge targeting to return aggressive angular deflection shots.
+  1. _Easy (Reactive Tracker):_ Direct ball tracking with simulated human reaction latency and positional jitter.
+  2. _Medium (Trajectory Estimator):_ Raycasted trajectory projection calculating wall bounces to arrive at the predicted intercept point.
+  3. _Hard/Expert (Adaptive Interceptor):_ Trajectory calculation combined with paddle-edge targeting to return aggressive angular deflection shots.
 
 - **R-PONG-AUDIO-6 — Procedural Sound Synthesis Abstraction:**  
   The audio subsystem MUST provide an abstract synthesizer interface with concrete drivers:
@@ -51,14 +51,14 @@ This specification defines the functional, structural, performance, and governan
 
 ## 2. Acceptance Criteria Matrix
 
-| Requirement ID | Implementation Citation | Verification Suite |
-| :--- | :--- | :--- |
-| `R-PONG-CONFIG-1` | `src/pong/core/config.ts` | `tests/pong/unit/config.test.ts` |
-| `R-PONG-CORE-2` | `src/pong/core/physics.ts`, `src/pong/core/vector.ts` | `tests/pong/unit/physics.test.ts`, `tests/pong/unit/vector.test.ts` |
-| `R-PONG-STATE-3` | `src/pong/core/state-machine.ts` | `tests/pong/unit/state-machine.test.ts`, `tests/pong/functional/pause-resume-reset.test.ts` |
-| `R-PONG-INPUT-4` | `src/pong/input/input-manager.ts` | `tests/pong/integration/input-ai-interaction.test.ts` |
-| `R-PONG-AI-5` | `src/pong/ai/ai-opponent.ts` | `tests/pong/unit/ai.test.ts`, `tests/pong/e2e/bot-tournament-e2e.test.ts` |
-| `R-PONG-AUDIO-6` | `src/pong/audio/audio-manager.ts` | `tests/pong/integration/audio-render-events.test.ts` |
-| `R-PONG-RENDER-7` | `src/pong/render/canvas-renderer.ts`, `src/pong/render/terminal-renderer.ts` | `tests/pong/integration/audio-render-events.test.ts` |
-| `R-PONG-LOOP-8` | `src/pong/loop/game-loop.ts` | `tests/pong/sanity/loop-sanity.test.ts` |
-| `C-PONG-GOV-9` | `src/pong/core/game-engine.ts` | `tests/pong/journey/player-journey.test.ts`, `tests/pong/security/security-sanitization.test.ts` |
+| Requirement ID    | Implementation Citation                                                      | Verification Suite                                                                               |
+| :---------------- | :--------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------- |
+| `R-PONG-CONFIG-1` | `src/pong/core/config.ts`                                                    | `tests/pong/unit/config.test.ts`                                                                 |
+| `R-PONG-CORE-2`   | `src/pong/core/physics.ts`, `src/pong/core/vector.ts`                        | `tests/pong/unit/physics.test.ts`, `tests/pong/unit/vector.test.ts`                              |
+| `R-PONG-STATE-3`  | `src/pong/core/state-machine.ts`                                             | `tests/pong/unit/state-machine.test.ts`, `tests/pong/functional/pause-resume-reset.test.ts`      |
+| `R-PONG-INPUT-4`  | `src/pong/input/input-manager.ts`                                            | `tests/pong/integration/input-ai-interaction.test.ts`                                            |
+| `R-PONG-AI-5`     | `src/pong/ai/ai-opponent.ts`                                                 | `tests/pong/unit/ai.test.ts`, `tests/pong/e2e/bot-tournament-e2e.test.ts`                        |
+| `R-PONG-AUDIO-6`  | `src/pong/audio/audio-manager.ts`                                            | `tests/pong/integration/audio-render-events.test.ts`                                             |
+| `R-PONG-RENDER-7` | `src/pong/render/canvas-renderer.ts`, `src/pong/render/terminal-renderer.ts` | `tests/pong/integration/audio-render-events.test.ts`                                             |
+| `R-PONG-LOOP-8`   | `src/pong/loop/game-loop.ts`                                                 | `tests/pong/sanity/loop-sanity.test.ts`                                                          |
+| `C-PONG-GOV-9`    | `src/pong/core/game-engine.ts`                                               | `tests/pong/journey/player-journey.test.ts`, `tests/pong/security/security-sanitization.test.ts` |

@@ -22,7 +22,7 @@ jobs:
       matrix:
         # Code uses PEP 604 unions (e.g. `str | None`) -> Python 3.10+.
         # pyproject ruff target-version is py311.
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout

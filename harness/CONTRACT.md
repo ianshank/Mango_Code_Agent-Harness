@@ -26,6 +26,14 @@
 - **INV-5:** CI invokes every policy-required gate by Make target; meta/self-tests detect omissions and raw reconstructions.
 - **INV-6:** the project repository is not its own root of trust. High-risk agent authority and the expected policy digest live outside it.
 - **INV-7:** agent delegation is bounded and does not transfer authority; every side effect has actor/trace/policy evidence.
+- **INV-8:** Generated code MUST execute through an approved execution broker.
+- **INV-9:** A candidate MUST receive a deterministic policy verdict before execution or scoring.
+- **INV-10:** A DENY verdict is terminal for that candidate; a model cannot override it.
+- **INV-11:** Every repair attempt MUST have a normalized critique and immutable evidence ID.
+- **INV-12:** Repair loops MUST stop at the configured budget and produce FAILED or BLOCKED, never a synthetic success.
+- **INV-13:** A “verified” result MUST include policy, test, sandbox, source, and tool-version digests.
+- **INV-14:** Exportable traces MUST be redacted and marked as approved training candidates before dataset export.
+- **INV-15:** LATS MUST remain disabled by default until its cost-adjusted evaluation threshold is met.
 
 ## Supply chain
 

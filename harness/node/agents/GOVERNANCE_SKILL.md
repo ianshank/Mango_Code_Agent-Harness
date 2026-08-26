@@ -9,6 +9,7 @@ Apply the Agentic SSD gate contract, preserve the external root of trust, refuse
 ## Decisions since 2026-08-24
 
 - DEC-000 — Projections are explicitly not applicable in the uninstantiated template; adopters must configure mappings or record a replacement decision.
+- DEC-001 — Live smoke tests against remote NVIDIA NIM API are conditionally skipped when endpoints are rate-limited or unavailable.
 
 ## Required behavior
 

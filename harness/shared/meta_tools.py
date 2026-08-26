@@ -2,6 +2,7 @@ import contextlib
 import json
 import os
 import time
+import typing
 import uuid
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def _ensure_memory_files() -> None:
 
 
 @contextlib.contextmanager
-def _file_lock(filepath: Path):
+def _file_lock(filepath: Path) -> typing.Iterator[None]:
     lockfile = filepath.with_suffix(".lock")
     timeout = 10.0
     start = time.time()
@@ -94,6 +95,7 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
 
+
 META_TOOLS_SCHEMA = [
     {
         "type": "function",
@@ -142,4 +144,5 @@ META_TOOLS_SCHEMA = [
             },
         },
     },
+
 ]

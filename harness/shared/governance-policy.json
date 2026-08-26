@@ -88,6 +88,9 @@
     ".mango/hooks/**",
     "docs/PROJECT-CHARTER.md",
     "harness/shared/governance-policy.json",
+    "harness/shared/check_dedup.py",
+    "harness/shared/check_py_compat.py",
+    "harness/shared/governance/**",
     "harness/shared/remotes.py",
     "harness/shared/pretooluse_guard.py",
     "harness/shared/pretooluse_guard.sh",
@@ -106,5 +109,14 @@
   "external_root_of_trust_required": true,
   "charter_version": "2.0",
   "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
-  "skill_max_age_days": 90
+  "skill_max_age_days": 90,
+  "dedup": {
+    "max_shim_lines": 40,
+    "exempt": [],
+    "rationale": "Per-stack scripts must delegate to harness/shared; see harness/shared/check_dedup.py"
+  },
+  "py_compat": {
+    "skip_dirs": [],
+    "rationale": "Minimum runtime is derived from the CI python-version matrix; see harness/shared/check_py_compat.py"
+  }
 }

@@ -2,6 +2,8 @@ import secrets
 from unittest.mock import patch
 
 import pytest
+pytest.importorskip("fastapi")
+
 from fastapi.testclient import TestClient
 
 from harness.api_server.main import app

@@ -1,14 +1,16 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
-logging.basicConfig(level=logging.INFO)
+setup_json_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Mango MAS E2E API")
@@ -30,7 +32,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Ensure static directory exists
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-async def verify_api_key(x_api_key: str | None = Header(None)):
+# NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
+# unions (`str | None`) would fail on Python 3.9/3.10 even with `from __future__ import
+# annotations`. Keep Optional[...] while 3.9 is in the CI matrix.
+async def verify_api_key(x_api_key: Optional[str] = Header(None)):
     expected_key = os.environ.get("API_SERVER_KEY")
     if not expected_key:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")

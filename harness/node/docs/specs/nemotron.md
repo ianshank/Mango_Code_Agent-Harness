@@ -28,10 +28,10 @@ This specification defines the functional, architectural, resilience, and securi
 
 ## 2. Acceptance Criteria Matrix
 
-| Requirement ID | Implementation Citation | Verification Suite |
-| :--- | :--- | :--- |
-| `R-AI-NEMO-1` | `src/ai/nemotron/nemotron-client.ts` | `tests/ai/unit/nemotron-client.test.ts`, `tests/ai/e2e/nemotron-e2e.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts` |
-| `R-AI-NEMO-2` | `src/ai/nemotron/types.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/integration/nemotron-streaming.test.ts`, `tests/ai/functional/prompt-completion.test.ts`, `tests/ai/smoke/nemotron-live.test.ts` |
-| `R-AI-RES-3` | `src/ai/nemotron/circuit-breaker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/sanity/resilience-stress.test.ts`, `tests/ai/smoke/nemotron-live.test.ts` |
-| `C-AI-SEC-1` | `src/ai/nemotron/secret-masker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/security/secret-safety.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts` |
-| `.mango` Agent Delegation | `.mango/agents/*.md`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/smoke/mango-agent-live.test.ts` |
+| Requirement ID            | Implementation Citation                                                    | Verification Suite                                                                                                                                      |
+| :------------------------ | :------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `R-AI-NEMO-1`             | `src/ai/nemotron/nemotron-client.ts`                                       | `tests/ai/unit/nemotron-client.test.ts`, `tests/ai/e2e/nemotron-e2e.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts` |
+| `R-AI-NEMO-2`             | `src/ai/nemotron/types.ts`, `src/ai/nemotron/nemotron-client.ts`           | `tests/ai/integration/nemotron-streaming.test.ts`, `tests/ai/functional/prompt-completion.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`              |
+| `R-AI-RES-3`              | `src/ai/nemotron/circuit-breaker.ts`, `src/ai/nemotron/nemotron-client.ts` | `tests/ai/sanity/resilience-stress.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`                                                                     |
+| `C-AI-SEC-1`              | `src/ai/nemotron/secret-masker.ts`, `src/ai/nemotron/nemotron-client.ts`   | `tests/ai/security/secret-safety.test.ts`, `tests/ai/smoke/nemotron-live.test.ts`, `tests/ai/smoke/cli-live.test.ts`                                    |
+| `.mango` Agent Delegation | `.mango/agents/*.md`, `src/ai/nemotron/nemotron-client.ts`                 | `tests/ai/smoke/mango-agent-live.test.ts`                                                                                                               |

@@ -17,21 +17,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any, Optional, cast
+
+from harness.shared.json_logging import setup_json_logging
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
-
-
-def resolve_base_url() -> str:
-    """Resolve the NVIDIA base URL, preferring the NVIDIA_BASE_URL env var.
-
-    Backward-compatible: falls back to DEFAULT_BASE_URL when the env var is unset.
-    """
-    base_url = os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
-    logger.debug("Resolved NVIDIA base URL: %s", base_url)
-    return base_url
 
 
 def mask_secret(secret: str) -> str:
@@ -44,11 +36,15 @@ def mask_secret(secret: str) -> str:
     return f"{s[:10]}...{s[-4:]}"
 
 
-def resolve_api_key() -> str:
-    """Resolve API key from environment variable or local .env file."""
-    api_key = os.environ.get("NVIDIA_API_KEY")
-    if api_key:
-        return api_key
+def resolve_environment() -> dict[str, str]:
+    """Resolve API key, base URL, and default model from environment or local .env file."""
+    env_vars = {
+        "api_key": os.environ.get("NVIDIA_API_KEY", ""),
+        "base_url": os.environ.get("NVIDIA_BASE_URL", ""),
+        "default_model": os.environ.get("NEMOTRON_DEFAULT_MODEL", ""),
+    }
+    if env_vars["api_key"] and env_vars["default_model"]:
+        return env_vars
 
     # Check candidate .env files
     current = Path(__file__).resolve()
@@ -60,34 +56,53 @@ def resolve_api_key() -> str:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
-                        if k.strip() == "NVIDIA_API_KEY":
-                            return v.strip()
+                        key_name = k.strip()
+                        val = v.strip()
+                        if key_name == "NVIDIA_API_KEY" and not env_vars["api_key"]:
+                            env_vars["api_key"] = val
+                        elif key_name == "NVIDIA_BASE_URL" and not env_vars["base_url"]:
+                            env_vars["base_url"] = val
+                        elif key_name == "NEMOTRON_DEFAULT_MODEL" and not env_vars["default_model"]:
+                            env_vars["default_model"] = val
             except Exception:
                 pass
-    return ""
+    return env_vars
+
+
+def resolve_api_key() -> str:
+    """Resolve API key from environment variable or local .env file."""
+    return resolve_environment()["api_key"]
 
 
 def complete_chat(
-    messages,
-    model=None,
-    api_key=None,
-    base_url=None,
-    temperature=0.2,
-    max_tokens=4096,
-    timeout_sec=30,
-    tools=None,
-    tool_choice=None,
-):
+    messages: list[dict[str, Any]],
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    temperature: float = 0.2,
+    max_tokens: int = 4096,
+    timeout_sec: int = 30,
+    tools: Optional[list[dict[str, Any]]] = None,
+    tool_choice: Optional[Any] = None,
+) -> dict[str, Any]:
     """Execute a chat completion request against NVIDIA Nemotron API."""
-    key = api_key or resolve_api_key()
+    env_config = resolve_environment()
+    key = api_key if api_key is not None else env_config["api_key"]
     if not key:
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
-    endpoint = base_url or resolve_base_url()
-    target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL") or DEFAULT_MODEL
+    endpoint = base_url or env_config["base_url"] or DEFAULT_BASE_URL
+    target_model = model or env_config["default_model"]
+    if not target_model:
+        raise ValueError(
+            "Target model is not configured. Set NEMOTRON_DEFAULT_MODEL "
+            "environment variable or pass explicitly."
+        )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
-    logger.info("Calling Nemotron model=%s timeout=%ss key=%s", target_model, timeout_sec, mask_secret(key))
+    if not (url.startswith("https://") or url.startswith("http://")):
+        raise ValueError(f"Invalid URL scheme in endpoint: {endpoint}")
+
     payload = {
         "model": target_model,
         "messages": messages,
@@ -115,12 +130,11 @@ def complete_chat(
 
     start_time = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # nosec B310
             body = resp.read().decode("utf-8")
-            data = json.loads(body)
+            data = cast(dict[str, Any], json.loads(body))
             latency_ms = int((time.time() - start_time) * 1000)
             data["latency_ms"] = latency_ms
-            logger.debug("Nemotron response received in %dms", latency_ms)
             return data
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8", errors="replace")
@@ -131,7 +145,7 @@ def complete_chat(
         raise RuntimeError(f"Nemotron Connection Error: {sanitized}") from e
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="NVIDIA Nemotron Ultra Python Bridge")
     parser.add_argument("--prompt", required=True, help="User prompt to send to Nemotron")
     parser.add_argument(
@@ -139,10 +153,13 @@ def main():
         default="You are an expert AI architect and reasoning assistant.",
         help="System instruction prompt",
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Target model ID")
+    parser.add_argument("--model", default=None, help="Target model ID")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     parser.add_argument("--json", action="store_true", help="Output raw JSON response")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+
+    setup_json_logging(level=logging.DEBUG if args.debug else logging.INFO)
 
     messages = [
         {"role": "system", "content": args.system},
@@ -159,13 +176,12 @@ def main():
             print(f"\n--- Nemotron Response [{res.get('model')}] ({res.get('latency_ms')}ms) ---\n")
             print(content)
             print(
-                "\nTokens: "
-                f"{usage.get('prompt_tokens', 0)} prompt + "
+                f"\nTokens: {usage.get('prompt_tokens', 0)} prompt + "
                 f"{usage.get('completion_tokens', 0)} completion = "
                 f"{usage.get('total_tokens', 0)} total\n"
             )
     except Exception as e:
-        print(f"\n[Nemotron Bridge Error]: {e}\n", file=sys.stderr)
+        logger.error(f"Nemotron Bridge Error: {e}")
         sys.exit(1)
 
 

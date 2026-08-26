@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.4 — Root Makefile
+# Agentic SSD v2.1.6 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -26,16 +26,20 @@ help: ## Show available targets
 
 # --- Linting & Static Analysis ---
 .PHONY: lint-python
-lint-python: ## Run ruff check + mypy on Python sources and tests
-	$(RUFF) check $(SHARED_TESTS)/ $(API_TESTS)/
+lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
+	$(RUFF) check .
 	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
+
+.PHONY: check-compat
+check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
+	$(PYTHON) $(SHARED_SRC)/check_py_compat.py --repo-root .
 
 .PHONY: lint-node
 lint-node: ## Run ESLint, Prettier, and Knip on Node stack
 	(cd $(NODE_DIR) && $(PM) exec eslint . --max-warnings=0 && $(PM) exec prettier --check . && $(PM) exec knip)
 
 .PHONY: lint
-lint: lint-python ## Run code style & static analysis gates
+lint: lint-python check-compat ## Run code style, static analysis, and runtime-compatibility gates
 
 # --- Python Testing & Coverage ---
 .PHONY: test-python
@@ -53,7 +57,7 @@ test-node: ## Run Vitest test suite and generate test results JSON
 
 .PHONY: verify-zero-skips
 verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
-	$(PYTHON) $(SHARED_SRC)/verify_zero_skips.py \
+	$(PYTHON) $(SHARED_SRC)/governance/verify_zero_skips.py \
 		--vitest-json $(NODE_DIR)/.governance/vitest-results.json \
 		--decision-log $(NODE_DIR)/.governance/decision-log.md \
 		--waivers $(NODE_DIR)/.governance/skip-waivers.json
@@ -62,31 +66,20 @@ verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
-	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy validate_invariants check_projections check_traceability; do \
+	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections; do \
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
+	@echo "  → governance/check_traceability.py"
+	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
+	@echo "  → validate_invariants.py"
+	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
 
 # --- Drift Detection ---
 .PHONY: check-dedup
-check-dedup: ## Fail if node/jvm governance scripts are not thin delegating shims to harness/shared (single source of truth)
-	@echo "--- Checking governance scripts delegate to $(SHARED_SRC) (single source of truth) ---"
-	@for script in check_projections check_traceability pretooluse_guard remotes validate_adoption validate_agent_policy validate_governance_docs validate_policy verify_zero_skips; do \
-		for dir in $(NODE_DIR)/scripts harness/jvm/scripts; do \
-			shim=$$dir/$$script.py; \
-			if [ ! -f "$$shim" ]; then \
-				echo "[FAIL] missing delegating shim: $$shim"; exit 1; \
-			fi; \
-			if ! grep -q "runpy" "$$shim" || ! grep -q "runpy.run_path" "$$shim"; then \
-				echo "[FAIL] $$shim is not a delegating shim: must import runpy and call runpy.run_path (logic lives only in $(SHARED_SRC))"; exit 1; \
-			fi; \
-			if ! grep -q "shared" "$$shim" || ! grep -q "$$script.py" "$$shim"; then \
-				echo "[FAIL] $$shim does not resolve the shared module $(SHARED_SRC)/$$script.py"; exit 1; \
-			fi; \
-		done; \
-	done
-	@echo "[PASS] All node/jvm governance scripts are thin delegating shims to $(SHARED_SRC) (logic lives only in shared/)."
+check-dedup: ## Fail if any per-stack governance script is a copy instead of a shim delegating to harness/shared
+	$(PYTHON) $(SHARED_SRC)/check_dedup.py --repo-root .
 
 # --- Composite Targets ---
 .PHONY: test

@@ -4,12 +4,38 @@ import json
 import logging
 import os
 import subprocess
+import typing
 from pathlib import Path
 
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 
 logger = logging.getLogger(__name__)
+
+AUTONOMOUS_AGENT_GUARDRAIL = (
+    "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
+    "and fail closed when approval is required."
+)
+
+PLANNER_PROMPT_TEMPLATE = (
+    "Create a plan for the following task, ensuring no hardcoded values and strict testing: {task}\n"
+    f"{AUTONOMOUS_AGENT_GUARDRAIL}"
+)
+
+REASONER_PROMPT_TEMPLATE = (
+    "Execute the following plan using backward-compatible, modular code. "
+    "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the filesystem.\n"
+    f"{AUTONOMOUS_AGENT_GUARDRAIL} "
+    "Use run_command to run standard terminal commands like pip, uvicorn, and pytest.\n\n"
+    "Plan:\n{plan}"
+)
+
+VERIFIER_PROMPT_TEMPLATE = (
+    "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
+    "Use your 'run_command' tool to execute them. Report PASS or FAIL.\n"
+    f"{AUTONOMOUS_AGENT_GUARDRAIL}\n\n"
+    "Reasoner Output:\n{code_output}"
+)
 
 # Combine orchestrator baseline tools with meta tools for continuous learning
 NEMOTRON_TOOLS = [
@@ -71,7 +97,7 @@ class MangoMASOrchestrator:
         self.hooks_dir = self.workspace_dir / ".mango" / "hooks"
         self.conversation_history: list[dict[str, str]] = []
 
-    def _run_hook(self, hook_name: str, **kwargs) -> None:
+    def _run_hook(self, hook_name: str, **kwargs: typing.Any) -> None:
         """Executes a pre- or post- hook script if it exists."""
         hook_path = self.hooks_dir / f"{hook_name}.sh"
         if hook_path.exists():
@@ -118,18 +144,21 @@ class MangoMASOrchestrator:
                 import json
 
                 payload = json.dumps({"tool": "run_command", "args": {"command": command}})
+                env = os.environ.copy()
+                env["PYTHONPATH"] = str(self.workspace_dir)
                 guard_result = subprocess.run(
                     ["python", str(guard_script)],
                     input=payload,
                     cwd=self.workspace_dir,
+                    env=env,
                     capture_output=True,
                     text=True,
                     timeout=self.tool_timeout,
                 )
                 if guard_result.returncode != 0:
                     return (
-                        "Error: Command blocked by policy guard. "
-                        f"Guard output:\n{guard_result.stdout}\n{guard_result.stderr}"
+                        f"Error: Command blocked by policy guard. Guard output:\n"
+                        f"{guard_result.stdout}\n{guard_result.stderr}"
                     )
 
             # If guard passes (or doesn't exist), execute the command
@@ -153,7 +182,7 @@ class MangoMASOrchestrator:
         except Exception as e:
             return f"Error executing command '{command}': {str(e)}"
 
-    def execute_agent(self, agent_name: str, task: str, tools=None) -> str:
+    def execute_agent(self, agent_name: str, task: str, tools: list[dict[str, typing.Any]] | None = None) -> str:
         """
         Executes a single agent's reasoning loop using ReAct (Reasoning and Acting).
         Returns the final string output from the agent.
@@ -173,7 +202,7 @@ class MangoMASOrchestrator:
 
         for i in range(self.max_iterations):
             try:
-                kwargs = {
+                kwargs: dict[str, typing.Any] = {
                     "messages": messages,
                     "tools": active_tools,
                     "timeout_sec": self.api_timeout,
@@ -211,6 +240,7 @@ class MangoMASOrchestrator:
                 if os.environ.get("MANGO_DEBUG_DUMP") == "1":
                     import copy
                     import tempfile
+
                     # Create a redacted copy of the history
                     redacted_history = copy.deepcopy(self.conversation_history)
                     if self.api_key:
@@ -258,6 +288,7 @@ class MangoMASOrchestrator:
                     tool_result = hypothesis_register(
                         args.get("claim", ""), args.get("reasoning", ""), args.get("confidence", 0.5)
                     )
+
                 else:
                     tool_result = f"Error: Unknown tool '{func_name}'"
 
@@ -272,38 +303,18 @@ class MangoMASOrchestrator:
     def execute_sequential_thinking_loop(self, initial_task: str) -> str:
         """Executes the full MAS loop: Planner -> Nemotron-Reasoner -> Verifier."""
         # 1. Planner
-        plan = self.execute_agent(
-            "planner",
-            "Create a plan for the following task, ensuring no hardcoded values and "
-            f"strict testing: {initial_task}\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and "
-            "fail closed when approval is required.",
-            tools=[],
-        )
+        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
+        plan = self.execute_agent("planner", planner_prompt, tools=[])
         logger.info(f"Plan generated: {len(plan)} bytes")
 
         # 2. Reasoner (Code Generation / Fixes using Tools)
-        code_output = self.execute_agent(
-            "nemotron-reasoner",
-            "Execute the following plan using backward-compatible, modular code. "
-            "You MUST use your 'write_file' and 'run_command' tools to actually implement "
-            "and test it on the filesystem.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail "
-            "closed when approval is required. Use run_command to run standard terminal "
-            "commands like pip, uvicorn, and pytest.\n\n"
-            f"Plan:\n{plan}",
-        )
+        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+        code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt)
         logger.info(f"Code generation completed via tools: {len(code_output)} bytes")
 
         # 3. Verifier (Testing & Hygiene using Tools)
-        verification = self.execute_agent(
-            "verifier",
-            "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
-            "Use your 'run_command' tool to execute them. Report PASS or FAIL.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail "
-            "closed when approval is required.\n\n"
-            f"Reasoner Output:\n{code_output}",
-        )
+        verifier_prompt = VERIFIER_PROMPT_TEMPLATE.format(code_output=code_output)
+        verification = self.execute_agent("verifier", verifier_prompt)
         logger.info(f"Verification result: {len(verification)} bytes")
 
         return verification

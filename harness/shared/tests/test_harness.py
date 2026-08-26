@@ -40,36 +40,26 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(rem.check_url(c["url"], allow)[0], c["allowed"])
 
     def test_shared_kernel_scripts_delegate_to_shared(self):
-        # The governance LOGIC lives only in harness/shared/*.py (single source of
-        # truth). The node/jvm copies are thin delegating shims (they import runpy
-        # and run the shared module as __main__), NOT byte-identical copies -- so
-        # that `python harness/<stack>/scripts/<name>.py` behaves identically to
-        # `python harness/shared/<name>.py`. Shell helpers remain byte-identical.
-        py_scripts = [
-            "remotes.py",
-            "pretooluse_guard.py",
-            "verify_zero_skips.py",
-            "check_projections.py",
-            "check_traceability.py",
-            "validate_agent_policy.py",
-            "validate_policy.py",
-            "validate_governance_docs.py",
-            "validate_adoption.py",
-        ]
+        """Per-stack governance scripts must delegate to harness/shared, never copy it.
+
+        The rule itself lives in harness/shared/check_dedup.py so the gate that CI runs
+        and the assertion this test makes cannot drift apart. Two delegation styles are
+        valid: a runpy trampoline, or an import re-export from the governance package.
+        """
+        from harness.shared import check_dedup
+
+        report = check_dedup.run(check_dedup.load_config(HARNESS.parent))
+        self.assertTrue(report.ok, f"governance script drift: {report.failures}")
+        self.assertTrue(report.checked, "expected per-stack governance shims to be discovered")
+
+    def test_shared_kernel_shell_helpers_are_byte_identical(self):
+        """Shell helpers have no import mechanism, so they stay byte-identical copies."""
         shell_files = [
             "pretooluse_guard.sh",
             "pre_push_scan.sh",
             "install_hooks.sh",
             "validate_specs.sh",
         ]
-        for f in py_scripts:
-            self.assertTrue((SHARED / f).is_file(), f"shared source of truth missing: {f}")
-            for stack in ("node", "jvm"):
-                shim = (HARNESS / stack / "scripts" / f).read_text()
-                self.assertIn("import runpy", shim, f"{stack}/{f} is not a delegating shim")
-                self.assertIn("runpy.run_path", shim, f"{stack}/{f} must call runpy.run_path")
-                self.assertIn("shared", shim, f"{stack}/{f} must resolve the shared module")
-                self.assertIn(f, shim, f"{stack}/{f} must delegate to shared/{f}")
         for f in shell_files:
             expected = (SHARED / f).read_bytes()
             for stack in ("node", "jvm"):
@@ -172,7 +162,7 @@ class HarnessTests(unittest.TestCase):
             subprocess.run(
                 ["git", "-C", str(r), "remote", "add", "origin", "git@github.com:ExampleOrg/Repo.git"], check=True
             )
-            env = {**os.environ, "CLAUDE_PROJECT_DIR": str(r)}
+            env = {**os.environ, "CLAUDE_PROJECT_DIR": str(r), "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}
             safe = subprocess.run(
                 [sys.executable, str(r / "scripts/pretooluse_guard.py")],
                 input=json.dumps({"tool_input": {"command": "git status"}}),
@@ -241,7 +231,7 @@ class HarnessTests(unittest.TestCase):
             vitest = {
                 "testResults": [
                     {
-                        "name": "/tmp/project/" + vfile,
+                        "name": str(r / vfile),
                         "assertionResults": [
                             {"status": "pending", "ancestorTitles": ["suite"], "title": "individual skip"}
                         ],
@@ -258,10 +248,10 @@ class HarnessTests(unittest.TestCase):
                 "--waivers",
                 str(r / ".governance/skip-waivers.json"),
             ]
-            self.assertEqual(subprocess.run([*base, "--vitest-json", str(r / "vitest.json")]).returncode, 0)
-            self.assertEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")]).returncode, 0)
+            self.assertEqual(subprocess.run([*base, "--vitest-json", str(r / "vitest.json")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
+            self.assertEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
             (r / "junit.tsv").write_text(f"{uid}\t{jname}\tDEC-999 fabricated\n", encoding="utf-8")
-            self.assertNotEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")]).returncode, 0)
+            self.assertNotEqual(subprocess.run([*base, "--junit-events", str(r / "junit.tsv")], env={**os.environ, "PYTHONPATH": str(HARNESS.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}).returncode, 0)
 
     def test_agent_role_contracts_and_policy_identity(self):
         roles = (

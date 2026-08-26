@@ -1,6 +1,7 @@
 """Tests for harness/shared/validate_invariants.py — protected paths, secrets, size budget."""
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 
@@ -93,19 +94,22 @@ def test_git_modified_files_ignores_gitignored(temp_repo: Path):
 
 # --- check_protected_paths ---
 
-def test_check_protected_paths_pass_when_clean(temp_repo: Path, capsys):
-    assert vi.check_protected_paths(temp_repo, [".github/workflows/**", "Makefile"]) is True
-    assert "[PASS]" in capsys.readouterr().out
+def test_check_protected_paths_pass_when_clean(temp_repo: Path, caplog):
+    with caplog.at_level(logging.INFO, logger=vi.logger.name):
+        assert vi.check_protected_paths(temp_repo, [".github/workflows/**", "Makefile"]) is True
+    assert "[PASS]" in caplog.text
 
 
-def test_check_protected_paths_fails_on_protected_change(temp_repo: Path, capsys):
+def test_check_protected_paths_fails_on_protected_change(temp_repo: Path, caplog):
     mf = temp_repo / "Makefile"
     mf.write_text("all:\n", encoding="utf-8")
     subprocess.run(["git", "add", "Makefile"], cwd=temp_repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "mk"], cwd=temp_repo, check=True, capture_output=True)
     mf.write_text("all:\nclean:\n", encoding="utf-8")  # tracked-modified protected path
-    assert vi.check_protected_paths(temp_repo, [".github/workflows/**", "Makefile"]) is False
-    assert "[FAIL]" in capsys.readouterr().out
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        assert vi.check_protected_paths(temp_repo, [".github/workflows/**", "Makefile"]) is False
+    assert "[FAIL]" in caplog.text
+    assert "Makefile" in caplog.text
 
 
 def test_check_protected_paths_allows_with_env(temp_repo: Path):
@@ -135,12 +139,13 @@ def test_check_hardcoded_secrets_clean(temp_repo: Path):
     assert vi.check_hardcoded_secrets(temp_repo) is True
 
 
-def test_check_hardcoded_secrets_detects_literal(temp_repo: Path, capsys):
+def test_check_hardcoded_secrets_detects_literal(temp_repo: Path, caplog):
     # Build the secret literal dynamically so this test file is not itself flagged.
     secret_literal = "NVIDIA_" + "API_KEY = 'nvapi-secret'\n"
     (temp_repo / "leaky.py").write_text(secret_literal, encoding="utf-8")
-    assert vi.check_hardcoded_secrets(temp_repo) is False
-    assert "[FAIL]" in capsys.readouterr().out
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        assert vi.check_hardcoded_secrets(temp_repo) is False
+    assert "[FAIL]" in caplog.text
 
 
 def test_check_hardcoded_secrets_skips_venv(temp_repo: Path):
@@ -158,10 +163,11 @@ def test_check_size_budget_pass(temp_repo: Path):
     assert vi.check_size_budget(temp_repo, budget=500) is True
 
 
-def test_check_size_budget_fails_over(temp_repo: Path, capsys):
+def test_check_size_budget_fails_over(temp_repo: Path, caplog):
     (temp_repo / "big.py").write_text("\n".join("x = 1" for _ in range(501)) + "\n", encoding="utf-8")
-    assert vi.check_size_budget(temp_repo, budget=500) is False
-    assert "[FAIL]" in capsys.readouterr().out
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        assert vi.check_size_budget(temp_repo, budget=500) is False
+    assert "[FAIL]" in caplog.text
 
 
 def test_check_size_budget_ignores_tests(temp_repo: Path):
@@ -196,3 +202,41 @@ def test_main_default_workspace_runs():
     # depending on working-tree state, so accept either 0 or 1.
     code = vi.main()
     assert code in (0, 1)
+
+
+# --- size_budget_lines (MAX_FILE_LINES override) ---
+
+def test_size_budget_lines_defaults(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    assert vi.size_budget_lines() == vi.SIZE_BUDGET_LINES
+
+
+def test_size_budget_lines_honors_env_override(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("MAX_FILE_LINES", "42")
+    assert vi.size_budget_lines() == 42
+
+
+def test_size_budget_lines_ignores_non_integer(monkeypatch: pytest.MonkeyPatch, caplog):
+    monkeypatch.setenv("MAX_FILE_LINES", "not-a-number")
+    with caplog.at_level(logging.WARNING, logger=vi.logger.name):
+        assert vi.size_budget_lines() == vi.SIZE_BUDGET_LINES
+    assert "MAX_FILE_LINES" in caplog.text
+
+
+def test_check_size_budget_uses_env_override(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    (temp_repo / "medium.py").write_text("\n".join("x = 1" for _ in range(20)) + "\n", encoding="utf-8")
+    monkeypatch.setenv("MAX_FILE_LINES", "10")
+    assert vi.check_size_budget(temp_repo) is False
+    monkeypatch.setenv("MAX_FILE_LINES", "500")
+    assert vi.check_size_budget(temp_repo) is True
+
+
+def test_check_protected_paths_warns_when_attested(temp_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    """An attested protected-path change passes, but must still be logged for the audit trail."""
+    mf = temp_repo / "Makefile"
+    mf.write_text("all:\n", encoding="utf-8")
+    monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
+    with caplog.at_level(logging.WARNING, logger=vi.logger.name):
+        assert vi.check_protected_paths(temp_repo, ["Makefile"]) is True
+    assert "attestation" in caplog.text
+    assert "Makefile" in caplog.text

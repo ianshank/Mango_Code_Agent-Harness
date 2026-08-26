@@ -1,7 +1,7 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.4 (2026 Standards)  
+**Version:** 2.1.6 (2026 Standards)  
 **Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.0
 
 ---
@@ -18,11 +18,13 @@ graph TD
         NIM[NVIDIA NIM Cloud API<br/>integrate.api.nvidia.com]
         ExtPDP[External Tool Broker / PDP<br/>Policy Decision Point]
         GitServer[Remote Git Server<br/>GitHub / GitLab]
+        Context7[Upstash Context7 MCP<br/>Real-Time Documentation Engine]
     end
 
     Platform -->|HTTPS /v1/chat/completions| NIM
     Platform -->|Action Authorization Request| ExtPDP
     Platform -->|Verified Push / Audit| GitServer
+    Platform -->|Documentation & Context Sync| Context7
 ```
 
 ---
@@ -37,13 +39,17 @@ graph TD
     User --> Browser[Web Browser<br/>HTML5 Canvas 2D UI]
 
     subgraph "Repository Runtime Containers"
+        subgraph ".agents Skill Registry"
+            AgentSkills[Skills: nemotron-reasoner<br/>Native Antigravity Skill Definition]
+        end
+
         subgraph ".mango Agent Runtime"
             MA[Mango Agent Core]
             SubAgents[Subagents: nemotron-reasoner, planner, verifier]
             Personas[Persona Topology: Web Presenter, Node Bridge]
-            Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart]
-            Skills[Skills: repo-invariant-review, openspec-peer-review]
-            MetaTools[Continuous Learning: knowledge_gap_log, hypothesis_register]
+            Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
+            Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
+            MetaTools[Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) [Planned]]
             Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
             MA --> SubAgents
             SubAgents --> Personas
@@ -54,20 +60,25 @@ graph TD
         end
 
         subgraph "Node.js Container - harness/node"
-            TSClient[NemotronClient<br/>TypeScript Adapter]
+            TSClient[NemotronClient<br/>TypeScript Adapter & Circuit Breaker]
             PongEngine[Pong Game Engine<br/>Physics, FSM, Renderers]
-            VitestRunner[Vitest Test Runner<br/>83 Tests / 7 Tiers]
+            VitestRunner[Vitest Test Runner<br/>95 Tests / 7 Tiers]
             PongCli[Pong CLI Runner<br/>Autoplay & Tournament]
         end
 
         subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter]
-            GovGuards[pretooluse_guard.py<br/>Policy Guards]
-            Validators["Governance Validators<br/>7 Scripts: policy, adoption,<br/>agent-policy, docs, projections,<br/>traceability, zero-skips"]
+            Orchestrator[mango_mas_orchestrator.py<br/>MAS Orchestrator]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools]
+            subgraph "governance/"
+                GovGuards[pretooluse_guard.py<br/>Policy Guards]
+                Validators["Governance Validators<br/>traceability, zero-skips, remotes"]
+            end
+            RootValidators["Root Validators<br/>policy, adoption, agent-policy"]
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>138 Tests / 85.37% Coverage"]
+            AQA["Pytest AQA Suite<br/>149 Tests / 81.42% Coverage"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators

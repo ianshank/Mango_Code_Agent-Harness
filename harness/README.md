@@ -5,8 +5,10 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 ## Package layout
 
 - `shared/` — byte-identical policy kernel, canonical agent policy, schemas and adversarial self-tests.
-  - `shared/mango_mas_orchestrator.py` — Orchestrator for the Mango Multi-Agent System.
-  - `shared/tests/` — **Python AQA Engine** (138 Tests / 85.37% Coverage) executing governance rules in-process.
+  - `shared/mango_mas_orchestrator.py` — Orchestrator for the Mango Multi-Agent System (with JSON logging).
+  - `shared/meta_tools.py` — Meta-learning and context state tools for autonomous synthesis.
+  - `shared/governance/` — Extracted policy evaluation mechanisms (traceability, zero-skips, guards).
+  - `shared/tests/` — **Python AQA Engine** executing governance rules in-process.
 - `node/` — Node/TypeScript adapter and full 7-tier test matrix.
 - `jvm/` — JVM/Gradle/Kotlin adapter.
 - `control-plane/` — verifier, policy bundle, required-workflow example and reference PDP intended for an independently protected governance repository/service.
