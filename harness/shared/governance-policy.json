@@ -85,6 +85,7 @@
     "agents/**",
     ".mango/agents/**",
     ".mango/settings.json",
+    ".mango/hooks/**",
     "docs/PROJECT-CHARTER.md",
     "harness/shared/governance-policy.json",
     "harness/shared/remotes.py",

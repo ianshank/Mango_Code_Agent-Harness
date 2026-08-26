@@ -98,8 +98,24 @@ coverage: coverage-python ## Run coverage validation
 .PHONY: ci
 ci: lint coverage test-node verify-zero-skips validate check-dedup ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check
 
+.PHONY: spec
+spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)
+	@test -n "$(NAME)" || { echo 'Usage: make spec NAME=<feature-name>'; exit 1; }
+	@mkdir -p docs/specs
+	@test -f docs/specs/SPEC_TEMPLATE.md || { echo 'ERROR: docs/specs/SPEC_TEMPLATE.md missing'; exit 1; }
+	@cp docs/specs/SPEC_TEMPLATE.md docs/specs/$(NAME).md
+	@echo "Scaffolded docs/specs/$(NAME).md — fill in the required sections."
+
+.PHONY: review
+review: validate ## Mechanical pre-PR review gate (invariants + governance validators)
+	@echo "--- Pre-PR review checklist ---"
+	@echo "1. Mechanical invariants: PASSED (validate target)"
+	@echo "2. Run the 'openspec-peer-review' skill on the change/plan (Architecture, SDLC, QA, Product)."
+	@echo "3. Run the 'repo-invariant-review' skill to predict concrete CI failures."
+	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
+
 .PHONY: pre-pr
-pre-pr: ci ## Pre-PR validation gate (identical to CI)
+pre-pr: ci review ## Pre-PR validation gate (full CI + mechanical review checklist)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts
