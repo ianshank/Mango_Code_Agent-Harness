@@ -37,3 +37,4 @@ __pycache__/
 harness/node/src/pong/web/dist/
 *.pongrec
 
+.venv

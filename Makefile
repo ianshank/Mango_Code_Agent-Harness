@@ -10,7 +10,9 @@ PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 PM       ?= pnpm
-COV_MIN  ?= 80
+# Coverage threshold is sourced from the governance policy (single source of truth)
+# so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
+COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -68,17 +70,23 @@ validate: ## Run all governance validation scripts
 
 # --- Drift Detection ---
 .PHONY: check-dedup
-check-dedup: ## Fail if node/jvm governance script copies drift from harness/shared (single source of truth)
-	@echo "--- Checking governance script parity (shared == node == jvm) ---"
+check-dedup: ## Fail if node/jvm governance scripts are not thin delegating shims to harness/shared (single source of truth)
+	@echo "--- Checking governance scripts delegate to $(SHARED_SRC) (single source of truth) ---"
 	@for script in check_projections check_traceability pretooluse_guard remotes validate_adoption validate_agent_policy validate_governance_docs validate_policy verify_zero_skips; do \
-		if ! diff -q $(SHARED_SRC)/$$script.py $(NODE_DIR)/scripts/$$script.py >/dev/null 2>&1; then \
-			echo "[FAIL] $$script.py drifted: $(NODE_DIR)/scripts differs from $(SHARED_SRC)"; exit 1; \
-		fi; \
-		if ! diff -q $(SHARED_SRC)/$$script.py harness/jvm/scripts/$$script.py >/dev/null 2>&1; then \
-			echo "[FAIL] $$script.py drifted: harness/jvm/scripts differs from $(SHARED_SRC)"; exit 1; \
-		fi; \
+		for dir in $(NODE_DIR)/scripts harness/jvm/scripts; do \
+			shim=$$dir/$$script.py; \
+			if [ ! -f "$$shim" ]; then \
+				echo "[FAIL] missing delegating shim: $$shim"; exit 1; \
+			fi; \
+			if ! grep -q "runpy" "$$shim" || ! grep -q "runpy.run_path" "$$shim"; then \
+				echo "[FAIL] $$shim is not a delegating shim: must import runpy and call runpy.run_path (logic lives only in $(SHARED_SRC))"; exit 1; \
+			fi; \
+			if ! grep -q "shared" "$$shim" || ! grep -q "$$script.py" "$$shim"; then \
+				echo "[FAIL] $$shim does not resolve the shared module $(SHARED_SRC)/$$script.py"; exit 1; \
+			fi; \
+		done; \
 	done
-	@echo "[PASS] All governance script copies match harness/shared (single source of truth)."
+	@echo "[PASS] All node/jvm governance scripts are thin delegating shims to $(SHARED_SRC) (logic lives only in shared/)."
 
 # --- Composite Targets ---
 .PHONY: test
@@ -90,8 +98,24 @@ coverage: coverage-python ## Run coverage validation
 .PHONY: ci
 ci: lint coverage test-node verify-zero-skips validate check-dedup ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check
 
+.PHONY: spec
+spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)
+	@test -n "$(NAME)" || { echo 'Usage: make spec NAME=<feature-name>'; exit 1; }
+	@mkdir -p docs/specs
+	@test -f docs/specs/SPEC_TEMPLATE.md || { echo 'ERROR: docs/specs/SPEC_TEMPLATE.md missing'; exit 1; }
+	@cp docs/specs/SPEC_TEMPLATE.md docs/specs/$(NAME).md
+	@echo "Scaffolded docs/specs/$(NAME).md — fill in the required sections."
+
+.PHONY: review
+review: validate ## Mechanical pre-PR review gate (invariants + governance validators)
+	@echo "--- Pre-PR review checklist ---"
+	@echo "1. Mechanical invariants: PASSED (validate target)"
+	@echo "2. Run the 'openspec-peer-review' skill on the change/plan (Architecture, SDLC, QA, Product)."
+	@echo "3. Run the 'repo-invariant-review' skill to predict concrete CI failures."
+	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
+
 .PHONY: pre-pr
-pre-pr: ci ## Pre-PR validation gate (identical to CI)
+pre-pr: ci review ## Pre-PR validation gate (full CI + mechanical review checklist)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts

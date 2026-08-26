@@ -41,6 +41,9 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
     commands = [
         ["git", "diff", "--cached", "--name-only"],
         ["git", "diff", "--name-only"],
+        # Untracked files are not listed by `git diff`; include them so a newly-created
+        # file in a protected path is caught before it is staged (fail-closed).
+        ["git", "ls-files", "--others", "--exclude-standard"],
     ]
     if base_ref:
         commands.append(["git", "diff", f"origin/{base_ref}...HEAD", "--name-only"])

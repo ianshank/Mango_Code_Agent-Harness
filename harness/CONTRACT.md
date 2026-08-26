@@ -34,3 +34,15 @@ Node requires a committed frozen `pnpm-lock.yaml`. JVM enables `lockAllConfigura
 ## Template adoption blockers
 
 CI examples intentionally contain `PIN_FULL_COMMIT_SHA`; adopters must replace each with a reviewed full action SHA in the independently protected onboarding change. JVM wrapper, lockfile and verification metadata must also be generated and reviewed. These are explicit blockers rather than silently insecure defaults.
+
+## Protected-paths escape hatch
+
+The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files (`Makefile`, `.github/workflows/**`, the shared validators, agent contracts, and the root of trust). `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
+
+Legitimate infrastructure modernization (CI, Makefile, governance scripts) necessarily touches these paths. Such changes MUST be made on a dedicated branch with an explicit, reviewed decision-log entry, and the protected-path gate is satisfied by setting `ALLOW_GITHUB_CHANGES=1` in the CI environment **for that reviewed change only**. The env var is a per-change attestation of review, not a blanket bypass: it is not set in the default CI environment and must never be committed to a `.env` file.
+
+Untracked files in protected paths are also caught (fail-closed) — `validate_invariants` enumerates staged, tracked-modified, and untracked non-ignored files.
+
+## Coverage gate
+
+The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The policy additionally declares `per_file: true`; a per-file gate is a planned follow-up. Until then, the total gate enforces the policy's `lines` threshold.
