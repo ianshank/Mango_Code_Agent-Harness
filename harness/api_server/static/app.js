@@ -2,13 +2,15 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const taskInput = document.getElementById('taskInput');
+    const apiKeyInput = document.getElementById('apiKeyInput');
     const submitBtn = document.getElementById('submitBtn');
     const btnText = document.getElementById('btnText');
     const btnLoader = document.getElementById('btnLoader');
     const timeline = document.getElementById('timeline');
     
     const task = taskInput.value.trim();
-    if (!task) return;
+    const apiKey = apiKeyInput.value.trim();
+    if (!task || !apiKey) return;
     
     // UI Loading State
     submitBtn.disabled = true;
@@ -23,7 +25,7 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-API-Key': 'default-dev-key'
+                'X-API-Key': apiKey
             },
             body: JSON.stringify({ task })
         });

@@ -56,7 +56,7 @@ class MangoMASOrchestrator:
         self,
         workspace_dir: Path,
         api_key: str | None = None,
-        model: str = "nvidia/llama-3.3-nemotron-super-49b-v1",
+        model: str | None = None,
         max_iterations: int = 10,
         api_timeout: int = 300,
         tool_timeout: int = 30,
@@ -100,7 +100,12 @@ class MangoMASOrchestrator:
 
     def _execute_write_file(self, filepath: str, content: str) -> str:
         """Local tool implementation to write a file."""
-        target_path = self.workspace_dir / filepath
+        workspace = self.workspace_dir.resolve()
+        target_path = (workspace / filepath).resolve()
+
+        if not target_path.is_relative_to(workspace):
+            return f"Error writing file {filepath}: path escapes workspace"
+
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding="utf-8")
@@ -111,9 +116,19 @@ class MangoMASOrchestrator:
     def _execute_run_command(self, command: str) -> str:
         """Local tool implementation to execute a command."""
         try:
-            result = subprocess.run(
-                command, shell=True, cwd=self.workspace_dir, capture_output=True, text=True, timeout=self.tool_timeout
-            )
+            # Route command execution through pretooluse guard
+            guard_script = self.workspace_dir / "harness" / "shared" / "pretooluse_guard.sh"
+            if guard_script.exists():
+                full_cmd = ["bash", str(guard_script), command]
+                result = subprocess.run(
+                    full_cmd, cwd=self.workspace_dir, capture_output=True, text=True, timeout=self.tool_timeout
+                )
+            else:
+                # Fallback if guard script doesn't exist, use bash -c instead of shell=True
+                result = subprocess.run(
+                    ["bash", "-c", command], cwd=self.workspace_dir, capture_output=True, text=True, timeout=self.tool_timeout
+                )
+
             output = result.stdout
             if result.stderr:
                 output += "\n[STDERR]\n" + result.stderr
@@ -140,18 +155,22 @@ class MangoMASOrchestrator:
         ]
 
         # Keep track of conversation for debugging
-        self.conversation_history = messages.copy()
+        self.conversation_history.extend(messages)
 
         active_tools = tools if tools is not None else NEMOTRON_TOOLS
 
         for i in range(self.max_iterations):
             try:
-                response = complete_chat(
-                    messages=messages,
-                    model=self.model,
-                    tools=active_tools,
-                    timeout_sec=self.api_timeout,
-                )
+                kwargs = {
+                    "messages": messages,
+                    "tools": active_tools,
+                    "timeout_sec": self.api_timeout,
+                    "api_key": self.api_key
+                }
+                if self.model:
+                    kwargs["model"] = self.model
+
+                response = complete_chat(**kwargs)
             except Exception as e:
                 logger.error(f"[{agent_name}] API failed: {e}")
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
@@ -177,10 +196,26 @@ class MangoMASOrchestrator:
                 self.conversation_history.append({"role": "assistant", "content": final_content})
 
                 # Debug dump
-                dump_file = self.workspace_dir / f".mango/memory/debug_{agent_name}.json"
-                dump_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(dump_file, "w") as f:
-                    json.dump(self.conversation_history, f, indent=2)
+                if os.environ.get("MANGO_DEBUG_DUMP") == "1":
+                    import tempfile
+                    import copy
+                    
+                    # Create a redacted copy of the history
+                    redacted_history = copy.deepcopy(self.conversation_history)
+                    if self.api_key:
+                        for msg in redacted_history:
+                            if "content" in msg and isinstance(msg["content"], str):
+                                msg["content"] = msg["content"].replace(self.api_key, "<REDACTED_API_KEY>")
+                                
+                    dump_dir = Path(tempfile.gettempdir()) / "mango_debug"
+                    dump_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Use a unique timestamp or run id for the dump
+                    import time
+                    dump_file = dump_dir / f"debug_{agent_name}_{int(time.time()*1000)}.json"
+                    
+                    with open(dump_file, "w") as f:
+                        json.dump(redacted_history, f, indent=2)
 
                 self._run_hook(f"post-{agent_name}-run", status="success")
                 return final_content

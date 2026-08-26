@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -5,6 +6,7 @@ from fastapi.testclient import TestClient
 from harness.api_server.main import app
 
 client = TestClient(app)
+os.environ["API_SERVER_KEY"] = "default-dev-key"
 
 
 def test_static_files():

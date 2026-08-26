@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Build a candidate protected bundle. Output must be independently reviewed/published."""
 from __future__ import annotations
-import argparse, hashlib, json
+
+import argparse
+import hashlib
+import json
 from pathlib import Path
+
 
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()

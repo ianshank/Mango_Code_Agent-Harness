@@ -31,7 +31,9 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 async def verify_api_key(x_api_key: str = Header(...)):
-    expected_key = os.environ.get("API_SERVER_KEY", "default-dev-key")
+    expected_key = os.environ.get("API_SERVER_KEY")
+    if not expected_key:
+        raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")
     if x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
@@ -42,11 +44,12 @@ async def orchestrate_task(request: TaskRequest):
     Executes the sequential thinking MAS loop for the given task.
     """
     try:
+        from fastapi.concurrency import run_in_threadpool
         api_key = os.environ.get("NVIDIA_API_KEY")
         orchestrator = MangoMASOrchestrator(workspace_dir=PROJECT_ROOT, api_key=api_key)
 
-        # Run the full sequence: Planner -> Reasoner -> Verifier
-        final_result = orchestrator.execute_sequential_thinking_loop(request.task)
+        # Run the full sequence: Planner -> Reasoner -> Verifier (offloaded to thread)
+        final_result = await run_in_threadpool(orchestrator.execute_sequential_thinking_loop, request.task)
 
         return TaskResponse(status="success", result=final_result, history=orchestrator.conversation_history)
     except Exception as e:

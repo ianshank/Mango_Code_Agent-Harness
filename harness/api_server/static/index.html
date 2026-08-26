@@ -18,6 +18,8 @@
             <div class="card input-section">
                 <h2>Define Task</h2>
                 <form id="taskForm">
+                    <label for="apiKeyInput" class="hidden">API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="Enter API_SERVER_KEY" required style="margin-bottom: 12px; width: 100%; padding: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; background: rgba(0, 0, 0, 0.2); color: #e2e8f0;">
                     <label for="taskInput" class="hidden">Task</label>
                     <textarea id="taskInput" placeholder="e.g., Write a python function to compute fibonacci numbers and test it..." required></textarea>
                     <button type="submit" id="submitBtn">
