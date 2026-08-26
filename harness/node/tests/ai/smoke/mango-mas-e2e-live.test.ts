@@ -4,6 +4,7 @@ import {
   IS_LIVE,
   LIVE_TEST_TIMEOUT_MS,
   createLiveClient,
+  isTransientError,
 } from './_fixtures.js';
 
 describe.skipIf(!IS_LIVE)(
@@ -29,7 +30,7 @@ describe.skipIf(!IS_LIVE)(
           });
           if (!response1.content) throw new Error("Empty response");
         } catch (err: any) {
-          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }
@@ -53,7 +54,7 @@ describe.skipIf(!IS_LIVE)(
              throw new Error("Invalid or empty response");
           }
         } catch (err: any) {
-          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }
@@ -75,7 +76,7 @@ describe.skipIf(!IS_LIVE)(
           });
           if (!response3.content) throw new Error("Empty response");
         } catch (err: any) {
-          if (err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }

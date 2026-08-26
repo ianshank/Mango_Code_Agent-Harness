@@ -7,6 +7,9 @@ and explicitly prevents host-process fallback if the sandbox is unavailable (INV
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,6 +49,34 @@ class ExecutionBroker:
                 stderr="BLOCKED: Sandbox unavailable; host-process execution fallback is strictly prohibited.",
                 exit_code=1
             )
+
+        context = context or {}
+        agent_id = context.get("agent_id", "unknown")
+        action = context.get("action", "unknown")
+        human_approved = context.get("human_approved", False)
+
+        pdp_path = Path(__file__).resolve().parent.parent.parent / "control-plane" / "tool_broker_reference.py"
+        policy_path = Path(__file__).resolve().parent.parent.parent / "control-plane" / "policy-bundle.example.json"
+
+        if pdp_path.exists() and policy_path.exists():
+            cmd_args = [
+                sys.executable,
+                str(pdp_path),
+                "--policy", str(policy_path),
+                "--agent", agent_id,
+                "--action", action
+            ]
+            if human_approved:
+                cmd_args.append("--human-approved")
+            
+            p = subprocess.run(cmd_args, text=True, capture_output=True)
+            if p.returncode != 0:
+                return ExecutionResult(
+                    status="BLOCKED",
+                    stdout="",
+                    stderr=f"BLOCKED: {p.stderr.strip() or p.stdout.strip()}",
+                    exit_code=p.returncode
+                )
 
         # INV-8: All execution requests MUST pass through harness.shared.governance.pretooluse_guard
         guard_result = check_command(command)

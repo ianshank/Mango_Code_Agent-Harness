@@ -17,11 +17,11 @@ for stack in ["node", "jvm"]:
             if shared_file.exists():
                 protected_files[file_path] = get_hash(shared_file)
             else:
-                print(f"Warning: {shared_file} not found")
+                raise FileNotFoundError(f"Cannot resolve hash for {file_path}: {shared_file} not found")
 
-# update the agent_policy_sha256 (which hashes the profiles object)
-# wait, how is agent_policy_sha256 calculated?
-# Let's see validate_agent_policy.py
+# If agent_policy_sha256 is unresolved or empty in the bundle, we should abort
+if not bundle.get("agent_policy_sha256"):
+    raise ValueError("agent_policy_sha256 is unresolved in the bundle.")
 
 bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", "utf-8")
 print("Updated policy-bundle.example.json")

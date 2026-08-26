@@ -26,7 +26,7 @@ Options:
   --system <string>       System instruction prompt
   --model <string>        Target model identifier (default: from NEMOTRON_DEFAULT_MODEL env)
   --temperature <number>  Sampling temperature (0.0 - 2.0, default: 0.2)
-  --timeout <number>      Request timeout in milliseconds (default: 60000)
+  --timeout <number>      Request timeout in milliseconds (default: 30000)
   --stream                Enable streaming response output
   --json                  Output full JSON response with telemetry
   --help, -h              Show this help message

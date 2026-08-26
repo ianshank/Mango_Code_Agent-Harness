@@ -18,6 +18,7 @@ import {
   LIVE_API_KEY,
   LIVE_TEST_TIMEOUT_MS,
   assertNoSecretLeakage,
+  isTransientError,
 } from './_fixtures.js';
 
 const execFileAsync = promisify(execFile);
@@ -95,7 +96,7 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          if (err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }
@@ -139,7 +140,7 @@ describe.skipIf(!IS_LIVE)(
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
-          if (err.message?.includes('502') || err.message?.includes('503') || err.message?.includes('504')) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }

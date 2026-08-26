@@ -43,7 +43,7 @@ export class NemotronClient {
         resolvedEnv.baseUrl ||
         DEFAULT_NEMOTRON_CONFIG.baseUrl,
       apiKey: customConfig.apiKey ?? resolvedEnv.apiKey,
-      defaultModel: customConfig.defaultModel || resolvedEnv.defaultModel || 'nvidia/nemotron-4-340b-instruct',
+      defaultModel: customConfig.defaultModel || resolvedEnv.defaultModel,
       timeoutMs:
         customConfig.timeoutMs ??
         resolvedEnv.timeoutMs ??

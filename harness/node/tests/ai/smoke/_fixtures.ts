@@ -134,3 +134,23 @@ export function loadAgentSystemPrompt(agentFilePath: string): string {
   }
   return content.trim();
 }
+
+/**
+ * Checks if an error represents a transient NIM error covered by DEC-001 (e.g. rate limit, unavailable).
+ */
+export function isTransientError(err: any): boolean {
+  const code = err.statusCode;
+  const msg = err.message || '';
+  if (code === 404 || code === 410 || code === 429 || code === 502 || code === 503 || code === 504) return true;
+  if (
+    msg.includes('404') ||
+    msg.includes('410') ||
+    msg.includes('429') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('504')
+  ) {
+    return true;
+  }
+  return false;
+}

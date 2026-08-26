@@ -6,8 +6,6 @@ paths = [
   '''.*\.example.*''',
   '''harness/node/tests/ai/unit/nemotron-client\.test\.ts''',
   '''harness/node/tests/ai/security/secret-safety\.test\.ts''',
-  '''harness/node/tests/ai/smoke/cli-live\.test\.ts''',
-  '''harness/node/tests/ai/smoke/mango-mas-e2e-live\.test\.ts''',
   '''harness/shared/tests/test_nemotron_bridge\.py''',
   '''harness/shared/tests/test_nemotron_bridge_live\.py''',
   '''harness/shared/tests/test_validate_invariants\.py'''

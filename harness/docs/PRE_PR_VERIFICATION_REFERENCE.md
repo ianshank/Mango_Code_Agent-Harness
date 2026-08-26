@@ -67,4 +67,4 @@ python -c "import subprocess, sys; scripts = ['validate_governance_docs.py', 'va
 
 - **`.agents/skills/nemotron-reasoner/SKILL.md`**: Native Antigravity skill executing `harness/shared/nemotron_bridge.py`.
 - **`.mango/skills/`**: Ecosystem skills including `harness-engineering`, `repo-invariant-review`, and `openspec-peer-review`.
-- **Context7 MCP**: Upstash Context7 MCP integration via `CONTEXT7_API_KEY` for live documentation queries.
+- **Context7 MCP**: [Planned] Upstash Context7 MCP integration via `CONTEXT7_API_KEY` for live documentation queries.

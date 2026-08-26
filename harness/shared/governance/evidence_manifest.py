@@ -51,6 +51,9 @@ class EvidenceBuilder:
 
         # Calculate a self-verifying hash of the content
         content_str = json.dumps(data, sort_keys=True).encode('utf-8')
-        data["_signature"] = hashlib.sha256(content_str).hexdigest()
+        import os
+        import hmac
+        key = os.environ.get("AGENT_EVIDENCE_KEY", "default-insecure-key").encode('utf-8')
+        data["_signature"] = hmac.new(key, content_str, hashlib.sha256).hexdigest()
 
         return data

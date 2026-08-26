@@ -87,7 +87,7 @@ def main() -> None:
 
     # 3. Size budget / Coverage check
     size_budget_failed = False
-    max_size = int(os.environ.get("MAX_FILE_LINES", 500))
+    max_size = 500
     for py_file in workspace_dir.rglob("*.py"):
         if ".venv" in py_file.parts or ".mypy_cache" in py_file.parts or ".pytest_cache" in py_file.parts:
             continue
