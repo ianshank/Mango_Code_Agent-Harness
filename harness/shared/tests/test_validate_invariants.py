@@ -97,10 +97,9 @@ def test_main_fails_on_size_budget_exceeded(mock_exit, mock_path, mock_check_out
     mock_exit.side_effect = ExitException
     mock_path.return_value.resolve.return_value.parent.parent.parent = mock_workspace
     mock_check_output.return_value = ""
-    os.environ["MAX_FILE_LINES"] = "10"
 
     big_file = mock_workspace / "big_file.py"
-    big_file.write_text("\n".join([f"print({i})" for i in range(15)]), encoding="utf-8")
+    big_file.write_text("\n".join([f"print({i})" for i in range(501)]), encoding="utf-8")
 
     with pytest.raises(ExitException):
         main()
