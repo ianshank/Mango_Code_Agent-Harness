@@ -55,7 +55,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # pnpm 11 (pinned via packageManager) requires Node >= 22.13.
+          # Node 20 is also being deprecated on GitHub-hosted runners.
+          node-version: 22
           cache: pnpm
           cache-dependency-path: harness/node/pnpm-lock.yaml
 
