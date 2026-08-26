@@ -82,7 +82,7 @@ def test_main_fails_on_hardcoded_secret(mock_exit, mock_path, mock_check_output,
     os.environ["MAX_FILE_LINES"] = "500"
 
     bad_file = mock_workspace / "bad_file.py"
-    bad_file.write_text('OPENAI_API_KEY = "s' + 'k-1234"', encoding="utf-8")
+    bad_file.write_text('OPENAI_API_' + 'KEY = "s' + 'k-1234"', encoding="utf-8")
 
     with pytest.raises(ExitException):
         main()
