@@ -127,7 +127,10 @@ class MangoMASOrchestrator:
                     timeout=self.tool_timeout,
                 )
                 if guard_result.returncode != 0:
-                    return f"Error: Command blocked by policy guard. Guard output:\n{guard_result.stdout}\n{guard_result.stderr}"
+                    return (
+                        "Error: Command blocked by policy guard. "
+                        f"Guard output:\n{guard_result.stdout}\n{guard_result.stderr}"
+                    )
 
             # If guard passes (or doesn't exist), execute the command
             result = subprocess.run(
@@ -206,9 +209,8 @@ class MangoMASOrchestrator:
 
                 # Debug dump
                 if os.environ.get("MANGO_DEBUG_DUMP") == "1":
-                    import tempfile
                     import copy
-
+                    import tempfile
                     # Create a redacted copy of the history
                     redacted_history = copy.deepcopy(self.conversation_history)
                     if self.api_key:
@@ -272,9 +274,10 @@ class MangoMASOrchestrator:
         # 1. Planner
         plan = self.execute_agent(
             "planner",
-            "Create a plan for the following task, ensuring no hardcoded values and strict testing: "
-            f"{initial_task}\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required.",
+            "Create a plan for the following task, ensuring no hardcoded values and "
+            f"strict testing: {initial_task}\n"
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and "
+            "fail closed when approval is required.",
             tools=[],
         )
         logger.info(f"Plan generated: {len(plan)} bytes")
@@ -283,10 +286,11 @@ class MangoMASOrchestrator:
         code_output = self.execute_agent(
             "nemotron-reasoner",
             "Execute the following plan using backward-compatible, modular code. "
-            "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the "
-            "filesystem.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required. "
-            "Use run_command to run standard terminal commands like pip, uvicorn, and pytest.\n\n"
+            "You MUST use your 'write_file' and 'run_command' tools to actually implement "
+            "and test it on the filesystem.\n"
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail "
+            "closed when approval is required. Use run_command to run standard terminal "
+            "commands like pip, uvicorn, and pytest.\n\n"
             f"Plan:\n{plan}",
         )
         logger.info(f"Code generation completed via tools: {len(code_output)} bytes")
@@ -296,7 +300,8 @@ class MangoMASOrchestrator:
             "verifier",
             "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
             "Use your 'run_command' tool to execute them. Report PASS or FAIL.\n"
-            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required.\n\n"
+            "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail "
+            "closed when approval is required.\n\n"
             f"Reasoner Output:\n{code_output}",
         )
         logger.info(f"Verification result: {len(verification)} bytes")

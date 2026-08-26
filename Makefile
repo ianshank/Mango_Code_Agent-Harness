@@ -60,11 +60,25 @@ verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
-	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections check_traceability; do \
+	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy validate_invariants check_projections check_traceability; do \
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
 	@echo "--- All governance validators passed ---"
+
+# --- Drift Detection ---
+.PHONY: check-dedup
+check-dedup: ## Fail if node/jvm governance script copies drift from harness/shared (single source of truth)
+	@echo "--- Checking governance script parity (shared == node == jvm) ---"
+	@for script in check_projections check_traceability pretooluse_guard remotes validate_adoption validate_agent_policy validate_governance_docs validate_policy verify_zero_skips; do \
+		if ! diff -q $(SHARED_SRC)/$$script.py $(NODE_DIR)/scripts/$$script.py >/dev/null 2>&1; then \
+			echo "[FAIL] $$script.py drifted: $(NODE_DIR)/scripts differs from $(SHARED_SRC)"; exit 1; \
+		fi; \
+		if ! diff -q $(SHARED_SRC)/$$script.py harness/jvm/scripts/$$script.py >/dev/null 2>&1; then \
+			echo "[FAIL] $$script.py drifted: harness/jvm/scripts differs from $(SHARED_SRC)"; exit 1; \
+		fi; \
+	done
+	@echo "[PASS] All governance script copies match harness/shared (single source of truth)."
 
 # --- Composite Targets ---
 .PHONY: test
@@ -74,7 +88,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips validate ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate
+ci: lint coverage test-node verify-zero-skips validate check-dedup ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check
 
 .PHONY: pre-pr
 pre-pr: ci ## Pre-PR validation gate (identical to CI)

@@ -10,6 +10,7 @@ Requirement Citations:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -17,8 +18,20 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
+
+
+def resolve_base_url() -> str:
+    """Resolve the NVIDIA base URL, preferring the NVIDIA_BASE_URL env var.
+
+    Backward-compatible: falls back to DEFAULT_BASE_URL when the env var is unset.
+    """
+    base_url = os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
+    logger.debug("Resolved NVIDIA base URL: %s", base_url)
+    return base_url
 
 
 def mask_secret(secret: str) -> str:
@@ -70,10 +83,11 @@ def complete_chat(
     if not key:
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
-    endpoint = base_url or os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
+    endpoint = base_url or resolve_base_url()
     target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL") or DEFAULT_MODEL
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
+    logger.info("Calling Nemotron model=%s timeout=%ss key=%s", target_model, timeout_sec, mask_secret(key))
     payload = {
         "model": target_model,
         "messages": messages,
@@ -106,6 +120,7 @@ def complete_chat(
             data = json.loads(body)
             latency_ms = int((time.time() - start_time) * 1000)
             data["latency_ms"] = latency_ms
+            logger.debug("Nemotron response received in %dms", latency_ms)
             return data
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8", errors="replace")
@@ -144,7 +159,10 @@ def main():
             print(f"\n--- Nemotron Response [{res.get('model')}] ({res.get('latency_ms')}ms) ---\n")
             print(content)
             print(
-                f"\nTokens: {usage.get('prompt_tokens', 0)} prompt + {usage.get('completion_tokens', 0)} completion = {usage.get('total_tokens', 0)} total\n"
+                "\nTokens: "
+                f"{usage.get('prompt_tokens', 0)} prompt + "
+                f"{usage.get('completion_tokens', 0)} completion = "
+                f"{usage.get('total_tokens', 0)} total\n"
             )
     except Exception as e:
         print(f"\n[Nemotron Bridge Error]: {e}\n", file=sys.stderr)

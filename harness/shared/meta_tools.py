@@ -99,7 +99,11 @@ META_TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "knowledge_gap_log",
-            "description": "Record a knowledge gap: something the agent could not answer or do, and what would be needed to fill the gap. This is the explicit alternative to hallucinating an answer.",
+            "description": (
+                "Record a knowledge gap: something the agent could not answer or do, "
+                "and what would be needed to fill the gap. This is the explicit "
+                "alternative to hallucinating an answer."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -122,7 +126,10 @@ META_TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "hypothesis_register",
-            "description": "Record a provisional belief: 'I think X is true because Y.' Hypotheses can be updated or falsified later as evidence arrives.",
+            "description": (
+                "Record a provisional belief: 'I think X is true because Y.' "
+                "Hypotheses can be updated or falsified later as evidence arrives."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

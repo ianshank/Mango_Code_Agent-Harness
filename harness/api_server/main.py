@@ -52,9 +52,13 @@ async def orchestrate_task(request: TaskRequest):
         final_result = await run_in_threadpool(orchestrator.execute_sequential_thinking_loop, request.task)
 
         return TaskResponse(status="success", result=final_result, history=orchestrator.conversation_history)
-    except Exception as e:
-        logger.error(f"Orchestration failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        # Re-raise explicit HTTP errors (e.g. auth) unchanged.
+        raise
+    except Exception:
+        # Avoid leaking internals to clients; log the real cause server-side.
+        logger.exception("Orchestration failed for task: %s", request.task)
+        raise HTTPException(status_code=500, detail="Internal orchestration error")
 
 
 # Mount the static files for the frontend UI
