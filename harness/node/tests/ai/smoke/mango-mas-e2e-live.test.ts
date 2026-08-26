@@ -11,17 +11,26 @@ describe.skipIf(!IS_LIVE)(
   () => {
     it(
       'simulates an E2E agent loop and generates verified responses',
-      async () => {
+      async (ctx) => {
         // Since we are mocking the orchestrator flow for TS, we just verify Nemotron
         // can handle complex sequential thinking prompts.
         const client = createLiveClient();
-
         const plannerPrompt = `You are a planner agent. Create a 3-step plan to output "HELLO_MANGO".`;
-        const response1 = await client.complete({
-          messages: [{ role: 'system', content: plannerPrompt }, { role: 'user', content: 'Go.' }],
-          temperature: 0.2,
-          max_tokens: 1024,
-        });
+
+        let response1;
+        try {
+          response1 = await client.complete({
+            messages: [{ role: 'system', content: plannerPrompt }, { role: 'user', content: 'Go.' }],
+            temperature: 0.2,
+            max_tokens: 1024,
+          });
+        } catch (err: any) {
+          if (err.message?.includes('404') || err.message?.includes('410') || err.message?.includes('429') || err.name === 'AbortError') {
+            ctx.skip();
+            return;
+          }
+          throw err;
+        }
 
         expect(response1.content).toBeTruthy();
 

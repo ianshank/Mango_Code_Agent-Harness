@@ -10,6 +10,7 @@ Requirement Citations:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -17,6 +18,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, cast
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
@@ -73,7 +76,10 @@ def complete_chat(
     endpoint = base_url or os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
     target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL")
     if not target_model:
-        raise ValueError("Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or pass explicitly.")
+        raise ValueError(
+            "Target model is not configured. Set NEMOTRON_DEFAULT_MODEL "
+            "environment variable or pass explicitly."
+        )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
     payload = {
@@ -129,7 +135,13 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="Target model ID")
     parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     parser.add_argument("--json", action="store_true", help="Output raw JSON response")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     messages = [
         {"role": "system", "content": args.system},
@@ -151,7 +163,7 @@ def main() -> None:
                 f"{usage.get('total_tokens', 0)} total\n"
             )
     except Exception as e:
-        print(f"\n[Nemotron Bridge Error]: {e}\n", file=sys.stderr)
+        logger.error(f"Nemotron Bridge Error: {e}")
         sys.exit(1)
 
 
