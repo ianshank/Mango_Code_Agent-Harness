@@ -61,7 +61,10 @@ def test_complete_chat_success(mock_urlopen):
     mock_urlopen.assert_called_once()
 
 
-@patch("harness.shared.nemotron_bridge.resolve_api_key", return_value="")
+@patch(
+    "harness.shared.nemotron_bridge.resolve_environment",
+    return_value={"api_key": "", "base_url": "", "default_model": ""},
+)
 @patch("urllib.request.urlopen")
 def test_complete_chat_missing_key(mock_urlopen, mock_resolve):
     with pytest.raises(ValueError, match="NVIDIA_API_KEY is not configured"):

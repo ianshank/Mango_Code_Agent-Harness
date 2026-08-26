@@ -34,11 +34,15 @@ def mask_secret(secret: str) -> str:
     return f"{s[:10]}...{s[-4:]}"
 
 
-def resolve_api_key() -> str:
-    """Resolve API key from environment variable or local .env file."""
-    api_key = os.environ.get("NVIDIA_API_KEY")
-    if api_key:
-        return api_key
+def resolve_environment() -> dict[str, str]:
+    """Resolve API key, base URL, and default model from environment or local .env file."""
+    env_vars = {
+        "api_key": os.environ.get("NVIDIA_API_KEY", ""),
+        "base_url": os.environ.get("NVIDIA_BASE_URL", ""),
+        "default_model": os.environ.get("NEMOTRON_DEFAULT_MODEL", ""),
+    }
+    if env_vars["api_key"] and env_vars["default_model"]:
+        return env_vars
 
     # Check candidate .env files
     current = Path(__file__).resolve()
@@ -50,11 +54,22 @@ def resolve_api_key() -> str:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
-                        if k.strip() == "NVIDIA_API_KEY":
-                            return v.strip()
+                        key_name = k.strip()
+                        val = v.strip()
+                        if key_name == "NVIDIA_API_KEY" and not env_vars["api_key"]:
+                            env_vars["api_key"] = val
+                        elif key_name == "NVIDIA_BASE_URL" and not env_vars["base_url"]:
+                            env_vars["base_url"] = val
+                        elif key_name == "NEMOTRON_DEFAULT_MODEL" and not env_vars["default_model"]:
+                            env_vars["default_model"] = val
             except Exception:
                 pass
-    return ""
+    return env_vars
+
+
+def resolve_api_key() -> str:
+    """Resolve API key from environment variable or local .env file."""
+    return resolve_environment()["api_key"]
 
 
 def complete_chat(
@@ -69,12 +84,13 @@ def complete_chat(
     tool_choice: Any | None = None,
 ) -> dict[str, Any]:
     """Execute a chat completion request against NVIDIA Nemotron API."""
-    key = api_key or resolve_api_key()
+    env_config = resolve_environment()
+    key = api_key if api_key is not None else env_config["api_key"]
     if not key:
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
-    endpoint = base_url or os.environ.get("NVIDIA_BASE_URL") or DEFAULT_BASE_URL
-    target_model = model or os.environ.get("NEMOTRON_DEFAULT_MODEL")
+    endpoint = base_url or env_config["base_url"] or DEFAULT_BASE_URL
+    target_model = model or env_config["default_model"]
     if not target_model:
         raise ValueError(
             "Target model is not configured. Set NEMOTRON_DEFAULT_MODEL "

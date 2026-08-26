@@ -64,8 +64,8 @@ export const SMOKE_MAX_TOKENS = 50;
 /** Token budget for agent delegation tests — needs more room for structured responses. */
 export const AGENT_MAX_TOKENS = 128;
 
-/** Maximum acceptable latency in milliseconds for a single API call. */
-export const LATENCY_CEILING_MS = 60_000;
+/** Maximum acceptable latency in milliseconds for a single API call in smoke tests. */
+export const LATENCY_CEILING_MS = 25_000;
 
 /** Timeout for individual test cases (ms). */
 export const LIVE_TEST_TIMEOUT_MS = 90_000;

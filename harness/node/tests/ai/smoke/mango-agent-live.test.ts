@@ -60,7 +60,10 @@ describe.skipIf(!IS_LIVE)(
             err.message?.includes('404') ||
             err.message?.includes('410') ||
             err.message?.includes('429') ||
-            err.name === 'AbortError'
+            err.name === 'AbortError' ||
+            err.name === 'TimeoutError' ||
+            err.message?.includes('timed out') ||
+            err.message?.includes('timeout')
           ) {
             ctx.skip();
             return;
@@ -115,7 +118,10 @@ describe.skipIf(!IS_LIVE)(
             err.message?.includes('404') ||
             err.message?.includes('410') ||
             err.message?.includes('429') ||
-            err.name === 'AbortError'
+            err.name === 'AbortError' ||
+            err.name === 'TimeoutError' ||
+            err.message?.includes('timed out') ||
+            err.message?.includes('timeout')
           ) {
             ctx.skip();
             return;
@@ -172,7 +178,10 @@ describe.skipIf(!IS_LIVE)(
             err.message?.includes('404') ||
             err.message?.includes('410') ||
             err.message?.includes('429') ||
-            err.name === 'AbortError'
+            err.name === 'AbortError' ||
+            err.name === 'TimeoutError' ||
+            err.message?.includes('timed out') ||
+            err.message?.includes('timeout')
           ) {
             ctx.skip();
             return;

@@ -2,7 +2,7 @@
   "policy_id": "agentic-ssd-governance",
   "version": "2.0.0",
   "governance_policy_sha256": "12fe788a8024dc62c51d8e6de2f44e22134389452a49f82f5ab66c041eacb7bd",
-  "agent_policy_sha256": "9580a1a5f7a592468c39076dd9f2dd5f51aebcad8505965ebdb1495f2fe99ada",
+  "agent_policy_sha256": "2d163c065dac75a545035a92c07551f6a0c92c98ac2ed58a1a814198fba439c5",
   "deny_if_digest_mismatch": true,
   "human_approval_categories": [
     "external_write",
@@ -31,9 +31,9 @@
         "scripts/check_traceability.py": "5c6bbc13f07a22263e2327cc5b2f817f91d910448fbd58d6243b0514cdd49abc",
         "scripts/check_projections.py": "66fbd56598cffb67b8cb1d439dd13d9f6d9cb67b2d6923a09dc7323372440fec",
         "package.json": "4d6f3b5a3c06c83a44f617e67200ed8835699058b7ce5d44fcad6bab188fec5b",
-        "tsconfig.json": "bee9fcdaff32cb8304b60f376c87e79f432f5ee4ed6187bc9c72255200f4d3b5",
-        "vitest.config.ts": "5f4b540411d8a1e1d9de822848705d8e6515b7538a401ce15c9ca047a1a250e3",
-        "tests/governance/meta.test.ts": "9f264794015f0216cbd4b220b8cd055f3f7eb178d4b81850672e089d231808e8"
+        "tsconfig.json": "ed88b96aaf42c7f9552e4360216c1ef096f537ea6d38c5c8b7e8b12c0e2da742",
+        "vitest.config.ts": "e559a2a84c1ad0a617c2ecdf1f7f9e0a97860e9f2ff7e76abb7fdc8ceb51a5fd",
+        "tests/governance/meta.test.ts": "b0fcbc55c932111baa47d773c9d3ecbb50eae10fc81b30c1efe03b4a705adc6c"
       }
     },
     "jvm": {

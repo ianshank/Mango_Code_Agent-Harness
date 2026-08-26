@@ -26,6 +26,7 @@ Options:
   --system <string>       System instruction prompt
   --model <string>        Target model identifier (default: from NEMOTRON_DEFAULT_MODEL env)
   --temperature <number>  Sampling temperature (0.0 - 2.0, default: 0.2)
+  --timeout <number>      Request timeout in milliseconds (default: 60000)
   --stream                Enable streaming response output
   --json                  Output full JSON response with telemetry
   --help, -h              Show this help message
@@ -47,10 +48,14 @@ Options:
   const rawTemp = tempIdx !== -1 ? args[tempIdx + 1] : undefined;
   const temperature = rawTemp ? parseFloat(rawTemp) : 0.2;
 
+  const timeoutIdx = args.indexOf('--timeout');
+  const rawTimeout = timeoutIdx !== -1 ? args[timeoutIdx + 1] : undefined;
+  const timeoutMs = rawTimeout ? parseInt(rawTimeout, 10) : undefined;
+
   const isStream = args.includes('--stream');
   const isJson = args.includes('--json');
 
-  const client = new NemotronClient();
+  const client = new NemotronClient(timeoutMs ? { timeoutMs } : {});
 
   const messages = [
     ...(systemPrompt

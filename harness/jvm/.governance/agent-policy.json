@@ -53,7 +53,12 @@
     {
       "id": "release-auditor",
       "delegation_depth": 1,
-      "allowed_actions": ["read", "evidence_write", "external_write", "production_change"],
+      "allowed_actions": [
+        "read",
+        "evidence_write",
+        "external_write",
+        "production_change"
+      ],
       "human_approval_required_for": ["external_write", "production_change"]
     }
   ],

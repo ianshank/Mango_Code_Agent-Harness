@@ -4,9 +4,9 @@
   "numFailedTestSuites": 0,
   "numPendingTestSuites": 0,
   "numTotalTests": 95,
-  "numPassedTests": 89,
+  "numPassedTests": 92,
   "numFailedTests": 0,
-  "numPendingTests": 6,
+  "numPendingTests": 3,
   "numTodoTests": 0,
   "snapshot": {
     "added": 0,
@@ -24,7 +24,7 @@
     "updated": 0,
     "didUpdate": false
   },
-  "startTime": 1787746782506,
+  "startTime": 1787748196225,
   "success": true,
   "testResults": [
     {
@@ -34,7 +34,7 @@
           "fullName": "C-GOV-1 repository conformance CI invokes every required named Make target",
           "status": "passed",
           "title": "CI invokes every required named Make target",
-          "duration": 1.6154999999999973,
+          "duration": 1.7182000000000244,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -44,7 +44,7 @@
           "fullName": "C-GOV-1 repository conformance pre-pr order is policy-defined",
           "status": "passed",
           "title": "pre-pr order is policy-defined",
-          "duration": 0.8200999999999681,
+          "duration": 0.8182000000000471,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -54,7 +54,7 @@
           "fullName": "C-GOV-1 repository conformance remotes validates actual configured destinations",
           "status": "passed",
           "title": "remotes validates actual configured destinations",
-          "duration": 0.2965000000000373,
+          "duration": 0.30069999999994934,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -64,14 +64,14 @@
           "fullName": "R-GOV-2 execution enforcement pre-push uses the shared remote kernel",
           "status": "passed",
           "title": "pre-push uses the shared remote kernel",
-          "duration": 0.28759999999999764,
+          "duration": 0.4936000000000149,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783027,
-      "endTime": 1787746783030.2964,
+      "startTime": 1787748196752,
+      "endTime": 1787748196755.4937,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/governance/meta.test.ts"
@@ -83,492 +83,17 @@
           "fullName": "governance anchors C-GOV-1 R-GOV-2 publishes both governed requirements",
           "status": "passed",
           "title": "publishes both governed requirements",
-          "duration": 0.7839000000000169,
+          "duration": 0.8425000000000011,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783293,
-      "endTime": 1787746783293.784,
+      "startTime": 1787748197023,
+      "endTime": 1787748197023.8425,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/governance/policy-anchor.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)"
-          ],
-          "fullName": "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2) executes multi-turn chat completion with telemetry metrics",
-          "status": "passed",
-          "title": "executes multi-turn chat completion with telemetry metrics",
-          "duration": 20.918900000000008,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)"
-          ],
-          "fullName": "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2) clamps extreme temperature and top_p parameters within safe boundaries",
-          "status": "passed",
-          "title": "clamps extreme temperature and top_p parameters within safe boundaries",
-          "duration": 0.9055999999999926,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746782912.9055,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/functional/prompt-completion.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2)"
-          ],
-          "fullName": "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2) parses Server-Sent Events stream chunks and terminates on [DONE]",
-          "status": "passed",
-          "title": "parses Server-Sent Events stream chunks and terminates on [DONE]",
-          "duration": 20.385299999999972,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2)"
-          ],
-          "fullName": "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2) handles stream HTTP error status and records failure",
-          "status": "passed",
-          "title": "handles stream HTTP error status and records failure",
-          "duration": 2.6913999999999874,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746782914.6914,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/integration/nemotron-streaming.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) displays help documentation when invoked with --help",
-          "status": "passed",
-          "title": "displays help documentation when invoked with --help",
-          "duration": 1.487700000000018,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) handles missing prompt argument gracefully by printing usage",
-          "status": "passed",
-          "title": "handles missing prompt argument gracefully by printing usage",
-          "duration": 0.20219999999994798,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) executes standard completion in JSON format",
-          "status": "passed",
-          "title": "executes standard completion in JSON format",
-          "duration": 0.8378000000000156,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) executes streaming completion and error path in CLI",
-          "status": "passed",
-          "title": "executes streaming completion and error path in CLI",
-          "duration": 0.9267000000000394,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746783094,
-      "endTime": 1787746783096.9268,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/e2e/nemotron-e2e.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": ["Nemotron Resilience & Stress Tests (R-AI-RES-3)"],
-          "fullName": "Nemotron Resilience & Stress Tests (R-AI-RES-3) retries automatically on HTTP 429 rate limits with exponential backoff and succeeds",
-          "status": "passed",
-          "title": "retries automatically on HTTP 429 rate limits with exponential backoff and succeeds",
-          "duration": 112.22949999999997,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron Resilience & Stress Tests (R-AI-RES-3)"],
-          "fullName": "Nemotron Resilience & Stress Tests (R-AI-RES-3) trips circuit breaker on repeated non-retryable failures and fast-fails subsequent calls",
-          "status": "passed",
-          "title": "trips circuit breaker on repeated non-retryable failures and fast-fails subsequent calls",
-          "duration": 743.0782,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746783747.0781,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/sanity/resilience-stress.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1)"
-          ],
-          "fullName": "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1) fails closed with a clear error when NVIDIA_API_KEY is not configured",
-          "status": "passed",
-          "title": "fails closed with a clear error when NVIDIA_API_KEY is not configured",
-          "duration": 2.8011000000000195,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1)"
-          ],
-          "fullName": "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1) redacts sensitive API tokens from server error response messages",
-          "status": "passed",
-          "title": "redacts sensitive API tokens from server error response messages",
-          "duration": 19.840599999999995,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782897,
-      "endTime": 1787746782919.8406,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/security/secret-safety.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
-          ],
-          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates Mango Agent delegating an architectural review task to Nemotron and receiving structured output",
-          "status": "passed",
-          "title": "simulates Mango Agent delegating an architectural review task to Nemotron and receiving structured output",
-          "duration": 21.91990000000004,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
-          ],
-          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates multi-agent reasoning chain (Planner -> Nemotron Reasoner -> Verifier)",
-          "status": "passed",
-          "title": "simulates multi-agent reasoning chain (Planner -> Nemotron Reasoner -> Verifier)",
-          "duration": 1.9698999999999955,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
-          ],
-          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates streaming reasoning delegation with real-time token accumulation",
-          "status": "passed",
-          "title": "simulates streaming reasoning delegation with real-time token accumulation",
-          "duration": 1.4032000000000266,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
-          ],
-          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) recovers gracefully when subagent outputs malformed JSON on first try and retries",
-          "status": "passed",
-          "title": "recovers gracefully when subagent outputs malformed JSON on first try and retries",
-          "duration": 1.0976,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746782917.0977,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/journey/agent-delegation.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
-          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) initializes with default configuration values",
-          "status": "passed",
-          "title": "initializes with default configuration values",
-          "duration": 2.5855000000000246,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
-          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) allows overriding base URL, model, and retry timeouts",
-          "status": "passed",
-          "title": "allows overriding base URL, model, and retry timeouts",
-          "duration": 0.6683000000000447,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
-          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) masks secret keys correctly without leaking raw token",
-          "status": "passed",
-          "title": "masks secret keys correctly without leaking raw token",
-          "duration": 0.44589999999999463,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
-          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) sanitizes secrets from error text and handles empty inputs",
-          "status": "passed",
-          "title": "sanitizes secrets from error text and handles empty inputs",
-          "duration": 0.3283999999999878,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
-          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) exercises circuit breaker transitions from OPEN to HALF_OPEN to CLOSED or OPEN",
-          "status": "passed",
-          "title": "exercises circuit breaker transitions from OPEN to HALF_OPEN to CLOSED or OPEN",
-          "duration": 91.68989999999997,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746782986.69,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/unit/nemotron-client.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": ["Nemotron CLI Subprocess Tests (R-AI-NEMO-1)"],
-          "fullName": "Nemotron CLI Subprocess Tests (R-AI-NEMO-1) prints help documentation with --help flag",
-          "status": "passed",
-          "title": "prints help documentation with --help flag",
-          "duration": 903.2254,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": ["Nemotron CLI Subprocess Tests (R-AI-NEMO-1)"],
-          "fullName": "Nemotron CLI Subprocess Tests (R-AI-NEMO-1) prints usage when no --prompt is provided",
-          "status": "passed",
-          "title": "prints usage when no --prompt is provided",
-          "duration": 721.6104,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) completes a prompt in --json mode via subprocess",
-          "status": "skipped",
-          "title": "completes a prompt in --json mode via subprocess",
-          "duration": 31509.1202,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) streams output via --stream flag without leaking secrets",
-          "status": "skipped",
-          "title": "streams output via --stream flag without leaking secrets",
-          "duration": 806.222600000001,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746784515.6104,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/cli-live.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
-          ],
-          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Planner agent produces a structured plan from a planning prompt",
-          "status": "passed",
-          "title": "Planner agent produces a structured plan from a planning prompt",
-          "duration": 20329.2398,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
-          ],
-          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Nemotron Reasoner agent produces architectural findings",
-          "status": "passed",
-          "title": "Nemotron Reasoner agent produces architectural findings",
-          "duration": 16122.152900000001,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
-          ],
-          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Verifier agent produces a structured PASS/FAIL verdict",
-          "status": "skipped",
-          "title": "Verifier agent produces a structured PASS/FAIL verdict",
-          "duration": 626.778999999995,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782891,
-      "endTime": 1787746819343.1528,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/mango-agent-live.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": ["Mango MAS Orchestrator Live Tests (Vitest E2E)"],
-          "fullName": "Mango MAS Orchestrator Live Tests (Vitest E2E) simulates an E2E agent loop and generates verified responses",
-          "status": "skipped",
-          "title": "simulates an E2E agent loop and generates verified responses",
-          "duration": 60818.3153,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746782506,
-      "endTime": 1787746782506,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/mango-mas-e2e-live.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) completes a minimal prompt with valid response structure and telemetry",
-          "status": "skipped",
-          "title": "completes a minimal prompt with valid response structure and telemetry",
-          "duration": 24738.2075,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) streams SSE chunks from the live API and accumulates non-empty content",
-          "status": "skipped",
-          "title": "streams SSE chunks from the live API and accumulates non-empty content",
-          "duration": 51.061900000000605,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) sanitizes secrets in error responses when using an invalid API key",
-          "status": "passed",
-          "title": "sanitizes secrets in error responses when using an invalid API key",
-          "duration": 37.29869999999937,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        },
-        {
-          "ancestorTitles": [
-            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
-          ],
-          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) handles timeout gracefully and records circuit breaker failure",
-          "status": "passed",
-          "title": "handles timeout gracefully and records circuit breaker failure",
-          "duration": 2.8910999999970954,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746807682,
-      "endTime": 1787746807722.891,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/nemotron-live.test.ts"
     },
     {
       "assertionResults": [
@@ -577,14 +102,14 @@
           "fullName": "Match Progression (R-PONG-STATE-3) progresses through serves, scoring rounds, and concludes with a definitive winner",
           "status": "passed",
           "title": "progresses through serves, scoring rounds, and concludes with a definitive winner",
-          "duration": 2.3444000000000074,
+          "duration": 2.2660999999999945,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783074,
-      "endTime": 1787746783076.3445,
+      "startTime": 1787748196919,
+      "endTime": 1787748196921.266,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/functional/match-progression.test.ts"
@@ -598,7 +123,7 @@
           "fullName": "Pause, Resume & Reset Lifecycle (R-PONG-STATE-3) freezes simulation ticks during pause and resumes seamlessly",
           "status": "passed",
           "title": "freezes simulation ticks during pause and resumes seamlessly",
-          "duration": 2.965900000000005,
+          "duration": 2.665999999999997,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -610,38 +135,17 @@
           "fullName": "Pause, Resume & Reset Lifecycle (R-PONG-STATE-3) resets entire state back to MENU on reset()",
           "status": "passed",
           "title": "resets entire state back to MENU on reset()",
-          "duration": 0.35880000000000223,
+          "duration": 0.32349999999996726,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783161,
-      "endTime": 1787746783164.359,
+      "startTime": 1787748196790,
+      "endTime": 1787748196793.3235,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/functional/pause-resume-reset.test.ts"
-    },
-    {
-      "assertionResults": [
-        {
-          "ancestorTitles": [
-            "Autonomous Bot Tournament E2E (R-PONG-AI-5, R-PONG-CORE-2)"
-          ],
-          "fullName": "Autonomous Bot Tournament E2E (R-PONG-AI-5, R-PONG-CORE-2) runs an autonomous AI vs AI tournament match until a player achieves victory",
-          "status": "passed",
-          "title": "runs an autonomous AI vs AI tournament match until a player achieves victory",
-          "duration": 7.546100000000024,
-          "failureMessages": [],
-          "meta": {},
-          "tags": []
-        }
-      ],
-      "startTime": 1787746783022,
-      "endTime": 1787746783029.5461,
-      "status": "passed",
-      "message": "",
-      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/e2e/bot-tournament-e2e.test.ts"
     },
     {
       "assertionResults": [
@@ -652,14 +156,14 @@
           "fullName": "Audio & Render Events Integration (R-PONG-AUDIO-6, R-PONG-RENDER-7) triggers audio events and updates terminal ASCII renderer on game events",
           "status": "passed",
           "title": "triggers audio events and updates terminal ASCII renderer on game events",
-          "duration": 1.290200000000027,
+          "duration": 1.408900000000017,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783261,
-      "endTime": 1787746783262.2903,
+      "startTime": 1787748197004,
+      "endTime": 1787748197005.409,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/integration/audio-render-events.test.ts"
@@ -673,14 +177,14 @@
           "fullName": "Engine & Loop Integration (R-PONG-CORE-2, R-PONG-STATE-3, R-PONG-LOOP-8) integrates GameEngine with GameLoop, NullRenderer, and AudioManager over simulated time",
           "status": "passed",
           "title": "integrates GameEngine with GameLoop, NullRenderer, and AudioManager over simulated time",
-          "duration": 2.0468999999999937,
+          "duration": 1.953800000000001,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783179,
-      "endTime": 1787746783181.0469,
+      "startTime": 1787748196944,
+      "endTime": 1787748196945.9539,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/integration/engine-integration.test.ts"
@@ -694,17 +198,38 @@
           "fullName": "Input & AI Integration (R-PONG-INPUT-4, R-PONG-AI-5) updates player 1 via simulated keyboard input while AI controls player 2",
           "status": "passed",
           "title": "updates player 1 via simulated keyboard input while AI controls player 2",
-          "duration": 1.7524999999999977,
+          "duration": 1.5982000000000198,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783281,
-      "endTime": 1787746783282.7524,
+      "startTime": 1787748196948,
+      "endTime": 1787748196949.5981,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/integration/input-ai-interaction.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Autonomous Bot Tournament E2E (R-PONG-AI-5, R-PONG-CORE-2)"
+          ],
+          "fullName": "Autonomous Bot Tournament E2E (R-PONG-AI-5, R-PONG-CORE-2) runs an autonomous AI vs AI tournament match until a player achieves victory",
+          "status": "passed",
+          "title": "runs an autonomous AI vs AI tournament match until a player achieves victory",
+          "duration": 7.930800000000033,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196748,
+      "endTime": 1787748196755.931,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/e2e/bot-tournament-e2e.test.ts"
     },
     {
       "assertionResults": [
@@ -715,14 +240,14 @@
           "fullName": "Player User Journey (R-PONG-INPUT-4, R-PONG-STATE-3, C-PONG-GOV-9) navigates complete journey: Menu -> Start -> Playing -> Scoring -> Game Over -> Rematch",
           "status": "passed",
           "title": "navigates complete journey: Menu -> Start -> Playing -> Scoring -> Game Over -> Rematch",
-          "duration": 1.8024000000000058,
+          "duration": 1.765199999999993,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783198,
-      "endTime": 1787746783199.8025,
+      "startTime": 1787748196959,
+      "endTime": 1787748196960.7651,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/journey/player-journey.test.ts"
@@ -736,7 +261,7 @@
           "fullName": "Loop Determinism & Stress Sanity (R-PONG-LOOP-8, C-PONG-GOV-9) guarantees deterministic simulation outputs across identical tick sequences",
           "status": "passed",
           "title": "guarantees deterministic simulation outputs across identical tick sequences",
-          "duration": 2.564399999999978,
+          "duration": 2.7409000000000106,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -748,7 +273,7 @@
           "fullName": "Loop Determinism & Stress Sanity (R-PONG-LOOP-8, C-PONG-GOV-9) handles frame budget timing under heavy 10,000 tick stress test without leaks",
           "status": "passed",
           "title": "handles frame budget timing under heavy 10,000 tick stress test without leaks",
-          "duration": 10.668099999999981,
+          "duration": 10.639999999999986,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -760,14 +285,14 @@
           "fullName": "Loop Determinism & Stress Sanity (R-PONG-LOOP-8, C-PONG-GOV-9) clamps huge frame delta spikes safely (spiral-of-death defense)",
           "status": "passed",
           "title": "clamps huge frame delta spikes safely (spiral-of-death defense)",
-          "duration": 0.31409999999999627,
+          "duration": 0.35089999999996735,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783011,
-      "endTime": 1787746783024.3142,
+      "startTime": 1787748196697,
+      "endTime": 1787748196710.64,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/sanity/loop-sanity.test.ts"
@@ -781,7 +306,7 @@
           "fullName": "Security & Parameter Tampering Defense (R-PONG-CONFIG-1, R-PONG-CORE-2, C-PONG-GOV-9) prevents NaN and Infinity vector injection from corrupting state",
           "status": "passed",
           "title": "prevents NaN and Infinity vector injection from corrupting state",
-          "duration": 1.118600000000015,
+          "duration": 1.3871000000000038,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -793,7 +318,7 @@
           "fullName": "Security & Parameter Tampering Defense (R-PONG-CONFIG-1, R-PONG-CORE-2, C-PONG-GOV-9) safely clamps maliciously negative or unbounded game configs",
           "status": "passed",
           "title": "safely clamps maliciously negative or unbounded game configs",
-          "duration": 0.4305999999999983,
+          "duration": 0.49080000000000723,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -805,14 +330,14 @@
           "fullName": "Security & Parameter Tampering Defense (R-PONG-CONFIG-1, R-PONG-CORE-2, C-PONG-GOV-9) guarantees state immutability preventing external tampering of snapshots",
           "status": "passed",
           "title": "guarantees state immutability preventing external tampering of snapshots",
-          "duration": 0.29359999999999786,
+          "duration": 0.41270000000000095,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783233,
-      "endTime": 1787746783235.2937,
+      "startTime": 1787748196912,
+      "endTime": 1787748196914.4126,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/security/security-sanitization.test.ts"
@@ -824,7 +349,7 @@
           "fullName": "AI Opponent Controller (R-PONG-AI-5) initializes with default medium difficulty and allows dynamic difficulty switching",
           "status": "passed",
           "title": "initializes with default medium difficulty and allows dynamic difficulty switching",
-          "duration": 0.9545000000000243,
+          "duration": 0.779200000000003,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -834,7 +359,7 @@
           "fullName": "AI Opponent Controller (R-PONG-AI-5) predicts intercept Y position when ball is heading towards AI",
           "status": "passed",
           "title": "predicts intercept Y position when ball is heading towards AI",
-          "duration": 0.5230999999999995,
+          "duration": 0.5178999999999974,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -844,14 +369,14 @@
           "fullName": "AI Opponent Controller (R-PONG-AI-5) returns steering direction toward targeted position",
           "status": "passed",
           "title": "returns steering direction toward targeted position",
-          "duration": 0.2213000000000136,
+          "duration": 0.2301000000000215,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783213,
-      "endTime": 1787746783215.2212,
+      "startTime": 1787748197013,
+      "endTime": 1787748197015.23,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/ai.test.ts"
@@ -863,7 +388,7 @@
           "fullName": "Audio Subsystem (R-PONG-AUDIO-6) manages sound events, volume, and mute states with NullAudioDriver",
           "status": "passed",
           "title": "manages sound events, volume, and mute states with NullAudioDriver",
-          "duration": 2.064800000000048,
+          "duration": 1.755299999999977,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -873,7 +398,7 @@
           "fullName": "Audio Subsystem (R-PONG-AUDIO-6) swaps audio drivers and handles null drivers safely",
           "status": "passed",
           "title": "swaps audio drivers and handles null drivers safely",
-          "duration": 0.8423999999999978,
+          "duration": 0.7201999999999771,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -883,7 +408,7 @@
           "fullName": "Audio Subsystem (R-PONG-AUDIO-6) exercises WebAudioDriver fallback and safe mock context in Node/browser environments",
           "status": "passed",
           "title": "exercises WebAudioDriver fallback and safe mock context in Node/browser environments",
-          "duration": 0.24310000000002674,
+          "duration": 0.22710000000000719,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -893,7 +418,7 @@
           "fullName": "Audio Subsystem (R-PONG-AUDIO-6) exercises WebAudioDriver with a mocked AudioContext",
           "status": "passed",
           "title": "exercises WebAudioDriver with a mocked AudioContext",
-          "duration": 0.30819999999999936,
+          "duration": 0.2976000000000454,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -903,14 +428,14 @@
           "fullName": "Audio Subsystem (R-PONG-AUDIO-6) exercises WebAudioDriver with globalThis.window webkitAudioContext constructor",
           "status": "passed",
           "title": "exercises WebAudioDriver with globalThis.window webkitAudioContext constructor",
-          "duration": 0.1844000000000392,
+          "duration": 0.20179999999999154,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783094,
-      "endTime": 1787746783097.308,
+      "startTime": 1787748196836,
+      "endTime": 1787748196839.2976,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/audio.test.ts"
@@ -922,14 +447,14 @@
           "fullName": "Pong CLI Runner (R-PONG-RENDER-7, R-PONG-AI-5) executes standalone CLI runner in autoplay mode for specified ticks",
           "status": "passed",
           "title": "executes standalone CLI runner in autoplay mode for specified ticks",
-          "duration": 459.2965,
+          "duration": 456.27970000000005,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783024,
-      "endTime": 1787746783483.2964,
+      "startTime": 1787748196748,
+      "endTime": 1787748197204.2798,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/cli.test.ts"
@@ -941,7 +466,7 @@
           "fullName": "Game Configuration & Presets (R-PONG-CONFIG-1) creates valid default configuration matching schema constraints",
           "status": "passed",
           "title": "creates valid default configuration matching schema constraints",
-          "duration": 1.0413000000000068,
+          "duration": 1.0035000000000025,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -951,7 +476,7 @@
           "fullName": "Game Configuration & Presets (R-PONG-CONFIG-1) loads predefined profile presets correctly",
           "status": "passed",
           "title": "loads predefined profile presets correctly",
-          "duration": 0.15149999999999864,
+          "duration": 0.1716000000000122,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -961,14 +486,14 @@
           "fullName": "Game Configuration & Presets (R-PONG-CONFIG-1) merges deep overrides and clamps invalid/out-of-bound inputs safely",
           "status": "passed",
           "title": "merges deep overrides and clamps invalid/out-of-bound inputs safely",
-          "duration": 0.13940000000002328,
+          "duration": 0.21280000000001564,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783263,
-      "endTime": 1787746783264.1516,
+      "startTime": 1787748196998,
+      "endTime": 1787748196999.213,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/config.test.ts"
@@ -980,14 +505,14 @@
           "fullName": "Public Barrel Exports (C-PONG-GOV-9) exports all core modules and classes",
           "status": "passed",
           "title": "exports all core modules and classes",
-          "duration": 0.9204000000000008,
+          "duration": 1.09050000000002,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783307,
-      "endTime": 1787746783307.9204,
+      "startTime": 1787748197048,
+      "endTime": 1787748197049.0906,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/index.test.ts"
@@ -999,7 +524,7 @@
           "fullName": "Input Subsystem (R-PONG-INPUT-4) manages input actions and drivers with manual fallback",
           "status": "passed",
           "title": "manages input actions and drivers with manual fallback",
-          "duration": 1.9102000000000032,
+          "duration": 1.9605000000000246,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1009,14 +534,14 @@
           "fullName": "Input Subsystem (R-PONG-INPUT-4) handles keyboard keydown/keyup events and action dispatching",
           "status": "passed",
           "title": "handles keyboard keydown/keyup events and action dispatching",
-          "duration": 0.5756000000000085,
+          "duration": 0.5283000000000015,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783199,
-      "endTime": 1787746783201.5757,
+      "startTime": 1787748196835,
+      "endTime": 1787748196837.5283,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/input.test.ts"
@@ -1028,7 +553,7 @@
           "fullName": "Game Loop (R-PONG-LOOP-8) starts and stops loop timer lifecycle cleanly",
           "status": "passed",
           "title": "starts and stops loop timer lifecycle cleanly",
-          "duration": 45.30720000000002,
+          "duration": 45.643100000000004,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1038,7 +563,7 @@
           "fullName": "Game Loop (R-PONG-LOOP-8) exercises requestAnimationFrame and cancelAnimationFrame in browser environment",
           "status": "passed",
           "title": "exercises requestAnimationFrame and cancelAnimationFrame in browser environment",
-          "duration": 0.3937999999999988,
+          "duration": 0.4200999999999908,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1048,14 +573,14 @@
           "fullName": "Game Loop (R-PONG-LOOP-8) computes fractional alpha interpolation during manual steps",
           "status": "passed",
           "title": "computes fractional alpha interpolation during manual steps",
-          "duration": 0.19299999999998363,
+          "duration": 0.23509999999998854,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746782880,
-      "endTime": 1787746782926.193,
+      "startTime": 1787748196600,
+      "endTime": 1787748196646.4202,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/loop.test.ts"
@@ -1067,7 +592,7 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) updates paddle position within boundary constraints",
           "status": "passed",
           "title": "updates paddle position within boundary constraints",
-          "duration": 1.6007999999999925,
+          "duration": 1.5739000000000374,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1077,7 +602,7 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) detects wall collisions on top and bottom boundaries",
           "status": "passed",
           "title": "detects wall collisions on top and bottom boundaries",
-          "duration": 0.3328000000000202,
+          "duration": 0.3798999999999637,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1087,7 +612,7 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) detects paddle collisions and resolves deflection angles with spin",
           "status": "passed",
           "title": "detects paddle collisions and resolves deflection angles with spin",
-          "duration": 0.4549000000000092,
+          "duration": 0.5509000000000128,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1097,7 +622,7 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) calculates paddle bounds and handles stationary paddle update",
           "status": "passed",
           "title": "calculates paddle bounds and handles stationary paddle update",
-          "duration": 0.6048999999999864,
+          "duration": 0.6953000000000316,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1107,7 +632,7 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) detects goals when ball crosses goal lines",
           "status": "passed",
           "title": "detects goals when ball crosses goal lines",
-          "duration": 0.20299999999997453,
+          "duration": 0.23980000000000246,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1117,14 +642,14 @@
           "fullName": "Physics Simulation (R-PONG-CORE-2) handles player 2 paddle collision and deflection correctly",
           "status": "passed",
           "title": "handles player 2 paddle collision and deflection correctly",
-          "duration": 0.25399999999996226,
+          "duration": 0.27060000000000173,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783070,
-      "endTime": 1787746783073.254,
+      "startTime": 1787748196783,
+      "endTime": 1787748196787.2705,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/physics.test.ts"
@@ -1136,7 +661,7 @@
           "fullName": "Render Subsystem (R-PONG-RENDER-7) generates ASCII frames with TerminalRenderer",
           "status": "passed",
           "title": "generates ASCII frames with TerminalRenderer",
-          "duration": 2.0371000000000095,
+          "duration": 2.8040000000000305,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1146,7 +671,7 @@
           "fullName": "Render Subsystem (R-PONG-RENDER-7) tracks frames and state in NullRenderer",
           "status": "passed",
           "title": "tracks frames and state in NullRenderer",
-          "duration": 0.329400000000021,
+          "duration": 0.4644000000000119,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1156,7 +681,7 @@
           "fullName": "Render Subsystem (R-PONG-RENDER-7) handles CanvasRenderer initialization errors safely",
           "status": "passed",
           "title": "handles CanvasRenderer initialization errors safely",
-          "duration": 0.7182999999999993,
+          "duration": 0.7302999999999997,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1166,14 +691,14 @@
           "fullName": "Render Subsystem (R-PONG-RENDER-7) renders states, particles, and overlay screens with CanvasRenderer",
           "status": "passed",
           "title": "renders states, particles, and overlay screens with CanvasRenderer",
-          "duration": 2.5751999999999953,
+          "duration": 3.0575999999999794,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783099,
-      "endTime": 1787746783104.5752,
+      "startTime": 1787748196824,
+      "endTime": 1787748196831.0576,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/render.test.ts"
@@ -1187,7 +712,7 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) initializes in MENU state with zeroed scores",
           "status": "passed",
           "title": "initializes in MENU state with zeroed scores",
-          "duration": 1.775000000000034,
+          "duration": 1.7941000000000145,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1199,7 +724,7 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) transitions from MENU to SERVING to PLAYING",
           "status": "passed",
           "title": "transitions from MENU to SERVING to PLAYING",
-          "duration": 0.20220000000000482,
+          "duration": 0.2296999999999798,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1211,7 +736,7 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) handles pause and resume toggle correctly",
           "status": "passed",
           "title": "handles pause and resume toggle correctly",
-          "duration": 0.2138999999999669,
+          "duration": 0.23419999999998709,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1223,7 +748,7 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) tracks rally increments during active gameplay",
           "status": "passed",
           "title": "tracks rally increments during active gameplay",
-          "duration": 0.1488000000000511,
+          "duration": 0.17250000000001364,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1235,7 +760,7 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) records points and transitions to GAME_OVER on match victory",
           "status": "passed",
           "title": "records points and transitions to GAME_OVER on match victory",
-          "duration": 0.24349999999998317,
+          "duration": 0.28829999999999245,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1247,14 +772,14 @@
           "fullName": "State Machine & Score Lifecycle (R-PONG-STATE-3) resets state cleanly back to MENU",
           "status": "passed",
           "title": "resets state cleanly back to MENU",
-          "duration": 0.11919999999997799,
+          "duration": 0.15100000000001046,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783070,
-      "endTime": 1787746783072.2434,
+      "startTime": 1787748196784,
+      "endTime": 1787748196786.2883,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/state-machine.test.ts"
@@ -1266,7 +791,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) creates immutable 2D vectors with default and explicit coordinates",
           "status": "passed",
           "title": "creates immutable 2D vectors with default and explicit coordinates",
-          "duration": 1.693899999999985,
+          "duration": 1.7408000000000357,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1276,7 +801,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) performs vector addition and subtraction correctly",
           "status": "passed",
           "title": "performs vector addition and subtraction correctly",
-          "duration": 0.24989999999996826,
+          "duration": 0.25159999999999627,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1286,7 +811,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) scales vectors by scalars and handles non-finite inputs",
           "status": "passed",
           "title": "scales vectors by scalars and handles non-finite inputs",
-          "duration": 0.22359999999997626,
+          "duration": 0.22169999999999845,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1296,7 +821,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) calculates dot products and magnitudes",
           "status": "passed",
           "title": "calculates dot products and magnitudes",
-          "duration": 0.21229999999997062,
+          "duration": 0.17140000000000555,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1306,7 +831,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) normalizes vectors to unit length and handles zero vectors safely",
           "status": "passed",
           "title": "normalizes vectors to unit length and handles zero vectors safely",
-          "duration": 0.17739999999997735,
+          "duration": 0.16039999999998145,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1316,7 +841,7 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) reflects incident vectors across surface normals accurately",
           "status": "passed",
           "title": "reflects incident vectors across surface normals accurately",
-          "duration": 0.2512999999999579,
+          "duration": 0.230700000000013,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1326,14 +851,14 @@
           "fullName": "Vector Mathematics (R-PONG-CORE-2) computes distance, clamping, lerp, and angle generation",
           "status": "passed",
           "title": "computes distance, clamping, lerp, and angle generation",
-          "duration": 0.32490000000001373,
+          "duration": 0.29270000000002483,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783028,
-      "endTime": 1787746783031.325,
+      "startTime": 1787748196782,
+      "endTime": 1787748196785.2927,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/vector.test.ts"
@@ -1345,7 +870,7 @@
           "fullName": "Web Application Controller (R-PONG-RENDER-7) handles missing DOM canvas gracefully without throwing",
           "status": "passed",
           "title": "handles missing DOM canvas gracefully without throwing",
-          "duration": 1.6888999999999896,
+          "duration": 1.9928999999999633,
           "failureMessages": [],
           "meta": {},
           "tags": []
@@ -1355,17 +880,492 @@
           "fullName": "Web Application Controller (R-PONG-RENDER-7) initializes and binds all buttons, inputs, and loop updates when DOM elements exist",
           "status": "passed",
           "title": "initializes and binds all buttons, inputs, and loop updates when DOM elements exist",
-          "duration": 1.4116000000000213,
+          "duration": 1.5874000000000024,
           "failureMessages": [],
           "meta": {},
           "tags": []
         }
       ],
-      "startTime": 1787746783119,
-      "endTime": 1787746783121.4116,
+      "startTime": 1787748196841,
+      "endTime": 1787748196844.5874,
       "status": "passed",
       "message": "",
       "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/pong/unit/web.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)"
+          ],
+          "fullName": "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2) executes multi-turn chat completion with telemetry metrics",
+          "status": "passed",
+          "title": "executes multi-turn chat completion with telemetry metrics",
+          "duration": 19.085200000000043,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)"
+          ],
+          "fullName": "Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2) clamps extreme temperature and top_p parameters within safe boundaries",
+          "status": "passed",
+          "title": "clamps extreme temperature and top_p parameters within safe boundaries",
+          "duration": 0.883700000000033,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196639,
+      "endTime": 1787748196658.8838,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/functional/prompt-completion.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) displays help documentation when invoked with --help",
+          "status": "passed",
+          "title": "displays help documentation when invoked with --help",
+          "duration": 1.031899999999979,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) handles missing prompt argument gracefully by printing usage",
+          "status": "passed",
+          "title": "handles missing prompt argument gracefully by printing usage",
+          "duration": 0.12330000000000041,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) executes standard completion in JSON format",
+          "status": "passed",
+          "title": "executes standard completion in JSON format",
+          "duration": 0.5290000000000248,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI E2E Tests (R-AI-NEMO-1, C-AI-SEC-1) executes streaming completion and error path in CLI",
+          "status": "passed",
+          "title": "executes streaming completion and error path in CLI",
+          "duration": 0.7704999999999984,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196899,
+      "endTime": 1787748196901.7705,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/e2e/nemotron-e2e.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2)"
+          ],
+          "fullName": "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2) parses Server-Sent Events stream chunks and terminates on [DONE]",
+          "status": "passed",
+          "title": "parses Server-Sent Events stream chunks and terminates on [DONE]",
+          "duration": 19.858599999999967,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2)"
+          ],
+          "fullName": "Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2) handles stream HTTP error status and records failure",
+          "status": "passed",
+          "title": "handles stream HTTP error status and records failure",
+          "duration": 3783.9874,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748200384.9873,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/integration/nemotron-streaming.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
+          ],
+          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates Mango Agent delegating an architectural review task to Nemotron and receiving structured output",
+          "status": "passed",
+          "title": "simulates Mango Agent delegating an architectural review task to Nemotron and receiving structured output",
+          "duration": 21.978300000000047,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
+          ],
+          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates multi-agent reasoning chain (Planner -> Nemotron Reasoner -> Verifier)",
+          "status": "passed",
+          "title": "simulates multi-agent reasoning chain (Planner -> Nemotron Reasoner -> Verifier)",
+          "duration": 2.323599999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
+          ],
+          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) simulates streaming reasoning delegation with real-time token accumulation",
+          "status": "passed",
+          "title": "simulates streaming reasoning delegation with real-time token accumulation",
+          "duration": 1.469699999999989,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)"
+          ],
+          "fullName": "Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7) recovers gracefully when subagent outputs malformed JSON on first try and retries",
+          "status": "passed",
+          "title": "recovers gracefully when subagent outputs malformed JSON on first try and retries",
+          "duration": 1.195600000000013,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196615,
+      "endTime": 1787748196642.1956,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/journey/agent-delegation.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1)"
+          ],
+          "fullName": "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1) fails closed with a clear error when NVIDIA_API_KEY is not configured",
+          "status": "passed",
+          "title": "fails closed with a clear error when NVIDIA_API_KEY is not configured",
+          "duration": 2.661800000000028,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1)"
+          ],
+          "fullName": "Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1) redacts sensitive API tokens from server error response messages",
+          "status": "passed",
+          "title": "redacts sensitive API tokens from server error response messages",
+          "duration": 16.998699999999985,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196644,
+      "endTime": 1787748196662.9988,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/security/secret-safety.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Nemotron CLI Subprocess Tests (R-AI-NEMO-1)"],
+          "fullName": "Nemotron CLI Subprocess Tests (R-AI-NEMO-1) prints help documentation with --help flag",
+          "status": "passed",
+          "title": "prints help documentation with --help flag",
+          "duration": 932.7757999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron CLI Subprocess Tests (R-AI-NEMO-1)"],
+          "fullName": "Nemotron CLI Subprocess Tests (R-AI-NEMO-1) prints usage when no --prompt is provided",
+          "status": "passed",
+          "title": "prints usage when no --prompt is provided",
+          "duration": 708.8079,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) completes a prompt in --json mode via subprocess",
+          "status": "passed",
+          "title": "completes a prompt in --json mode via subprocess",
+          "duration": 2336.4007,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron CLI Live Subprocess Tests (R-AI-NEMO-1, C-AI-SEC-1) streams output via --stream flag without leaking secrets",
+          "status": "passed",
+          "title": "streams output via --stream flag without leaking secrets",
+          "duration": 7387.8479,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748207947.848,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/cli-live.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
+          ],
+          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Planner agent produces a structured plan from a planning prompt",
+          "status": "passed",
+          "title": "Planner agent produces a structured plan from a planning prompt",
+          "duration": 2760.8184,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
+          ],
+          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Nemotron Reasoner agent produces architectural findings",
+          "status": "skipped",
+          "title": "Nemotron Reasoner agent produces architectural findings",
+          "duration": 771.6455000000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1)"
+          ],
+          "fullName": ".mango Agent Delegation Live Tests (R-AI-NEMO-1, R-AI-NEMO-2, C-AI-SEC-1) Verifier agent produces a structured PASS/FAIL verdict",
+          "status": "passed",
+          "title": "Verifier agent produces a structured PASS/FAIL verdict",
+          "duration": 3859.6158,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748203973.6157,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/mango-agent-live.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Mango MAS Orchestrator Live Tests (Vitest E2E)"],
+          "fullName": "Mango MAS Orchestrator Live Tests (Vitest E2E) simulates an E2E agent loop and generates verified responses",
+          "status": "passed",
+          "title": "simulates an E2E agent loop and generates verified responses",
+          "duration": 5960.2046,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748202541.2046,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/mango-mas-e2e-live.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) completes a minimal prompt with valid response structure and telemetry",
+          "status": "skipped",
+          "title": "completes a minimal prompt with valid response structure and telemetry",
+          "duration": 610.4503,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) streams SSE chunks from the live API and accumulates non-empty content",
+          "status": "skipped",
+          "title": "streams SSE chunks from the live API and accumulates non-empty content",
+          "duration": 912.5170999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) sanitizes secrets in error responses when using an invalid API key",
+          "status": "passed",
+          "title": "sanitizes secrets in error responses when using an invalid API key",
+          "duration": 36.74200000000019,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1)"
+          ],
+          "fullName": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) handles timeout gracefully and records circuit breaker failure",
+          "status": "passed",
+          "title": "handles timeout gracefully and records circuit breaker failure",
+          "duration": 2.7938000000001466,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748198105,
+      "endTime": 1787748198143.7937,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/smoke/nemotron-live.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Nemotron Resilience & Stress Tests (R-AI-RES-3)"],
+          "fullName": "Nemotron Resilience & Stress Tests (R-AI-RES-3) retries automatically on HTTP 429 rate limits with exponential backoff and succeeds",
+          "status": "passed",
+          "title": "retries automatically on HTTP 429 rate limits with exponential backoff and succeeds",
+          "duration": 143.4228,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron Resilience & Stress Tests (R-AI-RES-3)"],
+          "fullName": "Nemotron Resilience & Stress Tests (R-AI-RES-3) trips circuit breaker on repeated non-retryable failures and fast-fails subsequent calls",
+          "status": "passed",
+          "title": "trips circuit breaker on repeated non-retryable failures and fast-fails subsequent calls",
+          "duration": 868.4494000000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748197592.4495,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/sanity/resilience-stress.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
+          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) initializes with default configuration values",
+          "status": "passed",
+          "title": "initializes with default configuration values",
+          "duration": 2.6229999999999905,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
+          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) allows overriding base URL, model, and retry timeouts",
+          "status": "passed",
+          "title": "allows overriding base URL, model, and retry timeouts",
+          "duration": 0.541499999999985,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
+          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) masks secret keys correctly without leaking raw token",
+          "status": "passed",
+          "title": "masks secret keys correctly without leaking raw token",
+          "duration": 0.4019000000000119,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
+          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) sanitizes secrets from error text and handles empty inputs",
+          "status": "passed",
+          "title": "sanitizes secrets from error text and handles empty inputs",
+          "duration": 0.23409999999995534,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)"],
+          "fullName": "Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1) exercises circuit breaker transitions from OPEN to HALF_OPEN to CLOSED or OPEN",
+          "status": "passed",
+          "title": "exercises circuit breaker transitions from OPEN to HALF_OPEN to CLOSED or OPEN",
+          "duration": 91.3134,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1787748196581,
+      "endTime": 1787748196676.3135,
+      "status": "passed",
+      "message": "",
+      "name": "E:/Coding_Projects/Harness_TEST/harness/node/tests/ai/unit/nemotron-client.test.ts"
     }
   ]
 }
