@@ -20,27 +20,56 @@ def _ensure_memory_files() -> None:
         HYPOTHESES_FILE.write_text("[]", encoding="utf-8")
 
 
+DEFAULT_LOCK_TIMEOUT_S = 10.0
+DEFAULT_LOCK_POLL_S = 0.1
+#: Floor for the poll interval: keeps the poll budget finite and prevents a
+#: zero/negative interval from becoming a busy-spin.
+MIN_LOCK_POLL_S = 0.001
+
+
 @contextlib.contextmanager
-def _file_lock(filepath: Path) -> typing.Iterator[None]:
+def file_lock(
+    filepath: Path,
+    timeout_s: float = DEFAULT_LOCK_TIMEOUT_S,
+    poll_s: float = DEFAULT_LOCK_POLL_S,
+) -> typing.Iterator[None]:
+    """Best-effort single-host advisory lock via an O_CREAT|O_EXCL lockfile.
+
+    Only contention (the lockfile already existing) is retried; any other
+    OSError (permissions, disk full) propagates immediately rather than
+    spinning until the timeout.
+
+    The retry loop is bounded by a poll budget as well as by the deadline, so
+    "this never spins forever" is a structural property of the loop rather than
+    a consequence of the clock behaving. A clock regression then degrades to an
+    early ``TimeoutError`` instead of hanging the caller — and, in CI, the job.
+    """
     lockfile = filepath.with_suffix(".lock")
-    timeout = 10.0
-    start = time.time()
-    while True:
+    effective_poll_s = max(poll_s, MIN_LOCK_POLL_S)
+    deadline = time.monotonic() + timeout_s
+    max_polls = max(1, int(timeout_s / effective_poll_s) + 2)
+    acquired = False
+    for _ in range(max_polls):
         try:
             fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.close(fd)
+            acquired = True
             break
-        except (FileExistsError, OSError):
-            if time.time() - start > timeout:
-                raise TimeoutError(f"Could not acquire lock for {filepath}")
-            time.sleep(0.1)
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(effective_poll_s)
+    if not acquired:
+        raise TimeoutError(f"Could not acquire lock for {filepath}")
     try:
         yield
     finally:
-        try:
+        with contextlib.suppress(OSError):
             lockfile.unlink(missing_ok=True)
-        except OSError:
-            pass
+
+
+# Backward-compatible alias for existing internal callers.
+_file_lock = file_lock
 
 
 def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -> str:
@@ -64,7 +93,7 @@ def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -
         # Write to a temp file first for atomic replacement
         temp_file = GAPS_FILE.with_suffix(".tmp")
         temp_file.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
-        os.replace(temp_file, GAPS_FILE)
+        temp_file.replace(GAPS_FILE)
 
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
@@ -90,7 +119,7 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
 
         temp_file = HYPOTHESES_FILE.with_suffix(".tmp")
         temp_file.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
-        os.replace(temp_file, HYPOTHESES_FILE)
+        temp_file.replace(HYPOTHESES_FILE)
 
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 

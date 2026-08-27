@@ -146,7 +146,6 @@ class TestRunHook:
         assert not (mock_workspace / ".mango" / "hooks" / "pre-nemotron-run.sh").exists()
 
     def test_hook_exists_and_runs(self, mock_workspace: Path) -> None:
-        pytest.importorskip("bash", reason="bash hook tests require POSIX platform")
         if not _POSIX:
             pytest.skip("bash hook tests require POSIX platform")
         hooks = mock_workspace / ".mango" / "hooks"

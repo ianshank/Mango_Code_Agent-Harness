@@ -33,8 +33,15 @@ This document provides a reference architecture and checklist for developer and 
 
 ### Coverage Thresholds
 
-- **Python (Pytest):** >= 80% line/statement coverage enforced (`--cov-fail-under=80`).
+- **Python (Pytest):** threshold is read dynamically from `harness/shared/governance-policy.json`
+  (`coverage.lines`, currently **90%**) into `Makefile`'s `COV_MIN`, so the gate and the policy
+  cannot silently drift; enforced as `--cov-fail-under=$(COV_MIN)` and aggregate-only (per-file
+  is a documented follow-up — `harness/CONTRACT.md`). Never hard-code this percentage elsewhere;
+  read it from the policy file.
 - **Node (Vitest):** >= 90% lines, 90% statements, 80% branches, 90% functions enforced per file.
+- **Policy artifact drift** (`harness/control-plane/policy-artifact.json`): not a coverage metric,
+  but gated the same way — `test_committed_artifact_matches_working_tree` fails the pytest stage
+  if `governance-policy.json` or `agent-policy.json` changes without regenerating the artifact.
 
 ---
 

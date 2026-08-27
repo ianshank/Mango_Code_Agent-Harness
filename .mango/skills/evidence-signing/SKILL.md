@@ -99,6 +99,16 @@ def verify_manifest(manifest: dict, key: str) -> bool:
 4. **Redact arguments** before hashing: strip file paths, secrets, and PII before passing `arguments_hash`.
 5. **One builder per synthesis session.** Do not share a builder instance across unrelated tasks.
 
+## Consumers
+
+- `harness/control-plane/publish_policy_artifact.py --attest` signs the versioned
+  policy artifact. Its final `add_policy_snapshot` entry binds the canonical
+  digest of the artifact core (the artifact minus its attestation), so the HMAC
+  transitively covers the artifact identity and every pinned file digest — a
+  digest edited after signing fails verification. The same key resolution rules
+  apply: constructor argument, then `AGENT_EVIDENCE_KEY`, then fail closed. A
+  missing key is a `DENY`, never a silently unsigned artifact.
+
 ## Non-Goals
 
 - This skill does not manage secret storage or rotation.

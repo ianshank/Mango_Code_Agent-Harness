@@ -4,7 +4,7 @@
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (272+ tests passing, 0 unapproved skips, ≥90% coverage gate) and fail-closed governance invariants (INV-1..INV-15).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (575+ tests passing across Python + Node — 490 Python / 85 Node — 0 unapproved skips per `verify-zero-skips`, ≥90% coverage gate) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -23,13 +23,21 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── hooks/
 │   │   ├── block_dangerous.sh           # PreToolUse guard blocking destructive commands
 │   │   ├── loop_detection.sh            # Anti-loop edit cycle detector
+│   │   ├── pre-nemotron-run.sh          # Fired by the orchestrator before each agent turn
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/
-│   │   ├── evidence-signing/SKILL.md    # Reusable HMAC evidence manifest skill
-│   │   ├── nemotron-reasoner/SKILL.md   # NVIDIA Nemotron AI operational cheatsheet
-│   │   └── harness-engineering/SKILL.md # Harness inspection & extension rules
+│   ├── skills/                          # 10 reusable skills; see .mango/skills/
+│   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
+│   │   ├── coverage-gate/               # Coverage threshold sourced from policy
+│   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
+│   │   ├── harness-engineering/         # Harness inspection & extension rules
+│   │   ├── nemotron-reasoner/           # NVIDIA Nemotron AI operational cheatsheet
+│   │   ├── openspec-peer-review/        # Architecture/SDLC/QA/Product peer review
+│   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
+│   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
+│   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
@@ -56,8 +64,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator
-│   │   ├── meta_tools.py                # Meta-learning and context state tools
+│   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
+│   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
+│   │   ├── meta_tools.py                # Meta-learning, context state, and file_lock
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
+│   │   ├── schemas/                     # JSON Schema docs (agent policy, evidence, signals)
 │   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
 │   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
@@ -65,7 +76,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (198+ Tests / ≥90% Coverage)
+│   │   └── tests/                       # Python AQA Engine (486+ Tests / ≥90% Coverage)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
 │   │       ├── test_governance_broker.py # 11 tests: INV-8/INV-9, PDP, BLOCKED semantics
@@ -73,6 +84,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │       └── test_validation_scripts_extra.py # 21 tests: 80% coverage on governance validation scripts
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
+│       ├── publish_policy_artifact.py   # Versioned, digest-pinned, attestable policy artifact
+│       └── policy-artifact.json         # Committed artifact; drift-gated by the test suite
 │
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
@@ -158,6 +171,16 @@ Copy the template and set your NVIDIA API key:
 cp .env.example .env
 # Edit .env and set: NVIDIA_API_KEY=nvapi-your-key-here
 ```
+
+Optional environment variables for the shadow planner comparison channel
+(`docs/specs/mangomas-integration-core.md`; all off/unset by default):
+
+| Variable | Effect |
+|---|---|
+| `MANGO_SHADOW_PLANNER` | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
+| `MANGO_SHADOW_MODEL` | Alternate model for the shadow pass (defaults to the orchestrator model). |
+| `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout. |
+| `MANGO_SIGNAL_DIR` | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`). |
 
 ### 4.2 Running the Pong Game
 

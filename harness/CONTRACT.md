@@ -34,6 +34,7 @@
 - **INV-13:** A “verified” result MUST include policy, test, sandbox, source, and tool-version digests.
 - **INV-14:** Exportable traces MUST be redacted and marked as approved training candidates before dataset export.
 - **INV-15:** LATS MUST remain disabled by default until its cost-adjusted evaluation threshold is met.
+- **INV-16:** the cognitive/execution boundary is one-directional — the cognitive plane proposes, the harness disposes. No field of a `CognitiveSignal` (`confidence` and producer identity included) may reach a control path, select a tool or model, or alter tool exposure. Observation-mode producers run with an empty tool schema and receive value objects, never live orchestrator state, and their failures are contained so the incumbent path is unaffected. Enforced by the boundary suite (`pytest -m governance`) and the static boundary scan in `test_shadow_planner.py`.
 
 ## Supply chain
 

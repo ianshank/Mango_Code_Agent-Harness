@@ -4,11 +4,13 @@ import json
 import logging
 import os
 import subprocess
+import time
 import typing
 from pathlib import Path
 
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
+from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +202,7 @@ class MangoMASOrchestrator:
 
         active_tools = tools if tools is not None else NEMOTRON_TOOLS
 
-        for i in range(self.max_iterations):
+        for _iteration in range(self.max_iterations):
             try:
                 kwargs: dict[str, typing.Any] = {
                     "messages": messages,
@@ -256,7 +258,7 @@ class MangoMASOrchestrator:
 
                     dump_file = dump_dir / f"debug_{agent_name}_{int(time.time() * 1000)}.json"
 
-                    with open(dump_file, "w") as f:
+                    with dump_file.open("w") as f:
                         json.dump(redacted_history, f, indent=2)
 
                 self._run_hook(f"post-{agent_name}-run", status="success")
@@ -304,8 +306,32 @@ class MangoMASOrchestrator:
         """Executes the full MAS loop: Planner -> Nemotron-Reasoner -> Verifier."""
         # 1. Planner
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
+        plan_started = time.monotonic()
         plan = self.execute_agent("planner", planner_prompt, tools=[])
         logger.info(f"Plan generated: {len(plan)} bytes")
+
+        # Observation-only shadow comparison (docs/specs/mangomas-integration-core.md).
+        # Off by default; a value object crosses the boundary, never `self`.
+        if shadow_planner_enabled():
+            try:
+                run_shadow_comparison(
+                    ShadowContext(
+                        workspace_dir=self.workspace_dir,
+                        api_key=self.api_key,
+                        model=self.model,
+                        api_timeout=self.api_timeout,
+                        planner_system_prompt=self.load_agent_prompt("planner"),
+                        planner_user_prompt=planner_prompt,
+                        task=initial_task,
+                        incumbent_plan=plan,
+                        incumbent_elapsed_ms=int((time.monotonic() - plan_started) * 1000),
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Orchestrator-level guard caught a shadow planner failure "
+                    "the channel itself did not contain; incumbent plan is unaffected"
+                )
 
         # 2. Reasoner (Code Generation / Fixes using Tools)
         reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)

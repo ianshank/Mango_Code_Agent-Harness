@@ -18,6 +18,15 @@ from harness.shared.nemotron_bridge import resolve_api_key
 
 
 # --- Fixtures ---
+@pytest.fixture(autouse=True)
+def _scrub_shadow_planner_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the suite hermetic: an ambient MANGO_SHADOW_PLANNER=1 in a dev
+    shell or CI runner must not flip mocked orchestrator tests into making
+    real bridge calls. Tests that exercise the flag set it explicitly."""
+    for var in ("MANGO_SHADOW_PLANNER", "MANGO_SHADOW_MODEL", "MANGO_SHADOW_TIMEOUT_SEC", "MANGO_SIGNAL_DIR"):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture
 def api_key() -> str:
     """Delegates to nemotron_bridge.resolve_api_key() — single source of truth."""

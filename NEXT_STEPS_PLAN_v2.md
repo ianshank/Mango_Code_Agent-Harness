@@ -4,6 +4,8 @@
 **Grounding:** This plan is grounded in the repository's own governing documents — `harness/CONTRACT.md` v2.0 (invariants INV-1..INV-7), `PROJECT-CHARTER.md` v2.0, `NEXT_STEPS.md` roadmap (v2.2.0 / v2.3.0), `docs/ROOT_OF_TRUST.md`, the peer-review remediation matrix, and the post-PR-#4 hygiene state. (The referenced external research session could not be loaded; no fresh Web/Academic search was run for this plan — it is not externally validated, only charter/doc-grounded.)
 **Method:** Spec-driven development — every work item is a spec (R-* requirements, C-* citations) → implementation → full test suite + coverage gate → objective peer review → merge. Backwards-compatible, modular, reusable, dynamic code; no hard-coded values. **Peer-reviewed before presenting** (advisor pass incorporated below).
 
+**Status update:** Phases 0 and 1 below merged via [PR #7](https://github.com/ianshank/Mango_Code_Agent-Harness/pull/7). See Phase 6 for the MangoMas integration core, which applied this same spec → peer-review → gate discipline to a new initiative outside this plan's original scope.
+
 ---
 
 ## 0. Current State & Honest Verification Status
@@ -103,6 +105,25 @@ Per `ROOT_OF_TRUST.md`, the repository cannot be its own root of trust — and a
 - Full org required-workflow/ruleset protecting governance paths (INV-6).
 - High-risk agent authority + side-effect/approval evidence stored outside the mutable project repo (INV-7).
 - Pong multiplayer (WebSocket/GGPO) + audio customization (product/demo backlog).
+
+---
+
+## Phase 6 — MangoMas Integration Core (post-PR-#7)
+
+Not in this plan's original scope — added when `docs/research/mangomas-v2-integration-use-cases.md`
+established the integration boundary ("MangoMas proposes, the harness disposes"). Executed with
+the same discipline this plan defines below: spec (`docs/specs/mangomas-integration-core.md`,
+R-MMI-1..10, C-MMI-1..6) → implementation → full suite + coverage gate → `openspec-peer-review`
+persona matrix → post-implementation gap analysis → merge.
+
+| ID | Work item | Exit criteria | Status |
+|---|---|---|---|
+| 6.1 | Versioned `CognitiveSignal` envelope + JSONL sink | Fail-closed validation, boundary tests (`-m governance`) prove no field reaches a control path (INV-16) | ✅ Done |
+| 6.2 | Shadow-mode planner comparison channel | Byte-identical when disabled (proven, not asserted); zero tool authority; contained failures | ✅ Done — channel only, no UC-4 evidence yet |
+| 6.3 | Versioned, digest-pinned, attestable policy artifact | Fail-closed `check`; attestation transitively covers the artifact core; drift-gated in `make ci` via pytest | ✅ Done |
+| 6.4 | UC-4 experiment: register a real MangoMas producer, run the preregistered kill-criteria analysis | License/SBOM verification of `Mango-Metrics-NLM/MangoMas_V2` (still unreadable cross-owner); `shadow-channel-analysis` skill executed over a real run set | ⬜ Blocked on 6.4's own precondition — not started |
+| 6.5 | Protected-path follow-ups surfaced by two adversarial review passes: fix `.governance/**` fnmatch (matches no real dir today), wire the `specs` CI target into `make ci`, decide whether to wake the 5 dormant `.mango/hooks/` scripts via `.claude/settings.json`, add `--cov=harness/control-plane` to the `Makefile`'s coverage invocation (the `pyproject.toml` `source` entry alone doesn't change what `make coverage-python` measures — CLI `--cov=` flags take precedence) | Each needs a dedicated branch, decision-log entry, and `infra-reviewed` label per `harness/CONTRACT.md` | ⬜ Recorded, not started |
+| 6.6 | Verify (and if real, fix) whether `Dockerfile`'s `COPY .mango/ /app/.mango/` actually copies anything, given `.dockerignore` excludes the whole `.mango/` tree from the build context | A real `docker build` in an environment with a daemon; not verified this session (none available) | ⬜ Recorded, not started — low urgency: the runtime image never installs Python, so `harness/shared`/`harness/control-plane` can't execute in it regardless |
 
 ---
 
