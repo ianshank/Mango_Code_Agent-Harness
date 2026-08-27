@@ -1,10 +1,10 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.6 (2026 Standards)  
-**Author:** Ian Cruickshank  
-**Governing Standard:** Agentic SSD Gate Harness Contract v2.0 (`harness/CONTRACT.md`)
+**Version:** 2.1.7 (2026 Standards)
+**Author:** Ian Cruickshank
+**Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (244+ tests passing, 0 unapproved skips, >80% coverage gate) and fail-closed governance invariants.
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (272+ tests passing, 0 unapproved skips, ≥90% coverage gate) and fail-closed governance invariants (INV-1..INV-15).
 
 ---
 
@@ -27,6 +27,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
 │   ├── skills/
+│   │   ├── evidence-signing/SKILL.md    # Reusable HMAC evidence manifest skill
 │   │   ├── nemotron-reasoner/SKILL.md   # NVIDIA Nemotron AI operational cheatsheet
 │   │   └── harness-engineering/SKILL.md # Harness inspection & extension rules
 │   └── settings.json                    # Mango agent lifecycle hook bindings
@@ -57,11 +58,17 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator
 │   │   ├── meta_tools.py                # Meta-learning and context state tools
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
+│   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
+│   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
+│   │   │   ├── broker.py                # ExecutionBroker — INV-8/INV-9 enforcement
+│   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (149 Tests / 81.42% Coverage)
+│   │   └── tests/                       # Python AQA Engine (177+ Tests / ≥90% Coverage)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
+│   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
+│   │       ├── test_governance_broker.py # 11 tests: INV-8/INV-9, PDP, BLOCKED semantics
 │   │       └── test_harness.py          # Adversarial governance self-tests
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
@@ -101,6 +108,19 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **Multi-Target Rendering:** High-DPI HTML5 Canvas 2D with CRT glow & particle bursts, plus text-mode ANSI Terminal renderer.
 - **Procedural Audio:** Web Audio API procedural oscillator synthesis without external audio files.
 
+### 2.4 Governance Kernel (`harness/shared/governance/`)
+
+- **`ExecutionBroker`** (`broker.py`): Fail-closed execution gate enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Returns `BLOCKED` when sandbox is unavailable — never falls back to direct host execution. PDP policy verdicts configurable; `check_command()` is the inner guard.
+- **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
+- **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
+- **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in Python 3.9 (PEP 604 unions, `datetime.UTC`, unannotated `AnnAssign`). Run via `make check-compat`.
+
+**Required environment variable:**
+
+| Variable | Purpose |
+|----------|---------|
+| `AGENT_EVIDENCE_KEY` | HMAC signing key for `EvidenceBuilder`. Never hard-code. Set in secret store. |
+
 ---
 
 ## 3. 7-Tier Test Matrix & Governance
@@ -118,10 +138,12 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **244+ automated tests** (95 Vitest + 149 Pytest tests across 7 tiers)
-- **Node Code Coverage (V8):** **>90% Statements | >80% Branches | >90% Functions | >90% Lines**
-- **Python AQA Coverage:** **81.42% Statements** across `harness/shared` and `harness/api_server`
+- **Total Automated Tests:** **272+ automated tests** (95 Vitest + 177+ Pytest tests across 7 tiers)
+- **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
+- **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server` (per-file enforced)
 - **Requirements Traceability:** **15 / 15 specifications** traced bidirectionally (`check_traceability.py`)
+- **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
+- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9
 
 ---
 
@@ -176,10 +198,14 @@ pnpm exec knip
 cd ../..
 
 # 3. Run Python AQA Engine & Governance Validators
-make ci         # Runs lint -> coverage -> test-node -> zero-skips -> validate
-make lint       # Runs ruff and mypy on all Python sources
-make test       # Runs full test suite (Pytest + Vitest + Zero-Skips)
-make validate   # Runs all governance execution invariants
+make ci              # Full pipeline: lint → coverage → test-node → zero-skips → validate → dedup → digest-regen
+make lint            # ruff + mypy + check_py_compat (Python 3.9 compat gate)
+make test            # Full test suite (Pytest + Vitest + Zero-Skips)
+make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)
+make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
+make validate        # Governance invariants (adoption, policy, remotes, traceability)
+make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
+make digest-regen    # Regenerate protected-file digests after policy changes
 
 # 4. Run root adversarial harness self-tests
 python harness/shared/tests/test_harness.py
@@ -212,11 +238,13 @@ When introducing new features or modules:
 Use the unified root `Makefile` to enforce enterprise quality gates locally prior to committing:
 
 ```bash
-make lint       # Static analysis, formatting checks, and strict typing
-make coverage   # Enforce >=80% code coverage threshold
-make test-node  # Execute TypeScript/Node engine tests
-make validate   # Execute all governance invariants (adoption, policy, remotes, traceability)
-make pre-pr     # Full pre-submission validation pipeline
+make lint            # Static analysis, formatting checks, strict typing, compat gate
+make coverage        # Enforce ≥90% total coverage (per-file enforced)
+make test-node       # Execute TypeScript/Node engine tests
+make test-governance # Governance broker, evidence, invariant tests
+make validate        # All governance invariants (adoption, policy, remotes, traceability)
+make check-dedup     # Shim drift detection
+make pre-pr          # Full pre-submission validation pipeline
 ```
 
 ### 5.4 Secret Sanitization & Security Scanning

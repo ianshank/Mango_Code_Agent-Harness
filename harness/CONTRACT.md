@@ -1,4 +1,4 @@
-# Agentic SSD Gate Harness Contract — v2.0
+# Agentic SSD Gate Harness Contract — v2.1
 
 ## Core rule
 
@@ -37,7 +37,7 @@
 
 ## Supply chain
 
-Node requires a committed frozen `pnpm-lock.yaml`. JVM enables `lockAllConfigurations()` with `LockMode.STRICT` and requires both `gradle.lockfile` and reviewed `gradle/verification-metadata.xml`. Missing security scanners or lock state is a failure, never a clean/no-op pass.
+Node requires a committed frozen `pnpm-lock.yaml`. Builds that execute install scripts (e.g., `esbuild`) must be declared in `"pnpm": { "onlyBuiltDependencies": ["<pkg>"] }` in `package.json`; pnpm 11 blocks any undeclared build script execution. JVM enables `lockAllConfigurations()` with `LockMode.STRICT` and requires both `gradle.lockfile` and reviewed `gradle/verification-metadata.xml`. Missing security scanners or lock state is a failure, never a clean/no-op pass.
 
 ## Template adoption blockers
 
@@ -53,4 +53,12 @@ Untracked files in protected paths are also caught (fail-closed) — `validate_i
 
 ## Coverage gate
 
-The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The policy additionally declares `per_file: true`; a per-file gate is a planned follow-up. Until then, the total gate enforces the policy's `lines` threshold.
+The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The policy declares `per_file: true`; per-file enforcement is active as of v2.1 — no individual source file may fall below the `coverage.lines` threshold. The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation.
+
+## Evidence signing
+
+`EvidenceBuilder` (`harness/shared/governance/evidence_manifest.py`) requires a signing key sourced from the `AGENT_EVIDENCE_KEY` environment variable or injected via the `signing_key` constructor parameter. Constructor injection takes precedence over the environment variable. A missing key raises `ValueError` (not `OSError`) at `export()` time. The insecure hardcoded fallback key was removed in v2.1; fail-closed behavior is mandatory. See `.mango/skills/evidence-signing/SKILL.md` for the reusable skill.
+
+## Python compatibility gate
+
+`check_py_compat.py` enforces that all first-party Python uses only syntax available in the minimum CI matrix version (currently 3.9). It detects: PEP 604 union syntax (`X | Y`), `datetime.UTC` (3.11+), and annotated assignments (`ast.AnnAssign`) that use union types without `from __future__ import annotations`. Run via `make check-compat`.

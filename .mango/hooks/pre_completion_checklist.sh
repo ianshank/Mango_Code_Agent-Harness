@@ -22,7 +22,9 @@ CHECKLIST="Before ending this turn, confirm the following in your final message:
 6. Pre-PR review: if this change is headed for a PR, has 'make pre-pr' been run and
    the printed review checklist completed (openspec-peer-review and
    repo-invariant-review skills)? See CLAUDE.md.
-7. Follow-ups: list any known gaps or TODOs explicitly.
+7. Evidence signing: if this change used EvidenceBuilder, was AGENT_EVIDENCE_KEY set?
+   If not, confirm export was skipped gracefully with a WARNING log (never silently).
+8. Follow-ups: list any known gaps or TODOs explicitly.
 If you have NOT actually run tests/lint yet, run them now before finishing.
 Once you have verified all of this, end your turn normally -- do not re-trigger this checklist by looping."
 
