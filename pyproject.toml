@@ -1,3 +1,11 @@
+[project]
+name = "mango-code-agent-harness"
+version = "2.1.6"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["harness*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["harness/shared/tests", "harness/api_server/tests"]

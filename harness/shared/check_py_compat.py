@@ -162,6 +162,10 @@ def _runtime_annotations(tree: ast.Module):
                     yield node.lineno, arg.annotation
             if node.returns is not None:
                 yield node.lineno, node.returns
+        # Module/class-level variable annotations (PEP 526) are also evaluated at
+        # import time, so `x: str | None = ...` fails on 3.9 just like function args.
+        elif isinstance(node, ast.AnnAssign) and node.annotation is not None:
+            yield node.lineno, node.annotation
 
 
 def find_pep604(tree: ast.Module) -> list[int]:

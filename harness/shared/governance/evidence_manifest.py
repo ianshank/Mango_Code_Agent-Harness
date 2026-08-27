@@ -53,7 +53,13 @@ class EvidenceBuilder:
         content_str = json.dumps(data, sort_keys=True).encode('utf-8')
         import hmac
         import os
-        key = os.environ.get("AGENT_EVIDENCE_KEY", "default-insecure-key").encode('utf-8')
+        key_str = os.environ.get("AGENT_EVIDENCE_KEY", "")
+        if not key_str:
+            raise EnvironmentError(
+                "AGENT_EVIDENCE_KEY is not set. Evidence signatures require a "
+                "secret key to provide tamper-evident integrity."
+            )
+        key = key_str.encode('utf-8')
         data["_signature"] = hmac.new(key, content_str, hashlib.sha256).hexdigest()
 
         return data

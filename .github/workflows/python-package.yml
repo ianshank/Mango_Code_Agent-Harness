@@ -20,8 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Code uses PEP 604 unions (e.g. `str | None`) -> Python 3.10+.
-        # pyproject ruff target-version is py311.
+        # pyproject ruff target-version is py39 (oldest supported).
+        # check_py_compat gate enforces no runtime-only 3.10+ constructs.
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
@@ -72,5 +72,5 @@ jobs:
         # attestation required by harness/CONTRACT.md; without the label the
         # gate stays fail-closed. Never set this unconditionally.
         env:
-          ALLOW_GITHUB_CHANGES: ${{ contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
+          ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci

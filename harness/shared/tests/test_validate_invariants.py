@@ -196,12 +196,12 @@ def test_main_fails_on_hardcoded_secret(temp_repo: Path):
     assert vi.main(workspace_dir=temp_repo, policy_path=_policy_path(temp_repo)) == 1
 
 
-def test_main_default_workspace_runs():
-    # Calling main() with no args exercises the default workspace path branch.
-    # We only assert it returns an int exit code; the real repo may pass or fail
-    # depending on working-tree state, so accept either 0 or 1.
+def test_main_default_workspace_runs(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    # Patch DEFAULT_WORKSPACE_DIR so the default-path branch is exercised
+    # against a hermetic temp repo instead of the real working tree.
+    monkeypatch.setattr(vi, "DEFAULT_WORKSPACE_DIR", temp_repo)
     code = vi.main()
-    assert code in (0, 1)
+    assert code == 0
 
 
 # --- size_budget_lines (MAX_FILE_LINES override) ---
