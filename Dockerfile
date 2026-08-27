@@ -10,16 +10,17 @@ RUN pnpm install --frozen-lockfile
 
 FROM dependencies AS build
 WORKDIR /app
-COPY .mango/ /app/.mango/
 COPY harness/ /app/harness/
 WORKDIR /app/harness/node
 RUN pnpm exec tsc --noEmit
 
 FROM base AS runtime
 WORKDIR /app/harness/node
-COPY --from=dependencies /app/harness/node/node_modules ./node_modules
-COPY --from=build /app/.mango /app/.mango
-COPY harness/ /app/harness/
+# `build` extends `dependencies`, so this one copy carries both the sources and
+# the installed node_modules. Sourcing it from `build` rather than the context
+# also keeps that stage in the graph: BuildKit skips unreferenced stages, which
+# would silently drop its `tsc --noEmit` typecheck.
+COPY --from=build /app/harness /app/harness
 ENV NODE_ENV=production
 
 # Healthcheck & Default CLI Autoplay Entrypoint

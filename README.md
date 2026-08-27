@@ -90,7 +90,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
 ├── .gitleaks.toml                       # Gitleaks security scan configuration
-├── .dockerignore                        # Docker build context policy (includes .mango)
+├── .dockerignore                        # Docker build context policy (excludes .mango)
 ├── Dockerfile                           # Multi-stage production container image
 ├── Makefile                             # Unified root Makefile for CI/CD targets
 ├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest)
