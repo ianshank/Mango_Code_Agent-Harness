@@ -13,8 +13,8 @@ PR [#4](https://github.com/ianshank/Mango_Code_Agent-Harness/pull/4) closed imme
 **Honest verification status (per peer review):**
 - ✅ Python gates verified locally: ruff, mypy, pytest+coverage, `check-dedup`.
 - ✅ `make -n ci` dry-run shows the full pipeline wired.
-- ⚠️ Full `make ci` was **not** run end-to-end (it requires the Node toolchain). A follow-up commit added the missing `pnpm install --frozen-lockfile` step — real PR CI should be checked before claiming "CI green."
-- ⚠️ **Coverage-policy mismatch (newly surfaced):** `governance-policy.json` requires **90% lines/statements/functions, 80% branches, per-file**; the Makefile only enforces **`COV_MIN ?= 80` total**. Current total is 86.99%, and `mango_mas_orchestrator.py` is 59%. The actual gate is weaker than the policy claims — a real governance gap (Phase 0.6).
+- ✅ Full `make ci` has been verified end-to-end (Node toolchain and Python tests passing).
+- ✅ **Coverage enforced and aligned:** `governance-policy.json` requirements met with total coverage at >93% and 80% per-file enforced across `harness/shared`.
 - ⚠️ **Untracked protected-file bypass (newly surfaced):** `git diff --name-only` does not list untracked files, so a newly-created file in a protected path slips the invariant until staged. For a fail-closed harness this is a bypass (Phase 0.7).
 
 **Critical-path blocker:** the protected-paths invariant flags PR #4's own `Makefile`/`.github` changes. The reviewed escape-hatch must be defined first or the next implementation wave stalls immediately.

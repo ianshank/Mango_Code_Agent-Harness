@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `harness/shared/tests/test_validation_scripts_extra.py` — Added unit tests for governance validation scripts to ensure 80% coverage.
 - `harness/shared/check_py_compat.py` — runtime Python 3.9 compatibility gate; detects PEP 604 unions and `datetime.UTC` without `from __future__ import annotations`. Now also covers `ast.AnnAssign` (module/class-level variable annotations).
 - `harness/shared/check_dedup.py` — drift gate that fails CI when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`.
 - `harness/shared/governance/broker.py` — `ExecutionBroker` enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Paths extracted to module-level constants; structured `logging` throughout.
@@ -18,14 +19,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `harness/shared/validate_agent_policy.py`, `harness/shared/validate_policy.py`, `harness/shared/validate_governance_docs.py` — Refactored to use `main()` functions for importability and testability.
 - `.github/workflows/python-package.yml` — Fixed misleading PEP 604 comment; null-guarded `ALLOW_GITHUB_CHANGES` against push events where `pull_request` context is absent.
 - `harness/node/package.json` — Added `"pnpm": { "onlyBuiltDependencies": ["esbuild"] }` to allowlist esbuild's build script under pnpm 11 supply-chain security policy.
 - `Makefile` — `lint-python` now runs `ruff check .` (all first-party Python); `lint` depends on new `check-compat` target; `ci` depends on new `check-dedup` target; added `spec`, `review`, `pre-pr` targets.
 - `harness/shared/governance-policy.json` — Updated `protected_paths` from stale `scripts/*` references to correct `harness/shared/*` layout; added `dedup` and `py_compat` policy sections.
-- `harness/control-plane/policy-bundle.example.json` — Regenerated digests after governance script changes (19 node + 21 jvm protected file digests).
+- `harness/control-plane/policy-bundle.example.json` — Regenerated digests after governance script changes.
 
 ### Fixed
 
+- `requirements-dev.txt` — Added `pytest-mock` to fix missing `mocker` fixture dependencies.
+- `test_mango_mas_orchestrator.py` — Fixed missing mock usage in `test_live_execute_agent`.
 - `test_validate_invariants.py::test_main_default_workspace_runs` — Made hermetic by patching `DEFAULT_WORKSPACE_DIR` to a temp repo instead of accepting any exit code from the real working tree.
 - `governance/evidence_manifest.py` — Removed insecure HMAC fallback key (`"default-insecure-key"`); raises `ValueError` when `AGENT_EVIDENCE_KEY` is unset.
 - `governance/broker.py` — Replaced f-strings in logger calls with lazy `%s` format; extracted hardcoded PDP/policy paths to module-level constants.

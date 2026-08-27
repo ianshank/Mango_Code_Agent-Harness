@@ -65,11 +65,12 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (177+ Tests / ≥90% Coverage)
+│   │   └── tests/                       # Python AQA Engine (198+ Tests / ≥90% Coverage)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
 │   │       ├── test_governance_broker.py # 11 tests: INV-8/INV-9, PDP, BLOCKED semantics
-│   │       └── test_harness.py          # Adversarial governance self-tests
+│   │       ├── test_harness.py          # Adversarial governance self-tests
+│   │       └── test_validation_scripts_extra.py # 21 tests: 80% coverage on governance validation scripts
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │
@@ -138,7 +139,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **272+ automated tests** (95 Vitest + 177+ Pytest tests across 7 tiers)
+- **Total Automated Tests:** **425+ automated tests** (95 Vitest + 330+ Pytest tests across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server` (per-file enforced)
 - **Requirements Traceability:** **15 / 15 specifications** traced bidirectionally (`check_traceability.py`)

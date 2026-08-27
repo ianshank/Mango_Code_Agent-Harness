@@ -28,6 +28,7 @@ Thumbs.db
 
 # Mango & Agent Subsystem
 .agents/
+.mango/
 
 # Build & Scratch Artifacts
 .gradle/

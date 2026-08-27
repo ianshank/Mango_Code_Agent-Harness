@@ -10,5 +10,6 @@ paths = [
   '''harness/shared/tests/test_nemotron_bridge_live\.py''',
   '''harness/shared/tests/test_validate_invariants\.py''',
   '''harness/shared/tests/test_evidence_manifest\.py''',
-  '''harness/shared/tests/test_governance_broker\.py'''
+  '''harness/shared/tests/test_governance_broker\.py''',
+  '''harness/shared/tests/test_validation_scripts_extra\.py'''
 ]
