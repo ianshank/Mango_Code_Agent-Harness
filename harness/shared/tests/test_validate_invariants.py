@@ -240,3 +240,23 @@ def test_check_protected_paths_warns_when_attested(temp_repo: Path, monkeypatch:
         assert vi.check_protected_paths(temp_repo, ["Makefile"]) is True
     assert "attestation" in caplog.text
     assert "Makefile" in caplog.text
+
+
+def test_git_modified_files_raises_on_git_failure(temp_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    """INV-6: Inability to inspect git state is fatal and must fail closed (raise)."""
+    def broken_check_output(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["git", "diff"], output="", stderr="git error")
+
+    monkeypatch.setattr(subprocess, "check_output", broken_check_output)
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        with pytest.raises(subprocess.CalledProcessError):
+            vi.git_modified_files(temp_repo)
+    assert "[FAIL] Could not run" in caplog.text
+
+
+def test_size_budget_lines_reads_from_policy(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    policy = _policy_path(temp_repo)
+    policy.write_text(json.dumps({"limits": {"size_budget_lines": 350}}), encoding="utf-8")
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    assert vi.size_budget_lines(policy) == 350
+

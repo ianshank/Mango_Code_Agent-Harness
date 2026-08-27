@@ -19,10 +19,10 @@ Exit codes: 0 = no drift, 1 = drift detected.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import logging
 import os
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,9 +40,6 @@ DEFAULT_MAX_SHIM_LINES = 40
 
 # Shared subpackages searched (in order) for the canonical module behind a stack script.
 SHARED_SEARCH_SUBDIRS = ("", "governance")
-
-_RUNPY_PATTERN = re.compile(r"runpy\.run_path\s*\(")
-_IMPORT_PATTERN = re.compile(r"(?:from|import)\s+harness\.shared(?:\.[A-Za-z0-9_.]+)?")
 
 
 @dataclass
@@ -137,12 +134,45 @@ def find_shared_module(shared_dir: Path, name: str) -> Path | None:
     return None
 
 
-def classify_shim(text: str) -> str | None:
-    """Return the delegation style used by a shim, or None if it delegates in no known way."""
-    if _RUNPY_PATTERN.search(text):
-        return "runpy"
-    if _IMPORT_PATTERN.search(text):
-        return "import"
+def classify_shim(text: str, shared_module: Path | None = None) -> str | None:
+    """Return the delegation style used by a shim, or None if it delegates in no known way.
+
+    Uses AST parsing to confirm the delegation actually imports or calls runpy on the
+    expected shared module.
+    """
+    try:
+        tree = ast.parse(text)
+    except Exception:
+        return None
+
+    target_stem = shared_module.stem if shared_module is not None else None
+
+    # Check for AST-level imports
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module.startswith("harness.shared"):
+                if target_stem is None or target_stem in node.module:
+                    return "import"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("harness.shared"):
+                    if target_stem is None or target_stem in alias.name:
+                        return "import"
+        elif isinstance(node, ast.Call):
+            func_name = ""
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "run_path":
+                func_name = "runpy.run_path"
+            elif isinstance(node.func, ast.Name) and node.func.id == "run_path":
+                func_name = "run_path"
+            if func_name and node.args:
+                try:
+                    arg_str = ast.unparse(node.args[0])
+                except Exception:
+                    arg_str = ""
+                if "shared" in arg_str.lower() or "_shared" in arg_str.lower():
+                    if target_stem is None or target_stem in arg_str:
+                        return "runpy"
+
     return None
 
 
@@ -158,7 +188,7 @@ def check_script(script: Path, shared_module: Path, cfg: DedupConfig) -> str | N
         return f"{rel}: could not read ({e})"
 
     shared_rel = shared_module.relative_to(cfg.repo_root).as_posix()
-    style = classify_shim(text)
+    style = classify_shim(text, shared_module=shared_module)
     if style is None:
         # Distinguish the two failure modes so the remediation message is actionable.
         # Note: being byte-identical to the shared file is only drift when neither file

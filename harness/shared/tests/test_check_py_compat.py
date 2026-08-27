@@ -273,3 +273,15 @@ def test_main_block(monkeypatch: pytest.MonkeyPatch):
         import runpy
         runpy.run_path(str(cc.DEFAULT_REPO_ROOT / "harness" / "shared" / "check_py_compat.py"), run_name="__main__")
     assert exc.value.code == 0
+
+
+def test_find_pep604_assignments(repo: Path):
+    import ast
+    code_alias = "MyType = str | None\nflags = 1 | 2\n"
+    tree = ast.parse(code_alias)
+    assert cc.find_pep604_assignments(tree) == [1]
+    _write(repo, "pkg/alias.py", "Alias = str | int\n")
+    report = cc.run(repo, (3, 9))
+    assert not report.ok
+    assert any("runtime type alias" in v for v in report.violations)
+

@@ -110,10 +110,23 @@ def test_find_shared_module_returns_none_when_absent(repo: Path):
         (SHIM_RUNPY, "runpy"),
         (REAL_LOGIC, None),
         ("import os\n", None),
+        ("# from harness.shared.governance.thing import main\n", None),
+        ("syntax error :::", None),
     ],
 )
 def test_classify_shim(text: str, expected):
     assert cd.classify_shim(text) == expected
+
+
+def test_classify_shim_verifies_target_stem():
+    shared_thing = Path("/path/to/harness/shared/thing.py")
+    shared_other = Path("/path/to/harness/shared/other.py")
+    # SHIM_IMPORT imports harness.shared.governance.thing
+    assert cd.classify_shim(SHIM_IMPORT, shared_module=shared_thing) == "import"
+    assert cd.classify_shim(SHIM_IMPORT, shared_module=shared_other) is None
+    # SHIM_RUNPY runs thing.py
+    assert cd.classify_shim(SHIM_RUNPY, shared_module=shared_thing) == "runpy"
+    assert cd.classify_shim(SHIM_RUNPY, shared_module=shared_other) is None
 
 
 # --- config resolution ---

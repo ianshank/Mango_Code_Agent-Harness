@@ -189,6 +189,45 @@ def find_datetime_utc(tree: ast.Module) -> list[int]:
     )
 
 
+COMMON_TYPE_NAMES = frozenset(
+    {"str", "int", "float", "bool", "bytes", "dict", "list", "set", "tuple", "Any", "Optional", "Union", "Path"}
+)
+
+
+def _is_type_name_identifier(name: str) -> bool:
+    if name in COMMON_TYPE_NAMES:
+        return True
+    # PascalCase type names like MyClass, Path, TreeNode: starts with uppercase, but not ALL-CAPS constant
+    if len(name) > 1 and name[0].isupper() and not name.isupper():
+        return True
+    return False
+
+
+def _is_type_union_binop(binop: ast.BinOp) -> bool:
+    """Check if a BinOp(BitOr) represents a PEP 604 type union in an assignment."""
+    for side in (binop.left, binop.right):
+        if isinstance(side, ast.Constant) and side.value is None:
+            return True
+        if isinstance(side, ast.Name) and _is_type_name_identifier(side.id):
+            return True
+        if isinstance(side, ast.Attribute) and _is_type_name_identifier(side.attr):
+            return True
+        if isinstance(side, ast.BinOp) and isinstance(side.op, ast.BitOr) and _is_type_union_binop(side):
+            return True
+    return False
+
+
+def find_pep604_assignments(tree: ast.Module) -> list[int]:
+    """Return line numbers where a runtime assignment creates a PEP 604 union (e.g. Alias = str | None)."""
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.AST):
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr) and _is_type_union_binop(sub):
+                    lines.add(node.lineno)
+    return sorted(lines)
+
+
 def iter_python_files(repo_root: Path, skip_dirs: frozenset[str]):
     for path in sorted(repo_root.rglob("*.py")):
         if skip_dirs & set(path.relative_to(repo_root).parts):
@@ -230,11 +269,17 @@ def run(repo_root: Path, min_version: tuple[int, int] | None, skip_dirs: frozens
                     f"{rel}:{lineno}: `from datetime import UTC` requires Python 3.11+, "
                     f"but the matrix supports {'.'.join(map(str, min_version))}; use `timezone.utc`"
                 )
-        if check_pep604 and not has_future_annotations(tree):
-            for lineno in find_pep604(tree):
+        if check_pep604:
+            if not has_future_annotations(tree):
+                for lineno in find_pep604(tree):
+                    report.violations.append(
+                        f"{rel}:{lineno}: PEP 604 union (`X | Y`) is evaluated at runtime and requires "
+                        f"Python 3.10+; add `from __future__ import annotations` or use typing.Optional/Union"
+                    )
+            for lineno in find_pep604_assignments(tree):
                 report.violations.append(
-                    f"{rel}:{lineno}: PEP 604 union (`X | Y`) is evaluated at runtime and requires "
-                    f"Python 3.10+; add `from __future__ import annotations` or use typing.Optional/Union"
+                    f"{rel}:{lineno}: runtime type alias with PEP 604 union (`X | Y`) is evaluated at import time "
+                    f"and requires Python 3.10+; use typing.Union or TypeAlias with string annotations"
                 )
     return report
 

@@ -22,13 +22,13 @@ verifiable without access to the signing runtime.
 
 ## Required Environment
 
-| Variable | Required | Description |
-|----------|----------|-------------|
+| Variable             | Required                             | Description                        |
+|----------------------|--------------------------------------|------------------------------------|
 | `AGENT_EVIDENCE_KEY` | **Yes** (or inject via constructor) | HMAC signing key; never hard-code. |
 
 > **If `AGENT_EVIDENCE_KEY` is unset and no `signing_key` is injected, `export()` raises
-> `ValueError`. The agent MUST skip evidence export gracefully rather than failing the
-> entire task — log a warning and record the skip.**
+> `ValueError`. Treat this as a blocking configuration error: do not execute or report
+> completion for an action that requires signed evidence until a key is configured.**
 
 ## Usage Pattern
 

@@ -1,6 +1,6 @@
 [project]
 name = "mango-code-agent-harness"
-version = "2.1.6"
+version = "2.1.7"
 requires-python = ">=3.9"
 
 [tool.setuptools.packages.find]
@@ -14,6 +14,7 @@ markers = [
     "slow: tests that take > 5s",
     "security: security and secret sanitization tests",
     "governance: governance invariant validation",
+    "neurosym: neuro-symbolic synthesis and repair loop invariants",
 ]
 addopts = "--strict-markers -v --tb=short"
 

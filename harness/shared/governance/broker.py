@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Resolved relative to this file so the broker works from any working directory.
 _CONTROL_PLANE = Path(__file__).resolve().parent.parent.parent / "control-plane"
 _PDP_PATH = _CONTROL_PLANE / "tool_broker_reference.py"
-_POLICY_PATH = _CONTROL_PLANE / "policy-bundle.example.json"
+_POLICY_PATH = Path(__file__).resolve().parent.parent / "agent-policy.json"
 
 
 @dataclass

@@ -31,15 +31,22 @@ SECRET_PATTERNS = ("OPENAI_API_KEY =", "ANTHROPIC_API_KEY =", "NVIDIA_API_KEY ="
 SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", ".git"})
 
 
-def size_budget_lines() -> int:
-    """Resolve the per-file line budget, allowing `MAX_FILE_LINES` to override the default."""
+def size_budget_lines(policy_path: Path | None = None) -> int:
+    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override."""
     raw = os.environ.get("MAX_FILE_LINES")
     if raw:
         try:
             return int(raw)
         except ValueError:
-            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using %d", raw, SIZE_BUDGET_LINES)
-    return SIZE_BUDGET_LINES
+            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", raw)
+    policy_path = policy_path or DEFAULT_POLICY_PATH
+    try:
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        limits = policy.get("limits", {})
+        budget = limits.get("size_budget_lines", policy.get("size_budget_lines", SIZE_BUDGET_LINES))
+        return int(budget)
+    except Exception:
+        return SIZE_BUDGET_LINES
 
 
 def load_protected_patterns(policy_path: Path) -> list[str]:
@@ -77,8 +84,9 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
             found = [line for line in out.splitlines() if line.strip()]
             logger.debug("%s -> %d path(s)", " ".join(cmd), len(found))
             modified.update(found)
-        except Exception as e:  # noqa: BLE001 - git may be absent; report but continue
-            logger.warning("Could not run %s: %s", " ".join(cmd), e)
+        except Exception as e:  # noqa: BLE001 - inability to inspect git state is fatal
+            logger.error("[FAIL] Could not run %s: %s", " ".join(cmd), e)
+            raise
     return modified
 
 
@@ -134,9 +142,10 @@ def check_hardcoded_secrets(workspace_dir: Path) -> bool:
     return not failed
 
 
-def check_size_budget(workspace_dir: Path, budget: int | None = None) -> bool:
+def check_size_budget(workspace_dir: Path, budget: int | None = None, policy_path: Path | None = None) -> bool:
     """Return False if any first-party non-test .py file exceeds the line budget."""
-    budget = size_budget_lines() if budget is None else budget
+    resolved_policy = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
+    budget = size_budget_lines(resolved_policy) if budget is None else budget
     failed = False
     for py_file in _first_party_py_files(workspace_dir):
         if py_file.name.startswith("test_") or py_file.name.endswith("_test.py"):
@@ -167,7 +176,7 @@ def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> 
     results = [
         check_protected_paths(workspace_dir, protected_patterns),
         check_hardcoded_secrets(workspace_dir),
-        check_size_budget(workspace_dir),
+        check_size_budget(workspace_dir, policy_path=policy_path),
     ]
 
     if all(results):

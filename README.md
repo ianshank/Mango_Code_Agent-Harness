@@ -141,7 +141,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero
 
 - **Total Automated Tests:** **425+ automated tests** (95 Vitest + 330+ Pytest tests across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server` (per-file enforced)
+- **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server`
 - **Requirements Traceability:** **15 / 15 specifications** traced bidirectionally (`check_traceability.py`)
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9

@@ -21,7 +21,7 @@ All notable changes to this project will be documented in this file.
 
 - `harness/shared/validate_agent_policy.py`, `harness/shared/validate_policy.py`, `harness/shared/validate_governance_docs.py` — Refactored to use `main()` functions for importability and testability.
 - `.github/workflows/python-package.yml` — Fixed misleading PEP 604 comment; null-guarded `ALLOW_GITHUB_CHANGES` against push events where `pull_request` context is absent.
-- `harness/node/package.json` — Added `"pnpm": { "onlyBuiltDependencies": ["esbuild"] }` to allowlist esbuild's build script under pnpm 11 supply-chain security policy.
+- `harness/node/.npmrc`, `harness/node/pnpm-workspace.yaml` — Added the pnpm 11 esbuild build-script allowlist configuration.
 - `Makefile` — `lint-python` now runs `ruff check .` (all first-party Python); `lint` depends on new `check-compat` target; `ci` depends on new `check-dedup` target; added `spec`, `review`, `pre-pr` targets.
 - `harness/shared/governance-policy.json` — Updated `protected_paths` from stale `scripts/*` references to correct `harness/shared/*` layout; added `dedup` and `py_compat` policy sections.
 - `harness/control-plane/policy-bundle.example.json` — Regenerated digests after governance script changes.

@@ -62,7 +62,7 @@ async def orchestrate_task(request: TaskRequest):
         raise
     except Exception:
         # Avoid leaking internals to clients; log the real cause server-side.
-        logger.exception("Orchestration failed for task: %s", request.task)
+        logger.exception("Orchestration failed")
         raise HTTPException(status_code=500, detail="Internal orchestration error")
 
 

@@ -23,7 +23,7 @@ CHECKLIST="Before ending this turn, confirm the following in your final message:
    the printed review checklist completed (openspec-peer-review and
    repo-invariant-review skills)? See CLAUDE.md.
 7. Evidence signing: if this change used EvidenceBuilder, was AGENT_EVIDENCE_KEY set?
-   If not, confirm export was skipped gracefully with a WARNING log (never silently).
+   If not, treat required evidence export as BLOCKED; do not complete with unsigned evidence.
 8. Follow-ups: list any known gaps or TODOs explicitly.
 If you have NOT actually run tests/lint yet, run them now before finishing.
 Once you have verified all of this, end your turn normally -- do not re-trigger this checklist by looping."

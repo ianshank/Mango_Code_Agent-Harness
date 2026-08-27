@@ -152,3 +152,22 @@ def test_sandbox_unavailable_logs_warning(caplog: pytest.LogCaptureFixture) -> N
     with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
         broker.execute_command("ls")
     assert "sandbox" in caplog.text.lower() or "blocking" in caplog.text.lower()
+
+
+def test_real_pdp_integration_denies_and_allows() -> None:
+    """Ensure the real PDP subprocess correctly reads agent-policy.json without KeyErrors."""
+    broker = ExecutionBroker(sandbox_available=True)
+    # Orchestrator is allowed 'read'
+    allowed_result = broker.execute_command(
+        "git status",
+        context={"agent_id": "orchestrator", "action": "read"},
+    )
+    assert allowed_result.status != "BLOCKED" or "pdp" not in allowed_result.stderr.lower()
+
+    # Unknown agent must be BLOCKED by real PDP
+    denied_result = broker.execute_command(
+        "git status",
+        context={"agent_id": "malicious-hacker", "action": "read"},
+    )
+    assert denied_result.status == "BLOCKED"
+    assert "unknown agent identity" in denied_result.stderr.lower()
