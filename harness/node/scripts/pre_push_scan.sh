@@ -5,10 +5,11 @@ block(){ echo "BLOCKED: $1" >&2; echo "Remediation: $2" >&2; exit 1; }
 [ "$#" -ge 2 ] || block "expected <remote-name> <remote-url>" "invoke through git push"
 REMOTE_NAME="$1"; REMOTE_URL="$2"; REFS="$(cat || true)"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || block "cannot resolve repository root" "run inside a git work tree"
-[ -f "$ROOT/harness/node/scripts/remotes.py" ] || block "shared remote normalizer missing" "restore harness/node/scripts/remotes.py"
-[ -f "$ROOT/harness/node/.governance/allowed-remotes.txt" ] || block "remote allowlist missing" "restore/configure harness/node/.governance/allowed-remotes.txt"
-python3 "$ROOT/harness/node/scripts/remotes.py" --check-url "$REMOTE_URL" --allowlist "$ROOT/harness/node/.governance/allowed-remotes.txt" || block "remote '$REMOTE_NAME' is not approved" "use an approved destination or independently approve a policy change"
-G="$ROOT/harness/node/.governance/governed-paths.txt"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/remotes.py" ] || block "shared remote normalizer missing" "restore remotes.py"
+[ -f "$ROOT/.governance/allowed-remotes.txt" ] || block "remote allowlist missing" "restore/configure .governance/allowed-remotes.txt"
+python3 "$SCRIPT_DIR/remotes.py" --check-url "$REMOTE_URL" --allowlist "$ROOT/.governance/allowed-remotes.txt" || block "remote '$REMOTE_NAME' is not approved" "use an approved destination or independently approve a policy change"
+G="$ROOT/.governance/governed-paths.txt"
 report(){ echo "pre-push report: $*" >&2; }
 if [ ! -f "$G" ]; then report "WARNING: $G absent; governed-path intelligence unavailable"; exit 0; fi
 while IFS= read -r glob || [ -n "$glob" ]; do
