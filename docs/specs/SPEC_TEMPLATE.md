@@ -8,6 +8,16 @@
 What is wrong or missing? Attach evidence — a failing test, a user report, a
 governance gap, or a charter gap. No evidence, no spec.
 
+## Requirements
+
+Normative statements of what the change delivers. Every MUST-bullet carries a
+requirement ID (`R-<AREA>-<n>` functional, `C-<AREA>-<n>` constraint) so it can
+be traced to implementation and tests.
+
+- R-EXAMPLE-1: The feature MUST <observable behavior>, sourced from
+  `<config/policy location>` rather than a literal value.
+- C-EXAMPLE-1: The change MUST NOT weaken any invariant in `harness/CONTRACT.md`.
+
 ## Acceptance criteria
 
 Objective, testable, each tied to a specific validation stage. No criterion may
