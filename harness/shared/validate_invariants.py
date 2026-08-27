@@ -49,6 +49,17 @@ def size_budget_lines(policy_path: Path | None = None) -> int:
         return SIZE_BUDGET_LINES
 
 
+def is_protected(path: str, protected_patterns: list[str]) -> bool:
+    """Return True if a repo-root-relative path matches any protected pattern.
+
+    Patterns are matched with `fnmatch`, which is anchored to the whole string and
+    lets `*` cross `/`. A pattern written for a layout the repository does not have
+    therefore matches nothing at all, silently. This predicate is the single place
+    that semantic is defined, so the liveness suite measures the real matcher.
+    """
+    return any(fnmatch.fnmatch(path, pattern) for pattern in protected_patterns)
+
+
 def load_protected_patterns(policy_path: Path) -> list[str]:
     """Load protected path patterns from the governance policy JSON.
 
@@ -97,7 +108,7 @@ def check_protected_paths(workspace_dir: Path, protected_patterns: list[str]) ->
     ordered: list[str] = []
     seen: set[str] = set()
     for mf in sorted(modified_files):
-        if any(fnmatch.fnmatch(mf, pattern) for pattern in protected_patterns) and mf not in seen:
+        if is_protected(mf, protected_patterns) and mf not in seen:
             seen.add(mf)
             ordered.append(mf)
     if ordered and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":

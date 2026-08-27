@@ -39,8 +39,8 @@ python harness/shared/validate_invariants.py
 
 | Check | Predicts a failure in | Typical remedy |
 |---|---|---|
-| `protected_paths` | The `.github/` and core API server paths | request explicit override, or use `knowledge_gap_log` |
-| `test_coverage` | `pytest --cov-fail-under=80` | write unit tests |
+| `protected_paths` | The enforcement layer (Makefile, workflows, validators, roots of trust) and the agent control surface (CLAUDE.md, agent-policy, skills, hooks) | land the change with the `infra-reviewed` human attestation, or use `knowledge_gap_log` |
+| `test_coverage` | `pytest --cov-fail-under=$(COV_MIN)`, sourced from `governance-policy.json` → `coverage.lines` | write unit tests |
 | `no_hardcoded_secrets` | CI secret scan | move strings to `.env.example` and read from `os.environ` |
 
 ## 4. Limits worth knowing
