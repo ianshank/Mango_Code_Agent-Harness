@@ -31,6 +31,9 @@ while IFS= read -r glob || [ -n "$glob" ]; do
     else
       if ! HITS="$(git -C "$ROOT" diff --name-only "$remote_sha..$local_sha" -- "$glob" 2>&1)"; then report "WARNING: governed-path diff failed: $HITS"; continue; fi
     fi
-    [ -n "$HITS" ] && report "governed path '$glob': $(printf '%s' "$HITS" | tr '\n' ' ')"
+    if [ -n "$HITS" ]; then
+      report "governed path '$glob': $(printf '%s' "$HITS" | tr '\n' ' ')"
+    fi
   done <<<"$REFS"
 done < "$G"
+exit 0
