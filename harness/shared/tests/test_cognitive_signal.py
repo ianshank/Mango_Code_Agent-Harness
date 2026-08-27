@@ -278,7 +278,10 @@ class TestSink:
 
     def test_nonfinite_payload_rejected_strict_json(self, tmp_path: Path) -> None:
         sink = CognitiveSignalSink(tmp_path)
-        with pytest.raises(ValueError):
+        # SignalValidationError is a ValueError subclass; asserted here as the
+        # exact type raised (not just the base class) to pin the sink's "one
+        # exception type at the boundary" contract precisely.
+        with pytest.raises(SignalValidationError, match="not JSON-serializable"):
             sink.append(pinned_signal(payload={"v": float("inf")}))
         assert not sink.path.exists()
 
