@@ -159,6 +159,16 @@ cp .env.example .env
 # Edit .env and set: NVIDIA_API_KEY=nvapi-your-key-here
 ```
 
+Optional environment variables for the shadow planner comparison channel
+(`docs/specs/mangomas-integration-core.md`; all off/unset by default):
+
+| Variable | Effect |
+|---|---|
+| `MANGO_SHADOW_PLANNER` | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
+| `MANGO_SHADOW_MODEL` | Alternate model for the shadow pass (defaults to the orchestrator model). |
+| `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout. |
+| `MANGO_SIGNAL_DIR` | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`). |
+
 ### 4.2 Running the Pong Game
 
 ```bash

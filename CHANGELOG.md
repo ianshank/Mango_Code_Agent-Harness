@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.8] - 2026-08-27
+
+### Added
+
+- `docs/specs/mangomas-integration-core.md` — spec for the MangoMas integration core (R-MMI-1..10, C-MMI-1..6): CognitiveSignal envelope, shadow planner channel, policy-artifact publisher.
+- `harness/shared/cognitive_signal.py` — immutable versioned CognitiveSignal envelope with fail-closed validation and a workspace-scoped, locked JSONL sink; `confidence` is untrusted metadata and producer identity carries no authority.
+- `harness/shared/schemas/cognitive-signal.schema.json` — documentation schema pinned to the validator and dataclass by a drift-guard test.
+- `harness/shared/shadow_planner.py` — observation-only shadow plan comparison behind `MANGO_SHADOW_PLANNER=1`: value-object boundary, empty tool schema, bounded timeout, contained failures; records incumbent/shadow signals with lineage, `elapsed_ms`, and provider usage.
+- `harness/control-plane/publish_policy_artifact.py` — versioned, digest-pinned policy artifact builder with fail-closed `check` mode and optional `EvidenceBuilder` HMAC attestation whose signature transitively covers the artifact core.
+- `harness/shared/tests/test_cognitive_signal.py`, `test_shadow_planner.py`, `test_publish_policy_artifact.py` — envelope validation/metamorphic suites, byte-identity-when-disabled and authority-boundary suites, publisher tamper matrix and subprocess CLI smoke tests.
+
+### Changed
+
+- `harness/shared/meta_tools.py` — `_file_lock` promoted to public `file_lock(path, timeout_s, poll_s)` with monotonic timing and contention-only retry; alias retained.
+- `harness/shared/mango_mas_orchestrator.py` — guarded, observation-only shadow comparison hook after the incumbent planner call; disabled behavior byte-identical.
+- `harness/shared/tests/conftest.py` — autouse scrub of shadow-channel env vars keeps the mocked suite hermetic.
+- `README.md` — documented the shadow-channel environment variables.
+
+### Fixed
+
+- `docs/specs/SPEC_TEMPLATE.md` — added the `## Requirements` section `validate_specs.sh` requires; the template no longer fails the structural spec gate it scaffolds for.
+- `harness/shared/tests/test_mango_mas_orchestrator.py` — removed a dead `pytest.importorskip("bash")` that silently skipped the hook execution test on every platform.
+
 ## [2.1.7] - 2026-08-27
 
 ### Added
