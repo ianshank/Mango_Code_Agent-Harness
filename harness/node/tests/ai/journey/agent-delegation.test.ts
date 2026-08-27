@@ -78,7 +78,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     });
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-key-1234567890' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-key-1234567890',
+      },
       mockFetch as unknown as typeof fetch,
     );
 
@@ -172,7 +175,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     });
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-key-multiagent' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-key-multiagent',
+      },
       mockFetch as unknown as typeof fetch,
     );
 
@@ -235,7 +241,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     });
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-streaming-stream' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-streaming-stream',
+      },
       mockFetch as unknown as typeof fetch,
     );
 
@@ -288,7 +297,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     });
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-retry-key' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-retry-key',
+      },
       mockFetch as unknown as typeof fetch,
     );
 

@@ -1,3 +1,11 @@
+[project]
+name = "mango-code-agent-harness"
+version = "2.1.7"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["harness*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["harness/shared/tests", "harness/api_server/tests"]
@@ -6,6 +14,7 @@ markers = [
     "slow: tests that take > 5s",
     "security: security and secret sanitization tests",
     "governance: governance invariant validation",
+    "neurosym: neuro-symbolic synthesis and repair loop invariants",
 ]
 addopts = "--strict-markers -v --tb=short"
 
@@ -27,13 +36,14 @@ fail_under = 80
 show_missing = true
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py39"   # oldest supported runtime; keep in sync with the CI matrix
 line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
-# Governance validator scripts and control plane shims are intentionally compact CLI scripts.
-per-file-ignores = { "harness/control-plane/*.py" = ["E701", "E702", "E501"], "harness/node/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501"], "harness/jvm/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501"], "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401"], "harness/shared/tests/*.py" = ["E501", "E701", "E702", "E402"], "scratch/*.py" = ["E501", "E701", "E702", "E402"] }
+# Governance validator scripts, control-plane tools, and per-stack re-export shims are
+# intentionally compact CLI scripts; the shims must insert sys.path before importing.
+per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702", "E401", "E711"], "harness/node/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/jvm/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401", "E402"], "harness/shared/remotes.py" = ["E402", "E501"], "harness/shared/pretooluse_guard.py" = ["E402", "E501"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501", "E701", "E702", "E402"], "scratch/*.py" = ["E501", "E701", "E702", "E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["harness"]

@@ -72,6 +72,24 @@
       "reason": "Live NIM API streaming may encounter rate limits or empty response",
       "owner": "ai-maintainers",
       "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/nemotron-live.test.ts",
+      "test": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) > sanitizes secrets in error responses when using an invalid API key",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API error testing requires external network connectivity",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
+    },
+    {
+      "framework": "vitest",
+      "file": "tests/ai/smoke/nemotron-live.test.ts",
+      "test": "Nemotron Live API Smoke Tests (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, C-AI-SEC-1) > handles timeout gracefully and records circuit breaker failure",
+      "decision_id": "DEC-001",
+      "reason": "Live NIM API timeout test requires live client initialization",
+      "owner": "ai-maintainers",
+      "expires": "2027-01-01"
     }
   ]
 }

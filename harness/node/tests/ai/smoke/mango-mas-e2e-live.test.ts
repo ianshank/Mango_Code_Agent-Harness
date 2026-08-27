@@ -28,7 +28,7 @@ describe.skipIf(!IS_LIVE)(
             temperature: 0.2,
             max_tokens: 1024,
           });
-          if (!response1.content) throw new Error("Empty response");
+          if (!response1.content) throw new Error('Empty response');
         } catch (err: any) {
           if (isTransientError(err)) {
             ctx.skip();
@@ -50,8 +50,11 @@ describe.skipIf(!IS_LIVE)(
             temperature: 0.2,
             max_tokens: 1024,
           });
-          if (!response2.content || !response2.content.includes('HELLO_MANGO')) {
-             throw new Error("Invalid or empty response");
+          if (
+            !response2.content ||
+            !response2.content.includes('HELLO_MANGO')
+          ) {
+            throw new Error('Invalid or empty response');
           }
         } catch (err: any) {
           if (isTransientError(err)) {
@@ -74,7 +77,7 @@ describe.skipIf(!IS_LIVE)(
             temperature: 0.2,
             max_tokens: 1024,
           });
-          if (!response3.content) throw new Error("Empty response");
+          if (!response3.content) throw new Error('Empty response');
         } catch (err: any) {
           if (isTransientError(err)) {
             ctx.skip();

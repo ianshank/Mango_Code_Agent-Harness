@@ -1,42 +1,78 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
-name: Python package
+# Mango Code Agent Harness — unified CI pipeline.
+# Runs the repo's own `make ci` gate (lint -> coverage -> test-node -> zero-skips
+# -> validate -> drift-check) instead of a generic template.
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    # Stacked/phase branches must also be gated, otherwise a PR targeting an
+    # integration branch merges without ever running `make ci`.
+    branches: ["main", "chore/**", "phase*/**", "feature/**"]
+
+permissions:
+  contents: read
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        # pyproject ruff target-version is py39 (oldest supported).
+        # check_py_compat gate enforces no runtime-only 3.10+ constructs.
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      env:
-        PYTHONPATH: .
-      run: |
-        pytest
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+
+      # pnpm must be on PATH *before* actions/setup-node runs, because
+      # `cache: pnpm` resolves the pnpm store via the pnpm binary. Installing it
+      # afterwards fails the "Set up Node" step with "Unable to locate
+      # executable file: pnpm".
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Read the pinned version from `packageManager` in the Node package
+          # manifest (single source of truth) rather than duplicating it here.
+          package_json_file: harness/node/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # pnpm 11 (pinned via packageManager) requires Node >= 22.13.
+          # Node 20 is also being deprecated on GitHub-hosted runners.
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: harness/node/pnpm-lock.yaml
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: harness/node
+
+      - name: Run unified CI gate (make ci)
+        # The protected-path invariant fails closed on infrastructure changes
+        # (Makefile, .github/**, .mango/agents/**, governance policy). A human
+        # applying the `infra-reviewed` label IS the per-change review
+        # attestation required by harness/CONTRACT.md; without the label the
+        # gate stays fail-closed. Never set this unconditionally.
+        env:
+          ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
+        run: make ci

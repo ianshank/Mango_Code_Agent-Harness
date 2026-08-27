@@ -42,3 +42,8 @@ __pycache__/
 harness/node/src/pong/web/dist/
 *.pongrec
 
+.venv
+
+# Pytest / Hypothesis temp directories created in harness/node/ during local runs
+harness/node/test-*/
+.hypothesis/

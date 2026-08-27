@@ -31,6 +31,7 @@ describe('Nemotron Resilience & Stress Tests (R-AI-RES-3)', () => {
     const client = new NemotronClient(
       {
         apiKey: 'nvapi-mock-key-1234567890',
+        defaultModel: 'test-model',
         maxRetries: 3,
         baseBackoffMs: 10,
         maxBackoffMs: 50,
@@ -56,6 +57,7 @@ describe('Nemotron Resilience & Stress Tests (R-AI-RES-3)', () => {
     const client = new NemotronClient(
       {
         apiKey: 'nvapi-mock-key-1234567890',
+        defaultModel: 'test-model',
         maxRetries: 1,
         baseBackoffMs: 5,
       },

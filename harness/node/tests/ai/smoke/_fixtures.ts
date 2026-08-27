@@ -78,6 +78,7 @@ export function createLiveClient(
   overrides?: Partial<NemotronConfig>,
 ): NemotronClient {
   return new NemotronClient({
+    defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
     apiKey: LIVE_API_KEY,
     timeoutMs: LATENCY_CEILING_MS,
     maxRetries: 1,
@@ -141,7 +142,15 @@ export function loadAgentSystemPrompt(agentFilePath: string): string {
 export function isTransientError(err: any): boolean {
   const code = err.statusCode;
   const msg = err.message || '';
-  if (code === 404 || code === 410 || code === 429 || code === 502 || code === 503 || code === 504) return true;
+  if (
+    code === 404 ||
+    code === 410 ||
+    code === 429 ||
+    code === 502 ||
+    code === 503 ||
+    code === 504
+  )
+    return true;
   if (
     msg.includes('404') ||
     msg.includes('410') ||

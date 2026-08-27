@@ -56,6 +56,9 @@
     "branches": 80,
     "per_file": true
   },
+  "limits": {
+    "size_budget_lines": 500
+  },
   "decision_id_pattern": "^(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\\.[0-9]+)$",
   "agent_defaults": {
     "max_delegation_depth": 2,
@@ -83,23 +86,55 @@
     ".github/CODEOWNERS",
     "Makefile",
     "agents/**",
+    ".mango/agents/**",
+    ".mango/settings.json",
+    ".mango/hooks/**",
     "docs/PROJECT-CHARTER.md",
-    "scripts/remotes.py",
-    "scripts/pretooluse_guard.py",
-    "scripts/pretooluse_guard.sh",
-    "scripts/pre_push_scan.sh",
-    "scripts/install_hooks.sh",
-    "scripts/verify_zero_skips.py",
-    "scripts/validate_specs.sh",
-    "scripts/validate_policy.py",
-    "scripts/validate_agent_policy.py",
-    "scripts/validate_governance_docs.py",
-    "scripts/validate_adoption.py",
-    "scripts/check_traceability.py",
-    "scripts/check_projections.py"
+    "harness/shared/governance-policy.json",
+    "harness/shared/check_dedup.py",
+    "harness/shared/check_py_compat.py",
+    "harness/shared/governance/**",
+    "harness/shared/remotes.py",
+    "harness/shared/pretooluse_guard.py",
+    "harness/shared/pretooluse_guard.sh",
+    "harness/shared/install_hooks.sh",
+    "harness/shared/pre_push_scan.sh",
+    "harness/shared/verify_zero_skips.py",
+    "harness/shared/validate_specs.sh",
+    "harness/shared/validate_policy.py",
+    "harness/shared/validate_agent_policy.py",
+    "harness/shared/validate_governance_docs.py",
+    "harness/shared/validate_adoption.py",
+    "harness/shared/validate_invariants.py",
+    "harness/shared/check_traceability.py",
+    "harness/shared/check_projections.py"
   ],
   "external_root_of_trust_required": true,
   "charter_version": "2.0",
   "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
-  "skill_max_age_days": 90
+  "skill_max_age_days": 90,
+  "dedup": {
+    "max_shim_lines": 40,
+    "exempt": [],
+    "rationale": "Per-stack scripts must delegate to harness/shared; see harness/shared/check_dedup.py"
+  },
+  "py_compat": {
+    "skip_dirs": [],
+    "rationale": "Minimum runtime is derived from the CI python-version matrix; see harness/shared/check_py_compat.py"
+  },
+  "synthesis": {
+    "max_repair_cycles": 3,
+    "lats_enabled": false,
+    "lats_quality_threshold": 0.0,
+    "critique_schema_version": "1.0",
+    "seed_task_suite_version": "1.0",
+    "prohibited_imports": [
+      "os.system",
+      "subprocess",
+      "shutil.rmtree",
+      "importlib",
+      "__import__"
+    ],
+    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md §Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
+  }
 }

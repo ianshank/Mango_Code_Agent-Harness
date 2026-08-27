@@ -7,13 +7,22 @@ and explicitly prevents host-process fallback if the sandbox is unavailable (INV
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .pretooluse_guard import check_command
+
+logger = logging.getLogger(__name__)
+
+# Paths to the policy-enforcement point (PEP) and reference policy bundle.
+# Resolved relative to this file so the broker works from any working directory.
+_CONTROL_PLANE = Path(__file__).resolve().parent.parent.parent / "control-plane"
+_PDP_PATH = _CONTROL_PLANE / "tool_broker_reference.py"
+_POLICY_PATH = Path(__file__).resolve().parent.parent / "agent-policy.json"
 
 
 @dataclass
@@ -43,6 +52,7 @@ class ExecutionBroker:
         # INV-9: The execution broker MUST return BLOCKED if the sandbox is unavailable;
         # host-process fallback is strictly prohibited.
         if not self.verify_sandbox():
+            logger.warning("Sandbox unavailable; blocking execution of: %s", command)
             return ExecutionResult(
                 status="BLOCKED",
                 stdout="",
@@ -55,22 +65,22 @@ class ExecutionBroker:
         action = context.get("action", "unknown")
         human_approved = context.get("human_approved", False)
 
-        pdp_path = Path(__file__).resolve().parent.parent.parent / "control-plane" / "tool_broker_reference.py"
-        policy_path = Path(__file__).resolve().parent.parent.parent / "control-plane" / "policy-bundle.example.json"
+        logger.debug("Broker evaluating command for agent=%s action=%s", agent_id, action)
 
-        if pdp_path.exists() and policy_path.exists():
+        if _PDP_PATH.exists() and _POLICY_PATH.exists():
             cmd_args = [
                 sys.executable,
-                str(pdp_path),
-                "--policy", str(policy_path),
+                str(_PDP_PATH),
+                "--policy", str(_POLICY_PATH),
                 "--agent", agent_id,
                 "--action", action
             ]
             if human_approved:
                 cmd_args.append("--human-approved")
-            
+
             p = subprocess.run(cmd_args, text=True, capture_output=True)
             if p.returncode != 0:
+                logger.warning("PDP denied execution: agent=%s action=%s", agent_id, action)
                 return ExecutionResult(
                     status="BLOCKED",
                     stdout="",
@@ -81,6 +91,7 @@ class ExecutionBroker:
         # INV-8: All execution requests MUST pass through harness.shared.governance.pretooluse_guard
         guard_result = check_command(command)
         if guard_result != 0:
+            logger.warning("PreToolUse guard blocked command: %s", command)
             return ExecutionResult(
                 status="BLOCKED",
                 stdout="",
@@ -88,6 +99,7 @@ class ExecutionBroker:
                 exit_code=guard_result
             )
 
+        logger.debug("Execution engine not yet implemented; returning FAILED for: %s", command)
         return ExecutionResult(
             status="FAILED",
             stdout="",

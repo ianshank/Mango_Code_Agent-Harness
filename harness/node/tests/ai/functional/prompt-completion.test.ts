@@ -41,7 +41,10 @@ describe('Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)', () => {
     };
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-key-1234567890' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-key-1234567890',
+      },
       mockFetch,
     );
 
@@ -82,7 +85,10 @@ describe('Nemotron Functional Tests (R-AI-NEMO-1, R-AI-NEMO-2)', () => {
     };
 
     const client = new NemotronClient(
-      { apiKey: 'nvapi-mock-key-1234567890' },
+      {
+        defaultModel: 'test-model',
+        apiKey: 'nvapi-mock-key-1234567890',
+      },
       mockFetch,
     );
 

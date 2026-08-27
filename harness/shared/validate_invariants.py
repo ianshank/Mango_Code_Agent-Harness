@@ -1,3 +1,17 @@
+"""Repository invariant checks: protected paths, hardcoded secrets, and file size budget.
+
+These checks are intentionally deterministic and dependency-free so they can run as a
+git pre-push hook, a CI gate, or an orchestrator pre-flight (`.mango/hooks/pre-nemotron-run.sh`).
+
+Output goes through the stdlib `logging` module so callers can route or silence it; the
+CLI entrypoint configures a plain `LEVEL: message` format on stderr. Set `LOG_LEVEL=DEBUG`
+for per-file tracing of the secret and size-budget scans.
+
+Exit codes: 0 = all invariants satisfied, 1 = one or more invariants violated.
+"""
+
+from __future__ import annotations
+
 import fnmatch
 import json
 import logging
@@ -6,112 +20,175 @@ import subprocess
 import sys
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-def main() -> None:
-    logger.info("Running Repo Invariants Check...")
-    failed = False
+DEFAULT_WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_POLICY_PATH = DEFAULT_WORKSPACE_DIR / "harness" / "shared" / "governance-policy.json"
+SIZE_BUDGET_LINES = 500
+SECRET_PATTERNS = ("OPENAI_API_KEY =", "ANTHROPIC_API_KEY =", "NVIDIA_API_KEY =", "API_SERVER_KEY =")
 
-    workspace_dir = Path(__file__).resolve().parent.parent.parent
+# Skip directories that are not first-party source under governance.
+SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", ".git"})
 
-    # Load protected paths from governance policy
-    gov_policy_path = workspace_dir / "harness" / "shared" / "governance-policy.json"
+
+def size_budget_lines(policy_path: Path | None = None) -> int:
+    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override."""
+    raw = os.environ.get("MAX_FILE_LINES")
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", raw)
+    policy_path = policy_path or DEFAULT_POLICY_PATH
     try:
-        policy = json.loads(gov_policy_path.read_text(encoding="utf-8"))
-        protected_patterns = policy.get("protected_paths", [".github/**"])
-    except Exception as e:
-        logger.error(f"Could not load governance policy: {e}")
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        limits = policy.get("limits", {})
+        budget = limits.get("size_budget_lines", policy.get("size_budget_lines", SIZE_BUDGET_LINES))
+        return int(budget)
+    except Exception:
+        return SIZE_BUDGET_LINES
+
+
+def load_protected_patterns(policy_path: Path) -> list[str]:
+    """Load protected path patterns from the governance policy JSON.
+
+    Governance fails closed: an unreadable policy exits non-zero rather than
+    silently checking nothing.
+    """
+    try:
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        patterns = list(policy.get("protected_paths", [".github/**"]))
+        logger.debug("Loaded %d protected path patterns from %s", len(patterns), policy_path)
+        return patterns
+    except Exception as e:  # noqa: BLE001 - governance must fail closed with a reason
+        logger.error("[FAIL] Could not load governance policy from %s: %s", policy_path, e)
         sys.exit(1)
 
-    # 1. Protected Paths check
-    try:
-        staged = subprocess.check_output(
-            ["git", "diff", "--cached", "--name-only"], text=True, cwd=workspace_dir
-        ).splitlines()
-        unstaged = subprocess.check_output(["git", "diff", "--name-only"], text=True, cwd=workspace_dir).splitlines()
-        modified_files = set(staged + unstaged)
 
-        base_ref = os.environ.get("GITHUB_BASE_REF")
-        if base_ref:
-            pr_diff = subprocess.check_output(
-                ["git", "diff", f"origin/{base_ref}...HEAD", "--name-only"], text=True, cwd=workspace_dir
-            ).splitlines()
-            modified_files.update(pr_diff)
-
-        policy_modifications = []
-        for mf in modified_files:
-            for pattern in protected_patterns:
-                # Use fnmatch for glob pattern matching
-                if fnmatch.fnmatch(mf, pattern):
-                    policy_modifications.append(mf)
-                    break
-
-        if policy_modifications and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":
-            logger.error(
-                "Protected Paths: Unauthorized modifications to protected paths "
-                f"detected: {policy_modifications}"
-            )
-            failed = True
-        else:
-            logger.info("Protected Paths: No unauthorized modifications to protected systems.")
-    except Exception as e:
-        logger.error(f"Protected Paths: Could not run git diff: {e}")
-        failed = True
-
-    # 2. Hardcoded Secrets check
-    # Let's search the workspace for "API_KEY = " or similar patterns (naively).
-
-    # Simple naive scan
-    secret_patterns = [
-        "OPENAI_API_KEY =",
-        "ANTHROPIC_API_KEY =",
-        "NVIDIA_API_KEY =",
-        "API_SERVER_KEY =",
+def git_modified_files(workspace_dir: Path) -> set[str]:
+    """Return the set of files modified (staged + unstaged + untracked + PR diff)."""
+    modified: set[str] = set()
+    base_ref = os.environ.get("GITHUB_BASE_REF")
+    commands = [
+        ["git", "diff", "--cached", "--name-only"],
+        ["git", "diff", "--name-only"],
+        # Untracked files are not listed by `git diff`; include them so a newly-created
+        # file in a protected path is caught before it is staged (fail-closed).
+        ["git", "ls-files", "--others", "--exclude-standard"],
     ]
+    if base_ref:
+        commands.append(["git", "diff", f"origin/{base_ref}...HEAD", "--name-only"])
+    for cmd in commands:
+        try:
+            out = subprocess.check_output(cmd, text=True, cwd=workspace_dir)
+            found = [line for line in out.splitlines() if line.strip()]
+            logger.debug("%s -> %d path(s)", " ".join(cmd), len(found))
+            modified.update(found)
+        except Exception as e:  # noqa: BLE001 - inability to inspect git state is fatal
+            logger.error("[FAIL] Could not run %s: %s", " ".join(cmd), e)
+            raise
+    return modified
+
+
+def check_protected_paths(workspace_dir: Path, protected_patterns: list[str]) -> bool:
+    """Return True if no modified file matches a protected path (or changes are attested)."""
+    modified_files = git_modified_files(workspace_dir)
+    # Deduplicate while preserving discovery order for a stable, readable failure message.
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for mf in sorted(modified_files):
+        if any(fnmatch.fnmatch(mf, pattern) for pattern in protected_patterns) and mf not in seen:
+            seen.add(mf)
+            ordered.append(mf)
+    if ordered and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":
+        logger.error(
+            "[FAIL] Protected Paths: Unauthorized modifications to protected paths detected: %s", ordered
+        )
+        return False
+    if ordered:
+        logger.warning(
+            "Protected Paths: %d change(s) permitted by ALLOW_GITHUB_CHANGES attestation: %s",
+            len(ordered),
+            ordered,
+        )
+    logger.info("[PASS] Protected Paths: No unauthorized modifications to protected systems.")
+    return True
+
+
+def _first_party_py_files(workspace_dir: Path):
+    """Yield first-party Python files, skipping vendored and cache directories."""
     for py_file in workspace_dir.rglob("*.py"):
-        if ".venv" in py_file.parts or ".mypy_cache" in py_file.parts or ".pytest_cache" in py_file.parts:
+        if SKIP_DIR_PARTS & set(py_file.parts):
             continue
+        yield py_file
+
+
+def check_hardcoded_secrets(workspace_dir: Path) -> bool:
+    """Return False if a first-party .py file assigns a known secret literal."""
+    failed = False
+    for py_file in _first_party_py_files(workspace_dir):
+        # This module names the patterns it searches for, so exclude it from its own scan.
         if py_file.name == "validate_invariants.py":
             continue
         try:
             content = py_file.read_text(encoding="utf-8")
-            if any(secret in content for secret in secret_patterns):
-                logger.error(f"Hardcoded secret found in {py_file}")
+            if any(p in content for p in SECRET_PATTERNS):
+                logger.error("[FAIL] Hardcoded secret found in %s", py_file)
                 failed = True
-        except Exception:
-            pass
-
+        except Exception as e:  # noqa: BLE001 - unreadable file must not abort the scan
+            logger.debug("Skipping unreadable file %s: %s", py_file, e)
     if not failed:
-        logger.info("Secrets: No hardcoded API keys detected.")
+        logger.info("[PASS] Secrets: No hardcoded API keys detected.")
+    return not failed
 
-    # 3. Size budget / Coverage check
-    size_budget_failed = False
-    max_size = 500
-    for py_file in workspace_dir.rglob("*.py"):
-        if ".venv" in py_file.parts or ".mypy_cache" in py_file.parts or ".pytest_cache" in py_file.parts:
-            continue
+
+def check_size_budget(workspace_dir: Path, budget: int | None = None, policy_path: Path | None = None) -> bool:
+    """Return False if any first-party non-test .py file exceeds the line budget."""
+    resolved_policy = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
+    budget = size_budget_lines(resolved_policy) if budget is None else budget
+    failed = False
+    for py_file in _first_party_py_files(workspace_dir):
         if py_file.name.startswith("test_") or py_file.name.endswith("_test.py"):
             continue
         try:
-            lines = py_file.read_text(encoding="utf-8").splitlines()
-            if len(lines) > max_size:
-                logger.error(f"Size Budget: File {py_file.name} exceeds {max_size} lines ({len(lines)} lines).")
+            line_count = len(py_file.read_text(encoding="utf-8").splitlines())
+            if line_count > budget:
+                logger.error(
+                    "[FAIL] Size Budget: File %s exceeds %d lines (%d lines).", py_file.name, budget, line_count
+                )
                 failed = True
-                size_budget_failed = True
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 - unreadable file must not abort the scan
+            logger.debug("Skipping unreadable file %s: %s", py_file, e)
+    if not failed:
+        logger.info("[PASS] Size Budget: All files under %d lines.", budget)
+    return not failed
 
-    if not size_budget_failed:
-        logger.info(f"Size Budget: All files under {max_size} lines.")
 
-    if failed:
-        logger.error("Repo Invariants Check FAILED.")
-        sys.exit(1)
-    else:
+def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> int:
+    """Run all repo invariant checks. Returns process exit code (0 = pass)."""
+    logger.info("Running Repo Invariants Check...")
+    workspace_dir = workspace_dir or DEFAULT_WORKSPACE_DIR
+    policy_path = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
+    logger.debug("workspace_dir=%s policy_path=%s", workspace_dir, policy_path)
+
+    protected_patterns = load_protected_patterns(policy_path)
+
+    results = [
+        check_protected_paths(workspace_dir, protected_patterns),
+        check_hardcoded_secrets(workspace_dir),
+        check_size_budget(workspace_dir, policy_path=policy_path),
+    ]
+
+    if all(results):
         logger.info("Repo Invariants Check PASSED.")
-        sys.exit(0)
+        return 0
+    logger.error("Repo Invariants Check FAILED.")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        format="%(levelname)s: %(message)s",
+    )
+    sys.exit(main())

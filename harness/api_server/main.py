@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -31,7 +32,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Ensure static directory exists
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-async def verify_api_key(x_api_key: str | None = Header(None)):
+# NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
+# unions (`str | None`) would fail on Python 3.9/3.10 even with `from __future__ import
+# annotations`. Keep Optional[...] while 3.9 is in the CI matrix.
+async def verify_api_key(x_api_key: Optional[str] = Header(None)):
     expected_key = os.environ.get("API_SERVER_KEY")
     if not expected_key:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")
@@ -53,9 +57,13 @@ async def orchestrate_task(request: TaskRequest):
         final_result = await run_in_threadpool(orchestrator.execute_sequential_thinking_loop, request.task)
 
         return TaskResponse(status="success", result=final_result, history=orchestrator.conversation_history)
-    except Exception as e:
-        logger.error(f"Orchestration failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        # Re-raise explicit HTTP errors (e.g. auth) unchanged.
+        raise
+    except Exception:
+        # Avoid leaking internals to clients; log the real cause server-side.
+        logger.exception("Orchestration failed")
+        raise HTTPException(status_code=500, detail="Internal orchestration error")
 
 
 # Mount the static files for the frontend UI

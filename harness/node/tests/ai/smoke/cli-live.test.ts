@@ -92,7 +92,8 @@ describe.skipIf(!IS_LIVE)(
               timeout: LIVE_TEST_TIMEOUT_MS,
             },
           );
-          if (!result.stdout || !result.stdout.trim()) throw new Error("Empty response");
+          if (!result.stdout || !result.stdout.trim())
+            throw new Error('Empty response');
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {
@@ -136,7 +137,8 @@ describe.skipIf(!IS_LIVE)(
               timeout: LIVE_TEST_TIMEOUT_MS,
             },
           );
-          if (!result.stdout || !result.stdout.trim()) throw new Error("Empty response");
+          if (!result.stdout || !result.stdout.trim())
+            throw new Error('Empty response');
           stdout = result.stdout;
           stderr = result.stderr;
         } catch (err: any) {

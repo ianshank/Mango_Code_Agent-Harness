@@ -1,0 +1,287 @@
+"""Tests for harness/shared/check_py_compat.py - legacy-runtime compatibility gate."""
+
+import json
+import logging
+from pathlib import Path
+
+import pytest
+
+from harness.shared import check_py_compat as cc
+
+WORKFLOW = """\
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+"""
+
+PEP604_RUNTIME = """\
+def f(x: str | None = None) -> int | None:
+    return None
+"""
+
+PEP604_WITH_FUTURE = """\
+from __future__ import annotations
+
+
+def f(x: str | None = None) -> int | None:
+    return None
+"""
+
+LEGACY_SAFE = """\
+from typing import Optional
+
+
+def f(x: Optional[str] = None) -> Optional[int]:
+    return None
+"""
+
+DATETIME_UTC = """\
+from datetime import UTC, datetime
+
+print(datetime.now(tz=UTC))
+"""
+
+
+@pytest.fixture
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.delenv("MIN_PYTHON", raising=False)
+    root = tmp_path / "repo"
+    wf = root / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(WORKFLOW, encoding="utf-8")
+    (root / "harness" / "shared").mkdir(parents=True)
+    return root
+
+
+def _write(root: Path, rel: str, text: str) -> Path:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+# --- minimum version resolution ---
+
+def test_resolve_min_version_from_workflow_matrix(repo: Path):
+    assert cc.resolve_min_version(repo) == (3, 9)
+
+
+def test_resolve_min_version_picks_lowest_across_workflows(repo: Path):
+    _write(repo, ".github/workflows/other.yml", WORKFLOW.replace('"3.9", "3.10", "3.11"', '"3.8"'))
+    assert cc.resolve_min_version(repo) == (3, 8)
+
+
+def test_resolve_min_version_explicit_override_wins(repo: Path):
+    assert cc.resolve_min_version(repo, override="3.12") == (3, 12)
+
+
+def test_resolve_min_version_env_override(repo: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("MIN_PYTHON", "3.11")
+    assert cc.resolve_min_version(repo) == (3, 11)
+
+
+def test_resolve_min_version_ignores_bad_override(repo: Path, caplog):
+    with caplog.at_level(logging.WARNING, logger=cc.logger.name):
+        assert cc.resolve_min_version(repo, override="banana") == (3, 9)
+    assert "banana" in caplog.text
+
+
+def test_resolve_min_version_none_without_matrix(tmp_path: Path, caplog):
+    with caplog.at_level(logging.WARNING, logger=cc.logger.name):
+        assert cc.resolve_min_version(tmp_path) is None
+
+
+def test_parse_matrix_versions_regex_fallback():
+    """Parsing must work without PyYAML, since CI images may not install it."""
+    line = '        python-version: ["3.9", "3.13"]\n'
+    assert cc._parse_matrix_versions(line) == [(3, 9), (3, 13)]
+
+
+# --- AST detection ---
+
+def test_find_pep604_detects_arg_and_return():
+    import ast
+
+    assert cc.find_pep604(ast.parse(PEP604_RUNTIME)) == [1]
+
+
+def test_find_pep604_clean_on_legacy_safe_code():
+    import ast
+
+    assert cc.find_pep604(ast.parse(LEGACY_SAFE)) == []
+
+
+def test_has_future_annotations():
+    import ast
+
+    assert cc.has_future_annotations(ast.parse(PEP604_WITH_FUTURE)) is True
+    assert cc.has_future_annotations(ast.parse(PEP604_RUNTIME)) is False
+
+
+def test_find_datetime_utc():
+    import ast
+
+    assert cc.find_datetime_utc(ast.parse(DATETIME_UTC)) == [1]
+    assert cc.find_datetime_utc(ast.parse(LEGACY_SAFE)) == []
+
+
+# --- run ---
+
+def test_run_flags_pep604_without_future(repo: Path):
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    report = cc.run(repo, (3, 9))
+    assert not report.ok
+    assert any("PEP 604" in v for v in report.violations)
+
+
+def test_run_accepts_pep604_with_future(repo: Path):
+    _write(repo, "pkg/mod.py", PEP604_WITH_FUTURE)
+    assert cc.run(repo, (3, 9)).ok
+
+
+def test_run_accepts_legacy_safe_code(repo: Path):
+    _write(repo, "pkg/mod.py", LEGACY_SAFE)
+    assert cc.run(repo, (3, 9)).ok
+
+
+def test_run_flags_datetime_utc(repo: Path):
+    _write(repo, "pkg/mod.py", DATETIME_UTC)
+    report = cc.run(repo, (3, 9))
+    assert any("3.11+" in v for v in report.violations)
+
+
+def test_run_allows_datetime_utc_when_min_is_311(repo: Path):
+    _write(repo, "pkg/mod.py", DATETIME_UTC)
+    assert cc.run(repo, (3, 11)).ok
+
+
+def test_run_allows_pep604_when_min_is_310(repo: Path):
+    """The gate must relax automatically as the matrix moves forward."""
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    assert cc.run(repo, (3, 10)).ok
+
+
+def test_run_noop_without_declared_minimum(repo: Path):
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    report = cc.run(repo, None)
+    assert report.ok
+    assert report.scanned == 0
+
+
+def test_run_skips_configured_directories(repo: Path):
+    _write(repo, ".venv/lib/bad.py", PEP604_RUNTIME)
+    assert cc.run(repo, (3, 9)).ok
+
+
+def test_run_honors_policy_skip_dirs(repo: Path):
+    _write(repo, "vendor/bad.py", PEP604_RUNTIME)
+    _write(
+        repo,
+        "harness/shared/governance-policy.json",
+        json.dumps({"py_compat": {"skip_dirs": ["vendor"]}}),
+    )
+    assert cc.run(repo, (3, 9), skip_dirs=cc.load_skip_dirs(repo)).ok
+
+
+def test_run_reports_syntax_errors(repo: Path):
+    _write(repo, "pkg/broken.py", "def f(:\n")
+    report = cc.run(repo, (3, 9))
+    assert any("syntax error" in v for v in report.violations)
+
+
+# --- CLI ---
+
+def test_main_returns_zero_when_compatible(repo: Path):
+    _write(repo, "pkg/mod.py", LEGACY_SAFE)
+    assert cc.main(["--repo-root", str(repo)]) == 0
+
+
+def test_main_returns_one_on_violation(repo: Path):
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    assert cc.main(["--repo-root", str(repo)]) == 1
+
+
+def test_main_json_report(repo: Path, capsys):
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    cc.main(["--repo-root", str(repo), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["min_version"] == "3.9"
+    assert payload["violations"]
+
+
+def test_main_min_version_flag_relaxes_gate(repo: Path):
+    _write(repo, "pkg/mod.py", PEP604_RUNTIME)
+    assert cc.main(["--repo-root", str(repo), "--min-version", "3.10"]) == 0
+
+
+def test_report_to_dict_shape():
+    payload = cc.CompatReport(min_version=(3, 9), scanned=2, violations=[]).to_dict()
+    assert payload == {"ok": True, "min_version": "3.9", "scanned": 2, "violations": []}
+
+
+def test_real_repository_is_compatible_with_its_declared_minimum():
+    """The gate must pass against the actual tree, at whatever minimum the matrix declares."""
+    root = cc.DEFAULT_REPO_ROOT
+    min_version = cc.resolve_min_version(root)
+    assert min_version is not None, "CI workflow must declare a python-version matrix"
+    report = cc.run(root, min_version)
+    assert report.ok, f"compatibility violations: {report.violations}"
+    assert report.scanned > 0
+
+
+def test_parse_matrix_versions_import_error(monkeypatch: pytest.MonkeyPatch):
+    import builtins
+    real_import = builtins.__import__
+    def fake_import(name, *args, **kwargs):
+        if name == "yaml":
+            raise ImportError("no yaml")
+        return real_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert cc._parse_matrix_versions('        python-version: ["3.9"]\n') == [(3, 9)]
+
+def test_resolve_min_version_read_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        cc.resolve_min_version(repo)
+    assert "Could not read" in caplog.text
+
+def test_load_skip_dirs_json_error(repo: Path, caplog):
+    _write(repo, "harness/shared/governance-policy.json", "{ bad json")
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        cc.load_skip_dirs(repo)
+    assert "Could not read py_compat config" in caplog.text
+
+def test_run_read_file_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    _write(repo, "pkg/mod.py", "print(1)")
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        report = cc.run(repo, (3, 9))
+    assert "Skipping unreadable" in caplog.text
+    assert report.scanned == 0
+
+def test_main_block(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("sys.argv", ["check_py_compat.py", "--min-version", "3.12"])
+    with pytest.raises(SystemExit) as exc:
+        import runpy
+        runpy.run_path(str(cc.DEFAULT_REPO_ROOT / "harness" / "shared" / "check_py_compat.py"), run_name="__main__")
+    assert exc.value.code == 0
+
+
+def test_find_pep604_assignments(repo: Path):
+    import ast
+    code_alias = "MyType = str | None\nflags = 1 | 2\n"
+    tree = ast.parse(code_alias)
+    assert cc.find_pep604_assignments(tree) == [1]
+    _write(repo, "pkg/alias.py", "Alias = str | int\n")
+    report = cc.run(repo, (3, 9))
+    assert not report.ok
+    assert any("runtime type alias" in v for v in report.violations)
+

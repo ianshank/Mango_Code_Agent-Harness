@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.6 — Root Makefile
+# Agentic SSD v2.1.7 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -10,7 +10,9 @@ PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 PM       ?= pnpm
-COV_MIN  ?= 80
+# Coverage threshold is sourced from the governance policy (single source of truth)
+# so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
+COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -24,16 +26,20 @@ help: ## Show available targets
 
 # --- Linting & Static Analysis ---
 .PHONY: lint-python
-lint-python: ## Run ruff check + mypy on Python sources and tests
-	$(RUFF) check $(SHARED_TESTS)/ $(API_TESTS)/
+lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
+	$(RUFF) check .
 	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
+
+.PHONY: check-compat
+check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
+	$(PYTHON) $(SHARED_SRC)/check_py_compat.py --repo-root .
 
 .PHONY: lint-node
 lint-node: ## Run ESLint, Prettier, and Knip on Node stack
 	(cd $(NODE_DIR) && $(PM) exec eslint . --max-warnings=0 && $(PM) exec prettier --check . && $(PM) exec knip)
 
 .PHONY: lint
-lint: lint-python ## Run code style & static analysis gates
+lint: lint-python check-compat ## Run code style, static analysis, and runtime-compatibility gates
 
 # --- Python Testing & Coverage ---
 .PHONY: test-python
@@ -70,6 +76,30 @@ validate: ## Run all governance validation scripts
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
 
+# --- Drift Detection ---
+.PHONY: check-dedup
+check-dedup: ## Fail if any per-stack governance script is a copy instead of a shim delegating to harness/shared
+	$(PYTHON) $(SHARED_SRC)/check_dedup.py --repo-root .
+
+# --- Digest Regeneration ---
+.PHONY: digest-regen
+digest-regen: ## Regenerate protected-file digests in the control-plane policy bundle
+	$(PYTHON) harness/control-plane/regenerate_bundle_digests.py
+	git diff --exit-code -- harness/control-plane/policy-bundle.example.json
+
+# --- Governance-specific test target ---
+.PHONY: test-governance
+test-governance: ## Run governance module tests in isolation (broker, evidence, invariants)
+	$(PYTEST) $(SHARED_TESTS)/test_governance_broker.py \
+	          $(SHARED_TESTS)/test_evidence_manifest.py \
+	          $(SHARED_TESTS)/test_validate_invariants.py \
+	          -m "not live" -v --tb=short
+
+# --- Neuro-symbolic synthesis test target ---
+.PHONY: test-neurosym
+test-neurosym: ## Run neurosym synthesis tests (strategies, critique, evaluation, execution profiles)
+	$(PYTEST) $(SHARED_TESTS)/ -m "neurosym and not live" -v --tb=short
+
 # --- Composite Targets ---
 .PHONY: test
 test: test-python test-node verify-zero-skips ## Run all Python and Node tests + zero-skips
@@ -78,10 +108,26 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips validate ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate
+ci: lint coverage test-node verify-zero-skips validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check → digest-regen
+
+.PHONY: spec
+spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)
+	@test -n "$(NAME)" || { echo 'Usage: make spec NAME=<feature-name>'; exit 1; }
+	@mkdir -p docs/specs
+	@test -f docs/specs/SPEC_TEMPLATE.md || { echo 'ERROR: docs/specs/SPEC_TEMPLATE.md missing'; exit 1; }
+	@cp docs/specs/SPEC_TEMPLATE.md docs/specs/$(NAME).md
+	@echo "Scaffolded docs/specs/$(NAME).md — fill in the required sections."
+
+.PHONY: review
+review: validate ## Mechanical pre-PR review gate (invariants + governance validators)
+	@echo "--- Pre-PR review checklist ---"
+	@echo "1. Mechanical invariants: PASSED (validate target)"
+	@echo "2. Run the 'openspec-peer-review' skill on the change/plan (Architecture, SDLC, QA, Product)."
+	@echo "3. Run the 'repo-invariant-review' skill to predict concrete CI failures."
+	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
 
 .PHONY: pre-pr
-pre-pr: ci ## Pre-PR validation gate (identical to CI)
+pre-pr: ci review ## Pre-PR validation gate (full CI + mechanical review checklist)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts

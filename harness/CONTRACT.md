@@ -1,4 +1,4 @@
-# Agentic SSD Gate Harness Contract — v2.0
+# Agentic SSD Gate Harness Contract — v2.1
 
 ## Core rule
 
@@ -37,8 +37,28 @@
 
 ## Supply chain
 
-Node requires a committed frozen `pnpm-lock.yaml`. JVM enables `lockAllConfigurations()` with `LockMode.STRICT` and requires both `gradle.lockfile` and reviewed `gradle/verification-metadata.xml`. Missing security scanners or lock state is a failure, never a clean/no-op pass.
+Node requires a committed frozen `pnpm-lock.yaml`. Builds that execute install scripts (e.g., `esbuild`) must be explicitly allowlisted in the committed pnpm 11 configuration (`.npmrc` / `pnpm-workspace.yaml`); undeclared build scripts remain blocked. JVM enables `lockAllConfigurations()` with `LockMode.STRICT` and requires both `gradle.lockfile` and reviewed `gradle/verification-metadata.xml`. Missing security scanners or lock state is a failure, never a clean/no-op pass.
 
 ## Template adoption blockers
 
 CI examples intentionally contain `PIN_FULL_COMMIT_SHA`; adopters must replace each with a reviewed full action SHA in the independently protected onboarding change. JVM wrapper, lockfile and verification metadata must also be generated and reviewed. These are explicit blockers rather than silently insecure defaults.
+
+## Protected-paths escape hatch
+
+The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files (`Makefile`, `.github/workflows/**`, the shared validators, agent contracts, and the root of trust). `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
+
+Legitimate infrastructure modernization (CI, Makefile, governance scripts) necessarily touches these paths. Such changes MUST be made on a dedicated branch with an explicit, reviewed decision-log entry, and the protected-path gate is satisfied by setting `ALLOW_GITHUB_CHANGES=1` in the CI environment **for that reviewed change only**. The env var is a per-change attestation of review, not a blanket bypass: it is not set in the default CI environment and must never be committed to a `.env` file.
+
+Untracked files in protected paths are also caught (fail-closed) — `validate_invariants` enumerates staged, tracked-modified, and untracked non-ignored files.
+
+## Coverage gate
+
+The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The gate enforces aggregate coverage across all first-party Python modules; per-file enforcement is a documented follow-up. The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation.
+
+## Evidence signing
+
+`EvidenceBuilder` (`harness/shared/governance/evidence_manifest.py`) requires a signing key sourced from the `AGENT_EVIDENCE_KEY` environment variable or injected via the `signing_key` constructor parameter. Constructor injection takes precedence over the environment variable. A missing key raises `ValueError` (not `OSError`) at `export()` time. The insecure hardcoded fallback key was removed in v2.1; fail-closed behavior is mandatory. See `.mango/skills/evidence-signing/SKILL.md` for the reusable skill.
+
+## Python compatibility gate
+
+`check_py_compat.py` enforces that all first-party Python uses only syntax available in the minimum CI matrix version (currently 3.9). It detects: PEP 604 union syntax (`X | Y`), `datetime.UTC` (3.11+), and annotated assignments (`ast.AnnAssign`) that use union types without `from __future__ import annotations`. Run via `make check-compat`.

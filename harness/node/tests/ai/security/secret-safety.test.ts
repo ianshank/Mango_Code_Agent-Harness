@@ -39,7 +39,10 @@ describe('Nemotron Security & Secret Safety (C-AI-SEC-1, INV-1)', () => {
       );
     };
 
-    const client = new NemotronClient({ apiKey: rawSecret }, mockFetch);
+    const client = new NemotronClient(
+      { apiKey: rawSecret, defaultModel: 'test-model' },
+      mockFetch,
+    );
 
     try {
       await client.complete({

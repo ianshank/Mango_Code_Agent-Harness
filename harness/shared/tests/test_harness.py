@@ -39,23 +39,28 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(rem.normalize_remote_url(c["url"]).canonical, c["canonical"])
                 self.assertEqual(rem.check_url(c["url"], allow)[0], c["allowed"])
 
-    def test_shared_kernel_byte_identical(self):
-        files = [
-            "remotes.py",
-            "pretooluse_guard.py",
+    def test_shared_kernel_scripts_delegate_to_shared(self):
+        """Per-stack governance scripts must delegate to harness/shared, never copy it.
+
+        The rule itself lives in harness/shared/check_dedup.py so the gate that CI runs
+        and the assertion this test makes cannot drift apart. Two delegation styles are
+        valid: a runpy trampoline, or an import re-export from the governance package.
+        """
+        from harness.shared import check_dedup
+
+        report = check_dedup.run(check_dedup.load_config(HARNESS.parent))
+        self.assertTrue(report.ok, f"governance script drift: {report.failures}")
+        self.assertTrue(report.checked, "expected per-stack governance shims to be discovered")
+
+    def test_shared_kernel_shell_helpers_are_byte_identical(self):
+        """Shell helpers have no import mechanism, so they stay byte-identical copies."""
+        shell_files = [
             "pretooluse_guard.sh",
             "pre_push_scan.sh",
             "install_hooks.sh",
-            "verify_zero_skips.py",
-            "check_projections.py",
-            "check_traceability.py",
-            "validate_agent_policy.py",
-            "validate_policy.py",
-            "validate_governance_docs.py",
-            "validate_adoption.py",
             "validate_specs.sh",
         ]
-        for f in files:
+        for f in shell_files:
             expected = (SHARED / f).read_bytes()
             for stack in ("node", "jvm"):
                 self.assertEqual(expected, (HARNESS / stack / "scripts" / f).read_bytes(), f"{stack}/{f} drifted")
