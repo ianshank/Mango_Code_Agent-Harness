@@ -97,12 +97,12 @@ class TestBuild:
 
     def test_missing_policy_file_denies(self, policy_repo: Path) -> None:
         (policy_repo / "harness/shared/agent-policy.json").unlink()
-        with pytest.raises(SystemExit, match="DENY: missing policy file"):
+        with pytest.raises(ppa.PolicyArtifactError, match="missing policy file"):
             ppa.build_artifact(policy_repo)
 
     def test_unparseable_policy_source_denies(self, policy_repo: Path) -> None:
         (policy_repo / ppa.POLICY_SOURCE).write_text("not json", encoding="utf-8")
-        with pytest.raises(SystemExit, match="DENY: unparseable policy source"):
+        with pytest.raises(ppa.PolicyArtifactError, match="unparseable policy source"):
             ppa.build_artifact(policy_repo)
 
 
@@ -117,40 +117,132 @@ class TestCheck:
         artifact = ppa.build_artifact(policy_repo)
         ppa.check_artifact(policy_repo, artifact)  # no exception
 
-    def test_byte_flip_in_tree_denies(self, policy_repo: Path) -> None:
+    def test_byte_flip_in_non_identity_file_denies_on_digest(self, policy_repo: Path) -> None:
+        """agent-policy.json does not feed policy_id/policy_version, so a
+        tamper there is caught purely by the file-manifest digest check."""
+        artifact = ppa.build_artifact(policy_repo)
+        target = policy_repo / "harness/shared/agent-policy.json"
+        target.write_bytes(target.read_bytes() + b" ")
+        with pytest.raises(ppa.PolicyArtifactError, match="digest mismatch"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_byte_flip_in_policy_source_denies_on_identity_first(self, policy_repo: Path) -> None:
+        """POLICY_SOURCE feeds policy_version, so tampering it is caught by
+        the identity re-derivation before the file loop ever runs — a more
+        specific DENY than a generic digest mismatch."""
         artifact = ppa.build_artifact(policy_repo)
         target = policy_repo / ppa.POLICY_SOURCE
         target.write_bytes(target.read_bytes() + b" ")
-        with pytest.raises(SystemExit, match="DENY: digest mismatch"):
+        with pytest.raises(ppa.PolicyArtifactError, match="policy_version mismatch"):
             ppa.check_artifact(policy_repo, artifact)
 
-    def test_missing_file_denies(self, policy_repo: Path) -> None:
+    def test_missing_non_identity_file_denies_on_missing_file(self, policy_repo: Path) -> None:
+        artifact = ppa.build_artifact(policy_repo)
+        (policy_repo / "harness/shared/agent-policy.json").unlink()
+        with pytest.raises(ppa.PolicyArtifactError, match="missing file"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_missing_policy_source_denies_on_identity_first(self, policy_repo: Path) -> None:
         artifact = ppa.build_artifact(policy_repo)
         (policy_repo / ppa.POLICY_SOURCE).unlink()
-        with pytest.raises(SystemExit, match="DENY: missing file"):
+        with pytest.raises(ppa.PolicyArtifactError, match="missing policy source"):
             ppa.check_artifact(policy_repo, artifact)
 
     def test_short_digest_denies(self, policy_repo: Path) -> None:
         artifact = ppa.build_artifact(policy_repo)
-        artifact["files"][ppa.POLICY_SOURCE]["sha256"] = "abc123"
-        with pytest.raises(SystemExit, match="DENY: malformed digest"):
+        artifact["files"]["harness/shared/agent-policy.json"]["sha256"] = "abc123"
+        with pytest.raises(ppa.PolicyArtifactError, match="malformed digest"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_byte_size_mismatch_denies(self, policy_repo: Path) -> None:
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["files"]["harness/shared/agent-policy.json"]["bytes"] += 1
+        with pytest.raises(ppa.PolicyArtifactError, match="byte-size mismatch"):
             ppa.check_artifact(policy_repo, artifact)
 
     def test_unknown_schema_version_denies(self, policy_repo: Path) -> None:
         artifact = ppa.build_artifact(policy_repo)
         artifact["schema_version"] = "9.9.9"
-        with pytest.raises(SystemExit, match="DENY: unknown artifact schema_version"):
+        with pytest.raises(ppa.PolicyArtifactError, match="unknown artifact schema_version"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_artifact_id_mismatch_denies(self, policy_repo: Path) -> None:
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["artifact_id"] = "something-else"
+        with pytest.raises(ppa.PolicyArtifactError, match="unknown artifact_id"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_policy_id_mismatch_denies(self, policy_repo: Path) -> None:
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["policy_id"] = "a-different-policy"
+        with pytest.raises(ppa.PolicyArtifactError, match="policy_id mismatch"):
             ppa.check_artifact(policy_repo, artifact)
 
     @pytest.mark.parametrize("files", [{}, None, "x"])
     def test_empty_or_malformed_manifest_denies(self, policy_repo: Path, files) -> None:
         artifact = ppa.build_artifact(policy_repo)
         artifact["files"] = files
-        with pytest.raises(SystemExit, match="DENY: artifact carries no file manifest"):
+        with pytest.raises(ppa.PolicyArtifactError, match="artifact carries no file manifest"):
             ppa.check_artifact(policy_repo, artifact)
 
+    def test_narrowed_manifest_denies(self, policy_repo: Path) -> None:
+        """Architect-blocker regression: dropping a governed file from the
+        manifest — rather than corrupting its digest — must not slip past a
+        digest-only check. This is exactly what would defeat the drift gate."""
+        artifact = ppa.build_artifact(policy_repo)
+        del artifact["files"]["harness/shared/agent-policy.json"]
+        with pytest.raises(ppa.PolicyArtifactError, match="does not match governed policy files"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    def test_extra_manifest_entry_denies(self, policy_repo: Path) -> None:
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["files"]["some/other/file.json"] = {"sha256": "0" * 64, "bytes": 1}
+        with pytest.raises(ppa.PolicyArtifactError, match="does not match governed policy files"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    @pytest.mark.parametrize(
+        "malicious_key",
+        [
+            "/etc/passwd",
+            "../../../../etc/passwd",
+            "harness/shared/../../../etc/passwd",
+        ],
+    )
+    def test_unsafe_relpath_key_never_reaches_the_filesystem(
+        self, policy_repo: Path, tmp_path: Path, malicious_key: str
+    ) -> None:
+        """A files-map key with an unexpected name is already rejected by the
+        manifest-scope check (test_extra_manifest_entry_denies) before any
+        path is ever dereferenced, since POLICY_FILES is a fixed literal set
+        no attacker-controlled key can equal. That check is the reason a
+        traversal/absolute-path probe never reaches the filesystem today."""
+        outside = tmp_path / "secret.txt"
+        outside.write_text("outside the repo", encoding="utf-8")
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["files"] = {
+            malicious_key: {"sha256": hashlib.sha256(outside.read_bytes()).hexdigest(), "bytes": outside.stat().st_size}
+        }
+        with pytest.raises(ppa.PolicyArtifactError, match="does not match governed policy files"):
+            ppa.check_artifact(policy_repo, artifact)
+
+    @pytest.mark.parametrize(
+        "malicious_key",
+        ["/etc/passwd", "../../../../etc/passwd", "harness/shared/../../../etc/passwd"],
+    )
+    def test_reject_unsafe_relpath_guard_itself(self, malicious_key: str) -> None:
+        """Direct unit test of the path-safety guard as defense-in-depth: if
+        POLICY_FILES is ever made config-driven (a real follow-up — see
+        NEXT_STEPS.md), this is the check that keeps a malicious manifest key
+        from being dereferenced outside repo_root."""
+        with pytest.raises(ppa.PolicyArtifactError, match="unsafe file path"):
+            ppa._reject_unsafe_relpath(malicious_key)
+
+    def test_reject_unsafe_relpath_guard_accepts_governed_files(self) -> None:
+        for rel in ppa.POLICY_FILES:
+            ppa._reject_unsafe_relpath(rel)  # must not raise
+
     def test_non_object_artifact_denies(self, policy_repo: Path) -> None:
-        with pytest.raises(SystemExit, match="DENY"):
+        with pytest.raises(ppa.PolicyArtifactError):
             ppa.check_artifact(policy_repo, ["not", "an", "object"])
 
 
@@ -208,7 +300,7 @@ class TestAttestation:
         self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("AGENT_EVIDENCE_KEY", raising=False)
-        with pytest.raises(SystemExit, match="DENY"):
+        with pytest.raises(ppa.PolicyArtifactError):
             ppa.build_artifact(policy_repo, attest=True)
 
     def test_env_key_resolution(self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,11 +345,21 @@ class TestCli:
     def test_check_denies_after_tamper(self, policy_repo: Path, tmp_path: Path) -> None:
         out_file = tmp_path / "artifact.json"
         assert self._run("--repo-root", str(policy_repo), "build", "--output", str(out_file)).returncode == 0
-        target = policy_repo / ppa.POLICY_SOURCE
+        target = policy_repo / "harness/shared/agent-policy.json"
         target.write_bytes(target.read_bytes() + b"!")
         result = self._run("--repo-root", str(policy_repo), "check", "--artifact", str(out_file))
         assert result.returncode != 0
         assert "DENY: digest mismatch" in result.stderr
+
+    def test_check_denies_after_narrowed_manifest(self, policy_repo: Path, tmp_path: Path) -> None:
+        out_file = tmp_path / "artifact.json"
+        assert self._run("--repo-root", str(policy_repo), "build", "--output", str(out_file)).returncode == 0
+        artifact = json.loads(out_file.read_text(encoding="utf-8"))
+        del artifact["files"]["harness/shared/agent-policy.json"]
+        out_file.write_text(json.dumps(artifact), encoding="utf-8")
+        result = self._run("--repo-root", str(policy_repo), "check", "--artifact", str(out_file))
+        assert result.returncode != 0
+        assert "DENY: artifact file manifest does not match governed policy files" in result.stderr
 
     def test_check_unreadable_artifact_denies(self, policy_repo: Path, tmp_path: Path) -> None:
         result = self._run(

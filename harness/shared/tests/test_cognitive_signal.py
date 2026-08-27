@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import typing
 from pathlib import Path
 
 import pytest
@@ -297,16 +298,14 @@ class TestSink:
         sink.append(pinned_signal())
         assert not sink.path.with_suffix(".lock").exists()
 
-        import builtins
+        real_open = Path.open
 
-        real_open = builtins.open
-
-        def _fail_open(file, *args, **kwargs):
-            if str(file) == str(sink.path):
+        def _fail_open(self: Path, *args, **kwargs):
+            if self == sink.path:
                 raise OSError("disk full")
-            return real_open(file, *args, **kwargs)
+            return real_open(self, *args, **kwargs)
 
-        monkeypatch.setattr(builtins, "open", _fail_open)
+        monkeypatch.setattr(Path, "open", _fail_open)
         with pytest.raises(OSError, match="disk full"):
             sink.append(pinned_signal())
         assert not sink.path.with_suffix(".lock").exists()
@@ -380,3 +379,101 @@ class TestSinkLimits:
         for i in range(25):
             sink.append(pinned_signal(signal_id=f"s{i}"))
         assert len(sink.path.read_text(encoding="utf-8").splitlines()) == 25
+
+
+# ---------------------------------------------------------------------------
+# Cross-version timestamp acceptance (fromisoformat's "Z" support is a 3.11+
+# feature; the CI matrix spans 3.9-3.12) and payload key/serialization
+# hardening surfaced by adversarial review.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.governance
+class TestTimestampCrossVersion:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "2026-08-27T00:00:00Z",
+            "2026-08-27T00:00:00+00:00",
+            "2026-08-27T00:00:00.123456Z",
+        ],
+    )
+    def test_z_suffix_and_offset_forms_both_accepted(self, value: str) -> None:
+        data = pinned_signal().to_dict()
+        data["timestamp"] = value
+        assert validate_signal_dict(data).timestamp == value
+
+    def test_z_suffix_produces_a_timezone_aware_parse(self) -> None:
+        from harness.shared.cognitive_signal import _parse_iso_timestamp
+
+        parsed = _parse_iso_timestamp("2026-08-27T00:00:00Z")
+        offset = parsed.utcoffset()
+        assert offset is not None
+        assert offset.total_seconds() == 0
+
+    def test_lowercase_z_is_not_silently_accepted(self) -> None:
+        # ISO-8601 defines the UTC designator as uppercase "Z"; lowercase is
+        # not normalized and should fail the same as any other malformed
+        # string, not be silently treated as UTC.
+        data = pinned_signal().to_dict()
+        data["timestamp"] = "2026-08-27T00:00:00z"
+        with pytest.raises(SignalValidationError):
+            validate_signal_dict(data)
+
+
+class TestPayloadHardening:
+    def test_non_string_payload_keys_rejected(self) -> None:
+        data = pinned_signal().to_dict()
+        data["payload"] = {1: "from-int", "1": "from-str"}
+        with pytest.raises(SignalValidationError, match="payload' keys must all be strings"):
+            validate_signal_dict(data)
+
+    def test_string_keys_that_look_like_other_types_are_fine(self) -> None:
+        data = pinned_signal().to_dict()
+        data["payload"] = {"1": "a", "true": "b", "null": "c"}
+        assert validate_signal_dict(data).payload == {"1": "a", "true": "b", "null": "c"}
+
+    def test_lone_surrogate_in_payload_does_not_raise_unicode_error(self, tmp_path: Path) -> None:
+        sink = CognitiveSignalSink(tmp_path)
+        sig = pinned_signal(payload={"v": "x" + chr(0xD800) + "y"})
+        sink.append(sig)  # must not raise UnicodeEncodeError
+        stored = json.loads(sink.path.read_text(encoding="utf-8"))
+        assert validate_signal_dict(stored).payload["v"] == sig.payload["v"]
+
+    def test_line_and_paragraph_separators_do_not_split_the_jsonl_line(self, tmp_path: Path) -> None:
+        sink = CognitiveSignalSink(tmp_path)
+        payload_value = "before" + chr(0x2028) + "after" + chr(0x2029) + chr(0x0085) + "end"
+        sink.append(pinned_signal(payload={"v": payload_value}))
+        raw_text = sink.path.read_text(encoding="utf-8")
+        # A naive Unicode-aware reader (str.splitlines) must see exactly one
+        # line, matching the byte-level `\n`-count guarantee already tested.
+        assert len(raw_text.splitlines()) == 1
+        stored = json.loads(raw_text)
+        assert stored["payload"]["v"] == payload_value
+
+    def test_deeply_nested_payload_raises_signal_validation_error_not_recursion_error(
+        self, tmp_path: Path
+    ) -> None:
+        nested: typing.Any = "leaf"
+        for _ in range(20_000):
+            nested = {"n": nested}
+        sink = CognitiveSignalSink(tmp_path)
+        with pytest.raises(SignalValidationError, match="not JSON-serializable"):
+            sink.append(pinned_signal(payload={"v": nested}))
+        assert not sink.path.exists()
+
+    def test_sink_dir_blocked_by_existing_file_raises_signal_validation_error(
+        self, tmp_path: Path
+    ) -> None:
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a directory", encoding="utf-8")
+        sink = CognitiveSignalSink(blocker / "nested" / "signals")
+        with pytest.raises(SignalValidationError, match="cannot create sink directory"):
+            sink.append(pinned_signal())
+
+    def test_sink_path_itself_blocked_by_existing_file(self, tmp_path: Path) -> None:
+        blocker = tmp_path / "iamafile"
+        blocker.write_text("x", encoding="utf-8")
+        sink = CognitiveSignalSink(blocker)
+        with pytest.raises(SignalValidationError, match="cannot create sink directory"):
+            sink.append(pinned_signal())

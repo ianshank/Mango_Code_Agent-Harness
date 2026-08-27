@@ -185,6 +185,10 @@ class TestEnabled:
         incumbent, shadow = (json.loads(line) for line in lines)
         assert incumbent["signal_type"] == "plan.incumbent"
         assert shadow["signal_type"] == "plan.shadow"
+        # producer_id is the field C-MMI-2 is entirely about; a mutation
+        # swapping the incumbent/shadow producer constants must fail here.
+        assert incumbent["producer_id"] == "planner.incumbent"
+        assert shadow["producer_id"] == "planner.shadow"
         assert shadow["parent_signal_id"] == incumbent["signal_id"]
         assert shadow["run_id"] == incumbent["run_id"]
         # Both persisted signals revalidate through the fail-closed validator.
@@ -290,7 +294,24 @@ class TestContainment:
         assert broken["shadow_mock"].call_count == 1
         assert broken["result"] == baseline["result"]
         assert broken["history"] == baseline["history"]
-        assert any("incumbent plan is unaffected" in r.message for r in caplog.records)
+        # Filtered by logger name, not just message substring (both layers'
+        # messages share that substring by design): proves the CHANNEL's own
+        # containment caught this, not merely the orchestrator's outer guard —
+        # a mutation deleting run_shadow_comparison's try/except would leave
+        # this filtered assertion empty even though the loop result is fine.
+        channel_records = [r for r in caplog.records if r.name == "harness.shared.shadow_planner"]
+        assert any("channel-level containment" in r.message for r in channel_records)
+        # R-MMI-5: the run is terminated by a plan.shadow_error signal, not
+        # left as an orphan incumbent a consumer can't distinguish from
+        # "still in flight" (see .mango/skills/shadow-channel-analysis).
+        lines = broken["signals_path"].read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 2
+        incumbent, error_signal = (json.loads(line) for line in lines)
+        assert error_signal["signal_type"] == "plan.shadow_error"
+        assert error_signal["parent_signal_id"] == incumbent["signal_id"]
+        assert error_signal["payload"]["error_type"] == "RuntimeError"
+        assert "bridge exploded" in error_signal["payload"]["error"]
+        validate_signal_dict(error_signal)
 
     def test_sink_failure_swallowed(
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -306,7 +327,8 @@ class TestContainment:
         with caplog.at_level(logging.WARNING, logger="harness.shared.shadow_planner"):
             out = _run_loop(_mk_workspace(tmp_path), mocker, monkeypatch, flag="1")
         assert out["result"] == baseline_result
-        assert any("incumbent plan is unaffected" in r.message for r in caplog.records)
+        channel_records = [r for r in caplog.records if r.name == "harness.shared.shadow_planner"]
+        assert any("channel-level containment" in r.message for r in channel_records)
 
     def test_orchestrator_guard_swallows_channel_bug(
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -321,7 +343,8 @@ class TestContainment:
         with caplog.at_level(logging.ERROR, logger="harness.shared.mango_mas_orchestrator"):
             out = _run_loop(_mk_workspace(tmp_path), mocker, monkeypatch, flag="1")
         assert out["result"] == "PASS"
-        assert any("incumbent plan is unaffected" in r.message for r in caplog.records)
+        orch_records = [r for r in caplog.records if r.name == "harness.shared.mango_mas_orchestrator"]
+        assert any("did not contain" in r.message for r in orch_records)
 
 
 # ---------------------------------------------------------------------------
@@ -424,3 +447,107 @@ class TestHelpers:
         ).splitlines()
         assert len(lines) == 2
         validate_signal_dict(json.loads(lines[0]))
+
+    def test_policy_id_empty_string_degrades_to_unknown_not_silence(self, tmp_path: Path) -> None:
+        """A policy file that parses but carries an empty policy_id must not
+        take down the whole channel: previously this made the very first
+        sink.append (the incumbent signal) raise SignalValidationError,
+        swallowed by the outer guard, so ZERO signals were ever written."""
+        policy = tmp_path / "harness" / "shared" / "governance-policy.json"
+        policy.parent.mkdir(parents=True)
+        policy.write_text('{"policy_id": ""}', encoding="utf-8")
+        pid, _version = _policy_identity(tmp_path)
+        assert pid == "unknown"
+
+    @pytest.mark.parametrize("bad_id", [None, 7, [], {}])
+    def test_policy_id_non_string_degrades_to_unknown(self, tmp_path: Path, bad_id) -> None:
+        policy = tmp_path / "harness" / "shared" / "governance-policy.json"
+        policy.parent.mkdir(parents=True)
+        policy.write_text(json.dumps({"policy_id": bad_id}), encoding="utf-8")
+        pid, _version = _policy_identity(tmp_path)
+        assert pid == "unknown"
+
+
+@pytest.mark.governance
+class TestExtractShadowPlanText:
+    """`_extract_shadow_plan_text` defensively degrades any hostile/malformed
+    provider response to "" instead of raising deep in the happy path."""
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {},
+            {"choices": []},
+            {"choices": [None]},
+            {"choices": ["not-a-dict"]},
+            {"choices": [{"message": None}]},
+            {"choices": [{"message": "not-a-dict"}]},
+            {"choices": [{"message": {"content": None}}]},
+            {"choices": [{"message": {"content": 42}}]},
+            {"choices": [{"message": {"content": [{"type": "text", "text": "block-style"}]}}]},
+        ],
+    )
+    def test_hostile_responses_degrade_to_empty_string(self, response: dict) -> None:
+        assert shadow_module._extract_shadow_plan_text(response) == ""
+
+    def test_normal_response_extracts_content(self) -> None:
+        response = {"choices": [{"message": {"content": "the plan text"}}]}
+        assert shadow_module._extract_shadow_plan_text(response) == "the plan text"
+
+    def test_hostile_response_does_not_break_the_incumbent_path(
+        self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: a shadow response shaped so the old code would raise
+        AttributeError still yields a valid (empty-plan) shadow signal rather
+        than an uncaught exception, so the run completes instead of only
+        producing an orphan incumbent."""
+        ws = _mk_workspace(tmp_path)
+        out = _run_loop(
+            ws, mocker, monkeypatch, flag="1", shadow_resp={"choices": [None]}
+        )
+        lines = out["signals_path"].read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 2
+        incumbent, shadow = (json.loads(line) for line in lines)
+        assert shadow["signal_type"] == "plan.shadow"
+        assert shadow["payload"]["plan"] == ""
+        validate_signal_dict(shadow)
+
+
+@pytest.mark.governance
+def test_shadow_error_signal_write_failure_is_itself_contained(
+    tmp_path: Path, mocker, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Double-failure path: the bridge call fails AND the best-effort attempt
+    to record a plan.shadow_error signal about it also fails (e.g. the sink
+    itself is now unwritable). Must still propagate to run_shadow_comparison's
+    own containment rather than raising a second, different exception out of
+    the inner except block."""
+    import logging
+
+    mocker.patch.object(shadow_module, "complete_chat", side_effect=RuntimeError("bridge down"))
+    append_calls = {"n": 0}
+
+    def _flaky_append(self, signal):
+        append_calls["n"] += 1
+        if append_calls["n"] == 1:
+            return tmp_path / "ok"  # incumbent append succeeds
+        raise OSError("sink also down")  # shadow_error append fails too
+
+    mocker.patch.object(shadow_module.CognitiveSignalSink, "append", _flaky_append)
+    ctx = ShadowContext(
+        workspace_dir=tmp_path,
+        api_key="k",
+        model="m",
+        api_timeout=30,
+        planner_system_prompt="sys",
+        planner_user_prompt="user",
+        task="t",
+        incumbent_plan="p",
+        incumbent_elapsed_ms=1,
+    )
+    with caplog.at_level(logging.WARNING, logger="harness.shared.shadow_planner"):
+        run_shadow_comparison(ctx)  # must not raise
+    messages = [r.message for r in caplog.records if r.name == "harness.shared.shadow_planner"]
+    assert any("could not record shadow_error signal" in m for m in messages)
+    assert any("channel-level containment" in m for m in messages)
+    assert append_calls["n"] == 2

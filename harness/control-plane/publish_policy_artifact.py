@@ -53,8 +53,17 @@ def _bootstrap_imports() -> typing.Any:
     return EvidenceBuilder
 
 
+class PolicyArtifactError(Exception):
+    """Raised on any fail-closed rejection (R-MMI-9). A plain ``Exception``
+    subclass — not ``SystemExit`` — so ``build_artifact``/``check_artifact``/
+    ``verify_attestation`` stay usable as a library, not only as a CLI: a
+    caller wrapping ``except Exception`` can actually handle a DENY instead of
+    the process exiting out from under it. ``main()`` is the sole place this
+    becomes a ``SystemExit``."""
+
+
 def _deny(reason: str) -> typing.NoReturn:
-    raise SystemExit(f"{_TOOL}: DENY: {reason}")
+    raise PolicyArtifactError(reason)
 
 
 def digest(path: Path) -> str:
@@ -121,8 +130,34 @@ def build_artifact(
     return artifact
 
 
+def _reject_unsafe_relpath(rel: str) -> None:
+    """A file key must stay inside repo_root: reject absolute paths and any
+    ``..`` traversal segment. Without this, an attacker-controlled ``files``
+    key can point ``check_artifact`` at an arbitrary host path — an absolute
+    ``rel`` silently discards ``repo_root`` under ``Path.__truediv__``, and the
+    digest-mismatch message would echo that file's sha256 back as a DENY
+    reason, making ``check`` a hash oracle for files outside the repo.
+
+    Defense-in-depth: with ``POLICY_FILES`` a fixed literal tuple, the
+    manifest-scope check in ``check_artifact`` (exact match against
+    ``POLICY_FILES``) already rejects any key an attacker controls before this
+    function is ever reached. This guard is what keeps that property true if
+    ``POLICY_FILES`` is ever made config-driven.
+    """
+    parts = Path(rel).parts
+    if Path(rel).is_absolute() or ".." in parts:
+        _deny(f"unsafe file path in artifact manifest: {rel!r}")
+
+
 def check_artifact(repo_root: Path, artifact: dict[str, typing.Any]) -> None:
-    """Fail-closed verification of the working tree against an artifact (R-MMI-9)."""
+    """Fail-closed verification of the working tree against an artifact (R-MMI-9).
+
+    Verifies identity (``artifact_id``, ``policy_id``, ``policy_version`` all
+    re-derived from the working tree, not merely echoed back) and that the
+    file manifest is exactly the governed set — a manifest that has been
+    narrowed by dropping an entry passes digest checks on what remains, which
+    would otherwise defeat the drift gate this function exists to provide.
+    """
     if not isinstance(artifact, dict):
         _deny("artifact is not a JSON object")
     if artifact.get("schema_version") != ARTIFACT_SCHEMA_VERSION:
@@ -130,19 +165,44 @@ def check_artifact(repo_root: Path, artifact: dict[str, typing.Any]) -> None:
             f"unknown artifact schema_version {artifact.get('schema_version')!r}; "
             f"accepted: {ARTIFACT_SCHEMA_VERSION}"
         )
+    if artifact.get("artifact_id") != ARTIFACT_ID:
+        _deny(f"unknown artifact_id {artifact.get('artifact_id')!r}; expected {ARTIFACT_ID!r}")
+
+    expected_policy_id, expected_policy_version = _policy_identity(repo_root)
+    if artifact.get("policy_id") != expected_policy_id:
+        _deny(
+            f"policy_id mismatch: artifact claims {artifact.get('policy_id')!r}, "
+            f"working tree is {expected_policy_id!r}"
+        )
+    if artifact.get("policy_version") != expected_policy_version:
+        _deny(
+            f"policy_version mismatch: artifact claims {artifact.get('policy_version')!r}, "
+            f"working tree is {expected_policy_version!r}"
+        )
+
     files = artifact.get("files")
     if not isinstance(files, dict) or not files:
         _deny("artifact carries no file manifest")
+    if set(files) != set(POLICY_FILES):
+        missing = set(POLICY_FILES) - set(files)
+        extra = set(files) - set(POLICY_FILES)
+        _deny(f"artifact file manifest does not match governed policy files (missing={sorted(missing)}, extra={sorted(extra)})")
+
     for rel, meta in files.items():
-        expected = meta.get("sha256", "") if isinstance(meta, dict) else ""
-        if len(expected) != SHA256_HEX_LEN:
+        _reject_unsafe_relpath(rel)
+        expected_sha = meta.get("sha256", "") if isinstance(meta, dict) else ""
+        if len(expected_sha) != SHA256_HEX_LEN:
             _deny(f"malformed digest for {rel}")
         path = repo_root / rel
         if not path.is_file():
             _deny(f"missing file {rel}")
-        actual = digest(path)
-        if actual != expected:
-            _deny(f"digest mismatch for {rel}: expected {expected}, found {actual}")
+        raw = path.read_bytes()
+        actual_sha = hashlib.sha256(raw).hexdigest()
+        if actual_sha != expected_sha:
+            _deny(f"digest mismatch for {rel}: expected {expected_sha}, found {actual_sha}")
+        expected_bytes = meta.get("bytes") if isinstance(meta, dict) else None
+        if expected_bytes != len(raw):
+            _deny(f"byte-size mismatch for {rel}: expected {expected_bytes}, found {len(raw)}")
 
 
 def verify_attestation(
@@ -206,20 +266,26 @@ def main(argv: list[str] | None = None) -> None:
     setup_json_logging()
     root = args.repo_root
 
-    if args.command == "build":
-        artifact = build_artifact(root, attest=args.attest)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
-        print(f"{_TOOL}: built {args.output} (policy_version {artifact['policy_version']})")
-    else:
-        try:
-            artifact = json.loads(args.artifact.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            _deny(f"unreadable artifact {args.artifact}: {exc}")
-        check_artifact(root, artifact)
-        if args.verify_attestation and not verify_attestation(artifact):
-            _deny("attestation verification failed")
-        print(f"{_TOOL}: passed")
+    # The CLI's contract is SystemExit(non-zero) on DENY; everything else in
+    # this module raises PolicyArtifactError so it stays usable as a library.
+    # This is the one place the two contracts meet.
+    try:
+        if args.command == "build":
+            artifact = build_artifact(root, attest=args.attest)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
+            print(f"{_TOOL}: built {args.output} (policy_version {artifact['policy_version']})")
+        else:
+            try:
+                artifact = json.loads(args.artifact.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                _deny(f"unreadable artifact {args.artifact}: {exc}")
+            check_artifact(root, artifact)
+            if args.verify_attestation and not verify_attestation(artifact):
+                _deny("attestation verification failed")
+            print(f"{_TOOL}: passed")
+    except PolicyArtifactError as exc:
+        raise SystemExit(f"{_TOOL}: DENY: {exc}") from exc
 
 
 if __name__ == "__main__":

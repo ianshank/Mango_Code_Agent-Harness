@@ -64,10 +64,8 @@ def file_lock(
     try:
         yield
     finally:
-        try:
+        with contextlib.suppress(OSError):
             lockfile.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 # Backward-compatible alias for existing internal callers.
@@ -95,7 +93,7 @@ def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -
         # Write to a temp file first for atomic replacement
         temp_file = GAPS_FILE.with_suffix(".tmp")
         temp_file.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
-        os.replace(temp_file, GAPS_FILE)
+        temp_file.replace(GAPS_FILE)
 
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
@@ -121,7 +119,7 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
 
         temp_file = HYPOTHESES_FILE.with_suffix(".tmp")
         temp_file.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
-        os.replace(temp_file, HYPOTHESES_FILE)
+        temp_file.replace(HYPOTHESES_FILE)
 
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 

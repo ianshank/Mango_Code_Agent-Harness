@@ -39,6 +39,11 @@ INCUMBENT_PRODUCER_ID = "planner.incumbent"
 SHADOW_PRODUCER_ID = "planner.shadow"
 SIGNAL_TYPE_INCUMBENT_PLAN = "plan.incumbent"
 SIGNAL_TYPE_SHADOW_PLAN = "plan.shadow"
+# Terminal signal for a run whose shadow half failed (R-MMI-5): without this,
+# a run_id with only an incumbent signal is indistinguishable from "still in
+# flight" to an offline consumer (see .mango/skills/shadow-channel-analysis).
+SIGNAL_TYPE_SHADOW_ERROR = "plan.shadow_error"
+UNKNOWN_POLICY_IDENTITY = "unknown"
 
 TASK_ID_HEX_LEN = 16
 POLICY_VERSION_HEX_LEN = 16
@@ -76,17 +81,25 @@ def _policy_identity(workspace_dir: Path) -> tuple[str, str]:
 
     The policy file's own schema_version is a format version, not a content
     version, so the version recorded here is a digest of the bytes in effect.
-    Metadata only — any failure degrades to ("unknown", "unknown").
+    Metadata only — any failure, including a policy file that parses but
+    carries an empty/null/non-string ``policy_id``, degrades to
+    ``(UNKNOWN_POLICY_IDENTITY, UNKNOWN_POLICY_IDENTITY)`` rather than passing
+    a value through that ``validate_signal_dict`` would reject — that
+    rejection would otherwise happen on the very first ``sink.append`` in
+    ``_run``, silently discarding the incumbent signal along with it.
     """
     policy_path = Path(workspace_dir) / POLICY_RELPATH
     try:
         raw = policy_path.read_bytes()
-        policy_id = json.loads(raw.decode("utf-8")).get("policy_id", "unknown")
+        raw_id = json.loads(raw.decode("utf-8")).get("policy_id")
         digest = hashlib.sha256(raw).hexdigest()[:POLICY_VERSION_HEX_LEN]
-        return str(policy_id), digest
+        policy_id = raw_id if isinstance(raw_id, str) and raw_id else UNKNOWN_POLICY_IDENTITY
+        return policy_id, digest
     except Exception:
-        logger.warning("shadow_planner: could not read policy identity from %s", policy_path)
-        return ("unknown", "unknown")
+        logger.warning(
+            "shadow_planner: could not read policy identity from %s", policy_path, exc_info=True
+        )
+        return (UNKNOWN_POLICY_IDENTITY, UNKNOWN_POLICY_IDENTITY)
 
 
 def _shadow_timeout_sec(context: ShadowContext, environ: typing.Mapping[str, str] | None = None) -> int:
@@ -101,21 +114,55 @@ def _shadow_timeout_sec(context: ShadowContext, environ: typing.Mapping[str, str
     return max(1, min(value, context.api_timeout))
 
 
-def run_shadow_comparison(context: ShadowContext) -> None:
-    """Record the incumbent plan and one shadow plan. Never raises (C-MMI-5)."""
+def run_shadow_comparison(
+    context: ShadowContext, environ: typing.Mapping[str, str] | None = None
+) -> None:
+    """Record the incumbent plan and one shadow plan. Never raises (C-MMI-5).
+
+    On any failure, best-effort records a ``plan.shadow_error`` terminal
+    signal (see ``_run``) before this — the channel's own containment layer,
+    distinct from the orchestrator's outer guard around this call — swallows
+    it. The two layers log different messages so a test (or an operator
+    reading logs) can tell which one actually caught a given failure.
+    """
     try:
-        _run(context)
+        _run(context, environ=environ)
     except Exception:
         logger.warning(
-            "shadow_planner: comparison failed; incumbent plan is unaffected", exc_info=True
+            "shadow_planner: channel-level containment caught a failure; "
+            "incumbent plan is unaffected",
+            exc_info=True,
         )
 
 
-def _run(context: ShadowContext) -> None:
-    sink = CognitiveSignalSink.for_workspace(context.workspace_dir)
+def _extract_shadow_plan_text(response: dict) -> str:
+    """Defensively pull the plan text out of a provider response. A hostile
+    or malformed response (``choices=[None]``, a non-dict ``message``, or
+    ``content`` shaped as an Anthropic-style content-block list rather than a
+    plain string) degrades to ``""`` instead of raising ``AttributeError``
+    deep in the happy path."""
+    choices = response.get("choices") or [{}]
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    return content if isinstance(content, str) else ""
+
+
+def _run(
+    context: ShadowContext, environ: typing.Mapping[str, str] | None = None
+) -> None:
+    env = os.environ if environ is None else environ
+    sink = CognitiveSignalSink.for_workspace(context.workspace_dir, environ=env)
     run_id = str(uuid.uuid4())
     task_id = _sha256_text(context.task)[:TASK_ID_HEX_LEN]
     policy_id, policy_version = _policy_identity(context.workspace_dir)
+    logger.debug(
+        "shadow_planner: run %s starting; sink=%s policy=%s/%s",
+        run_id,
+        sink.path,
+        policy_id,
+        policy_version,
+    )
 
     incumbent = CognitiveSignal.create(
         run_id=run_id,
@@ -133,7 +180,14 @@ def _run(context: ShadowContext) -> None:
     )
     sink.append(incumbent)
 
-    shadow_model = os.environ.get(SHADOW_MODEL_ENV) or context.model
+    shadow_model = env.get(SHADOW_MODEL_ENV) or context.model
+    shadow_timeout = _shadow_timeout_sec(context, environ=env)
+    logger.debug(
+        "shadow_planner: run %s calling shadow model=%s timeout_s=%s",
+        run_id,
+        shadow_model or "(orchestrator default)",
+        shadow_timeout,
+    )
     call_kwargs: dict = {
         "messages": [
             {"role": "system", "content": context.planner_system_prompt},
@@ -141,18 +195,42 @@ def _run(context: ShadowContext) -> None:
         ],
         # Zero authority (C-MMI-3): the shadow pass is never offered a tool.
         "tools": [],
-        "timeout_sec": _shadow_timeout_sec(context),
+        "timeout_sec": shadow_timeout,
     }
     if context.api_key is not None:
         call_kwargs["api_key"] = context.api_key
     if shadow_model:
         call_kwargs["model"] = shadow_model
 
-    started = time.monotonic()
-    response = complete_chat(**call_kwargs)
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    message = (response.get("choices") or [{}])[0].get("message", {})
-    shadow_plan = message.get("content") or ""
+    try:
+        started = time.monotonic()
+        response = complete_chat(**call_kwargs)
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        shadow_plan = _extract_shadow_plan_text(response)
+        usage = response.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+    except Exception as exc:
+        # R-MMI-5: a run_id with only an incumbent signal reads as "still in
+        # flight" to an offline consumer. Emit a terminal error signal so a
+        # failed shadow pass is distinguishable from one that never ran,
+        # then let the outer guard's warning-and-swallow contract (C-MMI-5)
+        # take over — this signal is best-effort, not a substitute for it.
+        try:
+            sink.append(
+                CognitiveSignal.create(
+                    run_id=run_id,
+                    task_id=task_id,
+                    producer_id=SHADOW_PRODUCER_ID,
+                    signal_type=SIGNAL_TYPE_SHADOW_ERROR,
+                    payload={"error_type": type(exc).__name__, "error": str(exc)},
+                    policy_id=policy_id,
+                    policy_version=policy_version,
+                    parent_signal_id=incumbent.signal_id,
+                )
+            )
+        except Exception:
+            logger.warning("shadow_planner: run %s could not record shadow_error signal", run_id, exc_info=True)
+        raise
 
     shadow = CognitiveSignal.create(
         run_id=run_id,
@@ -163,7 +241,7 @@ def _run(context: ShadowContext) -> None:
             "plan_sha256": _sha256_text(shadow_plan),
             "plan": shadow_plan,
             "elapsed_ms": elapsed_ms,
-            "usage": response.get("usage") or {},
+            "usage": usage,
         },
         policy_id=policy_id,
         policy_version=policy_version,

@@ -74,7 +74,7 @@ class CognitiveSignal:
     task_id: str
     producer_id: str
     signal_type: str
-    payload: dict
+    payload: dict[str, typing.Any]
     policy_id: str
     policy_version: str
     timestamp: str
@@ -111,7 +111,7 @@ class CognitiveSignal:
         task_id: str,
         producer_id: str,
         signal_type: str,
-        payload: dict,
+        payload: dict[str, typing.Any],
         policy_id: str,
         policy_version: str,
         producer_version: str | None = None,
@@ -143,6 +143,17 @@ def _reject(reason: str) -> typing.NoReturn:
     raise SignalValidationError(reason)
 
 
+def _parse_iso_timestamp(value: str) -> datetime:
+    """`datetime.fromisoformat` accepts a trailing "Z" only from Python 3.11
+    onward (verified: rejected on 3.10, accepted on 3.11/3.12); the CI matrix
+    spans 3.9-3.12, and "Z" is the most common ISO-8601 UTC suffix an external
+    producer would emit. Normalize it first so acceptance is interpreter-
+    independent rather than a Python-version-dependent flake."""
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
+
+
 def validate_signal_dict(data: typing.Mapping[str, typing.Any]) -> CognitiveSignal:
     """Fail-closed validation of a signal mapping (R-MMI-2).
 
@@ -163,7 +174,7 @@ def validate_signal_dict(data: typing.Mapping[str, typing.Any]) -> CognitiveSign
     if not SIGNAL_TYPE_PATTERN.match(data["signal_type"]):
         _reject(f"malformed signal_type {data['signal_type']!r}")
     try:
-        parsed = datetime.fromisoformat(data["timestamp"])
+        parsed = _parse_iso_timestamp(data["timestamp"])
     except ValueError:
         _reject(f"unparseable timestamp {data['timestamp']!r}")
     if parsed.tzinfo is None:
@@ -171,6 +182,8 @@ def validate_signal_dict(data: typing.Mapping[str, typing.Any]) -> CognitiveSign
     payload = data.get("payload")
     if not isinstance(payload, dict):
         _reject("field 'payload' must be a dict")
+    if not all(isinstance(k, str) for k in payload):
+        _reject("field 'payload' keys must all be strings")
     for optional_str in ("producer_version", "parent_signal_id"):
         value = data.get(optional_str)
         if value is not None and not isinstance(value, str):
@@ -233,10 +246,11 @@ class CognitiveSignalSink:
         """Workspace-scoped sink; MANGO_SIGNAL_DIR overrides (operator trust)."""
         env = os.environ if environ is None else environ
         override = env.get(SIGNAL_DIR_ENV)
-        if override:
-            base = Path(override).resolve()
-        else:
-            base = (Path(workspace_dir) / DEFAULT_SIGNAL_SUBDIR).resolve()
+        base = (
+            Path(override).resolve()
+            if override
+            else (Path(workspace_dir) / DEFAULT_SIGNAL_SUBDIR).resolve()
+        )
         return cls(base, **kwargs)
 
     @property
@@ -249,18 +263,32 @@ class CognitiveSignalSink:
         Every rejection path raises ``SignalValidationError`` so callers have
         one exception type to contain: a payload carrying a non-JSON-serializable
         value is a malformed signal, not a caller bug, and must not leak a raw
-        ``TypeError`` from the serializer (R-MMI-2).
+        ``TypeError``/``ValueError``/``RecursionError`` from the serializer
+        (R-MMI-2). ``ensure_ascii=True`` is deliberate, not the json.dumps
+        default: it guarantees the line contains no character a Unicode-aware
+        line splitter (e.g. ``str.splitlines()``) would treat as a break — a
+        payload holding U+2028/U+2029/U+0085 would otherwise split into
+        multiple "lines" for exactly the readers docs/specs and the
+        shadow-channel-analysis skill describe — and it sidesteps
+        ``UnicodeEncodeError`` on a lone surrogate entirely, since the
+        serializer never needs to UTF-8-encode it directly.
         """
-        validate_signal_dict(signal.to_dict())
+        as_dict = signal.to_dict()
+        validate_signal_dict(as_dict)
         try:
-            line = json.dumps(signal.to_dict(), allow_nan=False, ensure_ascii=False)
-        except (TypeError, ValueError) as exc:
+            line = json.dumps(as_dict, allow_nan=False, ensure_ascii=True)
+        except (TypeError, ValueError, RecursionError) as exc:
             _reject(f"payload is not JSON-serializable: {exc}")
         encoded = line.encode("utf-8")
         if len(encoded) > MAX_SIGNAL_BYTES:
             _reject(f"serialized signal is {len(encoded)} bytes; limit {MAX_SIGNAL_BYTES}")
 
-        self._base_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._base_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # Covers FileExistsError (base_dir itself is a file) and
+            # NotADirectoryError (a parent segment is a file) alike.
+            _reject(f"cannot create sink directory {self._base_dir}: {exc}")
         target = self.path
         with file_lock(target, timeout_s=self._lock_timeout_s, poll_s=self._lock_poll_s):
             # Sink-level ceiling: the file is append-only and operator-pruned,
@@ -272,7 +300,7 @@ class CognitiveSignalSink:
                     f"sink {target} would exceed {self._max_sink_bytes} bytes "
                     f"(currently {current}); export and prune before continuing"
                 )
-            with open(target, "a", encoding="utf-8", newline="") as fh:
+            with target.open("a", encoding="utf-8", newline="") as fh:
                 fh.write(line + "\n")
         logger.info("cognitive_signal: appended %s signal %s", signal.signal_type, signal.signal_id)
         logger.debug(

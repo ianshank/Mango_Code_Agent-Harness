@@ -202,7 +202,7 @@ class MangoMASOrchestrator:
 
         active_tools = tools if tools is not None else NEMOTRON_TOOLS
 
-        for i in range(self.max_iterations):
+        for _iteration in range(self.max_iterations):
             try:
                 kwargs: dict[str, typing.Any] = {
                     "messages": messages,
@@ -258,7 +258,7 @@ class MangoMASOrchestrator:
 
                     dump_file = dump_dir / f"debug_{agent_name}_{int(time.time() * 1000)}.json"
 
-                    with open(dump_file, "w") as f:
+                    with dump_file.open("w") as f:
                         json.dump(redacted_history, f, indent=2)
 
                 self._run_hook(f"post-{agent_name}-run", status="success")
@@ -328,7 +328,10 @@ class MangoMASOrchestrator:
                     )
                 )
             except Exception:
-                logger.exception("Shadow planner failed; incumbent plan is unaffected")
+                logger.exception(
+                    "Orchestrator-level guard caught a shadow planner failure "
+                    "the channel itself did not contain; incumbent plan is unaffected"
+                )
 
         # 2. Reasoner (Code Generation / Fixes using Tools)
         reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
