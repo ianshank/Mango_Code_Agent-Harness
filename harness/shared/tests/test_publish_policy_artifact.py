@@ -316,3 +316,29 @@ def test_real_repo_build_check_round_trip(project_root: Path, tmp_path: Path) ->
     from harness.shared.shadow_planner import _policy_identity
 
     assert artifact["policy_version"] == _policy_identity(project_root)[1]
+
+
+# ---------------------------------------------------------------------------
+# Drift gate: the committed artifact must match the working tree
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.governance
+def test_committed_artifact_matches_working_tree(project_root: Path) -> None:
+    """Drift gate for the authoritative policy files.
+
+    `make digest-regen` pins the per-stack mirrors, but nothing gated drift on
+    `harness/shared/governance-policy.json` / `agent-policy.json` themselves.
+    Editing either without regenerating this artifact fails here — which puts
+    the gate inside `make ci` through the existing pytest stage, with no
+    protected-path change.
+
+    Regenerate with:
+        python harness/control-plane/publish_policy_artifact.py \
+            build --output harness/control-plane/policy-artifact.json
+    """
+    committed = project_root / "harness" / "control-plane" / "policy-artifact.json"
+    assert committed.is_file(), f"missing committed policy artifact: {committed}"
+    artifact = json.loads(committed.read_text(encoding="utf-8"))
+    ppa.check_artifact(project_root, artifact)  # SystemExit(DENY) on any drift
+    assert artifact["policy_version"] == ppa.build_artifact(project_root)["policy_version"]

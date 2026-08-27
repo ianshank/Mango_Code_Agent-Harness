@@ -1,0 +1,15 @@
+{
+  "$comment": "Claude Code project settings. Registers the SessionStart dependency-install hook only. The agent/tool-guard hooks declared in .mango/settings.json are NOT mirrored here: waking them would change tool-call behavior for every session and is a decision for a human, in its own reviewed change.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
