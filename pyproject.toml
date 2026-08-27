@@ -19,7 +19,7 @@ markers = [
 addopts = "--strict-markers -v --tb=short"
 
 [tool.coverage.run]
-source = ["harness/shared", "harness/api_server"]
+source = ["harness/shared", "harness/api_server", "harness/control-plane"]
 omit = [
     "harness/shared/tests/*",
     "harness/api_server/tests/*",

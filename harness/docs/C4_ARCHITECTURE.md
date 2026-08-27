@@ -1,8 +1,8 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.6 (2026 Standards)  
-**Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.0
+**Version:** 2.1.8 (2026 Standards)  
+**Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.1 (INV-1..INV-16)
 
 ---
 
@@ -69,21 +69,37 @@ graph TD
         subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter]
             Orchestrator[mango_mas_orchestrator.py<br/>MAS Orchestrator]
-            MetaTools[meta_tools.py<br/>Meta-Learning Tools]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock]
+            subgraph "Cognitive Boundary — INV-16 (one-directional)"
+                Signal[cognitive_signal.py<br/>CognitiveSignal envelope + JSONL sink]
+                Shadow[shadow_planner.py<br/>Shadow-mode comparison channel<br/>MANGO_SHADOW_PLANNER, off by default]
+                Shadow -->|emits, zero tool authority| Signal
+            end
             subgraph "governance/"
                 GovGuards[pretooluse_guard.py<br/>Policy Guards]
                 Validators["Governance Validators<br/>traceability, zero-skips, remotes"]
+                Evidence[evidence_manifest.py<br/>EvidenceBuilder — HMAC attestation]
             end
             RootValidators["Root Validators<br/>policy, adoption, agent-policy"]
+            Orchestrator -.->|guarded, observation-only| Shadow
+        end
+
+        subgraph "Control Plane - harness/control-plane"
+            Publisher[publish_policy_artifact.py<br/>Versioned, digest-pinned policy artifact]
+            Artifact[(policy-artifact.json<br/>committed, drift-gated)]
+            Verifier[verify_repository.py<br/>External root-of-trust verifier]
+            Publisher -->|attest, optional| Evidence
+            Publisher --> Artifact
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>149 Tests / 81.42% Coverage"]
+            AQA["Pytest AQA Suite<br/>490+ Tests / >=90% Coverage (per policy)"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators
             RunpyExec -->|executes in-process| PyBridge
             RunpyExec -->|executes in-process| GovGuards
+            AQA -->|drift gate| Artifact
         end
     end
 
@@ -153,8 +169,41 @@ flowchart TD
     Secrets --> ZeroSkip[INV-2: Zero-Skip Test Verification]
     ZeroSkip --> Remotes[INV-3: Canonical Remote URL Normalizer & Allowlist]
     Remotes --> Hooks[INV-4: Non-Destructive Effective Git Hook Installer]
-    Hooks --> SpecTrace[Traceability: 15 Bidirectional Requirements]
+    Hooks --> SpecTrace[Traceability: Bidirectional Requirements]
     SpecTrace --> Policy[INV-6: External Root of Trust Digest Verification]
-    Policy --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
-    Delegation --> Pass[PR Approved for Merge]
+    Policy --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
+    ArtifactDrift --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
+    Delegation --> Boundary["INV-16: Cognitive/Execution Boundary<br/>(no CognitiveSignal field reaches a control path)"]
+    Boundary --> Pass[PR Approved for Merge]
 ```
+
+### 4.2 Cognitive/Execution Boundary (INV-16)
+
+The shadow planner channel is one-directional and off by default. It is
+included at Level 4, not Level 2/3, because its defining property is a
+constraint on data flow rather than a runtime container: no field of a
+`CognitiveSignal` may reach a control path, select a tool, or alter tool
+exposure, and observation-mode code never receives the live orchestrator.
+
+```mermaid
+flowchart LR
+    subgraph "Incumbent path (always runs)"
+        Planner[planner role] --> Plan[incumbent plan]
+        Plan --> Reasoner[nemotron-reasoner]
+        Reasoner --> Verifier[verifier]
+    end
+
+    subgraph "Shadow channel (MANGO_SHADOW_PLANNER=1 only)"
+        Plan -.->|value object, zero tool authority| ShadowCall[shadow_planner.run_shadow_comparison]
+        ShadowCall -->|tools=[], bounded timeout| ShadowModel[shadow model call]
+        ShadowModel --> Signals[(cognitive-signals.jsonl<br/>.mango/memory/signals, gitignored)]
+        ShadowCall -.->|never raises; caller swallows and logs| Verifier
+    end
+
+    Signals -.->|read-only, offline| Analysis["shadow-channel-analysis skill<br/>(UC-4 kill-criteria reporting)"]
+```
+
+Enforced by `pytest -m governance` (byte-identity when disabled,
+zero-authority, envelope invariance, containment) and the static boundary
+scan in `test_shadow_planner.py`. See `docs/specs/mangomas-integration-core.md`
+and `.mango/skills/boundary-invariant-review/SKILL.md`.

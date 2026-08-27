@@ -1,11 +1,67 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.6  
+**Version:** 2.1.8  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
+
+Delivers the boundary machinery from `docs/research/mangomas-v2-integration-use-cases.md`
+(UC-1 + UC-4), spec-first at `docs/specs/mangomas-integration-core.md`. Peer-reviewed
+(Architect/QA-SQE/SDLC+Product) before implementation and re-audited for hygiene/wiring
+after. Framed explicitly as channel infrastructure validated with a same-model producer —
+no UC-4 experiment evidence is claimed by this milestone.
+
+- [x] `harness/shared/cognitive_signal.py` — versioned, fail-closed `CognitiveSignal`
+      envelope; workspace-scoped locked JSONL sink with per-signal and whole-sink byte
+      ceilings; `confidence` is untrusted metadata, never a control input (INV-16).
+- [x] `harness/shared/shadow_planner.py` + a guarded orchestrator hook — observation-only
+      shadow plan comparison behind `MANGO_SHADOW_PLANNER=1`; zero tool authority; bounded
+      timeout; disabled behavior byte-identical to baseline (proven by test, not asserted).
+- [x] `harness/control-plane/publish_policy_artifact.py` — versioned, digest-pinned policy
+      artifact with fail-closed `check` and HMAC attestation whose signature transitively
+      covers the artifact core; committed `policy-artifact.json` closes a real drift gap
+      (`make digest-regen` only pinned the per-stack mirrors, never the authoritative
+      `governance-policy.json`/`agent-policy.json`).
+- [x] Two new skills: `boundary-invariant-review` (reviews whether a diff gives a
+      cognitive-plane field authority) and `shadow-channel-analysis` (freezes the UC-4
+      analysis method before any producer exists).
+- [x] `.claude/` SessionStart hook installs pinned dev dependencies on remote sessions.
+- [x] INV-16 (one-directional cognitive/execution boundary) added to `harness/CONTRACT.md`.
+- [x] Hardening from a post-implementation gap analysis: the lock retry loop is bounded by
+      a poll budget independent of clock behavior (a clock-source mutation previously hung
+      the suite instead of failing it); sink rejections are uniformly `SignalValidationError`
+      instead of leaking a raw `TypeError` on unserializable payloads.
+- [x] Second-pass adversarial review: fixed a BLOCKER (`publish_policy_artifact.check_artifact`
+      never verified its file manifest actually covered the governed policy files — a
+      narrowed manifest defeated the drift gate entirely), a cross-Python-version timestamp
+      acceptance gap (`Z`-suffix ISO timestamps parse on 3.11+ but not 3.10, and CI runs
+      both), a silent-channel-death bug (`policy_id: ""` discarded every signal in a run),
+      and hardened the shadow channel against hostile provider responses and a data-integrity
+      gap in payload key handling. Full findings in `CHANGELOG.md` [2.1.8].
+- [x] `.gitignore` — `.governance/vitest-results.json`/`.governance/coverage/` were anchored
+      to a nonexistent repo-root `.governance/` (same class of bug as the `protected_paths`
+      finding below) and never actually matched `harness/node/.governance/`; surfaced by
+      running the Node suite and checking `git status`. Fixed to `**/.governance/...`.
+- [x] Findings recorded for follow-up, not silently patched (each requires a protected-path
+      change and `infra-reviewed`): 5 of 6 `.mango/hooks/` scripts never fire because
+      `.mango/settings.json` isn't the file Claude Code reads; `protected_paths` pattern
+      `.governance/**` matches no real directory (`fnmatch` full-string anchoring); the
+      `specs` CI-required target has no `make ci` stage; `R-MMI-*` requirement IDs aren't
+      covered by `check_traceability` (its globs are scoped to `harness/node/`);
+      `harness/control-plane` is in `pyproject.toml`'s coverage `source` but not yet
+      measured by `make coverage-python` (the Makefile's explicit `--cov=` flags take
+      precedence over the static config) — needs `--cov=harness/control-plane` added to
+      the protected `Makefile` line; `publish_policy_artifact.py` itself is independently
+      confirmed clean under `mypy --strict`, so this is purely a wiring gap, not a quality
+      one; the Dockerfile `COPY .mango/ /app/.mango/` appears to copy nothing, since
+      `.dockerignore` excludes the entire `.mango/` tree from the build context — flagged,
+      not fixed: no Docker daemon was available in this session to verify with a real build,
+      and the runtime image never installs Python regardless, so `harness/shared`/
+      `harness/control-plane` cannot execute in it today irrespective of this bug.
 
 ### ✅ v2.1.6 — Live Smoke Test Resilience & Native Agent Skill Binding
 
