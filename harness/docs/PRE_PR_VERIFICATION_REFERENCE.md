@@ -1,4 +1,4 @@
-# Pre-PR & AQA Verification Reference Guide (v2.1.6)
+# Pre-PR & AQA Verification Reference Guide (v2.1.9)
 
 This document provides a reference architecture and checklist for developer and agent verification prior to opening Pull Requests on the Agentic SSD Harness platform.
 
@@ -6,15 +6,35 @@ This document provides a reference architecture and checklist for developer and 
 
 ## 1. Governance & Security Invariants
 
+`harness/CONTRACT.md` is the authoritative definition of every invariant; this
+table is a verification index onto it. Where the two disagree, the contract wins
+— and the numbering below was previously wrong for INV-5 and INV-7, which is the
+kind of drift a table like this creates if it is treated as a second source of
+truth rather than an index.
+
 | Invariant | Name | Description | Verification Command |
 | :--- | :--- | :--- | :--- |
-| **INV-1** | Secret Sanitization | All logs, exceptions, and traces must redact API tokens. | `pytest -k test_secret` / `vitest run tests/ai/security` |
-| **INV-2** | Zero Unapproved Skips | No tests may be skipped without an unexpired waiver in `skip-waivers.json`. | `python harness/shared/governance/verify_zero_skips.py` |
-| **INV-3** | Remote Allowlist | Only whitelisted remotes in `allowed-remotes.txt` are push targets. | `python harness/shared/governance/remotes.py` |
-| **INV-4** | Non-Destructive Hooks | Git hooks must verify environments non-destructively. | `python harness/shared/validate_adoption.py` |
-| **INV-5** | Size Budget | All code files must remain under 500 lines. | `python harness/shared/validate_invariants.py` |
-| **INV-6** | Root of Trust | Governance policy files must match cryptographic digest anchors. | `python harness/shared/validate_policy.py` |
-| **INV-7** | Traceability | All requirements must be bidirectionally linked. | `python harness/shared/governance/check_traceability.py` |
+| **INV-1** | Secret Sanitization | Secret scan covers working tree and full history, failing closed when tooling is absent. | `make secrets-install && make secrets` (also a dedicated CI job) |
+| **INV-2** | Zero Unapproved Skips | Skipped tests are failures without a live, decision-backed exemption. | `make verify-zero-skips` |
+| **INV-3** | Remote Allowlist | One shared remote URL normalizer gates every push target. | `make remotes` |
+| **INV-4** | Non-Destructive Hooks | Git hooks install into Git's effective hooks path and never silently overwrite. | `python harness/shared/validate_adoption.py` |
+| **INV-5** | CI Gate Coverage | CI invokes every policy-required gate by Make target; meta-tests detect omissions. | `pytest harness/shared/tests/test_ci_gate_coverage.py` |
+| **INV-6** | Root of Trust | The repository is not its own root of trust; policy digests are anchored externally. | `python harness/shared/validate_policy.py` |
+| **INV-7** | Bounded Delegation | Agent delegation transfers no authority; every side effect carries actor/trace/policy evidence. | `pytest -m governance` |
+| **INV-8** | Approved Execution Broker | Generated code executes only through the approved broker. | `pytest harness/shared/tests/test_governance_broker.py` |
+| **INV-9** | Deterministic Verdict | A candidate receives a deterministic policy verdict before execution or scoring. | `pytest harness/shared/tests/test_governance_broker.py` |
+| **INV-10** | Terminal DENY | A DENY verdict is terminal; no model may override it. | `pytest harness/shared/tests/test_governance_broker.py` |
+| **INV-11** | Critique Evidence | Every repair attempt carries a normalized critique and immutable evidence ID. | `pytest harness/shared/tests/test_evidence_manifest.py` |
+| **INV-12** | Bounded Repair | Repair loops stop at budget and produce FAILED or BLOCKED, never synthetic success. | `pytest -m neurosym` |
+| **INV-13** | Verified Digests | A "verified" result includes policy, test, sandbox, source, and tool-version digests. | `pytest harness/shared/tests/test_evidence_manifest.py` |
+| **INV-14** | Redacted Export | Exportable traces are redacted and approved before dataset export. | `pytest -k redact` |
+| **INV-15** | LATS Disabled | LATS stays disabled until its cost-adjusted threshold is met. | `pytest -m neurosym` |
+| **INV-16** | Cognitive Boundary | No `CognitiveSignal` field reaches a control path, selects a tool/model, or alters tool exposure. | `pytest -m governance` + static scan in `test_shadow_planner.py` |
+
+Two invariants enforced by `validate_invariants.py` sit outside this numbering
+and are checked on every `make validate`: the per-file **size budget**
+(`limits.size_budget_lines`, not a hard-coded 500) and the **protected-path**
+gate, whose patterns are proven live by `test_protected_path_liveness.py`.
 
 ---
 
@@ -34,10 +54,12 @@ This document provides a reference architecture and checklist for developer and 
 ### Coverage Thresholds
 
 - **Python (Pytest):** threshold is read dynamically from `harness/shared/governance-policy.json`
-  (`coverage.lines`, currently **90%**) into `Makefile`'s `COV_MIN`, so the gate and the policy
-  cannot silently drift; enforced as `--cov-fail-under=$(COV_MIN)` and aggregate-only (per-file
-  is a documented follow-up — `harness/CONTRACT.md`). Never hard-code this percentage elsewhere;
-  read it from the policy file.
+  (`coverage.lines`) into `Makefile`'s `COV_MIN`, so the gate and the policy cannot silently
+  drift; enforced as `--cov-fail-under=$(COV_MIN)` and aggregate-only (per-file is a documented
+  follow-up — `harness/CONTRACT.md`). Never restate the number here or anywhere else: quoting it
+  recreates the drift the dynamic lookup exists to prevent. Measured roots are `harness/shared`,
+  `harness/api_server` and `harness/control-plane`; `test_ci_gate_coverage.py` fails if a root
+  declared in `pyproject.toml` is not actually passed to the gate.
 - **Node (Vitest):** >= 90% lines, 90% statements, 80% branches, 90% functions enforced per file.
 - **Policy artifact drift** (`harness/control-plane/policy-artifact.json`): not a coverage metric,
   but gated the same way — `test_committed_artifact_matches_working_tree` fails the pytest stage
@@ -61,9 +83,19 @@ pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=.gover
 cd ../..
 python -m ruff check harness/shared/ harness/shared/tests/ harness/api_server/
 python -m mypy harness/shared harness/api_server --explicit-package-bases
-python -m pytest harness/shared/tests/ harness/api_server/tests/ -m "not live" --cov=harness/shared --cov=harness/api_server --cov-fail-under=80
+python -m pytest harness/shared/tests/ harness/api_server/tests/ -m "not live" \
+  --cov=harness/shared --cov=harness/api_server --cov=harness/control-plane \
+  --cov-fail-under="$(python -c "import json;print(json.load(open('harness/shared/governance-policy.json'))['coverage']['lines'])")"
 
-# 3. Governance Invariant Validators
+# 3. Spec, Remote Allowlist & Secret Scan Gates
+make specs      # bash validate_specs.sh — `bash` is required: the script is mode 644
+make remotes    # every configured push URL against the governance allowlist
+# `secrets` is intentionally NOT part of `make ci`: the scan is interpreter-independent,
+# so the root workflow runs it once in a dedicated job rather than on all four matrix
+# legs. Run it locally when you have the pinned tool:
+make secrets-install && make secrets
+
+# 4. Governance Invariant Validators
 python harness/shared/governance/verify_zero_skips.py --vitest-json harness/node/.governance/vitest-results.json --decision-log harness/node/.governance/decision-log.md --waivers harness/node/.governance/skip-waivers.json
 python -c "import subprocess, sys; scripts = ['validate_governance_docs.py', 'validate_policy.py', 'validate_adoption.py', 'validate_agent_policy.py', 'check_projections.py', 'governance/check_traceability.py', 'validate_invariants.py']; [subprocess.check_call([sys.executable, f'../shared/{s}'], cwd='harness/node') for s in scripts]"
 ```

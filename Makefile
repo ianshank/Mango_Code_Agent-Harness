@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.7 — Root Makefile
+# Agentic SSD v2.1.9 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -10,6 +10,9 @@ PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 PM       ?= pnpm
+GITLEAKS ?= gitleaks
+# Pinned to match the per-stack adopter workflows; bump both together.
+GITLEAKS_VERSION ?= v8.28.0
 # Coverage threshold is sourced from the governance policy (single source of truth)
 # so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
 COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
@@ -76,6 +79,27 @@ validate: ## Run all governance validation scripts
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
 
+# --- Secret Scan Gate (INV-1) ---
+# Kept out of `ci` deliberately: the scan is interpreter-independent, so running it
+# on every leg of the Python matrix would repeat identical work. The root workflow
+# invokes it once in a dedicated job. INV-1 requires failing closed when the tool
+# or config is absent, so neither is treated as "nothing to scan".
+.PHONY: secrets
+secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if gitleaks is absent)
+	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
+	@test -f .gitleaks.toml || { echo '.gitleaks.toml missing; failing closed'; exit 1; }
+	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
+	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner
+
+.PHONY: secrets-install
+secrets-install: ## Install the pinned gitleaks used by the secrets gate
+	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
+
+# --- Remote Allowlist Gate ---
+.PHONY: remotes
+remotes: ## Verify every configured Git push URL against the governance allowlist
+	$(PYTHON) $(SHARED_SRC)/remotes.py --check-current-remotes --allowlist $(NODE_DIR)/.governance/allowed-remotes.txt
+
 # --- Spec Gate ---
 # Invoked via `bash`: validate_specs.sh is mode 644, so a bare ./ invocation is a
 # guaranteed "Permission denied". Both per-stack Makefiles already call it this way.
@@ -115,7 +139,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips specs validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → validate → drift-check → digest-regen
+ci: lint coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)

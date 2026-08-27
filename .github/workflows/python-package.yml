@@ -85,3 +85,26 @@ jobs:
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci
+
+  # INV-1 (secret scan over working tree AND full history) had no live enforcement:
+  # the gitleaks steps live in harness/{node,jvm}/.github/workflows/ci.yml, which are
+  # adopter templates GitHub never runs — it only reads workflows from the repository
+  # root. This job is the enforcement. It is separate from `build` because the scan is
+  # interpreter-independent; running it inside the matrix would repeat identical work
+  # four times.
+  secrets:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: INV-1 requires scanning past commits, not just the tree.
+          fetch-depth: 0
+
+      - name: Install pinned gitleaks
+        # Version is pinned in the Makefile so the local and CI gates cannot drift.
+        run: make secrets-install
+
+      - name: Run secret scan gate (make secrets)
+        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets

@@ -56,6 +56,54 @@ were recorded rather than patched in 2.1.8.
   0% as an artifact. `regenerate_bundle_digests.py` is deliberately kept
   measured: it *is* importable, so its 0% is a real gap. Total: 95.69% → 92.97%.
 
+### Security — INV-1 had no live enforcement
+
+- **The secret scan never ran in CI.** The gitleaks steps live in
+  `harness/{node,jvm}/.github/workflows/ci.yml`, which are **adopter templates
+  GitHub never executes** — it reads workflows only from the repository-root
+  `.github/workflows/`, which contained no secret scan at all. INV-1 ("secret scan
+  covers working tree and full history and fails closed when tooling is absent")
+  was therefore unenforced on every commit in this repository's history.
+- Added a root `secrets` target mirroring the per-stack shape (fails closed when
+  gitleaks or its config is absent, scans both the working tree and full history)
+  plus `secrets-install` pinning the same gitleaks version, and a dedicated
+  `secret-scan` CI job that runs it once with `fetch-depth: 0`. It is a separate
+  job rather than a `make ci` stage because the scan is interpreter-independent;
+  inside the matrix it would repeat identical work on all four Python legs.
+- Verified by running the pinned scanner: clean on the working tree (98.7 MB) and
+  across all 73 commits of history. No allowlist changes were needed.
+
+### Changed — CI gate coverage (INV-5)
+
+- **`make remotes`** now exists and runs in `make ci`. The remote-allowlist gate
+  (INV-3) had a shared implementation and a per-stack target, but no root wiring.
+- `test_ci_gate_coverage.py` enforces INV-5 directly: every `ci_required_targets`
+  entry must map to a root Make target that CI actually invokes — reachable from
+  `make ci`, or run by a root workflow job — or be declared in `KNOWN_GAPS` with a
+  reason. `audit` (osv-scanner) is the one declared gap. The suite resolves Make
+  prerequisites transitively and expands Make variables, so a mapping that points
+  at an unreachable or renamed target fails rather than reading as covered. It
+  also fails if a coverage source root declared in `pyproject.toml` is not passed
+  to the gate — the exact configured-but-unmeasured state `harness/control-plane`
+  was in. Verified against 12 mutants, all killed.
+
+### Fixed — documentation that contradicted the contract
+
+- `PRE_PR_VERIFICATION_REFERENCE.md` **misnumbered two invariants**: it labelled
+  INV-5 "Size Budget" and INV-7 "Traceability", while `harness/CONTRACT.md`
+  defines INV-5 as CI gate coverage and INV-7 as bounded delegation. The table now
+  covers all sixteen invariants, is explicitly an index onto the contract rather
+  than a second source of truth, and every command in it was executed to confirm
+  it resolves to real tests.
+- Removed two hard-coded coverage thresholds that contradicted policy: the
+  reference guide's `--cov-fail-under=80` and `.mango/agents/verifier.md`'s
+  "coverage % (must be >= 80%)", against a policy value of 90. Both now read the
+  threshold from `governance-policy.json`, as `COV_MIN` already did.
+- README, C4 architecture, and the reference guide carried stale versions and test
+  counts (2.1.7/2.1.8, "575+ tests", "490 Python", "486+ Tests"). Now 2.1.9 with
+  measured counts, and the C4 gate diagram includes the spec, remote,
+  protected-path, and CI-gate-coverage gates. Diagram re-validated as Mermaid.
+
 ### Testing
 
 - `test_protected_path_liveness.py` replaces a tautological test that asserted

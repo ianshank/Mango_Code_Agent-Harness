@@ -43,10 +43,29 @@ round-trip.
       real daemon — `COPY .mango/` fails with `"/.mango": not found`, while a
       `COPY harness/` control build succeeds. Also fixed two `.dockerignore`
       rules with the same anchoring bug, A/B tested by exporting the context.
+- [x] **INV-1 had no live enforcement.** The gitleaks steps live in
+      `harness/{node,jvm}/.github/workflows/ci.yml`, which are adopter templates
+      GitHub never executes — it reads workflows only from the repository-root
+      `.github/workflows/`. Added a root `secrets` gate (fails closed on missing
+      tooling; scans working tree *and* full history) and a dedicated `secret-scan`
+      CI job with `fetch-depth: 0`. Verified clean across all 73 commits.
+- [x] **`make remotes` wired** — INV-3 had a shared implementation and a per-stack
+      target but no root wiring.
+- [x] **INV-5 is now enforced by `test_ci_gate_coverage.py`**: every
+      `ci_required_targets` entry must map to a root target CI actually invokes, or
+      be a declared gap with a reason. `audit` (osv-scanner) is the single declared
+      gap. 12/12 mutants killed.
+- [x] Documentation corrected where it contradicted the contract: the pre-PR
+      reference misnumbered INV-5 and INV-7, and two hard-coded 80% coverage
+      thresholds contradicted the policy value of 90.
 - [x] Remaining open, and **the highest-value item on this list**: `main` has no
       branch ruleset — CI is not a required check, and 0 of 8 PRs were approved
-      before merge. Until a ruleset requires the four `build (3.x)` legs, every
-      gate above is advisory. This is a repository-settings change, not code.
+      before merge. Until a ruleset requires the four `build (3.x)` legs plus
+      `secret-scan`, every gate above is advisory. A repository-settings change,
+      not code.
+- [ ] **`audit` (dependency vulnerability scanning) is still unenforced at root.**
+      Declared in `KNOWN_GAPS`; wiring osv-scanner adds a toolchain dependency and
+      can turn CI red on a pre-existing advisory, so it needs its own change.
 
 ### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
 

@@ -1,7 +1,7 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.8 (2026 Standards)  
+**Version:** 2.1.9 (2026 Standards)  
 **Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.1 (INV-1..INV-16)
 
 ---
@@ -93,7 +93,7 @@ graph TD
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>490+ Tests / >=90% Coverage (per policy)"]
+            AQA["Pytest AQA Suite<br/>567 tests / coverage gate per policy"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators
@@ -167,11 +167,14 @@ graph TD
 flowchart TD
     Commit[Pre-PR Git Commit] --> Secrets[INV-1: Full Working Tree & History Secret Scan]
     Secrets --> ZeroSkip[INV-2: Zero-Skip Test Verification]
-    ZeroSkip --> Remotes[INV-3: Canonical Remote URL Normalizer & Allowlist]
+    ZeroSkip --> Remotes["INV-3: Canonical Remote URL Normalizer & Allowlist<br/>(make remotes)"]
     Remotes --> Hooks[INV-4: Non-Destructive Effective Git Hook Installer]
-    Hooks --> SpecTrace[Traceability: Bidirectional Requirements]
+    Hooks --> GateCov["INV-5: CI Gate Coverage<br/>(every ci_required_target reachable from make ci,<br/>or a declared gap — test_ci_gate_coverage.py)"]
+    GateCov --> SpecGate["Spec Gate<br/>(make specs → bash validate_specs.sh)"]
+    SpecGate --> SpecTrace[Traceability: Bidirectional Requirements]
     SpecTrace --> Policy[INV-6: External Root of Trust Digest Verification]
-    Policy --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
+    Policy --> Protected["Protected-Path Gate<br/>(fail-closed unless ALLOW_GITHUB_CHANGES;<br/>patterns proven live by test_protected_path_liveness.py)"]
+    Protected --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
     ArtifactDrift --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
     Delegation --> Boundary["INV-16: Cognitive/Execution Boundary<br/>(no CognitiveSignal field reaches a control path)"]
     Boundary --> Pass[PR Approved for Merge]
