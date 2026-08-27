@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness/shared/schemas/cognitive-signal.schema.json",
+  "title": "Cognitive Signal Envelope v1",
+  "description": "One cognitive-plane observation crossing the MangoMas/harness boundary. Identity and telemetry metadata only: no field grants, transfers, or modifies authority (C-MMI-2). Documentation artifact; the enforced validator is harness/shared/cognitive_signal.py:validate_signal_dict.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "signal_id",
+    "run_id",
+    "task_id",
+    "producer_id",
+    "signal_type",
+    "payload",
+    "policy_id",
+    "policy_version",
+    "timestamp"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Exact-pin envelope version; any shape change is a breaking change."
+    },
+    "signal_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id of this signal (uuid4)."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Shared id joining all signals of one comparison run."
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic digest of the originating task text."
+    },
+    "producer_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Role-shaped identity of the producing component (e.g. planner.shadow). Identity only; carries no permissions."
+    },
+    "signal_type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_-]*$",
+      "description": "Namespaced signal kind (e.g. plan.incumbent, plan.shadow)."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Producer-defined content. Shadow plan payloads carry plan_sha256, elapsed_ms, and the provider usage object (R-MMI-6)."
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "policy_id of the governance policy in effect."
+    },
+    "policy_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Content digest (sha256 prefix) of governance-policy.json — not its schema_version."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timezone-aware ISO-8601 UTC creation time."
+    },
+    "producer_version": {
+      "type": ["string", "null"],
+      "description": "Artifact version or content digest of the producing component; the MangoMas digest for shadow producers."
+    },
+    "parent_signal_id": {
+      "type": ["string", "null"],
+      "description": "Lineage: signal_id of the signal this one responds to."
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "References to evidence artifacts backing this signal."
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "UNTRUSTED metadata (C-MMI-1): recorded verbatim for offline analysis; never a gate or control input."
+    }
+  },
+  "additionalProperties": false
+}

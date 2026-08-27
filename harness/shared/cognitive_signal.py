@@ -1,0 +1,253 @@
+"""Versioned CognitiveSignal envelope and JSONL sink.
+
+Requirement Citations (docs/specs/mangomas-integration-core.md):
+- R-MMI-1: immutable versioned envelope for cognitive-plane output
+- R-MMI-2: fail-closed validation with logged rejections
+- R-MMI-3: strict single-line JSONL persistence under a file lock
+- R-MMI-4: workspace-scoped sink with MANGO_SIGNAL_DIR override
+- C-MMI-1: `confidence` is untrusted metadata and never a control input
+- C-MMI-2: producer identity fields carry no authority semantics
+
+The frozen dataclass constructor is the deterministic escape hatch for tests
+(pin `signal_id`/`timestamp` literals directly); do not monkeypatch module
+globals to fake time or uuids.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import logging
+import math
+import os
+import re
+import typing
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+from harness.shared.meta_tools import DEFAULT_LOCK_POLL_S, DEFAULT_LOCK_TIMEOUT_S, file_lock
+
+logger = logging.getLogger(__name__)
+
+# Exact-pin versioning: any change to the envelope shape is a breaking change
+# and requires a new accepted version (see spec Open questions).
+ACCEPTED_SCHEMA_VERSION = "1.0.0"
+SIGNAL_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$")
+# Ceiling for one serialized signal line; oversized payloads are rejected, not
+# truncated, so the sink can never be used to exhaust disk silently (R-MMI-3).
+MAX_SIGNAL_BYTES = 262_144
+
+SIGNAL_DIR_ENV = "MANGO_SIGNAL_DIR"
+DEFAULT_SIGNAL_SUBDIR = Path(".mango") / "memory" / "signals"
+SIGNAL_FILE_NAME = "cognitive-signals.jsonl"
+
+_REQUIRED_STR_FIELDS = (
+    "schema_version",
+    "signal_id",
+    "run_id",
+    "task_id",
+    "producer_id",
+    "signal_type",
+    "policy_id",
+    "policy_version",
+    "timestamp",
+)
+
+
+class SignalValidationError(ValueError):
+    """Raised when a signal fails fail-closed validation (R-MMI-2)."""
+
+
+@dataclasses.dataclass(frozen=True)
+class CognitiveSignal:
+    """One cognitive-plane observation. Identity metadata only — no field on
+    this envelope grants, transfers, or modifies any authority (C-MMI-2)."""
+
+    schema_version: str
+    signal_id: str
+    run_id: str
+    task_id: str
+    producer_id: str
+    signal_type: str
+    payload: dict
+    policy_id: str
+    policy_version: str
+    timestamp: str
+    producer_version: str | None = None
+    parent_signal_id: str | None = None
+    evidence_refs: tuple[str, ...] = ()
+    # Untrusted metadata (C-MMI-1): recorded verbatim for offline analysis,
+    # never read by any control path in this repository.
+    confidence: float | None = None
+
+    def to_dict(self) -> dict[str, typing.Any]:
+        return {
+            "schema_version": self.schema_version,
+            "signal_id": self.signal_id,
+            "run_id": self.run_id,
+            "task_id": self.task_id,
+            "producer_id": self.producer_id,
+            "signal_type": self.signal_type,
+            "payload": self.payload,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "timestamp": self.timestamp,
+            "producer_version": self.producer_version,
+            "parent_signal_id": self.parent_signal_id,
+            "evidence_refs": list(self.evidence_refs),
+            "confidence": self.confidence,
+        }
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        run_id: str,
+        task_id: str,
+        producer_id: str,
+        signal_type: str,
+        payload: dict,
+        policy_id: str,
+        policy_version: str,
+        producer_version: str | None = None,
+        parent_signal_id: str | None = None,
+        evidence_refs: typing.Sequence[str] = (),
+        confidence: float | None = None,
+    ) -> CognitiveSignal:
+        """Factory stamping a fresh uuid4 id and a tz-aware UTC timestamp."""
+        return cls(
+            schema_version=ACCEPTED_SCHEMA_VERSION,
+            signal_id=str(uuid.uuid4()),
+            run_id=run_id,
+            task_id=task_id,
+            producer_id=producer_id,
+            signal_type=signal_type,
+            payload=payload,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            producer_version=producer_version,
+            parent_signal_id=parent_signal_id,
+            evidence_refs=tuple(evidence_refs),
+            confidence=confidence,
+        )
+
+
+def _reject(reason: str) -> typing.NoReturn:
+    logger.warning("cognitive_signal: rejected signal: %s", reason)
+    raise SignalValidationError(reason)
+
+
+def validate_signal_dict(data: typing.Mapping[str, typing.Any]) -> CognitiveSignal:
+    """Fail-closed validation of a signal mapping (R-MMI-2).
+
+    Accepts `evidence_refs` as a list or tuple of strings (JSON round-trips
+    tuples as lists) and coerces to a tuple. Never coerces anything else.
+    """
+    if not isinstance(data, typing.Mapping):
+        _reject(f"signal must be a mapping, got {type(data).__name__}")
+    for field in _REQUIRED_STR_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value:
+            _reject(f"field '{field}' must be a non-empty string")
+    if data["schema_version"] != ACCEPTED_SCHEMA_VERSION:
+        _reject(
+            f"unsupported schema_version {data['schema_version']!r}; "
+            f"accepted: {ACCEPTED_SCHEMA_VERSION}"
+        )
+    if not SIGNAL_TYPE_PATTERN.match(data["signal_type"]):
+        _reject(f"malformed signal_type {data['signal_type']!r}")
+    try:
+        parsed = datetime.fromisoformat(data["timestamp"])
+    except ValueError:
+        _reject(f"unparseable timestamp {data['timestamp']!r}")
+    if parsed.tzinfo is None:
+        _reject(f"timezone-naive timestamp {data['timestamp']!r}")
+    payload = data.get("payload")
+    if not isinstance(payload, dict):
+        _reject("field 'payload' must be a dict")
+    for optional_str in ("producer_version", "parent_signal_id"):
+        value = data.get(optional_str)
+        if value is not None and not isinstance(value, str):
+            _reject(f"field '{optional_str}' must be a string or null")
+    refs = data.get("evidence_refs", ())
+    if not isinstance(refs, (list, tuple)) or not all(isinstance(r, str) for r in refs):
+        _reject("field 'evidence_refs' must be a list of strings")
+    confidence = data.get("confidence")
+    if confidence is not None:
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            _reject("field 'confidence' must be a number or null")
+        if math.isnan(float(confidence)) or not 0.0 <= float(confidence) <= 1.0:
+            _reject(f"field 'confidence' out of range [0, 1]: {confidence!r}")
+        confidence = float(confidence)
+    unknown = set(data) - {f.name for f in dataclasses.fields(CognitiveSignal)}
+    if unknown:
+        _reject(f"unknown fields: {sorted(unknown)}")
+    return CognitiveSignal(
+        schema_version=data["schema_version"],
+        signal_id=data["signal_id"],
+        run_id=data["run_id"],
+        task_id=data["task_id"],
+        producer_id=data["producer_id"],
+        signal_type=data["signal_type"],
+        payload=payload,
+        policy_id=data["policy_id"],
+        policy_version=data["policy_version"],
+        timestamp=data["timestamp"],
+        producer_version=data.get("producer_version"),
+        parent_signal_id=data.get("parent_signal_id"),
+        evidence_refs=tuple(refs),
+        confidence=confidence,
+    )
+
+
+class CognitiveSignalSink:
+    """Append-only JSONL sink for validated signals (R-MMI-3, R-MMI-4)."""
+
+    def __init__(
+        self,
+        base_dir: Path,
+        file_name: str = SIGNAL_FILE_NAME,
+        lock_timeout_s: float = DEFAULT_LOCK_TIMEOUT_S,
+        lock_poll_s: float = DEFAULT_LOCK_POLL_S,
+    ) -> None:
+        self._base_dir = base_dir
+        self._file_name = file_name
+        self._lock_timeout_s = lock_timeout_s
+        self._lock_poll_s = lock_poll_s
+
+    @classmethod
+    def for_workspace(
+        cls,
+        workspace_dir: Path,
+        environ: typing.Mapping[str, str] | None = None,
+        **kwargs: typing.Any,
+    ) -> CognitiveSignalSink:
+        """Workspace-scoped sink; MANGO_SIGNAL_DIR overrides (operator trust)."""
+        env = os.environ if environ is None else environ
+        override = env.get(SIGNAL_DIR_ENV)
+        if override:
+            base = Path(override).resolve()
+        else:
+            base = (Path(workspace_dir) / DEFAULT_SIGNAL_SUBDIR).resolve()
+        return cls(base, **kwargs)
+
+    @property
+    def path(self) -> Path:
+        return self._base_dir / self._file_name
+
+    def append(self, signal: CognitiveSignal) -> Path:
+        """Validate and append one signal as a single strict-JSON line."""
+        validate_signal_dict(signal.to_dict())
+        line = json.dumps(signal.to_dict(), allow_nan=False, ensure_ascii=False)
+        encoded = line.encode("utf-8")
+        if len(encoded) > MAX_SIGNAL_BYTES:
+            _reject(f"serialized signal is {len(encoded)} bytes; limit {MAX_SIGNAL_BYTES}")
+        self._base_dir.mkdir(parents=True, exist_ok=True)
+        target = self.path
+        with file_lock(target, timeout_s=self._lock_timeout_s, poll_s=self._lock_poll_s):
+            with open(target, "a", encoding="utf-8", newline="") as fh:
+                fh.write(line + "\n")
+        logger.info("cognitive_signal: appended %s signal %s", signal.signal_type, signal.signal_id)
+        return target
