@@ -442,5 +442,5 @@ def test_committed_artifact_matches_working_tree(project_root: Path) -> None:
     committed = project_root / "harness" / "control-plane" / "policy-artifact.json"
     assert committed.is_file(), f"missing committed policy artifact: {committed}"
     artifact = json.loads(committed.read_text(encoding="utf-8"))
-    ppa.check_artifact(project_root, artifact)  # SystemExit(DENY) on any drift
+    ppa.check_artifact(project_root, artifact)  # PolicyArtifactError(DENY) on any drift
     assert artifact["policy_version"] == ppa.build_artifact(project_root)["policy_version"]

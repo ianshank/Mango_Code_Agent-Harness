@@ -178,6 +178,12 @@ Recorded for follow-up; none block this implementation.
   the channel ever becomes multi-writer.
 - `MANGO_SIGNAL_DIR` may point outside the workspace by operator choice; this
   is trusted-operator surface, same class as the existing debug env vars.
-- The publisher is intentionally outside the mypy target set and the coverage
-  denominator (`harness/control-plane` is not in the coverage source list);
-  its correctness is held by its own test module.
+- The publisher is intentionally outside the mypy target set. It is listed in
+  `pyproject.toml`'s `[tool.coverage.run] source`, but `make coverage-python`
+  does not yet measure it: the `Makefile`'s explicit `--cov=harness/shared
+  --cov=harness/api_server` flags take precedence over that static config for
+  that invocation. Actually gating on it needs `--cov=harness/control-plane`
+  added to that protected `Makefile` line (see `NEXT_STEPS_PLAN_v2.md` Phase
+  6.5). `publish_policy_artifact.py` is independently confirmed clean under
+  `mypy --strict`; its correctness is held by its own test module in the
+  meantime.
