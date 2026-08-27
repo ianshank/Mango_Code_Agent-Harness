@@ -7,9 +7,18 @@ on:
   push:
     branches: ["main"]
   pull_request:
+    # `labeled` is load-bearing, not noise: ALLOW_GITHUB_CHANGES is derived from
+    # the `infra-reviewed` label below, and the default types
+    # [opened, synchronize, reopened] do not include it. Without this, applying
+    # the label cannot re-run CI -- "Re-run all jobs" replays the original,
+    # unlabelled event payload -- so a protected-path PR could only be unblocked
+    # by pushing another commit or closing and reopening it.
+    types: [opened, synchronize, reopened, labeled]
     # Stacked/phase branches must also be gated, otherwise a PR targeting an
-    # integration branch merges without ever running `make ci`.
-    branches: ["main", "chore/**", "phase*/**", "feature/**"]
+    # integration branch merges without ever running `make ci`. `claude/**` is
+    # the agent branch namespace and was missing here: a PR stacked onto one got
+    # zero check runs, which is the exact hole this list exists to close.
+    branches: ["main", "chore/**", "claude/**", "phase*/**", "feature/**"]
 
 permissions:
   contents: read
