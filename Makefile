@@ -47,8 +47,8 @@ test-python: ## Run full pytest suite (excludes live tests)
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
 
 .PHONY: coverage-python
-coverage-python: ## Run pytest with coverage gate (default: 80%)
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov-report=term-missing --cov-fail-under=$(COV_MIN)
+coverage-python: ## Run pytest with the coverage gate (threshold from governance-policy.json)
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-fail-under=$(COV_MIN)
 
 # --- Node Testing & Zero-Skip Verification ---
 .PHONY: test-node
@@ -75,6 +75,13 @@ validate: ## Run all governance validation scripts
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
+
+# --- Spec Gate ---
+# Invoked via `bash`: validate_specs.sh is mode 644, so a bare ./ invocation is a
+# guaranteed "Permission denied". Both per-stack Makefiles already call it this way.
+.PHONY: specs
+specs: ## Validate spec documents (structural tier always; openspec strict tier when available)
+	bash $(SHARED_SRC)/validate_specs.sh
 
 # --- Drift Detection ---
 .PHONY: check-dedup
@@ -108,7 +115,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check → digest-regen
+ci: lint coverage test-node verify-zero-skips specs validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → validate → drift-check → digest-regen
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)

@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.9] - 2026-08-27
+
+Governance follow-ups from the 2.1.8 review passes. Each needed a protected-path
+change and therefore the `infra-reviewed` human attestation, which is why they
+were recorded rather than patched in 2.1.8.
+
+### Security
+
+- **`protected_paths` patterns that matched zero files are now live.** Four
+  patterns (`.governance/**`, `agents/**`, `docs/PROJECT-CHARTER.md`,
+  `.github/CODEOWNERS`) were left in a single-stack frame by the layout
+  migration in `1eb2f7f`, which migrated only the `scripts/*` entries. Because
+  `fnmatch` is whole-string anchored, they matched nothing and the gate reported
+  PASS *because nothing matched* — an agent could add itself a test skip-waiver,
+  widen the git push allowlist, or edit the external root of trust unreviewed.
+  Patterns are added, never replaced: the originals cover a single-stack adopter
+  layout and the `**/` twins cover this repo's multi-stack one.
+- **The agent control surface is now gated**: `CLAUDE.md`, `harness/CONTRACT.md`,
+  `.mango/skills/**`, `agent-policy.json`, the `.claude/` and `.mango/` hook and
+  settings files that execute shell, `pyproject.toml` (where lint, type and
+  coverage gates can be silently weakened), and the policy publisher plus its
+  committed drift baseline. Protected files: 37 → 104.
+- Recorded as DEC-002 with the workflow cost measured rather than estimated:
+  ~32% of historical commits would newly require the label. DEC-003 records that
+  the five unbound `.mango/hooks/` scripts stay dormant.
+
+### Fixed
+
+- **The container image could never have built.** `.dockerignore` excludes the
+  whole `.mango/` tree, so `COPY .mango/ /app/.mango/` had no source to resolve
+  — reproduced against a real daemon as `"/.mango": not found`, with a
+  `COPY harness/` control build succeeding to isolate the cause. Dead since the
+  v2.1.1 `.claude/` → `.mango/` rename; no `docker build` runs anywhere to have
+  caught it. The runtime stage now sources `/app/harness` from `build` rather
+  than the context, which keeps that stage in the graph — BuildKit skips
+  unreferenced stages, which would have silently dropped its `tsc --noEmit`.
+- `.dockerignore`'s `.governance/vitest-results.json` and `.governance/coverage/`
+  had the same anchoring bug as the `.gitignore` entries fixed in 2.1.8 and
+  excluded nothing; verified by exporting the build context before and after.
+
+### Changed
+
+- **The `specs` gate now runs in `make ci`.** It was listed in
+  `ci_required_targets` but had no CI stage; both meta-tests asserting "CI
+  invokes every required target" read the per-stack `ci.yml`, never the root
+  workflow. Invoked as `bash harness/shared/validate_specs.sh` because that file
+  is mode 644 — a bare `./` invocation would have been a guaranteed red CI.
+- **`harness/control-plane` is now measured by the coverage gate**, making
+  `publish_policy_artifact.py` (158 statements, 78%) governed. Three CLIs are
+  omitted because they run `argparse` at module scope with required arguments
+  and have no `__main__` guard, so they cannot be imported in-process and read
+  0% as an artifact. `regenerate_bundle_digests.py` is deliberately kept
+  measured: it *is* importable, so its 0% is a real gap. Total: 95.69% → 92.97%.
+
+### Testing
+
+- `test_protected_path_liveness.py` replaces a tautological test that asserted
+  only that a pattern *string* appeared in the policy — which passes whether or
+  not the pattern protects anything, and is how the dead patterns survived. The
+  new suite asserts on the set of tracked files each pattern actually matches,
+  requires intentionally-dead patterns to be declared with a reason, and checks
+  that every discovered surface (workflows, hooks, `.governance/`, agent
+  contracts, skills, charters, validators) is covered in full. Verified against
+  14 mutants, all killed; one narrowing mutant survived the first draft and
+  exposed a genuine gap, which is what added the charter and validator checks.
+- `validate_invariants.is_protected` is extracted so the suite measures the real
+  matcher instead of a reimplementation that could drift from it.
+
 ## [2.1.8] - 2026-08-27
 
 ### Fixed (post-implementation adversarial review, second pass)

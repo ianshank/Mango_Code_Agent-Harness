@@ -1,11 +1,52 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.8  
+**Version:** 2.1.9  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.1.9 — Governance Follow-Ups (protected-path frame, CI wiring, Docker)
+
+Lands the findings v2.1.8 recorded rather than patched, each of which needed a
+protected-path change and therefore the `infra-reviewed` human attestation.
+Shipped as three PRs so the label-free Docker fix did not wait behind a label
+round-trip.
+
+- [x] **`protected_paths` patterns that matched zero files are now live.** Root
+      cause was an incomplete layout migration in `1eb2f7f`, which converted only
+      the `scripts/*` entries by replacement and left `.governance/**`,
+      `agents/**`, `docs/PROJECT-CHARTER.md` and `.github/CODEOWNERS` in the
+      single-stack frame. `fnmatch` is whole-string anchored, so they matched
+      nothing and the gate reported PASS *because nothing matched*.
+- [x] **The agent control surface is gated** — `CLAUDE.md`, `harness/CONTRACT.md`,
+      `.mango/skills/**`, `agent-policy.json`, the `.claude/`/`.mango/` hook and
+      settings files, `pyproject.toml`, and the policy publisher plus its
+      committed drift baseline. Protected files: 37 → 104. DEC-002 records the
+      measured workflow cost (~32% of historical commits); DEC-003 records that
+      the five unbound `.mango/hooks/` scripts stay dormant.
+- [x] **`test_protected_path_liveness.py`** replaces the tautology that let the
+      dead patterns through (`assertIn(pattern_string, policy_list)` passes
+      whether or not the pattern protects anything). Asserts on matched file
+      sets; 14/14 mutants killed, including narrowings that keep the pattern list
+      looking plausible. `validate_invariants.is_protected` extracted so the
+      suite measures the real matcher.
+- [x] **`specs` wired into `make ci`** as `bash harness/shared/validate_specs.sh`
+      — the file is mode 644, so a bare `./` invocation would have been red CI.
+- [x] **`harness/control-plane` measured by the coverage gate** (95.69% → 92.97%),
+      making `publish_policy_artifact.py` governed. Three module-scope-argparse
+      CLIs omitted as measurement artifacts; `regenerate_bundle_digests.py` kept
+      measured because its 0% is a real gap.
+- [x] **The Dockerfile bug is confirmed and fixed, not just flagged.** v2.1.8
+      could not verify it (no daemon); this milestone reproduced it against a
+      real daemon — `COPY .mango/` fails with `"/.mango": not found`, while a
+      `COPY harness/` control build succeeds. Also fixed two `.dockerignore`
+      rules with the same anchoring bug, A/B tested by exporting the context.
+- [x] Remaining open, and **the highest-value item on this list**: `main` has no
+      branch ruleset — CI is not a required check, and 0 of 8 PRs were approved
+      before merge. Until a ruleset requires the four `build (3.x)` legs, every
+      gate above is advisory. This is a repository-settings change, not code.
 
 ### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
 
