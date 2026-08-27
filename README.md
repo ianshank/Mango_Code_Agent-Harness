@@ -118,8 +118,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 
 **Required environment variable:**
 
-| Variable | Purpose |
-|----------|---------|
+| Variable             | Purpose                                                                         |
+|----------------------|---------------------------------------------------------------------------------|
 | `AGENT_EVIDENCE_KEY` | HMAC signing key for `EvidenceBuilder`. Never hard-code. Set in secret store. |
 
 ---
@@ -240,7 +240,7 @@ Use the unified root `Makefile` to enforce enterprise quality gates locally prio
 
 ```bash
 make lint            # Static analysis, formatting checks, strict typing, compat gate
-make coverage        # Enforce ≥90% total coverage (per-file enforced)
+make coverage        # Enforce ≥90% total coverage
 make test-node       # Execute TypeScript/Node engine tests
 make test-governance # Governance broker, evidence, invariant tests
 make validate        # All governance invariants (adoption, policy, remotes, traceability)

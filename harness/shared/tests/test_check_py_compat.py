@@ -235,3 +235,41 @@ def test_real_repository_is_compatible_with_its_declared_minimum():
     report = cc.run(root, min_version)
     assert report.ok, f"compatibility violations: {report.violations}"
     assert report.scanned > 0
+
+
+def test_parse_matrix_versions_import_error(monkeypatch: pytest.MonkeyPatch):
+    import builtins
+    real_import = builtins.__import__
+    def fake_import(name, *args, **kwargs):
+        if name == "yaml":
+            raise ImportError("no yaml")
+        return real_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert cc._parse_matrix_versions('        python-version: ["3.9"]\n') == [(3, 9)]
+
+def test_resolve_min_version_read_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        cc.resolve_min_version(repo)
+    assert "Could not read" in caplog.text
+
+def test_load_skip_dirs_json_error(repo: Path, caplog):
+    _write(repo, "harness/shared/governance-policy.json", "{ bad json")
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        cc.load_skip_dirs(repo)
+    assert "Could not read py_compat config" in caplog.text
+
+def test_run_read_file_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    _write(repo, "pkg/mod.py", "print(1)")
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        report = cc.run(repo, (3, 9))
+    assert "Skipping unreadable" in caplog.text
+    assert report.scanned == 0
+
+def test_main_block(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("sys.argv", ["check_py_compat.py", "--min-version", "3.12"])
+    with pytest.raises(SystemExit) as exc:
+        import runpy
+        runpy.run_path(str(cc.DEFAULT_REPO_ROOT / "harness" / "shared" / "check_py_compat.py"), run_name="__main__")
+    assert exc.value.code == 0

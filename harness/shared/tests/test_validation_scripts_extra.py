@@ -1,11 +1,13 @@
-import json
-import pytest
-from pathlib import Path
 import datetime as dt
+import json
+from pathlib import Path
+
+import pytest
 
 from harness.shared.validate_agent_policy import main as validate_agent_policy
-from harness.shared.validate_policy import main as validate_policy
 from harness.shared.validate_governance_docs import main as validate_governance_docs
+from harness.shared.validate_policy import main as validate_policy
+
 
 @pytest.fixture
 def temp_workspace(tmp_path: Path) -> Path:
@@ -15,7 +17,7 @@ def temp_workspace(tmp_path: Path) -> Path:
     docs.mkdir()
     agents = tmp_path / "agents"
     agents.mkdir()
-    
+
     # Valid agent-policy
     valid_agent = {
         "agents": [
@@ -38,7 +40,7 @@ def temp_workspace(tmp_path: Path) -> Path:
         }
     }
     (gov / "agent-policy.json").write_text(json.dumps(valid_agent))
-    
+
     # Valid policy
     valid_policy_doc = {
         "target_contract": "yes",
@@ -53,13 +55,13 @@ def temp_workspace(tmp_path: Path) -> Path:
         "external_root_of_trust_required": True
     }
     (gov / "policy.json").write_text(json.dumps(valid_policy_doc))
-    
+
     # Valid Docs
     (docs / "PROJECT-CHARTER.md").write_text("Charter v1")
     today = dt.date.today().isoformat()
     (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nxyz")
     (gov / "decision-log.md").write_text("2026-01-02 | xyz | reason")
-    
+
     return tmp_path
 
 # --- validate_agent_policy tests ---

@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 
+
 def main(policy_path: Path = Path(".governance/policy.json")) -> None:
     p = json.loads(policy_path.read_text())
     for k in (

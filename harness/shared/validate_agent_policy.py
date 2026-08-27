@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+
 def main(policy_path: Path = Path(".governance/agent-policy.json")) -> None:
     p = policy_path
     d = json.loads(p.read_text())
@@ -37,7 +38,8 @@ def main(policy_path: Path = Path(".governance/agent-policy.json")) -> None:
             raise SystemExit(f"agent-policy: {rid} approval action is not allowed to the role")
         unapproved = high.intersection(allowed) - set(approvals)
         if unapproved:
-            raise SystemExit(f"agent-policy: {rid} high-risk actions lack human approval: {', '.join(sorted(unapproved))}")
+            msg = f"agent-policy: {rid} high-risk actions lack human approval: {', '.join(sorted(unapproved))}"
+            raise SystemExit(msg)
     rules = d.get("rules", {})
     for key in (
         "self_modify_policy",

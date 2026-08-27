@@ -53,7 +53,7 @@ class EvidenceBuilder:
         Raises:
             ValueError: When no key is available from the constructor or env var.
         """
-        key_str = self.signing_key or os.environ.get(EVIDENCE_KEY_ENV, "")
+        key_str = self.signing_key or os.environ.get(EVIDENCE_KEY_ENV)
         if not key_str:
             raise ValueError(
                 f"No signing key available. Pass ``signing_key`` to the constructor "

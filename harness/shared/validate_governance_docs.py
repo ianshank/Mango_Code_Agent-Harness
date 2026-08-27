@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+
 def main(workspace: Path = Path(".")) -> None:
     p = json.loads((workspace / ".governance/policy.json").read_text())
     charter = workspace / "docs/PROJECT-CHARTER.md"
