@@ -343,3 +343,40 @@ class TestValidationEdges:
         data[field] = 42
         with pytest.raises(SignalValidationError, match=field):
             validate_signal_dict(data)
+
+
+@pytest.mark.governance
+class TestSinkLimits:
+    """Sink-level containment: unserializable payloads and file growth are both
+    rejected as SignalValidationError so a caller has one type to contain."""
+
+    def test_unserializable_payload_raises_signal_validation_error(self, tmp_path: Path) -> None:
+        sink = CognitiveSignalSink(tmp_path)
+        for value in (Path("/tmp"), {1, 2}, b"bytes", object()):
+            with pytest.raises(SignalValidationError, match="not JSON-serializable"):
+                sink.append(pinned_signal(payload={"v": value}))
+        assert not sink.path.exists()
+
+    def test_sink_size_ceiling_rejects_and_leaves_file_intact(self, tmp_path: Path) -> None:
+        from harness.shared.cognitive_signal import MAX_SINK_BYTES
+
+        # Budget derived from a real serialized line so the test does not depend
+        # on the envelope's byte size staying constant.
+        one_line = len(json.dumps(pinned_signal().to_dict(), ensure_ascii=False).encode()) + 1
+        sink = CognitiveSignalSink(tmp_path, max_sink_bytes=one_line * 3)
+        sink.append(pinned_signal(signal_id="first"))
+        first_size = sink.path.stat().st_size
+        with pytest.raises(SignalValidationError, match="would exceed"):
+            for i in range(50):
+                sink.append(pinned_signal(signal_id=f"fill-{i}"))
+        assert sink.path.stat().st_size >= first_size
+        # Every persisted line is still individually valid — no partial write.
+        for line in sink.path.read_text(encoding="utf-8").splitlines():
+            validate_signal_dict(json.loads(line))
+        assert MAX_SINK_BYTES > 0  # default ceiling is a positive budget
+
+    def test_default_ceiling_allows_normal_use(self, tmp_path: Path) -> None:
+        sink = CognitiveSignalSink(tmp_path)
+        for i in range(25):
+            sink.append(pinned_signal(signal_id=f"s{i}"))
+        assert len(sink.path.read_text(encoding="utf-8").splitlines()) == 25

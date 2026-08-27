@@ -37,6 +37,10 @@ SIGNAL_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$")
 # Ceiling for one serialized signal line; oversized payloads are rejected, not
 # truncated, so the sink can never be used to exhaust disk silently (R-MMI-3).
 MAX_SIGNAL_BYTES = 262_144
+# Ceiling for the whole append-only sink file. The sink is operator-pruned, so
+# a full sink refuses further writes instead of filling the disk; the shadow
+# channel contains the rejection, leaving the incumbent path unaffected.
+MAX_SINK_BYTES = 64 * 1024 * 1024
 
 SIGNAL_DIR_ENV = "MANGO_SIGNAL_DIR"
 DEFAULT_SIGNAL_SUBDIR = Path(".mango") / "memory" / "signals"
@@ -211,11 +215,13 @@ class CognitiveSignalSink:
         file_name: str = SIGNAL_FILE_NAME,
         lock_timeout_s: float = DEFAULT_LOCK_TIMEOUT_S,
         lock_poll_s: float = DEFAULT_LOCK_POLL_S,
+        max_sink_bytes: int = MAX_SINK_BYTES,
     ) -> None:
         self._base_dir = base_dir
         self._file_name = file_name
         self._lock_timeout_s = lock_timeout_s
         self._lock_poll_s = lock_poll_s
+        self._max_sink_bytes = max_sink_bytes
 
     @classmethod
     def for_workspace(
@@ -238,16 +244,41 @@ class CognitiveSignalSink:
         return self._base_dir / self._file_name
 
     def append(self, signal: CognitiveSignal) -> Path:
-        """Validate and append one signal as a single strict-JSON line."""
+        """Validate and append one signal as a single strict-JSON line.
+
+        Every rejection path raises ``SignalValidationError`` so callers have
+        one exception type to contain: a payload carrying a non-JSON-serializable
+        value is a malformed signal, not a caller bug, and must not leak a raw
+        ``TypeError`` from the serializer (R-MMI-2).
+        """
         validate_signal_dict(signal.to_dict())
-        line = json.dumps(signal.to_dict(), allow_nan=False, ensure_ascii=False)
+        try:
+            line = json.dumps(signal.to_dict(), allow_nan=False, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            _reject(f"payload is not JSON-serializable: {exc}")
         encoded = line.encode("utf-8")
         if len(encoded) > MAX_SIGNAL_BYTES:
             _reject(f"serialized signal is {len(encoded)} bytes; limit {MAX_SIGNAL_BYTES}")
+
         self._base_dir.mkdir(parents=True, exist_ok=True)
         target = self.path
         with file_lock(target, timeout_s=self._lock_timeout_s, poll_s=self._lock_poll_s):
+            # Sink-level ceiling: the file is append-only and operator-pruned,
+            # so refuse to grow it past the budget rather than filling the disk.
+            # Checked under the lock so concurrent writers see the same size.
+            current = target.stat().st_size if target.exists() else 0
+            if current + len(encoded) + 1 > self._max_sink_bytes:
+                _reject(
+                    f"sink {target} would exceed {self._max_sink_bytes} bytes "
+                    f"(currently {current}); export and prune before continuing"
+                )
             with open(target, "a", encoding="utf-8", newline="") as fh:
                 fh.write(line + "\n")
         logger.info("cognitive_signal: appended %s signal %s", signal.signal_type, signal.signal_id)
+        logger.debug(
+            "cognitive_signal: sink %s now %d bytes (limit %d)",
+            target,
+            current + len(encoded) + 1,
+            self._max_sink_bytes,
+        )
         return target
