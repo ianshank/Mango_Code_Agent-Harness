@@ -20,7 +20,7 @@
         "scripts/remotes.py": "347408d07460ff502febafd8f828ff844a7325b6c37b48e7cfa3b52a45adca0c",
         "scripts/pretooluse_guard.py": "2e269d28566b2ebaabade3d4cf584e8d4252e727edbb38f4025118aeaba26129",
         "scripts/pretooluse_guard.sh": "0986cb1eec994a1704772cc43f43b4d315370064ffa9e13ae5d0d1eb1cfaa34b",
-        "scripts/pre_push_scan.sh": "7d48c1bf405933374f2e383357432af04b33c5e33bac14bb79cb06f6b7558410",
+        "scripts/pre_push_scan.sh": "63009265b4fb4c48441642689ccb471f9f372d208276fa93c33c4e657a8d883f",
         "scripts/install_hooks.sh": "8ffd88340acd183e2d210c3772e6d227ab60ddf312d2a61a6a9cb7a63a76e1d0",
         "scripts/verify_zero_skips.py": "6f5ca41b2c95f185c59a77087815ab8abce7d64800a8da4cdb9b913defecfe18",
         "scripts/validate_specs.sh": "6447eb0f0e1bd5edea0d2a61cea5c0a46964f2a4e737ac97462058a6bb4bb9c6",
@@ -33,7 +33,7 @@
         "package.json": "6bc8965604ca929503d8e0db609c364a009a5696cd9941382011c26aca017cab",
         "tsconfig.json": "ed88b96aaf42c7f9552e4360216c1ef096f537ea6d38c5c8b7e8b12c0e2da742",
         "vitest.config.ts": "e559a2a84c1ad0a617c2ecdf1f7f9e0a97860e9f2ff7e76abb7fdc8ceb51a5fd",
-        "tests/governance/meta.test.ts": "b0fcbc55c932111baa47d773c9d3ecbb50eae10fc81b30c1efe03b4a705adc6c"
+        "tests/governance/meta.test.ts": "47e948abb93aa1d83b544095e2784e12701fe52c2d5d7bbb75beee9f93fbafde"
       }
     },
     "jvm": {
@@ -44,7 +44,7 @@
         "scripts/remotes.py": "347408d07460ff502febafd8f828ff844a7325b6c37b48e7cfa3b52a45adca0c",
         "scripts/pretooluse_guard.py": "2e269d28566b2ebaabade3d4cf584e8d4252e727edbb38f4025118aeaba26129",
         "scripts/pretooluse_guard.sh": "0986cb1eec994a1704772cc43f43b4d315370064ffa9e13ae5d0d1eb1cfaa34b",
-        "scripts/pre_push_scan.sh": "7d48c1bf405933374f2e383357432af04b33c5e33bac14bb79cb06f6b7558410",
+        "scripts/pre_push_scan.sh": "63009265b4fb4c48441642689ccb471f9f372d208276fa93c33c4e657a8d883f",
         "scripts/install_hooks.sh": "8ffd88340acd183e2d210c3772e6d227ab60ddf312d2a61a6a9cb7a63a76e1d0",
         "scripts/verify_zero_skips.py": "6f5ca41b2c95f185c59a77087815ab8abce7d64800a8da4cdb9b913defecfe18",
         "scripts/validate_specs.sh": "6447eb0f0e1bd5edea0d2a61cea5c0a46964f2a4e737ac97462058a6bb4bb9c6",

@@ -21,10 +21,11 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
     // Isolate environment
     const originalEnv = process.env['NEMOTRON_DEFAULT_MODEL'];
     delete process.env['NEMOTRON_DEFAULT_MODEL'];
-    
-    
+
     // Change cwd to prevent reading the workspace .env
-    const spyCwd = vi.spyOn(process, 'cwd').mockReturnValue(fs.mkdtempSync('test-'));
+    const spyCwd = vi
+      .spyOn(process, 'cwd')
+      .mockReturnValue(fs.mkdtempSync('test-'));
 
     let client;
     try {

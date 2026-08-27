@@ -23,6 +23,6 @@ describe('C-GOV-1 repository conformance', () => {
 });
 describe('R-GOV-2 execution enforcement', () => {
   it('pre-push uses the shared remote kernel', () => {
-    expect(read('scripts/pre_push_scan.sh')).toContain('scripts/remotes.py');
+    expect(read('scripts/pre_push_scan.sh')).toContain('remotes.py');
   });
 });

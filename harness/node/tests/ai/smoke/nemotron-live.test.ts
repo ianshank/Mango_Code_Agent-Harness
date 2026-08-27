@@ -154,6 +154,7 @@ describe.skipIf(!IS_LIVE)(
       async () => {
         const fakeKey = 'nvapi-INVALID-fake-key-for-testing-1234567890abcdef';
         const client = new NemotronClient({
+          defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
           apiKey: fakeKey,
           maxRetries: 0,
           timeoutMs: 15_000,
