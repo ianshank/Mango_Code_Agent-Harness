@@ -118,5 +118,20 @@
   "py_compat": {
     "skip_dirs": [],
     "rationale": "Minimum runtime is derived from the CI python-version matrix; see harness/shared/check_py_compat.py"
+  },
+  "synthesis": {
+    "max_repair_cycles": 3,
+    "lats_enabled": false,
+    "lats_quality_threshold": 0.0,
+    "critique_schema_version": "1.0",
+    "seed_task_suite_version": "1.0",
+    "prohibited_imports": [
+      "os.system",
+      "subprocess",
+      "shutil.rmtree",
+      "importlib",
+      "__import__"
+    ],
+    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md §Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
   }
 }

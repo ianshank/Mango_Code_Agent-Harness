@@ -34,3 +34,11 @@ Thumbs.db
 **/.gradle/
 scratch/
 .benchmarks/
+
+# Editable install metadata (pip install -e .)
+*.egg-info/
+mango_code_agent_harness.egg-info/
+
+# Pytest / Hypothesis temp directories created during local runs
+harness/node/test-*/
+.hypothesis/

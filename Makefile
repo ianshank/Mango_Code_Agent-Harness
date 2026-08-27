@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.6 — Root Makefile
+# Agentic SSD v2.1.7 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -81,6 +81,24 @@ validate: ## Run all governance validation scripts
 check-dedup: ## Fail if any per-stack governance script is a copy instead of a shim delegating to harness/shared
 	$(PYTHON) $(SHARED_SRC)/check_dedup.py --repo-root .
 
+# --- Digest Regeneration ---
+.PHONY: digest-regen
+digest-regen: ## Regenerate protected-file digests in the control-plane policy bundle
+	$(PYTHON) harness/control-plane/regenerate_bundle_digests.py
+
+# --- Governance-specific test target ---
+.PHONY: test-governance
+test-governance: ## Run governance module tests in isolation (broker, evidence, invariants)
+	$(PYTEST) $(SHARED_TESTS)/test_governance_broker.py \
+	          $(SHARED_TESTS)/test_evidence_manifest.py \
+	          $(SHARED_TESTS)/test_validate_invariants.py \
+	          -m "not live" -v --tb=short
+
+# --- Neuro-symbolic synthesis test target ---
+.PHONY: test-neurosym
+test-neurosym: ## Run neurosym synthesis tests (strategies, critique, evaluation, execution profiles)
+	$(PYTEST) $(SHARED_TESTS)/ -m "neurosym and not live" -v --tb=short
+
 # --- Composite Targets ---
 .PHONY: test
 test: test-python test-node verify-zero-skips ## Run all Python and Node tests + zero-skips
@@ -89,7 +107,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips validate check-dedup ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check
+ci: lint coverage test-node verify-zero-skips validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check → digest-regen
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)

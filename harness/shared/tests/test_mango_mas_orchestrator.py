@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,10 @@ import pytest
 
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+
+# Bash hook tests require a POSIX shell; skip on Windows where `bash` cannot
+# interpret Windows absolute paths without WSL.
+_POSIX = sys.platform != "win32"
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -141,6 +146,9 @@ class TestRunHook:
         assert not (mock_workspace / ".mango" / "hooks" / "pre-nemotron-run.sh").exists()
 
     def test_hook_exists_and_runs(self, mock_workspace: Path) -> None:
+        pytest.importorskip("bash", reason="bash hook tests require POSIX platform")
+        if not _POSIX:
+            pytest.skip("bash hook tests require POSIX platform")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text('echo ran > hook_marker.txt\n', encoding="utf-8")
@@ -149,6 +157,8 @@ class TestRunHook:
         assert (mock_workspace / "hook_marker.txt").exists()
 
     def test_hook_raises_propagates(self, mock_workspace: Path) -> None:
+        if not _POSIX:
+            pytest.skip("bash hook tests require POSIX platform")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("exit 1\n", encoding="utf-8")
