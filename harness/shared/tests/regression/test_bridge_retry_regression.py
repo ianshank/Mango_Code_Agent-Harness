@@ -69,7 +69,7 @@ class TestRetryPredicate:
 
     def test_http_error_is_not_a_connection_error(self) -> None:
         """HTTPError subclasses URLError; status codes, not transport, decide."""
-        err = urllib.error.HTTPError("url", 500, "boom", _headers(), None)
+        err = urllib.error.HTTPError("url", 500, "boom", _headers(), io.BytesIO(b""))
         assert not is_retryable_connection_error(err)
 
     @patch("harness.shared.nemotron_bridge.time.sleep")
