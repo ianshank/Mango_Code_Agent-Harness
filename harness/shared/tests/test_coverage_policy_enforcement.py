@@ -1,13 +1,16 @@
 """Is every coverage threshold the policy declares actually enforced somewhere?
 
 `governance-policy.json` declares `lines`, `statements`, `functions`, `branches`
-and `per_file`. The Python gate applies only `lines`, and only in aggregate. The
-Node config applies all five — but `make test-node` runs `vitest run` **without
-`--coverage`**, so those thresholds never evaluate in root CI.
+and `per_file`. Since the gate-hardening change, the Python gate
+(coverage_gate.py) applies `lines` and `branches` in aggregate AND `lines` per
+file when `per_file` is true, and `make test-node` runs vitest **with
+`--coverage`**, so the Node thresholds (all five, sourced from this policy via
+vitest.config.ts) evaluate on every root CI run.
 
 A declared-but-unenforced threshold reads as governance in a CI report while
-guaranteeing nothing. This module makes each one either enforced or explicitly
-declared unenforced with a measured reason, so the gap cannot stay accidental.
+guaranteeing nothing. This module classifies every declared key as enforced
+(and by which stack) or explicitly unenforced with a measured reason, so a gap
+cannot stay accidental in either direction.
 """
 
 from __future__ import annotations
@@ -26,41 +29,36 @@ VITEST_CONFIG = REPO / "harness" / "node" / "vitest.config.ts"
 
 pytestmark = pytest.mark.governance
 
-# Thresholds the *Python* gate applies (coverage_gate.py, one floor per metric).
-PYTHON_ENFORCED = {"lines", "branches"}
+# Thresholds the *Python* gate applies (coverage_gate.py): lines and branches in
+# aggregate, plus the lines floor per file when policy per_file is true.
+PYTHON_ENFORCED = {"lines", "branches", "per_file"}
 
-# Declared thresholds with no enforcement in the root pipeline. Each needs a
-# measured reason: these are the numbers that turn CI red if enabled today, so a
-# future change can weigh the cost instead of rediscovering it.
-UNENFORCED_IN_ROOT_CI = {
-    "per_file": (
-        "The Python gate is aggregate-only (coverage_gate.py reads only the "
-        "totals block). Measured at the policy's lines=90, six measured files "
-        "fail per-file today: "
-        "pretooluse_guard.py (75%), remotes.py (75%), publish_policy_artifact.py "
-        "(77.85%), validate_adoption.py (85.71%), verify_zero_skips.py (87.5%), "
-        "governance/pretooluse_guard.py (87.58%). Aggregate headroom is ~60 "
-        "statements, so a new untested module can ship green. Tracked in "
-        "harness/CONTRACT.md as a documented follow-up."
-    ),
+# Thresholds the *Node* gate applies: vitest.config.ts sources all of them from
+# this policy, and `make test-node` runs vitest with --coverage, so they
+# evaluate on every root CI run (per-file included, via perFile).
+NODE_ENFORCED = {"lines", "statements", "branches", "functions", "per_file"}
+
+# Keys with no Python-side equivalent, with the measured reason that is not a
+# gap: enforcement exists on the Node side, and the Python side either measures
+# the same thing under another name or has no such metric.
+PYTHON_EQUIVALENT_NOTES = {
     "statements": (
-        "Python: coverage.py's statement and line counts are the same measure at "
-        "this granularity (totals carry num_statements/covered_lines), so the "
-        "lines floor already covers it. Node: enforced by vitest.config.ts, "
-        "which `make test-node` never activates because it runs without "
-        "--coverage."
+        "coverage.py's statement and line counts are the same measure at this "
+        "granularity (totals carry num_statements/covered_lines), so the Python "
+        "lines floor already enforces it; the distinct statements number is "
+        "enforced on the Node side by vitest --coverage."
     ),
     "functions": (
-        "No Python equivalent is applied. Node enforces it only under --coverage, "
-        "which root CI does not pass; measured, circuit-breaker.ts (85.71%) and "
-        "web/app.ts (58.33%) would fail."
+        "coverage.py does not produce a per-function metric in coverage.json, so "
+        "there is nothing for the Python gate to read; function coverage is "
+        "enforced on the Node side by vitest --coverage, where the metric exists."
     ),
 }
 
-# Node-side note for the enforced keys: `lines` and `branches` are enforced for
-# Python by coverage_gate.py; on the Node side vitest.config.ts declares both but
-# `make test-node` runs without --coverage, the declared follow-up. Recorded here
-# so moving a key to PYTHON_ENFORCED does not read as "enforced everywhere".
+# Declared thresholds with no enforcement anywhere in the root pipeline. Empty
+# since the gate-hardening change; the classification machinery stays so any
+# future declared-but-unwired key must land here with a measured reason.
+UNENFORCED_IN_ROOT_CI: dict[str, str] = {}
 
 
 @pytest.fixture(scope="module")
@@ -77,22 +75,37 @@ def makefile() -> str:
 class TestEveryDeclaredThresholdIsAccountedFor:
     def test_no_threshold_is_silently_unaccounted_for(self, policy):
         declared = set(policy["coverage"])
-        unaccounted = sorted(declared - PYTHON_ENFORCED - set(UNENFORCED_IN_ROOT_CI))
+        unaccounted = sorted(
+            declared - PYTHON_ENFORCED - NODE_ENFORCED - set(UNENFORCED_IN_ROOT_CI)
+        )
         assert not unaccounted, (
             f"coverage keys neither enforced nor declared unenforced: {unaccounted}. "
             "Enforce it, or add it to UNENFORCED_IN_ROOT_CI with a measured reason."
         )
+
+    def test_node_only_keys_carry_a_python_equivalence_note(self, policy):
+        """A key enforced only on the Node side needs the measured reason there is
+        no Python half — otherwise the asymmetry reads as an oversight. Loops
+        rather than parametrizes so an empty dict cannot become a skipped test."""
+        node_only = sorted((NODE_ENFORCED - PYTHON_ENFORCED) & set(policy["coverage"]))
+        assert node_only == sorted(PYTHON_EQUIVALENT_NOTES), (
+            "PYTHON_EQUIVALENT_NOTES must name exactly the Node-only enforced keys"
+        )
+        for key, reason in PYTHON_EQUIVALENT_NOTES.items():
+            assert len(reason.strip()) > 80, f"PYTHON_EQUIVALENT_NOTES[{key!r}] needs a real reason"
 
     def test_declared_gaps_still_exist_in_policy(self, policy):
         """A waiver must not outlive the threshold it excuses."""
         stale = sorted(set(UNENFORCED_IN_ROOT_CI) - set(policy["coverage"]))
         assert not stale, f"UNENFORCED_IN_ROOT_CI names thresholds the policy dropped: {stale}"
 
-    @pytest.mark.parametrize("key", sorted(UNENFORCED_IN_ROOT_CI))
-    def test_each_declared_gap_carries_a_substantive_reason(self, key):
-        assert len(UNENFORCED_IN_ROOT_CI[key].strip()) > 80, (
-            f"UNENFORCED_IN_ROOT_CI['{key}'] needs a measured reason, not a placeholder"
-        )
+    def test_each_declared_gap_carries_a_substantive_reason(self):
+        """Loops rather than parametrizes: the dict is empty today, and an empty
+        parametrize would register as a skipped test."""
+        for key in sorted(UNENFORCED_IN_ROOT_CI):
+            assert len(UNENFORCED_IN_ROOT_CI[key].strip()) > 80, (
+                f"UNENFORCED_IN_ROOT_CI['{key}'] needs a measured reason, not a placeholder"
+            )
 
     def test_enforced_and_unenforced_sets_are_disjoint(self):
         overlap = sorted(PYTHON_ENFORCED & set(UNENFORCED_IN_ROOT_CI))
@@ -200,6 +213,72 @@ class TestCoverageGateFailsClosed:
             "covered_branches": 81, "num_branches": 100,
         }}), encoding="utf-8")
         assert cg.main(["--coverage-json", str(report), "--policy", str(policy)]) == 0
+
+
+class TestPerFileEnforcement:
+    """coverage.per_file is now a live gate: one file below the lines floor must
+    turn the run red even when the aggregate is comfortably green."""
+
+    def _report(self, tmp_path, files):
+        totals = {
+            "covered_lines": sum(f[0] for f in files.values()),
+            "num_statements": sum(f[1] for f in files.values()),
+            "covered_branches": 90,
+            "num_branches": 100,
+        }
+        payload = {
+            "totals": totals,
+            "files": {
+                path: {"summary": {"covered_lines": cov, "num_statements": num}}
+                for path, (cov, num) in files.items()
+            },
+        }
+        report = tmp_path / "coverage.json"
+        report.write_text(json.dumps(payload), encoding="utf-8")
+        return report
+
+    def _policy(self, tmp_path, per_file=True):
+        policy = tmp_path / "policy.json"
+        policy.write_text(
+            json.dumps({"coverage": {"lines": 90, "branches": 80, "per_file": per_file}}),
+            encoding="utf-8",
+        )
+        return policy
+
+    def test_one_failing_file_fails_the_gate_despite_green_aggregate(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        report = self._report(tmp_path, {"big.py": (960, 1000), "thin.py": (10, 20)})
+        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path))]) == 1
+
+    def test_all_files_at_floor_pass(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        report = self._report(tmp_path, {"a.py": (95, 100), "b.py": (90, 100), "empty_init.py": (0, 0)})
+        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path))]) == 0
+
+    def test_missing_files_block_fails_closed_when_per_file_declared(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        report = tmp_path / "coverage.json"
+        report.write_text(
+            json.dumps({"totals": {
+                "covered_lines": 95, "num_statements": 100,
+                "covered_branches": 90, "num_branches": 100,
+            }}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit) as exc:
+            cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path))])
+        assert exc.value.code == 1
+
+    def test_per_file_false_keeps_aggregate_only_behavior(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        report = self._report(tmp_path, {"big.py": (960, 1000), "thin.py": (10, 20)})
+        assert cg.main(
+            ["--coverage-json", str(report), "--policy", str(self._policy(tmp_path, per_file=False))]
+        ) == 0
 
 
 class TestDedupBypassIsNotSilentlyOpen:

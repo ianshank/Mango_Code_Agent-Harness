@@ -33,23 +33,15 @@ omit = [
     "harness/shared/pre_push_scan.sh",
     "harness/shared/pretooluse_guard.sh",
     "harness/shared/run_vitest.sh",
-    "harness/shared/validate_specs.sh",
-    # These two run argparse at module scope with required arguments and have no
-    # `if __name__ == "__main__"` guard, so they cannot be imported in-process at all.
-    # They read 0% as a measurement artifact, not as a quality signal, and would drag
-    # the aggregate below the gate for a reason unrelated to test quality.
-    # build_policy_bundle.py and regenerate_bundle_digests.py are deliberately NOT
-    # omitted: both are __main__-guarded and loadable, so their gaps are real signal.
-    "harness/control-plane/tool_broker_reference.py",
-    "harness/control-plane/verify_repository.py"
+    "harness/shared/validate_specs.sh"
 ]
 
 [tool.coverage.report]
 # No `fail_under` here on purpose. It previously hard-coded 80 while
 # governance-policy.json declared 90, so any `pytest --cov` run that did not pass
-# the Makefile's explicit flag silently enforced the weaker number. The threshold
-# has one source: governance-policy.json -> coverage.lines, applied by the
-# Makefile as --cov-fail-under=$(COV_MIN). Use `make coverage-python`.
+# the gate silently enforced the weaker number. The thresholds have one source:
+# governance-policy.json -> coverage.{lines,branches,per_file}, applied by
+# harness/shared/coverage_gate.py. Use `make coverage-python`.
 show_missing = true
 
 [tool.ruff]
@@ -57,10 +49,14 @@ target-version = "py39"   # oldest supported runtime; keep in sync with the CI m
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+# B (bugbear) and G (logging format) joined the select set with the
+# gate-hardening change; S (bandit) is deliberately absent — the
+# subprocess-heavy gate scripts would need blanket waivers, which CLAUDE.md
+# forbids without decision-log entries.
+select = ["E", "F", "W", "I", "UP", "B", "G"]
 # Governance validator scripts, control-plane tools, and per-stack re-export shims are
 # intentionally compact CLI scripts; the shims must insert sys.path before importing.
-per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702", "E401", "E711"], "harness/node/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/jvm/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401", "E402"], "harness/shared/remotes.py" = ["E402", "E501"], "harness/shared/pretooluse_guard.py" = ["E402", "E501"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501", "E701", "E702", "E402"], "scratch/*.py" = ["E501", "E701", "E702", "E402"] }
+per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702", "E401", "E711"], "harness/node/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/jvm/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401", "E402"], "harness/shared/remotes.py" = ["E402", "E501"], "harness/shared/pretooluse_guard.py" = ["E402", "E501"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501", "E701", "E702", "E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["harness"]

@@ -105,14 +105,12 @@ round-trip.
       MUST can never pass the `[CR]-` requirement-ID regex — acceptance
       criteria must avoid the word or use `C-*` IDs. Both are gate-quality
       follow-ups, not urgent.
-- [ ] **3,526 lines of production TypeScript have no coverage floor.**
-      `make test-node` runs `vitest run` with **no `--coverage`**, so
-      `vitest.config.ts` — which correctly reads all five thresholds from the
-      policy and fails closed on a malformed one — is never invoked with coverage
-      on. This is the largest unmeasured surface in the repository, and closing it
-      would let three of the four entries in `UNENFORCED_IN_ROOT_CI` be deleted.
-      Deliberately a separate change: it is a protected one-line edit that will
-      turn CI red on six already-measured files, which needs its own review.
+- [x] **Node coverage floor enforced.** Delivered by the gate-hardening change
+      (docs/specs/gate-hardening.md): `make test-node` now runs vitest with
+      `--coverage`, activating the policy-sourced thresholds (perFile
+      included); the Python gate additionally enforces the lines floor per
+      file, and `UNENFORCED_IN_ROOT_CI` is empty. The coverage-lift PR made
+      the flip land green.
 - [x] **`harness/SHA256SUMS.txt` deleted.** It pinned 10 files at digests of
       which 9 no longer matched, listed 5 files in a directory that no longer
       exists, and had zero readers anywhere. The live equivalents are

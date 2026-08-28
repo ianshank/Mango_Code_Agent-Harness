@@ -50,7 +50,7 @@ def waivers(path: str, ids: set[str]) -> list[dict]:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception as e:
-        raise SystemExit(f"zero-skip: cannot read waiver registry: {e}")
+        raise SystemExit(f"zero-skip: cannot read waiver registry: {e}") from e
     out: list[dict] = []
     today = dt.date.today()
     for w in data.get("waivers", []):
@@ -68,7 +68,7 @@ def waivers(path: str, ids: set[str]) -> list[dict]:
         try:
             expires = dt.date.fromisoformat(w["expires"])
         except ValueError:
-            raise SystemExit(f"zero-skip: invalid expiry {w['expires']!r}")
+            raise SystemExit(f"zero-skip: invalid expiry {w['expires']!r}") from None
         if expires < today:
             label = w.get("file") or w.get("unique_id") or "<unknown>"
             raise SystemExit(f"zero-skip: expired waiver for {label}::{w.get('test', '')}")

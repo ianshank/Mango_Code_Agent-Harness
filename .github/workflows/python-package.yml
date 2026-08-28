@@ -24,6 +24,11 @@ permissions:
   contents: read
 
 jobs:
+  # The Node suite's outcome is Python-version-independent, so the full gate
+  # (make ci, including test-node + verify-zero-skips) runs on one primary leg
+  # and the remaining interpreters run the Python-scoped `make ci-python`.
+  # Previously every matrix leg installed pnpm/node_modules and ran the entire
+  # Vitest suite — four identical Node runs per PR for one signal.
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -31,7 +36,7 @@ jobs:
       matrix:
         # pyproject ruff target-version is py39 (oldest supported).
         # check_py_compat gate enforces no runtime-only 3.10+ constructs.
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.12"]
 
     steps:
       - name: Checkout
@@ -43,6 +48,40 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+
+      - name: Run Python CI gate (make ci-python)
+        # The protected-path invariant fails closed on infrastructure changes
+        # (Makefile, .github/**, .mango/agents/**, governance policy). A human
+        # applying the `infra-reviewed` label IS the per-change review
+        # attestation required by harness/CONTRACT.md; without the label the
+        # gate stays fail-closed. Never set this unconditionally.
+        env:
+          ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
+        run: make ci-python
+
+  build-full:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Primary leg: one modern interpreter runs the complete gate,
+          # including the Node stack. The compat gate plus the ci-python matrix
+          # covers the older interpreters.
+          python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
@@ -77,11 +116,7 @@ jobs:
         working-directory: harness/node
 
       - name: Run unified CI gate (make ci)
-        # The protected-path invariant fails closed on infrastructure changes
-        # (Makefile, .github/**, .mango/agents/**, governance policy). A human
-        # applying the `infra-reviewed` label IS the per-change review
-        # attestation required by harness/CONTRACT.md; without the label the
-        # gate stays fail-closed. Never set this unconditionally.
+        # Same label-derived attestation as the matrix job; see the note there.
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci

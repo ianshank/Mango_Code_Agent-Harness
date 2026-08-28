@@ -33,14 +33,19 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 # --- Linting & Static Analysis ---
+# harness/control-plane is hyphenated (not an importable package) but mypy
+# checks it fine as a directory of top-level modules; it is in the coverage
+# source set, so it must not be type-unchecked.
+MYPY_TARGETS := $(SHARED_SRC) harness/api_server harness/control-plane
+
 .PHONY: lint-python
 lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
 	$(RUFF) check .
-	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
+	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases
 
 .PHONY: lint-cold
 lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
-	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases --no-incremental
+	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases --no-incremental
 
 .PHONY: check-compat
 check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
@@ -65,8 +70,8 @@ coverage-python: ## Run pytest, then enforce lines and branches floors from gove
 
 # --- Node Testing & Zero-Skip Verification ---
 .PHONY: test-node
-test-node: ## Run Vitest test suite and generate test results JSON
-	(cd $(NODE_DIR) && $(PM) exec vitest run --reporter=default --reporter=json --outputFile.json=.governance/vitest-results.json)
+test-node: ## Run Vitest with coverage (thresholds from the governance policy via vitest.config.ts) and generate test results JSON
+	(cd $(NODE_DIR) && $(PM) exec vitest run --coverage --reporter=default --reporter=json --outputFile.json=.governance/vitest-results.json)
 
 .PHONY: verify-zero-skips
 verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
@@ -151,6 +156,13 @@ coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
 ci: lint coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+
+# The Node suite's result is Python-version-independent, so the CI matrix runs
+# the full `ci` on one leg only and this Python-scoped pipeline on the others.
+# Every gate stays enforced by Make target (INV-5); nothing is skipped, the
+# Node gates just run once per PR instead of once per interpreter.
+.PHONY: ci-python
+ci-python: lint coverage specs remotes validate check-dedup digest-regen ## Python-scoped CI pipeline for secondary matrix legs (Node gates run once, on the primary leg)
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)
