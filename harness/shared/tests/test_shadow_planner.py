@@ -411,6 +411,10 @@ class TestBoundaryStatic:
         )
         assert result.returncode == 0, result.stderr
         assert result.stdout == "", f"import printed to stdout: {result.stdout!r}"
+        # stderr too, as the name promises. A DeprecationWarning or a stray
+        # logging handler firing at import is the same defect wearing a
+        # different stream: it means module scope is doing work.
+        assert result.stderr == "", f"import wrote to stderr: {result.stderr!r}"
 
 
 # ---------------------------------------------------------------------------

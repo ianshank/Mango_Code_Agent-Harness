@@ -174,13 +174,21 @@ class TestDeclaredNotYetEnforced:
 
     @pytest.mark.parametrize("dotted", sorted(DECLARED_NOT_YET_ENFORCED))
     def test_declared_key_still_exists(self, dotted):
-        """A classification for a key the policy no longer has is dead weight."""
-        sentinel = object()
-        value = _lookup(_load(SHARED_POLICY), dotted)
-        # _lookup asserts its way down the path, but binding and checking the
-        # result is what makes this test's own success visible: a _lookup that
-        # silently started returning early would otherwise go unnoticed here.
-        assert value is not sentinel
+        """A classification for a key the policy no longer has is dead weight.
+
+        Asserted against the *parent* object rather than the looked-up value:
+        an earlier version bound `sentinel = object()` and checked
+        `value is not sentinel`, which cannot fail -- a unique object is
+        exactly what a lookup can never return. Membership in the parent is
+        the claim being made, and it fails when the key is gone.
+        """
+        policy = _load(SHARED_POLICY)
+        parent_path, _, leaf = dotted.rpartition(".")
+        parent = _lookup(policy, parent_path) if parent_path else policy
+        assert isinstance(parent, dict), f"policy path {parent_path!r} is not an object"
+        assert leaf in parent, (
+            f"DECLARED_NOT_YET_ENFORCED classifies {dotted!r}, which the policy no longer has"
+        )
 
     @pytest.mark.parametrize("dotted", sorted(DECLARED_NOT_YET_ENFORCED))
     def test_each_entry_has_a_substantive_reason(self, dotted):
