@@ -1,173 +1,253 @@
-"""Tests for harness/shared/governance/broker.py — ExecutionBroker."""
+"""Tests for harness/shared/governance/broker.py -- ExecutionBroker.
+
+Rewritten for the in-process decision point. The previous versions patched
+``broker.subprocess.run`` module-wide to stand in for the PDP child process; with
+a real execution engine behind the same attribute, those patches would have
+silently intercepted the *engine* instead, and the tests would have passed while
+testing nothing. Three of them also pinned behaviour that has since been
+identified as a fail-open and removed -- ``test_pdp_skipped_when_files_absent``
+asserted that a missing policy file skipped the verdict.
+
+Spec: ``docs/specs/agent-containment.md`` (R-AC-11, R-AC-12).
+"""
+
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import json
+import subprocess
+import typing
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from harness.shared.governance.broker import (
+    DEFAULT_MAX_OUTPUT_BYTES,
     ExecutionBroker,
     ExecutionResult,
+    ProcessBackend,
 )
 
+pytestmark = pytest.mark.governance
+
+IMPLEMENTER = {"agent_id": "implementer"}
+
+
+class RecordingBackend(ProcessBackend):
+    """A backend that records instead of spawning.
+
+    The single ``_spawn`` seam is what keeps every branch of the real backend
+    reachable without starting a process -- and what makes "did the broker
+    execute anything?" a direct assertion rather than an inference.
+    """
+
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        super().__init__()
+        self.calls: list[tuple[str, Path | None, int]] = []
+        self._returncode, self._stdout, self._stderr = returncode, stdout, stderr
+
+    def _spawn(self, command: str, cwd: Path | None, timeout: int) -> typing.Any:
+        self.calls.append((command, cwd, timeout))
+        return subprocess.CompletedProcess(
+            args=command, returncode=self._returncode, stdout=self._stdout, stderr=self._stderr
+        )
+
+
 # ---------------------------------------------------------------------------
-# verify_sandbox
+# verify_sandbox -- the default is now "probe", not "assume healthy"
 # ---------------------------------------------------------------------------
 
 
-def test_verify_sandbox_true_by_default() -> None:
-    broker = ExecutionBroker()
-    assert broker.verify_sandbox() is True
+def test_default_probes_the_backend_rather_than_assuming() -> None:
+    """`sandbox_available: bool = True` meant a caller that never probed was told
+    the sandbox was fine, so INV-9's branch was unreachable from the constructor
+    most callers would write."""
+    assert ExecutionBroker().verify_sandbox() is True  # a process backend is available
 
 
-def test_verify_sandbox_false_when_unavailable() -> None:
-    broker = ExecutionBroker(sandbox_available=False)
-    assert broker.verify_sandbox() is False
+def test_explicit_unavailable_is_honoured() -> None:
+    assert ExecutionBroker(sandbox_available=False).verify_sandbox() is False
+
+
+def test_a_probe_that_raises_reads_as_unavailable() -> None:
+    class Exploding(ProcessBackend):
+        def available(self) -> bool:
+            raise RuntimeError("probe failed")
+
+    assert ExecutionBroker(backend=Exploding()).verify_sandbox() is False
 
 
 # ---------------------------------------------------------------------------
-# INV-9: sandbox unavailable → BLOCKED (no host fallback)
+# INV-9: backend unavailable -> BLOCKED, never host fallback
 # ---------------------------------------------------------------------------
 
 
-def test_sandbox_unavailable_returns_blocked() -> None:
-    broker = ExecutionBroker(sandbox_available=False)
-    result = broker.execute_command("git push origin main")
+def test_unavailable_backend_returns_blocked() -> None:
+    result = ExecutionBroker(sandbox_available=False).execute_command("git push origin main", IMPLEMENTER)
     assert result.status == "BLOCKED"
     assert result.exit_code == 1
     assert "host-process" in result.stderr.lower() or "sandbox" in result.stderr.lower()
 
 
-def test_sandbox_unavailable_does_not_fall_back_to_host(monkeypatch: pytest.MonkeyPatch) -> None:
-    """INV-9: BLOCKED must be returned immediately; subprocess must NOT be called."""
+def test_unavailable_backend_executes_nothing() -> None:
+    backend = RecordingBackend()
+    ExecutionBroker(sandbox_available=False, backend=backend).execute_command("ls", IMPLEMENTER)
+    assert backend.calls == [], "a blocked command reached the backend"
+
+
+# ---------------------------------------------------------------------------
+# INV-9/INV-10: the policy verdict, in process
+# ---------------------------------------------------------------------------
+
+
+def test_action_is_derived_from_the_command_not_the_caller() -> None:
+    """A caller-supplied action grades `pytest` and `rm -rf /` identically, and
+    `human_approval_required_for` is then never reached."""
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend)
+    blocked = broker.execute_command("rm -rf /", {"agent_id": "implementer", "action": "test_execute"})
+    assert blocked.status == "BLOCKED"
+    assert blocked.action == "destructive"
+    assert backend.calls == []
+
+
+def test_an_allowed_action_reaches_the_backend() -> None:
+    backend = RecordingBackend(stdout="ok")
+    result = ExecutionBroker(backend=backend).execute_command("pytest -q", IMPLEMENTER)
+    assert result.status == "SUCCESS"
+    assert result.stdout == "ok"
+    assert backend.calls and backend.calls[0][0] == "pytest -q"
+
+
+def test_unknown_agent_identity_is_denied() -> None:
+    result = ExecutionBroker(backend=RecordingBackend()).execute_command("echo hi", {"agent_id": "nobody"})
+    assert result.status == "BLOCKED"
+    assert "unknown agent identity" in result.reason
+
+
+def test_a_role_without_the_action_is_denied() -> None:
+    """`peer-reviewer` holds read and review_write; it may not write files."""
+    result = ExecutionBroker(backend=RecordingBackend()).execute_command("mkdir out", {"agent_id": "peer-reviewer"})
+    assert result.status == "BLOCKED"
+    assert "not granted" in result.reason
+
+
+def test_approval_gated_action_is_denied_without_approval() -> None:
+    ctx = {"agent_id": "release-auditor"}
+    result = ExecutionBroker(backend=RecordingBackend()).execute_command("curl https://example.test", ctx)
+    assert result.status == "BLOCKED"
+    assert "human approval" in result.reason
+
+
+def test_approval_gated_action_is_allowed_with_approval() -> None:
+    ctx = {"agent_id": "release-auditor", "human_approved": True}
+    backend = RecordingBackend()
+    result = ExecutionBroker(backend=backend).execute_command("curl https://example.test", ctx)
+    assert result.status == "SUCCESS"
+    assert backend.calls
+
+
+def test_an_unreadable_authority_model_denies(tmp_path: Path) -> None:
+    """The previous guard was `if _PDP_PATH.exists() and _POLICY_PATH.exists():`,
+    so a missing file skipped the verdict rather than denying it."""
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, agent_policy_path=tmp_path / "absent.json")
+    result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "BLOCKED"
+    assert "authority model could not be read" in result.reason
+    assert backend.calls == []
+
+
+def test_a_non_object_authority_model_denies(tmp_path: Path) -> None:
+    bad = tmp_path / "agent-policy.json"
+    bad.write_text("[]", encoding="utf-8")
+    result = ExecutionBroker(backend=RecordingBackend(), agent_policy_path=bad).execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "BLOCKED"
+
+
+def test_a_policy_declaring_no_agents_denies(tmp_path: Path) -> None:
+    thin = tmp_path / "agent-policy.json"
+    thin.write_text(json.dumps({"schema_version": "2.0.0"}), encoding="utf-8")
+    result = ExecutionBroker(backend=RecordingBackend(), agent_policy_path=thin).execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "BLOCKED"
+    assert "declares no agents" in result.reason
+
+
+# ---------------------------------------------------------------------------
+# INV-8: the command guard is on the path
+# ---------------------------------------------------------------------------
+
+
+def test_guard_denial_blocks_even_when_policy_allows(monkeypatch: pytest.MonkeyPatch) -> None:
     import harness.shared.governance.broker as broker_mod
-    spy = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
-    monkeypatch.setattr(broker_mod, "subprocess", MagicMock(run=spy))
-    broker = ExecutionBroker(sandbox_available=False)
-    broker.execute_command("ls")
-    spy.assert_not_called()
 
-
-# ---------------------------------------------------------------------------
-# PDP / policy enforcement
-# ---------------------------------------------------------------------------
-
-
-def test_pdp_block_returns_blocked_status() -> None:
-    """When the PDP subprocess exits non-zero the broker must return BLOCKED."""
-    broker = ExecutionBroker(sandbox_available=True)
-    with patch("harness.shared.governance.broker._PDP_PATH") as mock_pdp, \
-         patch("harness.shared.governance.broker._POLICY_PATH") as mock_policy, \
-         patch("harness.shared.governance.broker.subprocess.run") as mock_run:
-        mock_pdp.exists.return_value = True
-        mock_policy.exists.return_value = True
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Action denied")
-        result = broker.execute_command(
-            "git push",
-            context={"agent_id": "release-auditor", "action": "external_write"},
-        )
+    backend = RecordingBackend()
+    monkeypatch.setattr(broker_mod, "check_command", MagicMock(return_value=2))
+    result = ExecutionBroker(backend=backend).execute_command("pytest -q", IMPLEMENTER)
     assert result.status == "BLOCKED"
-    assert "denied" in result.stderr.lower() or result.exit_code != 0
-
-
-def test_pdp_allow_passes_through_to_guard() -> None:
-    """When PDP allows, execution must reach the pretooluse_guard check."""
-    broker = ExecutionBroker(sandbox_available=True)
-    with patch("harness.shared.governance.broker._PDP_PATH") as mock_pdp, \
-         patch("harness.shared.governance.broker._POLICY_PATH") as mock_policy, \
-         patch("harness.shared.governance.broker.subprocess.run") as mock_run, \
-         patch("harness.shared.governance.broker.check_command", return_value=0) as mock_guard:
-        mock_pdp.exists.return_value = True
-        mock_policy.exists.return_value = True
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        broker.execute_command("git status", context={"agent_id": "orchestrator", "action": "read"})
-    mock_guard.assert_called_once_with("git status")
-
-
-def test_pdp_skipped_when_files_absent() -> None:
-    """When PDP binary/policy are absent the check is bypassed (gate is advisory)."""
-    broker = ExecutionBroker(sandbox_available=True)
-    with patch("harness.shared.governance.broker._PDP_PATH") as mock_pdp, \
-         patch("harness.shared.governance.broker._POLICY_PATH") as mock_policy, \
-         patch("harness.shared.governance.broker.subprocess.run") as mock_run, \
-         patch("harness.shared.governance.broker.check_command", return_value=0):
-        mock_pdp.exists.return_value = False
-        mock_policy.exists.return_value = False
-        broker.execute_command("git status")
-    mock_run.assert_not_called()
-
-
-def test_human_approved_flag_passed_to_pdp() -> None:
-    broker = ExecutionBroker(sandbox_available=True)
-    with patch("harness.shared.governance.broker._PDP_PATH") as mock_pdp, \
-         patch("harness.shared.governance.broker._POLICY_PATH") as mock_policy, \
-         patch("harness.shared.governance.broker.subprocess.run") as mock_run, \
-         patch("harness.shared.governance.broker.check_command", return_value=0):
-        mock_pdp.exists.return_value = True
-        mock_policy.exists.return_value = True
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        broker.execute_command(
-            "deploy",
-            context={"agent_id": "release-auditor", "action": "external_write", "human_approved": True},
-        )
-    call_args = mock_run.call_args[0][0]
-    assert "--human-approved" in call_args
+    assert "guard" in result.stderr.lower()
+    assert backend.calls == []
 
 
 # ---------------------------------------------------------------------------
-# INV-8: pretooluse_guard blocks
+# The engine: cwd, timeout and output cap are governed budgets, not defaults
 # ---------------------------------------------------------------------------
 
 
-def test_guard_block_returns_blocked() -> None:
-    broker = ExecutionBroker(sandbox_available=True)
-    with patch("harness.shared.governance.broker._PDP_PATH") as mock_pdp, \
-         patch("harness.shared.governance.broker.check_command", return_value=2):
-        mock_pdp.exists.return_value = False
-        result = broker.execute_command("curl https://evil.example")
-    assert result.status == "BLOCKED"
-    assert result.exit_code == 2
+def test_cwd_and_timeout_reach_the_backend(tmp_path: Path) -> None:
+    """`execute_command` took neither. The orchestrator's whole contract is a
+    pinned working directory and a policy-declared timeout, so a broker that
+    dropped them would silently discard a governed budget."""
+    backend = RecordingBackend()
+    ExecutionBroker(backend=backend).execute_command("pytest -q", IMPLEMENTER, cwd=tmp_path, timeout=7)
+    assert backend.calls == [("pytest -q", tmp_path, 7)]
 
 
-# ---------------------------------------------------------------------------
-# ExecutionResult dataclass
-# ---------------------------------------------------------------------------
+def test_output_is_capped() -> None:
+    backend = RecordingBackend(stdout="x" * 5000)
+    result = ExecutionBroker(backend=backend, max_output_bytes=100).execute_command("pytest -q", IMPLEMENTER)
+    assert len(result.stdout) < 5000
+    assert "truncated" in result.stdout
+
+
+def test_a_timeout_is_a_failure_not_a_block() -> None:
+    class Slow(ProcessBackend):
+        def _spawn(self, command: str, cwd: Path | None, timeout: int) -> typing.Any:
+            raise subprocess.TimeoutExpired(cmd=command, timeout=timeout)
+
+    result = ExecutionBroker(backend=Slow()).execute_command("pytest -q", IMPLEMENTER)
+    assert result.status == "FAILED"
+    assert "timed out" in result.reason
+
+
+def test_a_backend_that_cannot_start_answers_rather_than_raising() -> None:
+    class Broken(ProcessBackend):
+        def _spawn(self, command: str, cwd: Path | None, timeout: int) -> typing.Any:
+            raise OSError("no such interpreter")
+
+    result = ExecutionBroker(backend=Broken()).execute_command("pytest -q", IMPLEMENTER)
+    assert result.status == "FAILED"
+    assert "could not be started" in result.reason
+
+
+def test_a_failing_command_is_failed_not_blocked() -> None:
+    """A non-zero exit is the command's verdict on itself, not the broker's."""
+    result = ExecutionBroker(backend=RecordingBackend(returncode=1, stderr="boom")).execute_command(
+        "pytest -q", IMPLEMENTER
+    )
+    assert result.status == "FAILED"
+    assert result.stderr == "boom"
+    assert result.reason == ""
+
+
+def test_the_real_backend_runs_a_command(tmp_path: Path) -> None:
+    """One test really spawns, so the seam cannot drift from the thing it stands
+    in for. Deliberately trivial and fast."""
+    result = ProcessBackend().run("echo hello", tmp_path, 10, DEFAULT_MAX_OUTPUT_BYTES)
+    assert result.status == "SUCCESS"
+    assert "hello" in result.stdout
 
 
 def test_execution_result_fields() -> None:
-    r = ExecutionResult(status="SUCCESS", stdout="ok", stderr="", exit_code=0)
-    assert r.status == "SUCCESS"
-    assert r.stdout == "ok"
-    assert r.exit_code == 0
-
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-
-def test_sandbox_unavailable_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
-    import logging
-    broker = ExecutionBroker(sandbox_available=False)
-    with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
-        broker.execute_command("ls")
-    assert "sandbox" in caplog.text.lower() or "blocking" in caplog.text.lower()
-
-
-def test_real_pdp_integration_denies_and_allows() -> None:
-    """Ensure the real PDP subprocess correctly reads agent-policy.json without KeyErrors."""
-    broker = ExecutionBroker(sandbox_available=True)
-    # Orchestrator is allowed 'read'
-    allowed_result = broker.execute_command(
-        "git status",
-        context={"agent_id": "orchestrator", "action": "read"},
-    )
-    assert allowed_result.status != "BLOCKED" or "pdp" not in allowed_result.stderr.lower()
-
-    # Unknown agent must be BLOCKED by real PDP
-    denied_result = broker.execute_command(
-        "git status",
-        context={"agent_id": "malicious-hacker", "action": "read"},
-    )
-    assert denied_result.status == "BLOCKED"
-    assert "unknown agent identity" in denied_result.stderr.lower()
+    r = ExecutionResult(status="SUCCESS", stdout="o", stderr="e", exit_code=0)
+    assert (r.status, r.stdout, r.stderr, r.exit_code, r.reason, r.action) == ("SUCCESS", "o", "e", 0, "", "")

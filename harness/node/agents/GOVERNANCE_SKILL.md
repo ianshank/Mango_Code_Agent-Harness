@@ -17,6 +17,8 @@ Apply the Agentic SSD gate contract, preserve the external root of trust, refuse
 - DEC-006 — The guard canonicalises its payload envelope across `tool_input` and `args` and denies a JSON object carrying neither; non-JSON input keeps its existing leg.
 - DEC-007 — `protected_paths` is enforced at tool-call time by the write gate, not only by CI; `.git/**` is denied explicitly because git never lists it; the PDP, the write gate and the orchestrator become protected paths.
 - DEC-008 — Role tool exposure is derived from `agent-policy.json` (union of canonical contracts minus approval-gated actions), so the verifier no longer holds `write_file`; hook environments are stripped of credentials.
+- DEC-009 — The policy decision point runs in process; the reference PDP is retained as the external contract and pinned by an agreement test. The `exists()` fail-open is removed.
+- DEC-010 — A command's action is derived from the command and fails closed to an action no role holds; the broker's process backend contains cwd, runtime and output size, and explicitly does not isolate.
 
 ## Required behavior
 

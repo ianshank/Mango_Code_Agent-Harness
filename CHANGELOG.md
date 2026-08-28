@@ -7,6 +7,71 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent containment — the execution broker becomes real
+
+Third in the containment sequence. `ExecutionBroker` is the approved execution
+path INV-8 names; it had no production caller and `execute_command` ended at
+`FAILED: Execution engine not fully implemented`, so INV-8 was declared and
+unreached.
+
+#### Fixed — three fail-open shapes in the broker
+
+- **`sandbox_available: bool = True`.** A caller that never probed was told the
+  sandbox was healthy, so INV-9's no-fallback branch was unreachable from the
+  constructor most callers would write. The default is now *probe*; an explicit
+  bool is still honoured, which is what lets a test drive the unavailable path.
+- **`if _PDP_PATH.exists() and _POLICY_PATH.exists():`** skipped the policy
+  verdict entirely when either file was missing, rather than denying.
+- **The decision point ran as a host subprocess, before the command guard, from
+  a path inside the agent's workspace.** Replacing that file replaced every
+  subsequent verdict. It is evaluated in process now.
+  `tool_broker_reference.py` remains as the contract an external broker mirrors,
+  and `test_policy_decision.py` pins that the two agree on every representative
+  request.
+
+#### Added
+
+- `governance/command_actions.py` — derives the action a command exercises from
+  the command. The action was previously whatever the caller passed, and a
+  constant grades `pytest` and `rm -rf /` identically, so
+  `human_approval_required_for` was never reached. Classification is an
+  allowlist; anything unmodelled resolves to an action **no role holds**, pinned
+  by `test_unclassified_action_is_held_by_no_role`. Chained and substituted
+  commands are unclassified rather than graded by their first word, and reading
+  a credential-bearing file is `secret_access` rather than `read`.
+- `governance/policy_decision.py` — the verdict, in process, mirroring the
+  reference implementation's three denials in order.
+- A process backend that pins the working directory, bounds runtime and caps
+  captured output. `execute_command` gains `cwd` and `timeout`: the
+  orchestrator's contract is a pinned directory and a policy-declared
+  `tool_timeout_sec`, and a broker that dropped them would discard a governed
+  budget silently.
+
+#### Scope, stated plainly
+
+The backend **contains**; it does not **isolate**. It confines neither the
+filesystem nor the network, so INV-13's sandbox digest is not yet satisfiable
+and no result produced here claims otherwise. Isolation is deferred to a
+capability profile because the primitive cannot be exercised on this
+repository's CI runners — `ubuntu-latest` restricts unprivileged user
+namespaces — and a gate that cannot run is the defect this programme exists to
+close.
+
+**INV-8 is not yet true on the live path.** The broker still has no production
+caller; the orchestrator's `run_command` continues to execute directly. Routing
+is the next change, and it is separated deliberately: a self-destructing
+dormancy waiver that lands in the same commit as its own fix never fires.
+
+#### Changed
+
+- `test_governance_broker.py` rewritten. The previous tests patched
+  `broker.subprocess.run` module-wide to stand in for the PDP child process;
+  with a real engine behind the same attribute those patches would have
+  intercepted the engine instead and passed while testing nothing. Three of them
+  pinned behaviour since identified as a fail-open —
+  `test_pdp_skipped_when_files_absent` asserted that a missing policy file
+  skipped the verdict.
+
 ### Agent containment — the write tool cannot reach the control surface
 
 The second change in the containment sequence. `protected_paths` was enforced
