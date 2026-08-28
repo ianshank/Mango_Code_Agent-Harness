@@ -406,6 +406,136 @@ class TestCli:
 
 
 # ---------------------------------------------------------------------------
+# Helpers and attestation edge legs (in-process, for coverage of the guards)
+# ---------------------------------------------------------------------------
+
+
+def _hand_sign(unsigned: dict, key: str) -> dict:
+    """Sign an attestation body the way EvidenceBuilder does, so tests can
+    craft signature-valid attestations whose *contents* are inconsistent."""
+    import hmac as hmac_mod
+
+    signed = dict(unsigned)
+    signed["_signature"] = hmac_mod.new(
+        key.encode("utf-8"),
+        json.dumps(unsigned, sort_keys=True).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return signed
+
+
+class TestHelpersAndAttestationEdges:
+    KEY = "edge-case-key"
+
+    def test_digest_helper_matches_hashlib(self, tmp_path: Path) -> None:
+        target = tmp_path / "f.bin"
+        target.write_bytes(b"payload")
+        assert ppa.digest(target) == hashlib.sha256(b"payload").hexdigest()
+
+    def test_bootstrap_imports_inserts_repo_root_when_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The sys.path insert leg fires when the repo root is not importable —
+        the direct `python harness/control-plane/...` environment."""
+        repo_root = ppa._repo_root_default()
+        stripped = [p for p in sys.path if Path(p or ".").resolve() != repo_root]
+        monkeypatch.setattr(sys, "path", stripped)
+        evidence_builder_cls = ppa._bootstrap_imports()
+        assert evidence_builder_cls is not None
+        assert str(repo_root) in sys.path
+
+    def test_signature_valid_but_files_not_a_dict_fails(self, policy_repo: Path) -> None:
+        """A hand-signed artifact whose core snapshot matches but whose files
+        entry is not a mapping must fail the structural cross-check."""
+        artifact = ppa.build_artifact(policy_repo)
+        artifact["files"] = "not-a-dict"
+        core = ppa._canonical_core_digest(artifact)
+        artifact["attestation"] = _hand_sign(
+            {"policies": [{"policy_id": ppa.ARTIFACT_ID, "content_hash": core}]}, self.KEY
+        )
+        assert ppa.verify_attestation(artifact, signing_key=self.KEY) is False
+
+    def test_signature_valid_but_file_snapshot_missing_fails(self, policy_repo: Path) -> None:
+        """A signed attestation carrying the core snapshot but no per-file
+        snapshots must fail: every manifest entry needs its own cross-check."""
+        artifact = ppa.build_artifact(policy_repo)
+        core = ppa._canonical_core_digest(artifact)
+        artifact["attestation"] = _hand_sign(
+            {"policies": [{"policy_id": ppa.ARTIFACT_ID, "content_hash": core}]}, self.KEY
+        )
+        assert ppa.verify_attestation(artifact, signing_key=self.KEY) is False
+
+
+# ---------------------------------------------------------------------------
+# main() in-process (the CLI wiring itself, visible to coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestMainInProcess:
+    def test_build_then_check_round_trip(
+        self, policy_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        out_file = tmp_path / "artifact.json"
+        ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file)])
+        assert "built" in capsys.readouterr().out
+        artifact = json.loads(out_file.read_text(encoding="utf-8"))
+        assert artifact["policy_id"] == "test-policy"
+
+        ppa.main(["--repo-root", str(policy_repo), "check", "--artifact", str(out_file)])
+        assert "publish_policy_artifact: passed" in capsys.readouterr().out
+
+    def test_check_deny_becomes_systemexit(self, policy_repo: Path, tmp_path: Path) -> None:
+        out_file = tmp_path / "artifact.json"
+        ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file)])
+        target = policy_repo / "harness/shared/agent-policy.json"
+        target.write_bytes(target.read_bytes() + b"!")
+        with pytest.raises(SystemExit, match="DENY: digest mismatch"):
+            ppa.main(["--repo-root", str(policy_repo), "check", "--artifact", str(out_file)])
+
+    def test_check_unreadable_artifact_denies(self, policy_repo: Path, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit, match="DENY: unreadable artifact"):
+            ppa.main(["--repo-root", str(policy_repo), "check", "--artifact", str(tmp_path / "absent.json")])
+
+    def test_check_verify_attestation_fails_without_attestation(
+        self, policy_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENT_EVIDENCE_KEY", raising=False)
+        out_file = tmp_path / "artifact.json"
+        ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file)])
+        with pytest.raises(SystemExit, match="DENY: attestation verification failed"):
+            ppa.main(
+                ["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"]
+            )
+
+    def test_attested_round_trip(
+        self, policy_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        import secrets
+
+        monkeypatch.setenv("AGENT_EVIDENCE_KEY", secrets.token_urlsafe(16))
+        out_file = tmp_path / "artifact.json"
+        ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file), "--attest"])
+        ppa.main(
+            ["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"]
+        )
+        assert "publish_policy_artifact: passed" in capsys.readouterr().out
+
+    def test_main_dispatch_leg(
+        self, policy_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """The `if __name__ == "__main__"` leg via runpy, as the real CLI runs."""
+        import runpy
+
+        out_file = tmp_path / "artifact.json"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["publish_policy_artifact.py", "--repo-root", str(policy_repo), "build", "--output", str(out_file)],
+        )
+        runpy.run_path(str(_MODULE_PATH), run_name="__main__")
+        assert out_file.is_file()
+        assert "built" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
 # Real repository smoke: the shipped policies build and check cleanly
 # ---------------------------------------------------------------------------
 
