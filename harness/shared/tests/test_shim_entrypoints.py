@@ -86,3 +86,26 @@ class TestMainDispatchBranch:
         with pytest.raises(SystemExit) as exc:
             runpy.run_path(str(SHARED / "remotes.py"), run_name="__main__")
         assert exc.value.code == 0
+
+
+class TestCheckTraceabilityShim:
+    def test_bootstrap_is_load_bearing_without_site_packages(self, tmp_path: Path):
+        """The one shim that had NO sys.path bootstrap.
+
+        In this checkout the package is also importable via the editable install,
+        which masks a missing bootstrap for every in-process test. `python -S`
+        disables site processing, so the shim's own bootstrap is the only way
+        `harness.shared` can resolve -- exactly an adopter's bare-invocation
+        environment. Gutting the bootstrap makes this fail with ImportError.
+        """
+        import subprocess
+
+        probe = (
+            "import runpy; "
+            f"ns = runpy.run_path({str(SHARED / 'check_traceability.py')!r}); "
+            "assert callable(ns['check_traceability'])"
+        )
+        result = subprocess.run(
+            [sys.executable, "-S", "-c", probe], cwd=tmp_path, capture_output=True, text=True
+        )
+        assert result.returncode == 0, result.stderr

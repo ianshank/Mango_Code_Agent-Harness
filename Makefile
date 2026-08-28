@@ -124,8 +124,9 @@ check-dedup: ## Fail if any per-stack governance script is a copy instead of a s
 
 # --- Digest Regeneration ---
 .PHONY: digest-regen
-digest-regen: ## Regenerate protected-file digests in the control-plane policy bundle
+digest-regen: ## Regenerate the control-plane policy bundle (per-file digests + top-level policy digests)
 	$(PYTHON) harness/control-plane/regenerate_bundle_digests.py
+	$(PYTHON) harness/control-plane/build_policy_bundle.py --node harness/node --jvm harness/jvm --output harness/control-plane/policy-bundle.example.json
 	git diff --exit-code -- harness/control-plane/policy-bundle.example.json
 
 # --- Governance-specific test target ---

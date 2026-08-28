@@ -34,13 +34,12 @@ omit = [
     "harness/shared/pretooluse_guard.sh",
     "harness/shared/run_vitest.sh",
     "harness/shared/validate_specs.sh",
-    # These three run argparse at module scope with required arguments and have no
+    # These two run argparse at module scope with required arguments and have no
     # `if __name__ == "__main__"` guard, so they cannot be imported in-process at all.
     # They read 0% as a measurement artifact, not as a quality signal, and would drag
     # the aggregate below the gate for a reason unrelated to test quality.
-    # regenerate_bundle_digests.py is deliberately NOT omitted: it *is* __main__-guarded
-    # and importable, so its 0% is a real gap worth keeping visible.
-    "harness/control-plane/build_policy_bundle.py",
+    # build_policy_bundle.py and regenerate_bundle_digests.py are deliberately NOT
+    # omitted: both are __main__-guarded and loadable, so their gaps are real signal.
     "harness/control-plane/tool_broker_reference.py",
     "harness/control-plane/verify_repository.py"
 ]

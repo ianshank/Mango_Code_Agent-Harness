@@ -537,6 +537,21 @@ class TestRootPipelineShape:
             "would measure coverage without enforcing any threshold"
         )
 
+    def test_digest_regen_regenerates_both_digest_layers(self, makefile):
+        """The bundle has two layers: profiles[*].protected_files (refreshed by
+        regenerate_bundle_digests.py) and the top-level governance/agent policy
+        digests (refreshed ONLY by build_policy_bundle.py). Dropping either tool
+        from the recipe silently un-gates its layer, so both invocations -- and
+        the `git diff --exit-code` that turns drift red -- are pinned here."""
+        body = _recipe_body(makefile, "digest-regen")
+        assert body, "root Makefile has no digest-regen recipe"
+        for required in (
+            "regenerate_bundle_digests.py",
+            "build_policy_bundle.py",
+            "git diff --exit-code",
+        ):
+            assert required in body, f"digest-regen recipe no longer runs {required}"
+
     def test_coverage_gate_script_has_no_numeric_fallback(self):
         """The gate script must carry no default threshold a broken policy could
         silently fall back to -- the COV_MIN=80 inversion, one layer down."""
