@@ -97,6 +97,30 @@ in #19 — neither open PR fixes it.
 - Pong ignore rules from `.gitignore`, two PRs after the demo was deleted.
 - `.agents/skills/` from the README layout tree; the directory does not exist.
 
+#### Collected — three deferrals that came due when the policy work merged
+
+The v3 stack was built on `main` deliberately excluding the then-open
+policy-single-source work, so re-implementing it could not conflict with review
+already spent. Three places recorded that dependency in a form that fails when
+it is discharged, rather than in a comment nobody re-reads:
+
+- `KNOWN_IMPORT_SIDE_EFFECTS` waived three modules that acted at import.
+  `test_every_waiver_is_still_necessary` failed on all three the moment they
+  imported cleanly, so the entries were deleted and the modules now fall under
+  the purity gate normally. The registry is empty and documents what earns a
+  new entry.
+- `DTZ` was deferred solely because one source site sat inside a rewritten
+  file. Both source sites — waiver expiry in `verify_zero_skips.py`, skill
+  staleness in `validate_governance_docs.py` — now anchor to UTC, the rule is
+  enabled, and the deferral entry is gone. A waiver keyed on a calendar date
+  expires a day early or late depending on the runner's timezone; six test
+  sites shared `date.today()` and would have disagreed with the validators for
+  the hours where the two dates differ, so they share one clock via a
+  `utc_today()` helper.
+- Three `per-file-ignores` E402 entries stopped suppressing anything once those
+  modules were restructured; `test_every_code_still_suppresses_something`
+  reported it and they were removed.
+
 
 Hygiene remediation batch (DEC-004), shaped by three adversarial reviews of its
 own plan -- nine elements of the first draft were rejected as wrong or
