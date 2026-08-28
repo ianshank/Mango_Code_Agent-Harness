@@ -1,3 +1,4 @@
+import email.message
 import io
 import json
 import os
@@ -73,7 +74,7 @@ def test_complete_chat_missing_key(mock_urlopen, mock_resolve):
 
 @patch("urllib.request.urlopen")
 def test_complete_chat_http_error(mock_urlopen):
-    err = urllib.error.HTTPError("url", 401, "Unauthorized", {}, io.BytesIO(b"Bad Key my_secret_key"))
+    err = urllib.error.HTTPError("url", 401, "Unauthorized", email.message.Message(), io.BytesIO(b"Bad Key my_secret_key"))
     mock_urlopen.side_effect = err
 
     with pytest.raises(RuntimeError) as exc:
@@ -149,7 +150,7 @@ def _mock_success_response():
 @patch("urllib.request.urlopen")
 def test_complete_chat_retries_transient_http_error(mock_urlopen, mock_sleep):
     """With NEMOTRON_MAX_RETRIES set, a transient 503 is retried to success."""
-    err = urllib.error.HTTPError("url", 503, "Service Unavailable", {}, io.BytesIO(b"busy"))
+    err = urllib.error.HTTPError("url", 503, "Service Unavailable", email.message.Message(), io.BytesIO(b"busy"))
     mock_urlopen.side_effect = [err, _mock_success_response()]
 
     with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_MAX_RETRIES": "2"}):
@@ -164,7 +165,7 @@ def test_complete_chat_retries_transient_http_error(mock_urlopen, mock_sleep):
 @patch("urllib.request.urlopen")
 def test_complete_chat_no_retry_by_default(mock_urlopen, mock_sleep):
     """Retries default to 0: a transient failure surfaces immediately."""
-    err = urllib.error.HTTPError("url", 503, "Service Unavailable", {}, io.BytesIO(b"busy"))
+    err = urllib.error.HTTPError("url", 503, "Service Unavailable", email.message.Message(), io.BytesIO(b"busy"))
     mock_urlopen.side_effect = err
 
     with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}, clear=False):
@@ -180,7 +181,7 @@ def test_complete_chat_no_retry_by_default(mock_urlopen, mock_sleep):
 @patch("urllib.request.urlopen")
 def test_complete_chat_non_transient_http_error_never_retried(mock_urlopen, mock_sleep):
     """A 401 is not transient: no retry even with the knob set."""
-    err = urllib.error.HTTPError("url", 401, "Unauthorized", {}, io.BytesIO(b"bad key"))
+    err = urllib.error.HTTPError("url", 401, "Unauthorized", email.message.Message(), io.BytesIO(b"bad key"))
     mock_urlopen.side_effect = err
 
     with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_MAX_RETRIES": "3"}):

@@ -123,7 +123,9 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
             found = [line for line in out.splitlines() if line.strip()]
             logger.debug("%s -> %d path(s)", " ".join(cmd), len(found))
             modified.update(found)
-        except Exception as e:  # noqa: BLE001 - inability to inspect git state is fatal
+        # Inability to inspect git state is fatal: re-raised below, which is
+        # also why BLE001 does not fire here.
+        except Exception as e:
             logger.error("[FAIL] Could not run %s: %s", " ".join(cmd), e)
             raise
     return modified

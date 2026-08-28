@@ -165,6 +165,7 @@ class TestGateLoggerDegradation:
 
     def test_repo_root_bootstrap_targets_the_actual_repository(self):
         """parents[3] must resolve to the repo root, or the sys.path insert is wrong."""
+        assert ct.__file__ is not None
         module_path = Path(ct.__file__).resolve()
         assert (module_path.parents[3] / "harness" / "shared" / "json_logging.py").is_file()
         assert os.path.basename(module_path.parents[3]) != "harness"

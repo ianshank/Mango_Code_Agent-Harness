@@ -16,7 +16,12 @@ markers = [
     "governance: governance invariant validation",
     "neurosym: neuro-symbolic synthesis and repair loop invariants",
 ]
-addopts = "--strict-markers -v --tb=short"
+# -m "not live": bare `pytest` used to collect the live suites and fail with
+# "NVIDIA_API_KEY is not configured", so the documented entry point disagreed
+# with `make test-python` (which passes -m "not live" explicitly). Select them
+# with `pytest -m live`. Each live suite also carries its own skipif, so the
+# two mechanisms are belt and braces rather than one point of failure.
+addopts = "--strict-markers -v --tb=short -m 'not live'"
 
 [tool.coverage.run]
 # branch = true makes coverage.py record branch arcs. Note the knock-on effect:
@@ -57,10 +62,34 @@ target-version = "py39"   # oldest supported runtime; keep in sync with the CI m
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
-# Governance validator scripts, control-plane tools, and per-stack re-export shims are
-# intentionally compact CLI scripts; the shims must insert sys.path before importing.
-per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702", "E401", "E711"], "harness/node/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/jvm/scripts/*.py" = ["E701", "E702", "E401", "E711", "E501", "E402"], "harness/shared/check_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/validate_*.py" = ["E701", "E702", "E401", "E711"], "harness/shared/verify_*.py" = ["E401", "E402"], "harness/shared/remotes.py" = ["E402", "E501"], "harness/shared/pretooluse_guard.py" = ["E402", "E501"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501", "E701", "E702", "E402"], "scratch/*.py" = ["E501", "E701", "E702", "E402"] }
+# Expansion is measured, never speculative: every rule below was run against
+# the tree first, and every rule NOT selected is recorded in
+# test_deferred_rigor.py with its finding count and the reason. See that file
+# before adding or removing anything here.
+#
+# BLE is the load-bearing addition. The repository already carried 16
+# `# noqa: BLE001` comments explaining why particular broad catches are
+# deliberate fail-closed boundaries; with BLE unselected those comments were
+# inert prose. Selecting it makes all 27 of them enforced decisions.
+#
+# RUF100 is safe *because* BLE is on: it flagged 20 inert noqa directives
+# before, 13 of which were exactly those BLE001 justifications, so enabling it
+# alone would have invited deleting them. With BLE selected the count drops to
+# the 7 genuinely dead directives, which are removed in this change. RUF100 now
+# protects the justifications instead of threatening them -- every noqa in the
+# tree has to be load-bearing.
+#
+# S (bandit) stays off deliberately: the subprocess-heavy gate scripts would
+# need blanket waivers, which CLAUDE.md forbids without decision-log entries.
+select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID", "A", "C4", "PIE"]
+# Control-plane tools are intentionally compact CLI scripts; the per-stack
+# re-export shims must insert sys.path before importing (E402).
+# Every entry below is pinned live by test_lint_config_liveness.py: each pattern
+# must still match a file, and each code must still suppress a real finding.
+# Ruff has no unused-ignore check, so without that test this block only ever
+# grows -- three patterns (scratch/*.py for a directory that does not exist,
+# and the check_*/validate_* globs) had already stopped suppressing anything.
+per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702"], "harness/node/scripts/*.py" = ["E402"], "harness/jvm/scripts/*.py" = ["E402"], "harness/shared/verify_*.py" = ["E402"], "harness/shared/remotes.py" = ["E402"], "harness/shared/pretooluse_guard.py" = ["E402"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["harness"]

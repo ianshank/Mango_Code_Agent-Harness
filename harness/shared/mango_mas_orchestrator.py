@@ -189,7 +189,9 @@ class MangoMASOrchestrator:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding="utf-8")
             return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a tool must always answer its call
+            # with a string; an escaping exception would leave the model's
+            # tool_calls message unanswered and stall the conversation.
             return f"Error writing file {filepath}: {str(e)}"
 
     def _execute_run_command(self, command: str) -> str:
@@ -234,7 +236,8 @@ class MangoMASOrchestrator:
             return output
         except subprocess.TimeoutExpired:
             return f"Error: Command '{command}' timed out after {self.tool_timeout} seconds."
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - same tool-result contract as
+            # _execute_write_file: report the failure, never propagate it.
             return f"Error executing command '{command}': {str(e)}"
 
     def _dispatch_tool_calls(
@@ -253,7 +256,7 @@ class MangoMASOrchestrator:
             else:
                 try:
                     tool_result = handler(args)
-                except Exception as exc:  # noqa: BLE001 - see below
+                except Exception as exc:
                     # The wire protocol requires exactly one tool message per
                     # requested tool call. An escaping handler exception (a
                     # meta-tool lock timeout, say) would abandon execute_agent

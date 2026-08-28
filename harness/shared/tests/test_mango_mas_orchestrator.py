@@ -402,13 +402,20 @@ class TestSequentialThinkingLoop:
 # ---------------------------------------------------------------------------
 
 
+# Paired with the marker, exactly as test_mango_mas_live.py does. The marker
+# alone only controls *selection*: a bare `pytest` (no -m) still collects and
+# runs these, and without a key they fail rather than skip.
+IS_LIVE = os.environ.get("NVIDIA_API_KEY") is not None
+
+
 @pytest.mark.live
+@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
 class TestLiveOrchestrator:
     """Real-API smoke tests. Skipped unless explicitly selected with ``-m live``."""
 
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=os.environ.get("NVIDIA_API_KEY"))
-        assert orch.execute_agent("test-agent", "Reply with the word: OK")  # noqa: S101
+        assert orch.execute_agent("test-agent", "Reply with the word: OK")
 
 
 # ---------------------------------------------------------------------------

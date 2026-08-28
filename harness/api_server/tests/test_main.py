@@ -86,7 +86,9 @@ def _run_dev_runner(monkeypatch):
 
     calls = {}
     fake_uvicorn = types.ModuleType("uvicorn")
-    fake_uvicorn.run = lambda app, **kwargs: calls.update(kwargs)
+    # setattr, not attribute assignment: ModuleType has no declared `run`, so a
+    # direct assignment is an attr-defined error under --check-untyped-defs.
+    fake_uvicorn.run = lambda app, **kwargs: calls.update(kwargs)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
     runpy.run_module("harness.api_server.main", run_name="__main__")
     return calls

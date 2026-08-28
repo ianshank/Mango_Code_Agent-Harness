@@ -72,9 +72,20 @@ jobs:
           cache: pnpm
           cache-dependency-path: harness/node/pnpm-lock.yaml
 
+      # Routed through `make node-deps` rather than an inline pnpm call so CI,
+      # the session-start hook and a local run all execute the same recipe.
+      # An inline duplicate is how the three drift into installing differently.
       - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: harness/node
+        run: make node-deps
+
+      # Run the regression tier on its own, before the full gate. These tests
+      # each reproduce a defect that already shipped once, so a failure here has
+      # a specific meaning -- something came back -- that is worth reading
+      # without scrolling through the whole suite. They also run again inside
+      # `make ci`; the tier is fast enough that the duplicate is worth the
+      # distinct signal.
+      - name: Run regression/AQA tier (make test-regression)
+        run: make test-regression
 
       - name: Run unified CI gate (make ci)
         # The protected-path invariant fails closed on infrastructure changes
