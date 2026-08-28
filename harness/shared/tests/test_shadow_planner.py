@@ -551,3 +551,39 @@ def test_shadow_error_signal_write_failure_is_itself_contained(
     assert any("could not record shadow_error signal" in m for m in messages)
     assert any("channel-level containment" in m for m in messages)
     assert append_calls["n"] == 2
+
+
+@pytest.mark.governance
+class TestRunWithoutCredentialsOrModel:
+    """Branch-only regression: shadow_planner was 100% line / 50% branch covered.
+
+    The untaken branches were exactly the "orchestrator defaults" path: a context
+    with no api_key and no model must call the bridge WITHOUT those kwargs, so
+    the bridge's own resolution applies. Line coverage could never lose this --
+    both lines execute either way -- which is why branch measurement exists.
+    """
+
+    def test_bridge_call_omits_api_key_and_model_when_unset(
+        self, tmp_path: Path, mocker: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(shadow_module.SHADOW_MODEL_ENV, raising=False)
+        workspace = _mk_workspace(tmp_path)
+        bridge = mocker.patch.object(
+            shadow_module, "complete_chat", return_value=_content_resp("shadow plan")
+        )
+        context = shadow_module.ShadowContext(
+            workspace_dir=workspace,
+            api_key=None,
+            model=None,
+            api_timeout=30,
+            planner_system_prompt="sys",
+            planner_user_prompt="user",
+            task="t",
+            incumbent_plan="p",
+            incumbent_elapsed_ms=1,
+        )
+        shadow_module._run(context, environ={})
+        kwargs = bridge.call_args.kwargs
+        assert "api_key" not in kwargs, "api_key=None must not be forwarded to the bridge"
+        assert "model" not in kwargs, "an unset model must defer to the bridge default"
+        assert kwargs["tools"] == []

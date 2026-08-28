@@ -165,15 +165,14 @@ class SpecWorkflowTests(unittest.TestCase):
         self.assertIn("review", prereqs, "pre-pr must run the review gate")
 
     def test_coverage_threshold_is_sourced_from_policy_not_hardcoded(self):
-        """COV_MIN must be derived from governance-policy.json (no literal drift)."""
+        """The coverage gate must run coverage_gate.py, whose thresholds come from
+        governance-policy.json with no numeric default (COV_MIN's replacement)."""
         text = MAKEFILE.read_text(encoding="utf-8")
-        match = re.search(r"^COV_MIN\s*\?=\s*(.+)$", text, re.MULTILINE)
-        self.assertIsNotNone(match, "Makefile does not define COV_MIN")
-        self.assertIn(
-            "governance-policy.json",
-            match.group(1) if match else "",
-            "COV_MIN must be read from governance-policy.json",
-        )
+        match = re.search(r"^coverage-python:.*?\n((?:\t[^\n]*\n)+)", text, re.MULTILINE)
+        self.assertIsNotNone(match, "Makefile has no coverage-python recipe")
+        self.assertIn("coverage_gate.py", match.group(1) if match else "")
+        gate = (MAKEFILE.parent / "harness" / "shared" / "coverage_gate.py").read_text(encoding="utf-8")
+        self.assertIn("governance-policy.json", gate)
 
 
 class InstructionWiringTests(unittest.TestCase):

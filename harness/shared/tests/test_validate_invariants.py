@@ -327,3 +327,36 @@ def test_check_size_budget_enforces_the_policy_value_not_the_default(
     assert vi.check_size_budget(temp_repo, policy_path=policy) is False, (
         "a 10-line file passed a 7-line policy budget; the policy is not reaching the gate"
     )
+
+
+def test_cli_survives_a_bogus_log_level(temp_repo: Path):
+    """LOG_LEVEL=BOGUS previously crashed the gate with ValueError before any check ran.
+
+    Subprocess deliberately: under pytest the root logger already has a handler,
+    and `logging.basicConfig` only applies `level` when there is none -- an
+    in-process version of this test passes identically with and without the fix.
+    The gate runs against its own repository (the CLI takes no --repo-root), so a
+    clean tree plus the attestation env is the passing baseline.
+    """
+    import os
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, str(Path(vi.__file__).resolve())],
+        env={**os.environ, "LOG_LEVEL": "BOGUS", "ALLOW_GITHUB_CHANGES": "1", "GITHUB_BASE_REF": ""},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Unknown level" not in result.stderr
+
+
+def test_size_budget_lines_fails_closed_on_a_non_object_policy(temp_repo: Path, monkeypatch):
+    """Valid JSON that is not an object previously escaped as a raw AttributeError."""
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text("[]", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        vi.size_budget_lines(policy)
+    assert excinfo.value.code == 1

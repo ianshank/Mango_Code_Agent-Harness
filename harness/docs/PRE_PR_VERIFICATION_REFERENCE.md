@@ -83,10 +83,11 @@ missing.
 
 ### Coverage Thresholds
 
-- **Python (Pytest):** threshold is read dynamically from `harness/shared/governance-policy.json`
-  (`coverage.lines`) into `Makefile`'s `COV_MIN`, so the gate and the policy cannot silently
-  drift; enforced as `--cov-fail-under=$(COV_MIN)` and aggregate-only (per-file is a documented
-  follow-up — `harness/CONTRACT.md`). Never restate the number here or anywhere else: quoting it
+- **Python (Pytest):** thresholds are read dynamically from `harness/shared/governance-policy.json`
+  by `harness/shared/coverage_gate.py`, which applies `coverage.lines` and `coverage.branches`
+  as two separate floors (with `branch = true`, pytest-cov's single total is a blended
+  statements+branches number, so a single `--cov-fail-under` would mislabel what the lines
+  floor gates); aggregate-only (per-file is a documented follow-up — `harness/CONTRACT.md`). Never restate the number here or anywhere else: quoting it
   recreates the drift the dynamic lookup exists to prevent. Measured roots are `harness/shared`,
   `harness/api_server` and `harness/control-plane`; `test_ci_gate_coverage.py` fails if a root
   declared in `pyproject.toml` is not actually passed to the gate.
@@ -115,7 +116,8 @@ python -m ruff check harness/shared/ harness/shared/tests/ harness/api_server/
 python -m mypy harness/shared harness/api_server --explicit-package-bases
 python -m pytest harness/shared/tests/ harness/api_server/tests/ -m "not live" \
   --cov=harness/shared --cov=harness/api_server --cov=harness/control-plane \
-  --cov-fail-under="$(python -c "import json;print(json.load(open('harness/shared/governance-policy.json'))['coverage']['lines'])")"
+  --cov-report=term-missing --cov-report=json
+python harness/shared/coverage_gate.py   # lines and branches floors from governance-policy.json
 
 # 3. Spec, Remote Allowlist & Secret Scan Gates
 make specs      # bash validate_specs.sh — `bash` is required: the script is mode 644

@@ -13,14 +13,14 @@ PM       ?= pnpm
 GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
 GITLEAKS_VERSION ?= v8.28.0
-# Coverage threshold is sourced from the governance policy (single source of truth)
-# so the gate and the policy can never silently drift.
-#
-# Fails CLOSED: an unreadable or malformed policy yields an empty COV_MIN, and the
-# guard below aborts. This previously fell back to 80 while the policy said 90 —
-# a governance gate that *lowers itself* when it cannot read its own policy, the
-# opposite of how validate_invariants treats the same failure.
-COV_MIN  ?= $(shell $(PYTHON) -c "import json; p=json.load(open('harness/shared/governance-policy.json')); print(int(p['coverage']['lines']))" 2>/dev/null)
+# Coverage thresholds are sourced from the governance policy (single source of
+# truth) and applied by coverage_gate.py as TWO separate numbers: coverage.lines
+# against line coverage and coverage.branches against branch coverage. With
+# `branch = true` in pyproject, pytest-cov's single "total" is a blended
+# statements+branches percentage, so gating that blend with --cov-fail-under
+# would mislabel what the lines floor applies to — the same "gate that lowers
+# itself" inversion the old hard-coded COV_MIN=80 fallback had. The gate script
+# fails closed on a missing or malformed report or policy.
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -59,9 +59,9 @@ test-python: ## Run full pytest suite (excludes live tests)
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
 
 .PHONY: coverage-python
-coverage-python: ## Run pytest with the coverage gate (threshold from governance-policy.json)
-	@test -n "$(COV_MIN)" || { echo 'COV_MIN unresolved: governance-policy.json is unreadable or has no coverage.lines; failing closed'; exit 1; }
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-fail-under=$(COV_MIN)
+coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
+	$(PYTHON) $(SHARED_SRC)/coverage_gate.py
 
 # --- Node Testing & Zero-Skip Verification ---
 .PHONY: test-node
@@ -124,8 +124,9 @@ check-dedup: ## Fail if any per-stack governance script is a copy instead of a s
 
 # --- Digest Regeneration ---
 .PHONY: digest-regen
-digest-regen: ## Regenerate protected-file digests in the control-plane policy bundle
+digest-regen: ## Regenerate the control-plane policy bundle (per-file digests + top-level policy digests)
 	$(PYTHON) harness/control-plane/regenerate_bundle_digests.py
+	$(PYTHON) harness/control-plane/build_policy_bundle.py --node harness/node --jvm harness/jvm --output harness/control-plane/policy-bundle.example.json
 	git diff --exit-code -- harness/control-plane/policy-bundle.example.json
 
 # --- Governance-specific test target ---

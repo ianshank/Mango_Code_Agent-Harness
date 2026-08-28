@@ -56,7 +56,7 @@ GATE_TO_ROOT_TARGET = {
 # name is wired into `ci`; without this, emptying `validate` (which would delete
 # the only invocation of the protected-path gate) leaves every test green.
 GATE_TO_EVIDENCE = {
-    "cov": r"--cov-fail-under",
+    "cov": r"coverage_gate\.py",
     "lint": r"\$\(RUFF\)|ruff",
     "types": r"\$\(MYPY\)|mypy",
     "specs": r"validate_specs\.sh",
@@ -517,23 +517,51 @@ class TestRootPipelineShape:
             "Either they are typos, or the parser accepted comment text as targets."
         )
 
-    def test_coverage_threshold_is_not_hardcoded(self, makefile):
-        """COV_MIN must come from policy so the gate and policy cannot drift."""
-        match = re.search(r"^COV_MIN\s*\?=\s*(.+)$", makefile, re.M)
-        assert match, "root Makefile does not define COV_MIN"
-        assert "governance-policy.json" in match.group(1), (
-            "COV_MIN must be read from governance-policy.json, not hard-coded"
-        )
+    def test_coverage_thresholds_are_enforced_by_the_gate_script(self, makefile):
+        """The recipe must produce the machine-readable report AND run the gate.
 
-    def test_coverage_threshold_is_actually_applied(self, makefile):
-        """Defining COV_MIN proves nothing if the recipe does not use it: setting
-        `--cov-fail-under=0`, or dropping the flag, disables the gate entirely."""
+        coverage_gate.py applies coverage.lines and coverage.branches as two
+        separate numbers. Its thresholds come from governance-policy.json with no
+        numeric default anywhere, so "not hardcoded" is a property of the script;
+        what the Makefile must guarantee is that the script actually runs against
+        a report produced by this same pytest invocation.
+        """
         body = _recipe_body(makefile, "coverage-python")
         assert body, "root Makefile has no coverage-python recipe"
-        assert "--cov-fail-under=$(COV_MIN)" in body, (
-            "the coverage gate must apply $(COV_MIN); a literal or absent "
-            "--cov-fail-under lets the threshold drift from policy or vanish"
+        assert "--cov-report=json" in body, (
+            "coverage-python must emit coverage.json; without it the gate script "
+            "fails closed on every run instead of measuring anything"
         )
+        assert re.search(r"coverage_gate\.py", body), (
+            "coverage-python no longer runs coverage_gate.py; the pytest run "
+            "would measure coverage without enforcing any threshold"
+        )
+
+    def test_digest_regen_regenerates_both_digest_layers(self, makefile):
+        """The bundle has two layers: profiles[*].protected_files (refreshed by
+        regenerate_bundle_digests.py) and the top-level governance/agent policy
+        digests (refreshed ONLY by build_policy_bundle.py). Dropping either tool
+        from the recipe silently un-gates its layer, so both invocations -- and
+        the `git diff --exit-code` that turns drift red -- are pinned here."""
+        body = _recipe_body(makefile, "digest-regen")
+        assert body, "root Makefile has no digest-regen recipe"
+        for required in (
+            "regenerate_bundle_digests.py",
+            "build_policy_bundle.py",
+            "git diff --exit-code",
+        ):
+            assert required in body, f"digest-regen recipe no longer runs {required}"
+
+    def test_coverage_gate_script_has_no_numeric_fallback(self):
+        """The gate script must carry no default threshold a broken policy could
+        silently fall back to -- the COV_MIN=80 inversion, one layer down."""
+        source = (REPO / "harness" / "shared" / "coverage_gate.py").read_text(encoding="utf-8")
+        assert "governance-policy.json" in source
+        for pattern in (r"=\s*(80|90)\b", r"default=\s*(80|90)\b"):
+            assert not re.search(pattern, source), (
+                "coverage_gate.py carries a numeric threshold literal; thresholds "
+                "have exactly one source, governance-policy.json"
+            )
 
     def test_coverage_run_does_not_exclude_tests(self, makefile):
         """Deselecting governance tests would silently drop these very gates."""
