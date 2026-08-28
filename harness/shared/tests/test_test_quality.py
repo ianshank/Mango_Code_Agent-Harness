@@ -94,7 +94,7 @@ class TestSuiteHasNoUnfailableTests:
         """
         for root in TEST_ROOTS:
             assert root.is_dir(), f"test root {root} does not exist"
-            found = [p for p in root.rglob("test_*.py")]
+            found = list(root.rglob("test_*.py"))
             assert found, f"test root {root} contributed no modules to the scan"
 
     def test_every_test_asserts_something(self) -> None:
