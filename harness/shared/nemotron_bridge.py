@@ -24,6 +24,14 @@ from harness.shared.json_logging import setup_json_logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+# Fallbacks when NEMOTRON_TIMEOUT_MS / NEMOTRON_MAX_RETRIES are unset (see
+# .env.example). Retries default to 0 so behavior is opt-in.
+DEFAULT_TIMEOUT_SEC = 30
+DEFAULT_MAX_RETRIES = 0
+# Backoff between retry attempts: RETRY_BACKOFF_BASE_SEC * 2**attempt.
+RETRY_BACKOFF_BASE_SEC = 1.0
+# Transient HTTP statuses worth retrying; everything else fails immediately.
+RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 def mask_secret(secret: str) -> str:
@@ -36,13 +44,20 @@ def mask_secret(secret: str) -> str:
     return f"{s[:10]}...{s[-4:]}"
 
 
+# Environment variables the bridge honors, mapped to resolve_environment keys.
+_ENV_VAR_KEYS = {
+    "NVIDIA_API_KEY": "api_key",
+    "NVIDIA_BASE_URL": "base_url",
+    "NEMOTRON_DEFAULT_MODEL": "default_model",
+    "NEMOTRON_TIMEOUT_MS": "timeout_ms",
+    "NEMOTRON_MAX_RETRIES": "max_retries",
+}
+
+
 def resolve_environment() -> dict[str, str]:
-    """Resolve API key, base URL, and default model from environment or local .env file."""
-    env_vars = {
-        "api_key": os.environ.get("NVIDIA_API_KEY", ""),
-        "base_url": os.environ.get("NVIDIA_BASE_URL", ""),
-        "default_model": os.environ.get("NEMOTRON_DEFAULT_MODEL", ""),
-    }
+    """Resolve API key, base URL, model, timeout, and retries from environment
+    or a local .env file (process environment wins)."""
+    env_vars = {key: os.environ.get(var, "") for var, key in _ENV_VAR_KEYS.items()}
     if env_vars["api_key"] and env_vars["default_model"]:
         return env_vars
 
@@ -56,17 +71,25 @@ def resolve_environment() -> dict[str, str]:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
-                        key_name = k.strip()
-                        val = v.strip()
-                        if key_name == "NVIDIA_API_KEY" and not env_vars["api_key"]:
-                            env_vars["api_key"] = val
-                        elif key_name == "NVIDIA_BASE_URL" and not env_vars["base_url"]:
-                            env_vars["base_url"] = val
-                        elif key_name == "NEMOTRON_DEFAULT_MODEL" and not env_vars["default_model"]:
-                            env_vars["default_model"] = val
-            except Exception:
-                pass
+                        key_name = _ENV_VAR_KEYS.get(k.strip())
+                        if key_name and not env_vars[key_name]:
+                            env_vars[key_name] = v.strip()
+            except (OSError, UnicodeDecodeError):
+                # A malformed or unreadable .env must not crash the bridge, but
+                # it must not fail invisibly either.
+                logger.debug("Skipping unreadable .env file at %s", env_path, exc_info=True)
     return env_vars
+
+
+def _int_from_env(raw: str, default: int, name: str) -> int:
+    """Parse an integer env value, warning (not raising) on garbage."""
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Ignoring non-integer %s=%r; using %d", name, raw, default)
+        return default
 
 
 def resolve_api_key() -> str:
@@ -81,15 +104,31 @@ def complete_chat(
     base_url: Optional[str] = None,
     temperature: float = 0.2,
     max_tokens: int = 4096,
-    timeout_sec: int = 30,
+    timeout_sec: Optional[int] = None,
     tools: Optional[list[dict[str, Any]]] = None,
     tool_choice: Optional[Any] = None,
+    max_retries: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Execute a chat completion request against NVIDIA Nemotron API."""
+    """Execute a chat completion request against NVIDIA Nemotron API.
+
+    ``timeout_sec`` and ``max_retries`` default to the NEMOTRON_TIMEOUT_MS /
+    NEMOTRON_MAX_RETRIES environment configuration when not passed explicitly;
+    retries cover transient failures (HTTP 429/5xx and connection errors) with
+    exponential backoff and default to 0 (off).
+    """
     env_config = resolve_environment()
     key = api_key if api_key is not None else env_config["api_key"]
     if not key:
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
+
+    if timeout_sec is None:
+        timeout_ms = _int_from_env(
+            env_config.get("timeout_ms", ""), DEFAULT_TIMEOUT_SEC * 1000, "NEMOTRON_TIMEOUT_MS"
+        )
+        timeout_sec = max(1, timeout_ms // 1000)
+    if max_retries is None:
+        max_retries = _int_from_env(env_config.get("max_retries", ""), DEFAULT_MAX_RETRIES, "NEMOTRON_MAX_RETRIES")
+    max_retries = max(0, max_retries)
 
     endpoint = base_url or env_config["base_url"] or DEFAULT_BASE_URL
     target_model = model or env_config["default_model"]
@@ -128,21 +167,41 @@ def complete_chat(
         method="POST",
     )
 
-    start_time = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # nosec B310
-            body = resp.read().decode("utf-8")
-            data = cast(dict[str, Any], json.loads(body))
-            latency_ms = int((time.time() - start_time) * 1000)
-            data["latency_ms"] = latency_ms
-            return data
-    except urllib.error.HTTPError as e:
-        err_msg = e.read().decode("utf-8", errors="replace")
-        sanitized = err_msg.replace(key, mask_secret(key))
-        raise RuntimeError(f"Nemotron API HTTP {e.code} Error: {sanitized}") from e
-    except Exception as e:
-        sanitized = str(e).replace(key, mask_secret(key))
-        raise RuntimeError(f"Nemotron Connection Error: {sanitized}") from e
+    for attempt in range(max_retries + 1):
+        start_time = time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # nosec B310
+                body = resp.read().decode("utf-8")
+                data = cast(dict[str, Any], json.loads(body))
+                latency_ms = int((time.time() - start_time) * 1000)
+                data["latency_ms"] = latency_ms
+                return data
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")
+            sanitized = err_msg.replace(key, mask_secret(key))
+            if e.code in RETRYABLE_HTTP_STATUSES and attempt < max_retries:
+                backoff = RETRY_BACKOFF_BASE_SEC * (2**attempt)
+                logger.warning(
+                    "Nemotron API HTTP %d (attempt %d/%d); retrying in %.1fs",
+                    e.code, attempt + 1, max_retries + 1, backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise RuntimeError(f"Nemotron API HTTP {e.code} Error: {sanitized}") from e
+        except Exception as e:
+            sanitized = str(e).replace(key, mask_secret(key))
+            if isinstance(e, (urllib.error.URLError, TimeoutError)) and attempt < max_retries:
+                backoff = RETRY_BACKOFF_BASE_SEC * (2**attempt)
+                logger.warning(
+                    "Nemotron connection error (attempt %d/%d): %s; retrying in %.1fs",
+                    attempt + 1, max_retries + 1, sanitized, backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise RuntimeError(f"Nemotron Connection Error: {sanitized}") from e
+
+    # Unreachable: the loop either returns or raises on its final attempt.
+    raise RuntimeError("Nemotron retry loop exited without a response")
 
 
 def main() -> None:
@@ -181,7 +240,7 @@ def main() -> None:
                 f"{usage.get('total_tokens', 0)} total\n"
             )
     except Exception as e:
-        logger.error(f"Nemotron Bridge Error: {e}")
+        logger.error("Nemotron Bridge Error: %s", e)
         sys.exit(1)
 
 

@@ -409,3 +409,34 @@ class TestLiveOrchestrator:
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=os.environ.get("NVIDIA_API_KEY"))
         assert orch.execute_agent("test-agent", "Reply with the word: OK")  # noqa: S101
+
+
+# ---------------------------------------------------------------------------
+# Tool registry (spec: orchestrator-tool-registry, R-ORCH-2)
+# ---------------------------------------------------------------------------
+
+
+class TestToolRegistry:
+    def test_every_declared_tool_has_a_handler(self, mock_workspace: Path) -> None:
+        """Declaration (NEMOTRON_TOOLS) and dispatch (_tool_handlers) must not drift."""
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        tools: list[dict[str, Any]] = orch_module.NEMOTRON_TOOLS
+        declared = {t["function"]["name"] for t in tools}
+        registered = set(orch._tool_handlers)
+        assert declared == registered, (
+            f"declared-but-unhandled: {declared - registered}; "
+            f"handled-but-undeclared: {registered - declared}"
+        )
+
+    def test_handlers_return_strings(self, mock_workspace: Path, mocker) -> None:
+        """Every handler returns a str for the tool message content (empty args).
+
+        The meta tools are patched so the test never writes to the real
+        .mango/memory store.
+        """
+        mocker.patch.object(orch_module, "knowledge_gap_log", return_value="gap-logged")
+        mocker.patch.object(orch_module, "hypothesis_register", return_value="hypothesis-logged")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        for name, handler in orch._tool_handlers.items():
+            result = handler({})
+            assert isinstance(result, str), f"handler {name} returned {type(result)}"
