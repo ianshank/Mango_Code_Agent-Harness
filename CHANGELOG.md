@@ -23,21 +23,37 @@ every threshold and the decision-ID grammar silently fell back to built-in
 defaults and the run went green — the gate reporting success precisely because
 it had stopped reading the policy that governs it.
 
-All three now distinguish the two. `exists()` is checked alongside `is_symlink()`
-because `exists()` follows symlinks and answers False for a dangling one, which
-would otherwise read as absence. `policy_loader` exposes the rule as
-`policy_file_is_absent`; the other two inline it, because both are standalone-
-stdlib by contract (the adopter path copies them, so they take no harness
-imports).
+Worse, the `Path` predicates also swallow `OSError`. `is_file()`, `exists()` and
+`is_symlink()` all answer False when the policy is *present and merely
+inaccessible* — a parent directory without execute permission, a path component
+that turned out to be a file (`NotADirectoryError`), a symlink loop. No
+predicate can express the question; only the errno can.
+
+All three readers now probe with `stat`/`lstat` and branch on the error.
+`FileNotFoundError` from both is the adopter path; anything else stops the run.
+`lstat` is what separates "nothing here" from "the symlink target is gone",
+since `stat` follows the link and reports both as `FileNotFoundError` — while a
+symlink to a *real* policy file must still be followed and read, so rejecting
+every symlink would be a fail-closed bug of its own. `policy_loader` exposes the
+rule as `policy_file_is_absent`; the other two inline it, because both are
+standalone-stdlib by contract (the adopter path copies them, so they take no
+harness imports).
 
 `test_policy_path_fail_closed.py` pins it twice over. Behaviourally, each reader
 is driven with a directory, a dangling symlink and a FIFO, and must raise with a
 reason — while a genuinely absent policy must still return the fallback, so the
 fix cannot quietly break the adopter case it stands in front of. Structurally, a
-source scan fails on the *shape* — a `POLICY_PATH.is_file()` guard with nothing
-nearby distinguishing absence — so a fourth reader is caught the day it is
-written rather than the day it is deployed. Both halves were verified failing
-against the reverted code: 3 tests for `policy_loader`, 7 for the other two.
+source scan bans the shape outright: a policy path is never guarded by
+`is_file()`, because there is no correct way to answer this question with it.
+(An earlier version of the scan required a compensating `is_symlink()` nearby,
+which a guard checking *only* `is_symlink()` would have satisfied while still
+failing open on a directory.) The scan carries both a positive and a negative
+control, so neither a pattern that matches nothing nor one that matches the
+fixed form can pass unnoticed. Every claim about the stdlib that makes this a
+regression rather than a style choice is asserted too, not left in a comment.
+
+All of it was verified failing against the reverted code, including a guard
+written the way the first review round suggested.
 
 ### Remediation programme v3 — peer review of the v2 tech-debt programme
 

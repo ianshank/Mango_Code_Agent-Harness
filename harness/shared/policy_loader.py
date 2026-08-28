@@ -17,6 +17,7 @@ Spec: docs/specs/policy-single-source.md.
 from __future__ import annotations
 
 import json
+import stat
 from pathlib import Path
 
 POLICY_PATH = Path(__file__).resolve().parent / "governance-policy.json"
@@ -29,29 +30,47 @@ class PolicyError(ValueError):
 def policy_file_is_absent(path: Path) -> bool:
     """True when nothing exists at ``path`` -- the adopter path.
 
-    Raises PolicyError when something *is* there but is not a regular file: a
-    directory, a dangling symlink, a FIFO, a device node.
+    Raises PolicyError for anything else: a directory, a dangling symlink, a
+    FIFO, a device node, a path whose parent component is not a directory, an
+    unreadable parent, a symlink loop.
 
-    ``Path.is_file()`` alone cannot tell those apart from absence -- it answers
-    False for both -- so a reader that branches on it treats a broken
-    deployment as a repository that simply has no policy. That is the
-    difference between "this adopter has not adopted the policy yet", which is
-    supported, and "the policy that governs this run is not readable", which
-    must stop the run. Get it wrong and a bad volume mount or a half-extracted
-    archive drops every threshold to its built-in default while every gate
-    keeps reporting success.
+    Deliberately probes with ``stat``/``lstat`` rather than the ``Path``
+    predicates. ``is_file()``, ``exists()`` and ``is_symlink()`` all swallow
+    OSError and answer False, so each of them reports "absent" for a policy
+    that is present and merely inaccessible -- a parent directory without
+    execute permission, or a path component that turned out to be a file. The
+    predicates cannot express the question; only the errno can.
 
-    A dangling symlink is checked explicitly because ``exists()`` follows
-    symlinks and answers False for one, which would otherwise read as absence.
+    That distinction is the whole point of this function. "This adopter has not
+    adopted the policy yet" is supported and yields built-in defaults. "The
+    policy that governs this run cannot be read" must stop the run. Collapse
+    them and a bad volume mount or a half-extracted archive drops every
+    threshold to its default while every gate still reports success.
     """
-    if path.is_file():
-        return False
-    if path.exists() or path.is_symlink():
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        # Either nothing is here at all, or a symlink whose target is gone --
+        # stat() follows the link and cannot tell them apart. lstat() does not
+        # follow it, so it answers the question stat() just lost.
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return True
+        except OSError as exc:
+            raise PolicyError(f"governance policy path {path} is not readable: {exc}") from exc
+        raise PolicyError(
+            f"governance policy path {path} is a symlink whose target does not exist; "
+            "refusing to fall back to built-in defaults"
+        ) from None
+    except OSError as exc:
+        raise PolicyError(f"governance policy path {path} is not readable: {exc}") from exc
+    if not stat.S_ISREG(info.st_mode):
         raise PolicyError(
             f"governance policy path {path} exists but is not a regular file; "
             "refusing to fall back to built-in defaults"
         )
-    return True
+    return False
 
 
 def load_policy(policy_path: Path | None = None) -> dict:
