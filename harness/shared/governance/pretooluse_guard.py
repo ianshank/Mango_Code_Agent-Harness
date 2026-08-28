@@ -24,6 +24,47 @@ UNMODELED = re.compile(r"`|\$\(|\bGIT_CONFIG_(?:COUNT|KEY_[0-9]+|VALUE_[0-9]+)\b
 BLOCK_EXIT = 2
 ALLOW_EXIT = 0
 
+#: Destination-check budget used when the caller supplies none. `main()` is the
+#: PreToolUse hook entry point and has no tool budget to hand down, so without a
+#: default the hook path keeps the unbounded `subprocess.run` the broker path just
+#: lost -- and a guard that hangs never returns a verdict at all, which is the one
+#: outcome a fail-closed gate cannot produce. The literal is the *adopter*
+#: fallback, for a checkout carrying no governance policy; the live value is read
+#: from the policy below.
+FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC = 30
+
+#: Read with `json.loads` rather than `policy_loader`: Claude Code executes this
+#: module directly as a hook, so it takes no harness imports -- the same
+#: standalone-stdlib contract `check_projections` and `verify_zero_skips` carry.
+POLICY_PATH = Path(__file__).resolve().parent.parent / "governance-policy.json"
+
+
+def destination_check_timeout(policy_path: Path = POLICY_PATH) -> int:
+    """Seconds the destination check may run before the guard blocks.
+
+    An absent policy is the adopter path and yields the fallback. A policy that
+    is present but unusable raises: falling back to a default because the policy
+    could not be read is how a bound nobody set comes to look deliberate.
+    """
+    try:
+        policy_path.stat()
+    except FileNotFoundError:
+        return FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC
+    except OSError as exc:  # present but inaccessible -- not the adopter path
+        raise ValueError(f"cannot read {policy_path}: {exc}") from exc
+    try:
+        # Annotated `object`, not left as `Any`: the isinstance checks below only
+        # narrow a value the checker does not already believe is an int, so with
+        # `Any` they are decoration and the return type is unverified.
+        value: object = json.loads(policy_path.read_text(encoding="utf-8"))["orchestrator"]["tool_timeout_sec"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f"unusable orchestrator.tool_timeout_sec in {policy_path}: {exc}") from exc
+    # `bool` is an `int` subclass, so `isinstance(True, int)` is True and a policy
+    # of `true` would sail through as a one-second budget.
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"orchestrator.tool_timeout_sec in {policy_path} is not a positive int: {value!r}")
+    return value
+
 #: Envelope keys that may carry the tool payload. ``tool_input`` is the Claude Code
 #: PreToolUse shape. ``args`` is the shape ``MangoMASOrchestrator`` sent, which this
 #: guard read as an absent key and therefore evaluated as the empty string -- a
@@ -200,7 +241,7 @@ def destinations(root: Path, seg: list[str]) -> list[str]:
     return urls
 
 
-def check_command(cmd: str) -> int:
+def check_command(cmd: str, timeout: int | None = None) -> int:
     if not DANGER.search(cmd):
         return 0
     if re.search(r"\bgh\b[^\n]*\brepo\b[^\n]*\bcreate\b[^\n]*--public\b", cmd, re.I):
@@ -213,6 +254,13 @@ def check_command(cmd: str) -> int:
         return block(f"cannot tokenize dangerous command: {e}")
     env_root = os.environ.get("CLAUDE_PROJECT_DIR")
     root = Path(env_root or git_output(Path.cwd(), ["rev-parse", "--show-toplevel"]) or Path.cwd()).resolve()
+    if timeout is None:
+        # Resolved here, not at the signature: a default evaluated at import time
+        # would pin the policy value read when the module first loaded.
+        try:
+            timeout = destination_check_timeout()
+        except ValueError as exc:
+            return block(str(exc), "unusable-policy")
     logger.debug(
         "guard resolved root=%s source=%s allowlist=%s",
         root,
@@ -236,18 +284,25 @@ def check_command(cmd: str) -> int:
                 # We use the module directly if possible, else subprocess
                 # For safety in the guard we stick to the subprocess or we can just import it
                 remotes_path = Path(__file__).resolve().parent / "remotes.py"
-                p = subprocess.run(
-                    [
-                        sys.executable,
-                        str(remotes_path),
-                        "--check-url",
-                        url,
-                        "--allowlist",
-                        str(root / ".governance/allowed-remotes.txt"),
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    p = subprocess.run(
+                        [
+                            sys.executable,
+                            str(remotes_path),
+                            "--check-url",
+                            url,
+                            "--allowlist",
+                            str(root / ".governance/allowed-remotes.txt"),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                    )
+                except subprocess.TimeoutExpired:
+                    return block(
+                        f"push destination check timed out after {timeout}s",
+                        "remote-destination-timeout",
+                    )
                 if p.returncode != 0:
                     # Captured rather than inherited: the destination check runs in a
                     # child process, so its stderr went to fd 2 and never reached the

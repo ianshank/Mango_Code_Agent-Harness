@@ -11,10 +11,13 @@ import pytest
 # The shim re-exports the module's historical public surface and sits two lines
 # under `dedup.max_shim_lines`; the newer names are imported from the module
 # itself rather than spending that budget.
+import harness.shared.governance.pretooluse_guard as guard_mod
 from harness.shared.governance.pretooluse_guard import (
     BLOCK_EXIT,
+    FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC,
     UNRECOGNISED_ENVELOPE,
     check_command,
+    destination_check_timeout,
     extract_command,
 )
 from harness.shared.pretooluse_guard import (
@@ -431,3 +434,126 @@ class TestExtractCommand:
 
     def test_non_dict_section_is_not_a_recognised_envelope(self):
         assert extract_command({"tool_input": "git push origin main"}) is UNRECOGNISED_ENVELOPE
+
+
+class TestDestinationCheckIsBounded:
+    """The guard's own destination check runs in a subprocess, and an unbounded
+    one turns a fail-closed gate into a hang -- the single outcome it cannot
+    produce, because a guard that never returns yields no verdict to fail closed
+    *with*. The broker path gained `timeout=timeout`; `main()`, the PreToolUse
+    hook Claude Code actually executes, has no tool budget to hand down and so
+    kept the unbounded call. These pin both ends.
+    """
+
+    def test_a_timed_out_destination_check_blocks(self) -> None:
+        """Fail closed, not open: a check that did not finish has not approved."""
+        def explode(*args: object, **kwargs: object) -> None:
+            raise subprocess.TimeoutExpired(cmd="remotes.py", timeout=1)
+
+        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
+                patch.object(guard_mod.subprocess, "run", explode), \
+                patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]):
+            assert check_command("git push origin main", timeout=1) == BLOCK_EXIT
+
+    def test_the_default_is_a_bound_and_not_none(self) -> None:
+        """The regression: `timeout: int | None = None` reads as "bounded" and is
+        not. Asserted on the value handed to `subprocess.run`, because the
+        signature default is exactly what looked correct."""
+        seen: dict[str, object] = {}
+
+        def capture(*args: object, **kwargs: object) -> subprocess.CompletedProcess:
+            seen.update(kwargs)
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
+                patch.object(guard_mod.subprocess, "run", capture), \
+                patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]):
+            check_command("git push origin main")
+
+        assert seen.get("timeout") is not None, (
+            "check_command called with no timeout left subprocess.run unbounded; "
+            "the hook path can hang indefinitely on a stuck destination check"
+        )
+        assert seen["timeout"] == destination_check_timeout()
+
+
+class TestDestinationCheckTimeoutIsPolicySourced:
+    """No hard-coded threshold, and no silent fallback when the policy is
+    unreadable -- a bound that defaults because nobody could read the policy is
+    indistinguishable from one somebody chose."""
+
+    def test_the_live_value_comes_from_the_policy(self, tmp_path: Path) -> None:
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps({"orchestrator": {"tool_timeout_sec": 47}}), encoding="utf-8")
+        assert destination_check_timeout(policy) == 47
+
+    def test_the_repository_policy_is_readable(self) -> None:
+        """Positive control. Every fail-closed case below is satisfied by a
+        resolver that rejects everything, including the real policy."""
+        assert destination_check_timeout() > 0
+
+    def test_an_absent_policy_is_the_adopter_path(self, tmp_path: Path) -> None:
+        assert (
+            destination_check_timeout(tmp_path / "nothing.json")
+            == FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC
+        )
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param("{not json", id="malformed"),
+            pytest.param(json.dumps({}), id="no-orchestrator"),
+            pytest.param(json.dumps({"orchestrator": {}}), id="no-key"),
+            pytest.param(json.dumps({"orchestrator": {"tool_timeout_sec": "30"}}), id="string"),
+            pytest.param(json.dumps({"orchestrator": {"tool_timeout_sec": 0}}), id="zero"),
+            pytest.param(json.dumps({"orchestrator": {"tool_timeout_sec": -1}}), id="negative"),
+            # bool is an int subclass, so a bare isinstance check reads `true` as
+            # a one-second budget rather than as a malformed policy.
+            pytest.param(json.dumps({"orchestrator": {"tool_timeout_sec": True}}), id="bool"),
+            pytest.param(json.dumps({"orchestrator": []}), id="orchestrator-not-a-mapping"),
+        ],
+    )
+    def test_a_present_but_unusable_policy_raises(self, tmp_path: Path, payload: str) -> None:
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(payload, encoding="utf-8")
+        with pytest.raises(ValueError):
+            destination_check_timeout(policy)
+
+    def test_a_directory_where_the_policy_belongs_is_not_the_adopter_path(self, tmp_path: Path) -> None:
+        """`stat()` succeeds on a directory, so only the read fails -- the
+        container-mount shape `policy_loader` was fixed for, one module over."""
+        policy = tmp_path / "governance-policy.json"
+        policy.mkdir()
+        with pytest.raises(ValueError):
+            destination_check_timeout(policy)
+
+    def test_a_policy_behind_a_non_directory_is_not_the_adopter_path(self, tmp_path: Path) -> None:
+        """`stat()` raises `NotADirectoryError` -- an `OSError` that is *not*
+        `FileNotFoundError`. Only the errno separates "nothing is here" from "the
+        policy is here and unreadable", which is the distinction `policy_loader`
+        was fixed for one module over; catching `OSError` as absence collapses it
+        again. Provoked with a file where a directory belongs rather than with
+        permission bits, which a root test runner ignores.
+        """
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("", encoding="utf-8")
+        with pytest.raises(ValueError):
+            destination_check_timeout(blocker / "governance-policy.json")
+
+    def test_a_symlink_loop_is_not_the_adopter_path(self, tmp_path: Path) -> None:
+        """The other errno the `Path` predicates swallow: `ELOOP`."""
+        looped = tmp_path / "governance-policy.json"
+        looped.symlink_to(looped)
+        with pytest.raises(ValueError):
+            destination_check_timeout(looped)
+
+    def test_an_unusable_policy_blocks_rather_than_propagating(self, tmp_path: Path) -> None:
+        """`check_command` must convert that raise into a verdict: an exception
+        escaping a PreToolUse hook is a crash, which Claude Code reads as a broken
+        hook rather than as a denial."""
+        def unusable(*args: object, **kwargs: object) -> int:
+            raise ValueError("unusable policy")
+
+        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
+                patch.object(guard_mod, "destination_check_timeout", unusable):
+            assert check_command("git push origin main") == BLOCK_EXIT

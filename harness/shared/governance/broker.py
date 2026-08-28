@@ -259,7 +259,10 @@ class ExecutionBroker:
                 )
 
         # INV-8: every execution request passes the command guard.
-        if check_command(command) != 0:
+        # `timeout=timeout` bounds the guard's own destination-check subprocess by
+        # the caller's budget; `redact_text` because a blocked command is exactly
+        # when it is most likely to carry a credential -- `git push https://user:TOKEN@host`.
+        if check_command(command, timeout=timeout) != 0:
             logger.warning("PreToolUse guard blocked command: %s", redact_text(command))
             return ExecutionResult(
                 "BLOCKED", "", "BLOCKED: Command failed pretooluse_guard policy evaluation.", 2,

@@ -7,6 +7,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — the command guard could hang instead of returning a verdict
+
+`check_command` delegates push-destination decisions to `remotes.py` in a
+subprocess, and that call carried no timeout. A guard that hangs produces the one
+outcome a fail-closed gate cannot: no verdict at all. The tool call waits on a
+subprocess that waits on a network read, and neither the broker's timeout nor
+INV-8 has anything to act on.
+
+Threading the broker's own budget through (`check_command(command,
+timeout=timeout)`) fixed the broker path and left the other one open.
+`main()` — the PreToolUse entry point Claude Code actually executes as a hook —
+has no tool budget to hand down, so it kept calling `check_command(str(cmd))`
+and the signature default `timeout: int | None = None` passed `None` straight
+into `subprocess.run`. A default that reads as "bounded" and is not is the same
+shape as the `sandbox_available: bool = True` fail-open removed one commit
+earlier.
+
+The default is now resolved from `orchestrator.tool_timeout_sec` in
+`governance-policy.json` rather than fixed in the signature, so the hook and the
+broker share one policy-declared bound and neither restates it. Read with
+`json.loads` rather than through `policy_loader`: Claude Code executes this
+module directly, so it takes no harness imports — the same standalone-stdlib
+contract `check_projections` and `verify_zero_skips` carry, and the reason they
+duplicate the absent-policy rule rather than importing it.
+
+Resolution is inside `check_command`, not at import time, so the value cannot be
+pinned to whatever the policy said when the hook module first loaded. An absent
+policy is the adopter path; a policy that is *present but unreadable* raises, and
+`check_command` converts that raise into a block — an exception escaping a
+PreToolUse hook is a crash, which Claude Code reads as a broken hook rather than
+as a denial. Absence is separated from inaccessibility by errno, not by a `Path`
+predicate, for the reason recorded below: `stat()` answers `NotADirectoryError`
+for a policy behind a file-where-a-directory-belongs and `ELOOP` for a symlink
+loop, and reading either as "no policy here" silently restores the default.
+
+**8/8 mutants killed** — restoring the unbounded default, dropping the
+`TimeoutExpired` catch, falling back on an unusable policy, dropping the
+positivity guard, dropping the `bool`-is-an-`int` guard (a policy of `true`
+otherwise reads as a one-second budget), letting the `ValueError` escape as a
+crash, and either of the two ways to collapse inaccessible into absent.
+
 ### Agent containment — INV-8 becomes true on the live path
 
 `run_command` routes through `ExecutionBroker`. Generated code now executes
