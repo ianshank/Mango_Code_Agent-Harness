@@ -51,5 +51,5 @@
       }
     ]
   },
-  "$comment": "Mango agent lifecycle hook bindings. DORMANT BY DECISION DEC-003: these are declared here but deliberately NOT mirrored into .claude/settings.json, which is the file Claude Code reads, so none of them run. Commands are routed through `bash` (matching .claude/settings.json) because every tracked .sh in this repository is mode 644 by convention -- invoking the bare path would fail with Permission denied the moment these were woken. test_mango_hooks_stay_dormant pins the dormancy; test_every_hook_references_only_existing_paths pins that the scripts stay correct while dormant."
+  "$comment": "Mango agent lifecycle hook bindings. DORMANT BY DECISION DEC-003: these are declared here but deliberately NOT mirrored into .claude/settings.json, which is the file Claude Code reads, so none of them run. Commands are routed through `bash` (matching .claude/settings.json) because every tracked .sh in this repository is mode 644 by convention -- invoking the bare path would fail with Permission denied the moment these were woken. test_mango_hooks_stay_dormant pins the dormancy; test_hook_references_only_paths_that_exist pins that the scripts stay correct while dormant."
 }

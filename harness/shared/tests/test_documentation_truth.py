@@ -28,12 +28,17 @@ pytestmark = pytest.mark.governance
 def _tree_entries() -> list[str]:
     """Repository paths drawn in the README's layout tree.
 
-    The tree uses box-drawing characters for nesting but writes each entry's
-    path relative to the repository root at its own depth, so reconstructing
-    full paths would mean re-deriving the indentation grammar. Instead only
-    top-level entries (depth 0) and entries whose text is already a full
-    relative path are checked -- enough to catch a removed directory, without
-    inventing a parser that would itself need tests.
+    Only depth-0 entries are returned, and deliberately so. A nested line such
+    as ``hooks/session-start.sh`` under ``.claude/`` is written relative to its
+    *parent*, not to the repository root, so it cannot be resolved without
+    reconstructing the indentation grammar -- a parser that would itself need
+    tests to be trustworthy. Depth 0 is where a whole removed directory shows
+    up, which is the rot this exists to catch (``.agents/`` was exactly that).
+
+    Nested entries are not unchecked, they are checked differently:
+    ``test_every_skill_directory_is_listed`` compares the skill names in the
+    tree against the filesystem, which is the one nested section that changes
+    often enough to rot.
     """
     text = README.read_text(encoding="utf-8")
     match = re.search(r"```text\n(.*?)```", text, re.S)

@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -110,7 +110,15 @@ class TestSkillsAreDated:
         match = re.search(r"^Reviewed:\s*(\d{4}-\d{2}-\d{2})\s*$", text, re.M)
         assert match, f"{name}/SKILL.md has no `Reviewed: YYYY-MM-DD` line in its frontmatter"
         reviewed = date.fromisoformat(match.group(1))
-        assert reviewed <= date.today(), f"{name} claims a review date in the future"
+        # Compared against UTC, with a day of slack. These dates are stamped in
+        # UTC, but `date.today()` is local: a runner behind UTC evaluating this
+        # just after midnight would see "tomorrow" and fail a file nobody
+        # touched. The assertion exists to catch a typo'd year, not to police
+        # the hour, so a day of tolerance costs it nothing.
+        today_utc = datetime.now(timezone.utc).date()
+        assert reviewed <= today_utc + timedelta(days=1), (
+            f"{name} claims a review date in the future: {reviewed} > {today_utc}"
+        )
 
     @pytest.mark.parametrize("name", _skill_names())
     def test_reviewed_line_is_inside_the_frontmatter(self, name: str) -> None:
@@ -344,4 +352,51 @@ class TestAgentContractsMatchThePolicy:
         assert not silent, (
             f"roles with no allowed_actions: {silent}. Under default_deny an empty list is "
             "indistinguishable from a forgotten one; say so explicitly."
+        )
+
+
+class TestProseNamesTestsThatExist:
+    """Governance prose that names an enforcing test must name a real one.
+
+    ``.mango/settings.json``'s ``$comment`` cited
+    ``test_every_hook_references_only_existing_paths``, which never existed --
+    the test is called ``test_hook_references_only_paths_that_exist``. A
+    reader following that pointer to check the claim finds nothing and is left
+    unable to tell whether the enforcement is missing or merely misnamed.
+
+    This is the same defect the rest of this file guards against, one level up:
+    a claim about the code that the code does not support.
+    """
+
+    # Files whose prose points at enforcing tests by name.
+    PROSE_SOURCES = (
+        REPO / ".mango" / "settings.json",
+        REPO / "harness" / "CONTRACT.md",
+    )
+
+    def _declared_test_names(self) -> set[str]:
+        names: set[str] = set()
+        for source in self.PROSE_SOURCES:
+            if source.is_file():
+                names |= set(re.findall(r"\btest_[a-z0-9_]{6,}\b", source.read_text(encoding="utf-8")))
+        return names
+
+    def _defined_test_names(self) -> set[str]:
+        defined: set[str] = set()
+        for root in (REPO / "harness" / "shared" / "tests", REPO / "harness" / "api_server" / "tests"):
+            for module in root.rglob("test_*.py"):
+                defined.add(module.stem)
+                defined |= set(re.findall(r"^\s*def (test_[a-z0-9_]+)", module.read_text(encoding="utf-8"), re.M))
+        return defined
+
+    def test_the_scan_finds_prose_references(self) -> None:
+        """Guards the scan: no references found would make the check vacuous."""
+        assert self._declared_test_names(), "no test names found in the governance prose"
+
+    def test_every_named_test_exists(self) -> None:
+        missing = sorted(self._declared_test_names() - self._defined_test_names())
+        assert not missing, (
+            f"governance prose names tests that do not exist: {missing}. Rename the "
+            "reference or the test -- a pointer to nothing is worse than no pointer, "
+            "because it reads as evidence the claim is enforced."
         )
