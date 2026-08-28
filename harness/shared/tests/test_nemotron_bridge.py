@@ -133,3 +133,107 @@ def test_main_error_exit(mock_stdout, mock_complete):
         main()
     assert exc.value.code == 1
     assert "mock error" in mock_stdout.getvalue()
+
+
+# --- Retry / environment-knob behavior (spec: orchestrator-tool-registry) ---
+
+
+def _mock_success_response():
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b'{"choices": [{"message": {"content": "ok"}}]}'
+    mock_resp.__enter__.return_value = mock_resp
+    return mock_resp
+
+
+@patch("harness.shared.nemotron_bridge.time.sleep")
+@patch("urllib.request.urlopen")
+def test_complete_chat_retries_transient_http_error(mock_urlopen, mock_sleep):
+    """With NEMOTRON_MAX_RETRIES set, a transient 503 is retried to success."""
+    err = urllib.error.HTTPError("url", 503, "Service Unavailable", {}, io.BytesIO(b"busy"))
+    mock_urlopen.side_effect = [err, _mock_success_response()]
+
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_MAX_RETRIES": "2"}):
+        res = complete_chat([], api_key="secret-key")
+
+    assert res["choices"][0]["message"]["content"] == "ok"
+    assert mock_urlopen.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+@patch("harness.shared.nemotron_bridge.time.sleep")
+@patch("urllib.request.urlopen")
+def test_complete_chat_no_retry_by_default(mock_urlopen, mock_sleep):
+    """Retries default to 0: a transient failure surfaces immediately."""
+    err = urllib.error.HTTPError("url", 503, "Service Unavailable", {}, io.BytesIO(b"busy"))
+    mock_urlopen.side_effect = err
+
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}, clear=False):
+        os.environ.pop("NEMOTRON_MAX_RETRIES", None)
+        with pytest.raises(RuntimeError, match="HTTP 503"):
+            complete_chat([], api_key="secret-key")
+
+    assert mock_urlopen.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("harness.shared.nemotron_bridge.time.sleep")
+@patch("urllib.request.urlopen")
+def test_complete_chat_non_transient_http_error_never_retried(mock_urlopen, mock_sleep):
+    """A 401 is not transient: no retry even with the knob set."""
+    err = urllib.error.HTTPError("url", 401, "Unauthorized", {}, io.BytesIO(b"bad key"))
+    mock_urlopen.side_effect = err
+
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_MAX_RETRIES": "3"}):
+        with pytest.raises(RuntimeError, match="HTTP 401"):
+            complete_chat([], api_key="secret-key")
+
+    assert mock_urlopen.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("harness.shared.nemotron_bridge.time.sleep")
+@patch("urllib.request.urlopen")
+def test_complete_chat_retries_connection_error_then_exhausts(mock_urlopen, mock_sleep):
+    """URLErrors are retried up to the configured budget, then surface sanitized."""
+    mock_urlopen.side_effect = urllib.error.URLError("refused by my_secret_key")
+
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_MAX_RETRIES": "2"}):
+        with pytest.raises(RuntimeError, match="Nemotron Connection Error"):
+            complete_chat([], api_key="my_secret_key")
+
+    assert mock_urlopen.call_count == 3
+    assert mock_sleep.call_count == 2
+
+
+@patch("urllib.request.urlopen")
+def test_complete_chat_timeout_from_env(mock_urlopen):
+    """NEMOTRON_TIMEOUT_MS is honored when the caller omits timeout_sec."""
+    mock_urlopen.return_value = _mock_success_response()
+
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_TIMEOUT_MS": "5000"}):
+        complete_chat([], api_key="secret-key")
+
+    assert mock_urlopen.call_args.kwargs["timeout"] == 5
+
+    # An explicit caller value always wins over the environment.
+    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model", "NEMOTRON_TIMEOUT_MS": "5000"}):
+        complete_chat([], api_key="secret-key", timeout_sec=7)
+
+    assert mock_urlopen.call_args.kwargs["timeout"] == 7
+
+
+@patch("urllib.request.urlopen")
+def test_complete_chat_garbage_env_ints_fall_back(mock_urlopen):
+    """Non-integer knob values are ignored with a warning, not raised."""
+    mock_urlopen.return_value = _mock_success_response()
+
+    env = {
+        "NEMOTRON_DEFAULT_MODEL": "dummy-model",
+        "NEMOTRON_TIMEOUT_MS": "not-a-number",
+        "NEMOTRON_MAX_RETRIES": "also-bad",
+    }
+    with patch.dict(os.environ, env):
+        res = complete_chat([], api_key="secret-key")
+
+    assert res["choices"][0]["message"]["content"] == "ok"
+    assert mock_urlopen.call_args.kwargs["timeout"] == 30

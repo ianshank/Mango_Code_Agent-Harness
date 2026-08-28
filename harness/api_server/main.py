@@ -35,7 +35,7 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 # NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
 # unions (`str | None`) would fail on Python 3.9/3.10 even with `from __future__ import
 # annotations`. Keep Optional[...] while 3.9 is in the CI matrix.
-async def verify_api_key(x_api_key: Optional[str] = Header(None)):
+async def verify_api_key(x_api_key: Optional[str] = Header(None)) -> None:
     expected_key = os.environ.get("API_SERVER_KEY")
     if not expected_key:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")
@@ -44,7 +44,7 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
 
 
 @app.post("/api/orchestrate", response_model=TaskResponse, dependencies=[Depends(verify_api_key)])
-async def orchestrate_task(request: TaskRequest):
+async def orchestrate_task(request: TaskRequest) -> TaskResponse:
     """
     Executes the sequential thinking MAS loop for the given task.
     """
