@@ -46,7 +46,9 @@ CI examples intentionally contain `PIN_FULL_COMMIT_SHA`; adopters must replace e
 
 ## Protected-paths escape hatch
 
-The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files (`Makefile`, `.github/workflows/**`, the shared validators, agent contracts, and the root of trust). `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
+The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files. Two groups are covered: the **enforcement layer** (`Makefile`, `pyproject.toml`, `.github/workflows/**`, the shared validators, the policy publisher and its committed artifact, and the per-stack roots of trust under `.governance/`), and the **agent control surface** — everything an agent reads to decide what it may do: `CLAUDE.md`, `harness/CONTRACT.md`, `agent-policy.json`, agent role contracts, `.mango/skills/**`, and the `.mango/` and `.claude/` hook and settings files that execute shell. `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
+
+Patterns are matched with `fnmatch` against repo-root-relative paths, so a pattern written for a different repository layout matches nothing and protects nothing — silently. `test_protected_path_liveness.py` guards against that by asserting on the set of files each pattern actually matches, and requires any intentionally-dormant pattern to be declared with a reason.
 
 Legitimate infrastructure modernization (CI, Makefile, governance scripts) necessarily touches these paths. Such changes MUST be made on a dedicated branch with an explicit, reviewed decision-log entry, and the protected-path gate is satisfied by setting `ALLOW_GITHUB_CHANGES=1` in the CI environment **for that reviewed change only**. The env var is a per-change attestation of review, not a blanket bypass: it is not set in the default CI environment and must never be committed to a `.env` file.
 
@@ -54,7 +56,16 @@ Untracked files in protected paths are also caught (fail-closed) — `validate_i
 
 ## Coverage gate
 
-The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The gate enforces aggregate coverage across all first-party Python modules; per-file enforcement is a documented follow-up. The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation.
+The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`) so the gate and the policy cannot silently drift, and it **fails closed**: an unreadable or malformed policy aborts `coverage-python` rather than falling back to a weaker literal. (It previously degraded to 80 while the policy declared 90 — a gate that lowers itself when it cannot read its own policy.) `pyproject.toml` deliberately declares no competing `fail_under`.
+
+**Which thresholds are actually enforced.** `governance-policy.json` declares `lines`, `statements`, `functions`, `branches` and `per_file`. Only `lines` is enforced by the root pipeline, and only in aggregate. The others are declared-but-unenforced, each recorded with a measured reason in `test_coverage_policy_enforcement.py`, which fails if a new threshold key is added without either enforcing it or declaring the gap:
+
+- **`per_file`** — six measured Python files fall below `lines` today, and aggregate headroom is roughly 60 statements, so a new untested module can ship green.
+- **`statements` / `functions` / `branches`** — enforced by `harness/node/vitest.config.ts`, which `make test-node` never activates because it runs without `--coverage`; enabling it fails six Node files at present. Python declares no `branch = true`, so branch coverage is not even measured there.
+
+Node thresholds are read from this same policy rather than restated as literals, so the two cannot drift.
+
+The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation. They are currently schema-shape guards for an unimplemented feature: no production code path consults them.
 
 ## Evidence signing
 

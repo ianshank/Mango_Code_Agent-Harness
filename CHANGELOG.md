@@ -2,6 +2,299 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.9] - 2026-08-27
+
+Governance follow-ups from the 2.1.8 review passes. Each needed a protected-path
+change and therefore the `infra-reviewed` human attestation, which is why they
+were recorded rather than patched in 2.1.8.
+
+### Security
+
+- **`protected_paths` patterns that matched zero files are now live.** Four
+  patterns (`.governance/**`, `agents/**`, `docs/PROJECT-CHARTER.md`,
+  `.github/CODEOWNERS`) were left in a single-stack frame by the layout
+  migration in `1eb2f7f`, which migrated only the `scripts/*` entries. Because
+  `fnmatch` is whole-string anchored, they matched nothing and the gate reported
+  PASS *because nothing matched* — an agent could add itself a test skip-waiver,
+  widen the git push allowlist, or edit the external root of trust unreviewed.
+  Patterns are added, never replaced: the originals cover a single-stack adopter
+  layout and the `**/` twins cover this repo's multi-stack one.
+- **The agent control surface is now gated**: `CLAUDE.md`, `harness/CONTRACT.md`,
+  `.mango/skills/**`, `agent-policy.json`, the `.claude/` and `.mango/` hook and
+  settings files that execute shell, `pyproject.toml` (where lint, type and
+  coverage gates can be silently weakened), and the policy publisher plus its
+  committed drift baseline. Protected files: 37 → 104.
+- Recorded as DEC-002 with the workflow cost measured rather than estimated:
+  ~32% of historical commits would newly require the label. DEC-003 records that
+  the five unbound `.mango/hooks/` scripts stay dormant.
+
+### Fixed
+
+- **The container image could never have built.** `.dockerignore` excludes the
+  whole `.mango/` tree, so `COPY .mango/ /app/.mango/` had no source to resolve
+  — reproduced against a real daemon as `"/.mango": not found`, with a
+  `COPY harness/` control build succeeding to isolate the cause. Dead since the
+  v2.1.1 `.claude/` → `.mango/` rename; no `docker build` runs anywhere to have
+  caught it. The runtime stage now sources `/app/harness` from `build` rather
+  than the context, which keeps that stage in the graph — BuildKit skips
+  unreferenced stages, which would have silently dropped its `tsc --noEmit`.
+- `.dockerignore`'s `.governance/vitest-results.json` and `.governance/coverage/`
+  had the same anchoring bug as the `.gitignore` entries fixed in 2.1.8 and
+  excluded nothing; verified by exporting the build context before and after.
+
+### Changed
+
+- **The `specs` gate now runs in `make ci`.** It was listed in
+  `ci_required_targets` but had no CI stage; both meta-tests asserting "CI
+  invokes every required target" read the per-stack `ci.yml`, never the root
+  workflow. Invoked as `bash harness/shared/validate_specs.sh` because that file
+  is mode 644 — a bare `./` invocation would have been a guaranteed red CI.
+- **`harness/control-plane` is now measured by the coverage gate**, making
+  `publish_policy_artifact.py` (158 statements, 78%) governed. Three CLIs are
+  omitted because they run `argparse` at module scope with required arguments
+  and have no `__main__` guard, so they cannot be imported in-process and read
+  0% as an artifact. `regenerate_bundle_digests.py` is deliberately kept
+  measured: it *is* importable, so its 0% is a real gap. Total: 95.69% → 92.97%.
+
+### Security — INV-1 had no live enforcement
+
+- **The secret scan never ran in CI.** The gitleaks steps live in
+  `harness/{node,jvm}/.github/workflows/ci.yml`, which are **adopter templates
+  GitHub never executes** — it reads workflows only from the repository-root
+  `.github/workflows/`, which contained no secret scan at all. INV-1 ("secret scan
+  covers working tree and full history and fails closed when tooling is absent")
+  was therefore unenforced on every commit in this repository's history.
+- Added a root `secrets` target mirroring the per-stack shape (fails closed when
+  gitleaks or its config is absent, scans both the working tree and full history)
+  plus `secrets-install` pinning the same gitleaks version, and a dedicated
+  `secret-scan` CI job that runs it once with `fetch-depth: 0`. It is a separate
+  job rather than a `make ci` stage because the scan is interpreter-independent;
+  inside the matrix it would repeat identical work on all four Python legs.
+- Verified by running the pinned scanner: clean on the working tree (98.7 MB) and
+  across all 73 commits of history. No allowlist changes were needed.
+
+### Changed — CI gate coverage (INV-5)
+
+- **`make remotes`** now exists and runs in `make ci`. The remote-allowlist gate
+  (INV-3) had a shared implementation and a per-stack target, but no root wiring.
+- `test_ci_gate_coverage.py` enforces INV-5 directly: every `ci_required_targets`
+  entry must map to a root Make target that CI actually invokes — reachable from
+  `make ci`, or run by a root workflow job — or be declared in `KNOWN_GAPS` with a
+  reason. `audit` (osv-scanner) is the one declared gap. The suite resolves Make
+  prerequisites transitively and expands Make variables, so a mapping that points
+  at an unreachable or renamed target fails rather than reading as covered. It
+  also fails if a coverage source root declared in `pyproject.toml` is not passed
+  to the gate — the exact configured-but-unmeasured state `harness/control-plane`
+  was in. Verified against 12 mutants, all killed.
+
+### Fixed — documentation that contradicted the contract
+
+- `PRE_PR_VERIFICATION_REFERENCE.md` **misnumbered two invariants**: it labelled
+  INV-5 "Size Budget" and INV-7 "Traceability", while `harness/CONTRACT.md`
+  defines INV-5 as CI gate coverage and INV-7 as bounded delegation. The table now
+  covers all sixteen invariants, is explicitly an index onto the contract rather
+  than a second source of truth, and every command in it was executed to confirm
+  it resolves to real tests.
+- Removed two hard-coded coverage thresholds that contradicted policy: the
+  reference guide's `--cov-fail-under=80` and `.mango/agents/verifier.md`'s
+  "coverage % (must be >= 80%)", against a policy value of 90. Both now read the
+  threshold from `governance-policy.json`, as `COV_MIN` already did.
+- README, C4 architecture, and the reference guide carried stale versions and test
+  counts (2.1.7/2.1.8, "575+ tests", "490 Python", "486+ Tests"). Now 2.1.9 with
+  measured counts, and the C4 gate diagram includes the spec, remote,
+  protected-path, and CI-gate-coverage gates. Diagram re-validated as Mermaid.
+
+### Security — the coverage gate lowered itself, and most declared thresholds ran nowhere
+
+A second audit traced every key in `governance-policy.json` to the code that reads
+it. Findings below were each confirmed by running, not by reading.
+
+- **The coverage gate failed *open*.** `COV_MIN` fell back to the literal `80`
+  whenever the policy was unreadable or its `coverage` block absent — while the
+  policy declared 90. Governance fails closed everywhere else
+  (`validate_invariants` exits non-zero on an unreadable policy); this one gate
+  silently weakened itself. It now fails closed, and `coverage-python` aborts on an
+  unresolved threshold. `pyproject.toml` separately hard-coded `fail_under = 80`,
+  so any `pytest --cov` run that did not pass the Makefile's explicit flag enforced
+  the weaker number; that declaration is removed, leaving one source of truth.
+- **`harness/node/vitest.config.ts` hard-coded all five thresholds**, duplicating
+  the policy block it was copied from with nothing detecting divergence — a direct
+  violation of CLAUDE.md's "no hard-coded values; thresholds come from
+  governance-policy.json". It now reads the policy and fails closed on a malformed
+  one.
+- **Four of the five declared thresholds are enforced nowhere in the root
+  pipeline.** Only `coverage.lines` is applied, and only in aggregate.
+  `statements`, `functions` and `branches` are enforced solely by the vitest config
+  — which `make test-node` never activates, because it runs `vitest run` **without
+  `--coverage`**. Measured: enabling it fails six Node files today, so it is
+  recorded as a quantified follow-up rather than switched on into three open PRs.
+  `per_file: true` has no Python implementation at all; six measured files fall
+  below `lines`, and aggregate headroom is ~60 statements, so an entirely untested
+  new module can ship green. `test_coverage_policy_enforcement.py` now fails if a
+  threshold key is neither enforced nor declared a gap with a measured reason.
+- **`dedup.exempt` was an unguarded bypass** — an entry silently disables the
+  shim-vs-copy drift gate for that file. It is empty today and now asserted so.
+
+### Security — the new gates verified names, not substance
+
+An adversarial review of the gates added earlier in this release found they
+asserted a target's *name* was wired in without ever asserting the target still
+*did* anything. Every case below was confirmed by mutation — the suite stayed
+green — and every one is now killed.
+
+- **The protected-path gate could be deleted outright.** Removing the
+  `validate_invariants.py` line from the `validate` recipe left its name in `ci`
+  and the whole suite passing, disarming every guarantee
+  `test_protected_path_liveness.py` exists to make. The same held for `ruff` and
+  `mypy` (`lint`), and for the remote-allowlist recipe. `GATE_TO_EVIDENCE` now
+  requires each mapped gate's recipe — and its prerequisites' — to still invoke the
+  enforcing artifact.
+- **Deleting a `protected_paths` pattern was invisible.** Liveness only caught
+  patterns that stayed but matched nothing, so `Makefile`, `.mango/settings.json`,
+  `remotes.py`, `install_hooks.sh` and `pre_push_scan.sh` could each be
+  un-protected with the suite green. `CRITICAL_PATTERNS` is now an explicit floor.
+- **The secret-scan gate had four independent false positives**: commented-out
+  scan commands satisfied the check (a raw recipe capture includes `#` lines); the
+  `fetch-depth: 0` assertion was global, so the *build* job's checkout satisfied it
+  while the scanning job went shallow and its history scan turned vacuous; and an
+  `if:` guard on the job or step could disable it entirely. Checks are now scoped
+  to the job that actually runs `make secrets`, comment lines are stripped, and any
+  conditional on that job fails the test.
+- **The coverage threshold could be set to zero.** The test inspected `COV_MIN`'s
+  *definition*, never its use, so `--cov-fail-under=0`, dropping the flag, or
+  deselecting governance tests via `-m` all passed.
+- **Makefile parsing accepted fiction as fact.** A single-`#` comment (which Make
+  ignores) parsed as prerequisites, so `ci: lint coverage # was: specs remotes …`
+  reported every commented-out stage as reachable. Prerequisites are now truncated
+  at the first unescaped `#`, line continuations are spliced, and every reachable
+  name must resolve to a real rule.
+- **Four `make ci` stages were unguarded** — `test-node`, `verify-zero-skips`,
+  `check-dedup` and `digest-regen` could all be dropped silently.
+  `REQUIRED_CI_STAGES` pins them with a reason each.
+- **`--cov={source}` was a substring test**, so broadening the declared coverage
+  source to `["harness"]` read as measured while most of the tree was not. Now an
+  exact token comparison, with the pyproject read scoped to `[tool.coverage.run]`.
+- **Non-ASCII protected paths evaded the gate entirely.** With git's default
+  `core.quotePath`, such a path is reported C-escaped and double-quoted, and the
+  leading quote defeats every anchored `fnmatch` pattern. Both `validate_invariants`
+  and the liveness suite now pass `-c core.quotePath=false`; covered by a regression
+  test that fails without it.
+- Corrected a factually wrong justification in the dormant-pattern rationale:
+  `validate_policy.py` does **not** backstop the shared policy — it runs with
+  CWD=`harness/node` and reads that stack's own `policy.json`.
+
+Also newly protected: `.gitleaks.toml` (allowlist edits neuter the INV-1 scan),
+`requirements-dev.txt`, the per-stack `Makefile`s, `regenerate_bundle_digests.py`,
+and the two gate test modules themselves. Protected files: 104 → 111.
+
+### Added — gate diagnostics
+
+- `json_logging.configure_gate_logging()` — a reusable, operator-controlled gate
+  logger. Level comes from `LOG_LEVEL` (names or numerics, case-insensitive); an
+  unusable value **degrades to the default rather than raising**, because
+  misconfigured verbosity must never be able to fail a governance gate. Writes to
+  **stderr**, never stdout: gates print their verdict to stdout and both CI and the
+  test suite match on those exact strings, so raising verbosity is structurally
+  incapable of changing a verdict. The handler resolves `sys.stderr` at emit time
+  rather than at construction, so diagnostics stay visible to pytest capture and to
+  any caller that redirects the stream, and `propagate` is off so a stray
+  `basicConfig()` elsewhere cannot reroute them onto stdout.
+- The traceability gate now names **which side** each requirement is missing from
+  (`absent from implementation and tests`) instead of only that something is
+  missing, and at `DEBUG` reports which globs matched which files — which is how a
+  glob scoped to a single stack, silently checking nothing outside it, becomes
+  visible. The original leading sentence is preserved, so existing CI-log and test
+  matches are unaffected.
+
+### Fixed — an untested script inside `make ci`
+
+- `regenerate_bundle_digests.py` ran in the `digest-regen` stage with **0% test
+  coverage**, because its paths were module constants that could not be pointed at
+  a fixture. Paths are now parameters with the same repo-relative defaults (the
+  zero-argument form the Makefile uses is unchanged), and the digest computation is
+  separated from persistence so drift behaviour is testable without writing to the
+  real bundle. Coverage 0% → 92.59%.
+- Stale manifest entries were dropped **silently** — a deleted protected file
+  vanished from the bundle with no output at all. Drops are now logged at WARNING
+  with the specific paths and summarised on stderr, leaving the stdout summary a
+  stable shape. Exit semantics are unchanged: `digest-regen` still pairs this with
+  `git diff --exit-code`, which is what turns a drop red.
+
+### Security — three more gates that failed open, and a gate module left unprotected
+
+Found by reviewing a *plan* rather than a diff: a proposal to classify unused
+policy keys was reframed into "which gate reports PASS without doing its job",
+which is the failure class this release exists to eliminate. The keys turned out
+to be a non-issue; three fail-open gates and an unprotected gate module did not.
+
+- **Three governance gates degraded to their defaults on a malformed policy.**
+  `validate_invariants.size_budget_lines`, `check_dedup.load_config`, and
+  `check_py_compat.load_skip_dirs` each wrapped the policy read in a broad
+  `except` that returned the built-in default. This is the same inversion
+  `COV_MIN` had two commits earlier — a gate that lowers itself on exactly the
+  input that should stop it — and all three were missed while fixing the first.
+  Confirmed by running against a corrupted policy: all three returned their
+  defaults and reported PASS.
+- The three now distinguish **absent** from **malformed**. An absent policy still
+  defaults, because that is the adopter path and the shared kernel must run
+  outside this repository. A policy that exists but cannot be parsed or read
+  (`OSError`, including permissions) exits 1 with the reason. `FileNotFoundError`
+  is ordered ahead of `OSError` so the two legs stay separable, and a test pins
+  that ordering.
+- **Every one of these defaults was byte-identical to its policy value**
+  (`size_budget_lines: 500` vs `SIZE_BUDGET_LINES = 500`; `max_shim_lines: 40` vs
+  `DEFAULT_MAX_SHIM_LINES = 40`), so no existing assertion could tell whether the
+  policy was read at all. Each gate now has a probe test driving a deliberately
+  distinguishable value through to the *behaviour* — a 7-line size budget must
+  reject a 10-line file — which is what makes deleting the block detectable.
+- **`test_coverage_policy_enforcement.py` was not in `protected_paths`**, though
+  the two sibling gate modules added in the same branch were. It owns the entire
+  coverage-threshold classification, so an agent could have deleted that gate
+  outright with `make ci` green and no `infra-reviewed` label. It is now
+  protected and in the `CRITICAL_PATTERNS` floor, which makes removal — not just
+  decay — detectable.
+
+### Testing — the spec gate had no behavioural tests
+
+- **`make specs` was wired into `make ci` last release with nothing asserting it
+  does anything.** The only coverage was `test_ci_gate_coverage.py` checking that
+  the Makefile *invokes* it: a name check that would pass if the script were
+  gutted to `exit 0`. `test_validate_specs.py` drives the real script against
+  fixture spec directories and asserts on exit status and diagnostics. Verified
+  against 8 mutants (gutted structural tier, each rule removed individually,
+  `rglob`→`glob`, `*`-bullets unscanned, empty-directory pass, strict tier failing
+  open) — all killed.
+- The suite pins the negative space as well: prose containing "MUST", bullets
+  without "MUST", and nested spec files must *not* be rejected, so the rules
+  cannot be tightened into uselessness either.
+- **The strict tier does not run in root CI, and now says so.**
+  `validate_specs.sh` is two-tier; `openspec` is pinned nowhere and
+  `REQUIRE_STRICT_SPEC_VALIDATOR=1` is set only in
+  `harness/{node,jvm}/.github/workflows/ci.yml` — adopter templates GitHub never
+  executes — so root CI takes the WARNING branch on every run. Declared in
+  `PARTIAL_COVERAGE["specs"]` with a measured reason rather than left implied.
+  Installing an unpinned validator as a hard CI dependency is a product decision,
+  not a gate fix. A test asserts the waiver is **removed** the moment anything in
+  the root pipeline sets the flag, so it cannot outlive the gap it excuses.
+- The structural tier is genuinely load-bearing and is now shown to be: it
+  rejects a missing required section, a normative `MUST` without a requirement ID,
+  and unfalsifiable acceptance language, and it still does all three with the
+  strict tier absent. "Degraded" and "off" are now distinguishable by test.
+
+### Testing
+
+- `test_protected_path_liveness.py` replaces a tautological test that asserted
+  only that a pattern *string* appeared in the policy — which passes whether or
+  not the pattern protects anything, and is how the dead patterns survived. The
+  new suite asserts on the set of tracked files each pattern actually matches,
+  requires intentionally-dead patterns to be declared with a reason, and checks
+  that every discovered surface (workflows, hooks, `.governance/`, agent
+  contracts, skills, charters, validators) is covered in full. Verified against
+  14 mutants, all killed; one narrowing mutant survived the first draft and
+  exposed a genuine gap, which is what added the charter and validator checks.
+- `validate_invariants.is_protected` is extracted so the suite measures the real
+  matcher instead of a reimplementation that could drift from it.
+
 ## [2.1.8] - 2026-08-27
 
 ### Fixed (post-implementation adversarial review, second pass)

@@ -7,9 +7,18 @@ on:
   push:
     branches: ["main"]
   pull_request:
+    # `labeled` is load-bearing, not noise: ALLOW_GITHUB_CHANGES is derived from
+    # the `infra-reviewed` label below, and the default types
+    # [opened, synchronize, reopened] do not include it. Without this, applying
+    # the label cannot re-run CI -- "Re-run all jobs" replays the original,
+    # unlabelled event payload -- so a protected-path PR could only be unblocked
+    # by pushing another commit or closing and reopening it.
+    types: [opened, synchronize, reopened, labeled]
     # Stacked/phase branches must also be gated, otherwise a PR targeting an
-    # integration branch merges without ever running `make ci`.
-    branches: ["main", "chore/**", "phase*/**", "feature/**"]
+    # integration branch merges without ever running `make ci`. `claude/**` is
+    # the agent branch namespace and was missing here: a PR stacked onto one got
+    # zero check runs, which is the exact hole this list exists to close.
+    branches: ["main", "chore/**", "claude/**", "phase*/**", "feature/**"]
 
 permissions:
   contents: read
@@ -76,3 +85,35 @@ jobs:
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci
+
+  # INV-1 (secret scan over working tree AND full history) had no live enforcement:
+  # the gitleaks steps live in harness/{node,jvm}/.github/workflows/ci.yml, which are
+  # adopter templates GitHub never runs — it only reads workflows from the repository
+  # root. This job is the enforcement. It is separate from `build` because the scan is
+  # interpreter-independent; running it inside the matrix would repeat identical work
+  # four times.
+  secrets:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: INV-1 requires scanning past commits, not just the tree.
+          fetch-depth: 0
+
+      # `make secrets-install` shells out to `go install`. GitHub's ubuntu image
+      # happens to ship Go today, but relying on that makes INV-1 enforcement an
+      # implicit dependency on the runner image: a base-image change would break
+      # the scan rather than fail it loudly. Pin the toolchain explicitly.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install pinned gitleaks
+        # Version is pinned in the Makefile so the local and CI gates cannot drift.
+        run: make secrets-install
+
+      - name: Run secret scan gate (make secrets)
+        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets

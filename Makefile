@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.7 — Root Makefile
+# Agentic SSD v2.1.9 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -10,9 +10,17 @@ PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 PM       ?= pnpm
+GITLEAKS ?= gitleaks
+# Pinned to match the per-stack adopter workflows; bump both together.
+GITLEAKS_VERSION ?= v8.28.0
 # Coverage threshold is sourced from the governance policy (single source of truth)
-# so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
-COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
+# so the gate and the policy can never silently drift.
+#
+# Fails CLOSED: an unreadable or malformed policy yields an empty COV_MIN, and the
+# guard below aborts. This previously fell back to 80 while the policy said 90 —
+# a governance gate that *lowers itself* when it cannot read its own policy, the
+# opposite of how validate_invariants treats the same failure.
+COV_MIN  ?= $(shell $(PYTHON) -c "import json; p=json.load(open('harness/shared/governance-policy.json')); print(int(p['coverage']['lines']))" 2>/dev/null)
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -29,6 +37,10 @@ help: ## Show available targets
 lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
 	$(RUFF) check .
 	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
+
+.PHONY: lint-cold
+lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
+	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases --no-incremental
 
 .PHONY: check-compat
 check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
@@ -47,8 +59,9 @@ test-python: ## Run full pytest suite (excludes live tests)
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
 
 .PHONY: coverage-python
-coverage-python: ## Run pytest with coverage gate (default: 80%)
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov-report=term-missing --cov-fail-under=$(COV_MIN)
+coverage-python: ## Run pytest with the coverage gate (threshold from governance-policy.json)
+	@test -n "$(COV_MIN)" || { echo 'COV_MIN unresolved: governance-policy.json is unreadable or has no coverage.lines; failing closed'; exit 1; }
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-fail-under=$(COV_MIN)
 
 # --- Node Testing & Zero-Skip Verification ---
 .PHONY: test-node
@@ -75,6 +88,34 @@ validate: ## Run all governance validation scripts
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
+
+# --- Secret Scan Gate (INV-1) ---
+# Kept out of `ci` deliberately: the scan is interpreter-independent, so running it
+# on every leg of the Python matrix would repeat identical work. The root workflow
+# invokes it once in a dedicated job. INV-1 requires failing closed when the tool
+# or config is absent, so neither is treated as "nothing to scan".
+.PHONY: secrets
+secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if gitleaks is absent)
+	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
+	@test -f .gitleaks.toml || { echo '.gitleaks.toml missing; failing closed'; exit 1; }
+	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
+	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner
+
+.PHONY: secrets-install
+secrets-install: ## Install the pinned gitleaks used by the secrets gate
+	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
+
+# --- Remote Allowlist Gate ---
+.PHONY: remotes
+remotes: ## Verify every configured Git push URL against the governance allowlist
+	$(PYTHON) $(SHARED_SRC)/remotes.py --check-current-remotes --allowlist $(NODE_DIR)/.governance/allowed-remotes.txt
+
+# --- Spec Gate ---
+# Invoked via `bash`: validate_specs.sh is mode 644, so a bare ./ invocation is a
+# guaranteed "Permission denied". Both per-stack Makefiles already call it this way.
+.PHONY: specs
+specs: ## Validate spec documents (structural tier always; openspec strict tier when available)
+	bash $(SHARED_SRC)/validate_specs.sh
 
 # --- Drift Detection ---
 .PHONY: check-dedup
@@ -108,7 +149,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → validate → drift-check → digest-regen
+ci: lint coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)
@@ -127,7 +168,7 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
 
 .PHONY: pre-pr
-pre-pr: ci review ## Pre-PR validation gate (full CI + mechanical review checklist)
+pre-pr: ci review lint-cold ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts

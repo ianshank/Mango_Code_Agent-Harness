@@ -32,21 +32,51 @@ SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cach
 
 
 def size_budget_lines(policy_path: Path | None = None) -> int:
-    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override."""
-    raw = os.environ.get("MAX_FILE_LINES")
-    if raw:
+    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override.
+
+    Fails closed on a *malformed* policy: an absent policy is the adopter path and
+    legitimately falls back to the built-in budget, but one that exists and cannot
+    be parsed is corruption, and silently substituting the default would relax the
+    gate on exactly the input that should stop it.
+    """
+    override = os.environ.get("MAX_FILE_LINES")
+    if override:
         try:
-            return int(raw)
+            return int(override)
         except ValueError:
-            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", raw)
+            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", override)
     policy_path = policy_path or DEFAULT_POLICY_PATH
     try:
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        raw = policy_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # A policy that is simply absent is the adopter path; defaults apply.
+        logger.debug("No governance policy at %s; using the built-in size budget", policy_path)
+        return SIZE_BUDGET_LINES
+    except OSError as e:
+        logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
+        sys.exit(1)
+    try:
+        policy = json.loads(raw)
         limits = policy.get("limits", {})
         budget = limits.get("size_budget_lines", policy.get("size_budget_lines", SIZE_BUDGET_LINES))
         return int(budget)
-    except Exception:
-        return SIZE_BUDGET_LINES
+    except (ValueError, TypeError) as e:
+        # A policy that exists but cannot be parsed is corruption, not an adopter
+        # default. Returning the built-in budget here let a malformed policy
+        # silently relax the gate -- the same fail-open inversion COV_MIN had.
+        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
+        sys.exit(1)
+
+
+def is_protected(path: str, protected_patterns: list[str]) -> bool:
+    """Return True if a repo-root-relative path matches any protected pattern.
+
+    Patterns are matched with `fnmatch`, which is anchored to the whole string and
+    lets `*` cross `/`. A pattern written for a layout the repository does not have
+    therefore matches nothing at all, silently. This predicate is the single place
+    that semantic is defined, so the liveness suite measures the real matcher.
+    """
+    return any(fnmatch.fnmatch(path, pattern) for pattern in protected_patterns)
 
 
 def load_protected_patterns(policy_path: Path) -> list[str]:
@@ -69,15 +99,20 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
     """Return the set of files modified (staged + unstaged + untracked + PR diff)."""
     modified: set[str] = set()
     base_ref = os.environ.get("GITHUB_BASE_REF")
+    # `core.quotePath=false` is load-bearing, not cosmetic: with git's default the
+    # output for a non-ASCII path is C-escaped and wrapped in double quotes
+    # (`"harness/shared/validate_caf\303\251.py"`), and the leading quote defeats
+    # every anchored fnmatch pattern -- a protected file would pass the gate.
+    git = ["git", "-c", "core.quotePath=false"]
     commands = [
-        ["git", "diff", "--cached", "--name-only"],
-        ["git", "diff", "--name-only"],
+        [*git, "diff", "--cached", "--name-only"],
+        [*git, "diff", "--name-only"],
         # Untracked files are not listed by `git diff`; include them so a newly-created
         # file in a protected path is caught before it is staged (fail-closed).
-        ["git", "ls-files", "--others", "--exclude-standard"],
+        [*git, "ls-files", "--others", "--exclude-standard"],
     ]
     if base_ref:
-        commands.append(["git", "diff", f"origin/{base_ref}...HEAD", "--name-only"])
+        commands.append([*git, "diff", f"origin/{base_ref}...HEAD", "--name-only"])
     for cmd in commands:
         try:
             out = subprocess.check_output(cmd, text=True, cwd=workspace_dir)
@@ -97,7 +132,7 @@ def check_protected_paths(workspace_dir: Path, protected_patterns: list[str]) ->
     ordered: list[str] = []
     seen: set[str] = set()
     for mf in sorted(modified_files):
-        if any(fnmatch.fnmatch(mf, pattern) for pattern in protected_patterns) and mf not in seen:
+        if is_protected(mf, protected_patterns) and mf not in seen:
             seen.add(mf)
             ordered.append(mf)
     if ordered and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":

@@ -4,8 +4,11 @@ These guard against silent drift between:
   * the active Mango roles in .mango/agents/ and the canonical contracts
     in harness/shared/agents/ (reconciled by .mango/agents/README.md),
   * the skills declared in .mango/skills/ and their SKILL.md frontmatter,
-  * the spec-driven workflow scaffolding (template + Makefile targets),
-  * the governance policy's protected paths.
+  * the spec-driven workflow scaffolding (template + Makefile targets).
+
+Whether the governance policy's protected paths actually cover real files is
+checked by `test_protected_path_liveness.py`, which asserts on matched file sets
+rather than on pattern strings.
 
 Everything is discovered dynamically from the filesystem/policy - no
 hard-coded thresholds, digests, or role lists beyond the documented contract.
@@ -22,7 +25,6 @@ MANGO = REPO / ".mango"
 ACTIVE_AGENTS = MANGO / "agents"
 CANONICAL_AGENTS = REPO / "harness" / "shared" / "agents"
 SKILLS = MANGO / "skills"
-POLICY = REPO / "harness" / "shared" / "governance-policy.json"
 SPEC_TEMPLATE = REPO / "docs" / "specs" / "SPEC_TEMPLATE.md"
 MAKEFILE = REPO / "Makefile"
 CLAUDE_MD = REPO / "CLAUDE.md"
@@ -183,15 +185,6 @@ class InstructionWiringTests(unittest.TestCase):
         for skill in ("openspec-peer-review", "repo-invariant-review"):
             self.assertIn(skill, text, f"CLAUDE.md does not mandate the {skill} skill")
         self.assertIn("make pre-pr", text, "CLAUDE.md does not mandate the pre-pr gate")
-
-    def test_hooks_are_protected_by_policy(self):
-        """Hooks execute shell on tool use; they must be protected paths."""
-        policy = json.loads(POLICY.read_text(encoding="utf-8"))
-        self.assertIn(
-            ".mango/hooks/**",
-            policy.get("protected_paths", []),
-            "executable hooks are not covered by protected_paths",
-        )
 
     def test_declared_hooks_exist_on_disk(self):
         """Every hook command referenced by settings.json must exist and be valid."""

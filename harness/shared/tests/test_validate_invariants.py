@@ -260,3 +260,70 @@ def test_size_budget_lines_reads_from_policy(temp_repo: Path, monkeypatch: pytes
     monkeypatch.delenv("MAX_FILE_LINES", raising=False)
     assert vi.size_budget_lines(policy) == 350
 
+
+
+def test_non_ascii_protected_path_is_not_hidden_by_git_quoting(temp_repo: Path):
+    """A protected file with a non-ASCII name must still trip the gate.
+
+    With git's default `core.quotePath=true`, such a path is reported C-escaped and
+    double-quoted (`"a/caf\\303\\251.py"`). The leading quote defeats every anchored
+    fnmatch pattern, so the file would sail through as unprotected. This pins the
+    `core.quotePath=false` that keeps the name matchable.
+    """
+    guarded = temp_repo / ".github" / "workflows"
+    guarded.mkdir(parents=True, exist_ok=True)
+    target = guarded / "café-ci.yml"
+    target.write_text("name: CI\n", encoding="utf-8")
+
+    modified = vi.git_modified_files(temp_repo)
+    assert any(f.endswith("café-ci.yml") for f in modified), (
+        f"non-ASCII path came back quoted or escaped: {modified}"
+    )
+    assert not any(f.startswith('"') for f in modified), "git output is still C-quoted"
+    assert vi.check_protected_paths(temp_repo, [".github/workflows/**"]) is False, (
+        "a non-ASCII file inside a protected path evaded the gate"
+    )
+
+
+def test_size_budget_lines_fails_closed_on_malformed_policy(temp_repo: Path, monkeypatch, caplog):
+    """A malformed policy must not silently relax the size gate.
+
+    This previously returned SIZE_BUDGET_LINES via a bare `except Exception`, the
+    same fail-open inversion COV_MIN had: the gate lowered itself on exactly the
+    input that should stop it.
+    """
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text("{not json", encoding="utf-8")
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            vi.size_budget_lines(policy)
+    assert excinfo.value.code == 1
+    assert "Malformed governance policy" in caplog.text
+
+
+def test_size_budget_lines_uses_default_when_policy_is_absent(tmp_path: Path, monkeypatch):
+    """An absent policy is the adopter path; defaults still apply."""
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    assert vi.size_budget_lines(tmp_path / "nope.json") == vi.SIZE_BUDGET_LINES
+
+
+def test_check_size_budget_enforces_the_policy_value_not_the_default(
+    temp_repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """End-to-end probe: the policy number must reach the *gate*, not just the loader.
+
+    The repository's `size_budget_lines` is byte-identical to `SIZE_BUDGET_LINES`,
+    so every existing assertion passes whether the policy is read or ignored. A
+    deliberately distinguishable budget (7) is the only thing that separates the
+    two, and it is what would catch the block being deleted outright.
+    """
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text(json.dumps({"limits": {"size_budget_lines": 7}}), encoding="utf-8")
+    (temp_repo / "small.py").write_text("x = 1\n" * 5, encoding="utf-8")
+    assert vi.check_size_budget(temp_repo, policy_path=policy) is True
+    (temp_repo / "big.py").write_text("x = 1\n" * 10, encoding="utf-8")
+    assert vi.check_size_budget(temp_repo, policy_path=policy) is False, (
+        "a 10-line file passed a 7-line policy budget; the policy is not reaching the gate"
+    )

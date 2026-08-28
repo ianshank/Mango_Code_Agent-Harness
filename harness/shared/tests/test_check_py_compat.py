@@ -253,19 +253,57 @@ def test_resolve_min_version_read_error(repo: Path, monkeypatch: pytest.MonkeyPa
         cc.resolve_min_version(repo)
     assert "Could not read" in caplog.text
 
-def test_load_skip_dirs_json_error(repo: Path, caplog):
+def test_load_skip_dirs_fails_closed_on_malformed_policy(repo: Path, caplog):
+    """Silently using the built-in skip set could skip directories the policy meant
+    to scan. The old test asserted that fail-open behaviour."""
     _write(repo, "harness/shared/governance-policy.json", "{ bad json")
-    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
-        cc.load_skip_dirs(repo)
-    assert "Could not read py_compat config" in caplog.text
+    with caplog.at_level(logging.ERROR, logger=cc.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            cc.load_skip_dirs(repo)
+    assert excinfo.value.code == 1
+    assert "Malformed governance policy" in caplog.text
+
+
+def test_load_skip_dirs_uses_defaults_when_policy_is_absent(repo: Path):
+    """An absent policy is the adopter path and still legitimately defaults."""
+    assert cc.load_skip_dirs(repo) == frozenset(cc.DEFAULT_SKIP_DIRS)
 
 def test_run_read_file_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    """An unreadable *source file* is skipped with a diagnostic, not fatal.
+
+    `skip_dirs` is passed explicitly so the patched `read_text` only stands in for
+    the per-file read this test is about. Patching it globally would also hit the
+    policy read inside `load_skip_dirs`, which now fails closed by design -- the
+    test would then pass for the wrong reason (or fail for an unrelated one).
+    `OSError` is the realistic failure here: a permission or I/O error, which is
+    what the `except` clause has to survive in production.
+    """
     _write(repo, "pkg/mod.py", "print(1)")
-    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    monkeypatch.setattr(
+        Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("boom"))
+    )
     with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
-        report = cc.run(repo, (3, 9))
+        report = cc.run(repo, (3, 9), skip_dirs=frozenset(cc.DEFAULT_SKIP_DIRS))
     assert "Skipping unreadable" in caplog.text
     assert report.scanned == 0
+
+
+def test_load_skip_dirs_fails_closed_on_an_unreadable_policy(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Present-but-unreadable is corruption, not the adopter path.
+
+    Distinct from the absent-policy case: `FileNotFoundError` is a subclass of
+    `OSError`, so the two legs are only separable if ordering is preserved. This
+    pins that ordering.
+    """
+    (repo / cc.POLICY_RELPATH).write_text(json.dumps({"py_compat": {}}), encoding="utf-8")
+    monkeypatch.setattr(
+        Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("denied"))
+    )
+    with pytest.raises(SystemExit) as exc:
+        cc.load_skip_dirs(repo)
+    assert exc.value.code == 1
 
 def test_main_block(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("sys.argv", ["check_py_compat.py", "--min-version", "3.12"])

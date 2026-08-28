@@ -162,11 +162,31 @@ def test_load_config_ignores_bad_env(repo: Path, monkeypatch: pytest.MonkeyPatch
     assert "MAX_SHIM_LINES" in caplog.text
 
 
-def test_load_config_survives_malformed_policy(repo: Path, caplog):
+def test_load_config_fails_closed_on_malformed_policy(repo: Path, caplog):
+    """A policy that exists but cannot be parsed is corruption, not an adopter default.
+
+    This previously degraded to DEFAULT_MAX_SHIM_LINES, which silently relaxed the
+    shim budget on exactly the input that should stop the gate. The old test
+    asserted that fail-open behaviour; it encoded the defect.
+    """
     _write(repo / "harness" / "shared" / "governance-policy.json", "{not json")
-    with caplog.at_level(logging.WARNING, logger=cd.logger.name):
-        cfg = cd.load_config(repo)
-    assert cfg.max_shim_lines == cd.DEFAULT_MAX_SHIM_LINES
+    with caplog.at_level(logging.ERROR, logger=cd.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            cd.load_config(repo)
+    assert excinfo.value.code == 1
+    assert "Malformed governance policy" in caplog.text
+
+
+def test_load_config_uses_defaults_when_policy_is_absent(repo: Path):
+    """An absent policy is the adopter path and still legitimately defaults."""
+    assert cd.load_config(repo).max_shim_lines == cd.DEFAULT_MAX_SHIM_LINES
+
+
+def test_load_config_reads_a_distinguishable_policy_value(repo: Path):
+    """Proves the policy is read at all, rather than coinciding with the default."""
+    _write(repo / "harness" / "shared" / "governance-policy.json",
+           '{"dedup": {"max_shim_lines": 1}}')
+    assert cd.load_config(repo).max_shim_lines == 1
 
 
 # --- check_script ---

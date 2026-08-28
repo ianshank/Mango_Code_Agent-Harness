@@ -169,21 +169,21 @@ Recorded for follow-up; none block this implementation.
   `cognitive-signals.jsonl` is the first deliverable of the UC-4 experiment
   step; until then the sink is audit-only, unbounded append, operator-pruned
   (gitignored under `.mango/memory/`).
-- Specs gate drift: `specs` appears in `ci_required_targets` but `make ci`
-  has no specs stage; wiring it touches the protected root `Makefile` and
-  needs its own reviewed change.
+- ~~Specs gate drift: `specs` appears in `ci_required_targets` but `make ci`
+  has no specs stage.~~ **Resolved in 2.1.9** — `make ci` now runs a `specs`
+  stage invoking `bash harness/shared/validate_specs.sh`.
 - Lock semantics: the sink lock is single-host, best-effort
   (`O_CREAT|O_EXCL` lockfile with bounded timeout); crashed-process stranding
   is bounded by the timeout and surfaces as a swallowed warning. Revisit if
   the channel ever becomes multi-writer.
 - `MANGO_SIGNAL_DIR` may point outside the workspace by operator choice; this
   is trusted-operator surface, same class as the existing debug env vars.
-- The publisher is intentionally outside the mypy target set. It is listed in
-  `pyproject.toml`'s `[tool.coverage.run] source`, but `make coverage-python`
-  does not yet measure it: the `Makefile`'s explicit `--cov=harness/shared
-  --cov=harness/api_server` flags take precedence over that static config for
-  that invocation. Actually gating on it needs `--cov=harness/control-plane`
-  added to that protected `Makefile` line (see `NEXT_STEPS_PLAN_v2.md` Phase
-  6.5). `publish_policy_artifact.py` is independently confirmed clean under
-  `mypy --strict`; its correctness is held by its own test module in the
-  meantime.
+- The publisher is intentionally outside the mypy target set; it is
+  independently confirmed clean under `mypy --strict`. Its coverage is
+  **resolved in 2.1.9**: `make coverage-python` now passes
+  `--cov=harness/control-plane`, so `publish_policy_artifact.py` (158
+  statements, 78%) counts toward the gate. Three sibling CLIs are omitted in
+  `pyproject.toml` because they run `argparse` at module scope with required
+  arguments and have no `__main__` guard, making in-process measurement
+  impossible; `regenerate_bundle_digests.py` stays measured because it *is*
+  importable, so its 0% is a real gap rather than an artifact.

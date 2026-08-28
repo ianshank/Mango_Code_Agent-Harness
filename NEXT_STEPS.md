@@ -1,11 +1,100 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.8  
+**Version:** 2.1.9  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.1.9 — Governance Follow-Ups (protected-path frame, CI wiring, Docker)
+
+Lands the findings v2.1.8 recorded rather than patched, each of which needed a
+protected-path change and therefore the `infra-reviewed` human attestation.
+Shipped as three PRs so the label-free Docker fix did not wait behind a label
+round-trip.
+
+- [x] **`protected_paths` patterns that matched zero files are now live.** Root
+      cause was an incomplete layout migration in `1eb2f7f`, which converted only
+      the `scripts/*` entries by replacement and left `.governance/**`,
+      `agents/**`, `docs/PROJECT-CHARTER.md` and `.github/CODEOWNERS` in the
+      single-stack frame. `fnmatch` is whole-string anchored, so they matched
+      nothing and the gate reported PASS *because nothing matched*.
+- [x] **The agent control surface is gated** — `CLAUDE.md`, `harness/CONTRACT.md`,
+      `.mango/skills/**`, `agent-policy.json`, the `.claude/`/`.mango/` hook and
+      settings files, `pyproject.toml`, and the policy publisher plus its
+      committed drift baseline. Protected files: 37 → 104. DEC-002 records the
+      measured workflow cost (~32% of historical commits); DEC-003 records that
+      the five unbound `.mango/hooks/` scripts stay dormant.
+- [x] **`test_protected_path_liveness.py`** replaces the tautology that let the
+      dead patterns through (`assertIn(pattern_string, policy_list)` passes
+      whether or not the pattern protects anything). Asserts on matched file
+      sets; 14/14 mutants killed, including narrowings that keep the pattern list
+      looking plausible. `validate_invariants.is_protected` extracted so the
+      suite measures the real matcher.
+- [x] **`specs` wired into `make ci`** as `bash harness/shared/validate_specs.sh`
+      — the file is mode 644, so a bare `./` invocation would have been red CI.
+- [x] **`harness/control-plane` measured by the coverage gate** (95.69% → 92.97%),
+      making `publish_policy_artifact.py` governed. Three module-scope-argparse
+      CLIs omitted as measurement artifacts; `regenerate_bundle_digests.py` kept
+      measured because its 0% is a real gap.
+- [x] **The Dockerfile bug is confirmed and fixed, not just flagged.** v2.1.8
+      could not verify it (no daemon); this milestone reproduced it against a
+      real daemon — `COPY .mango/` fails with `"/.mango": not found`, while a
+      `COPY harness/` control build succeeds. Also fixed two `.dockerignore`
+      rules with the same anchoring bug, A/B tested by exporting the context.
+- [x] **INV-1 had no live enforcement.** The gitleaks steps live in
+      `harness/{node,jvm}/.github/workflows/ci.yml`, which are adopter templates
+      GitHub never executes — it reads workflows only from the repository-root
+      `.github/workflows/`. Added a root `secrets` gate (fails closed on missing
+      tooling; scans working tree *and* full history) and a dedicated `secret-scan`
+      CI job with `fetch-depth: 0`. Verified clean across all 73 commits.
+- [x] **`make remotes` wired** — INV-3 had a shared implementation and a per-stack
+      target but no root wiring.
+- [x] **INV-5 is now enforced by `test_ci_gate_coverage.py`**: every
+      `ci_required_targets` entry must map to a root target CI actually invokes, or
+      be a declared gap with a reason. `audit` (osv-scanner) is the single declared
+      gap. 12/12 mutants killed.
+- [x] Documentation corrected where it contradicted the contract: the pre-PR
+      reference misnumbered INV-5 and INV-7, and two hard-coded 80% coverage
+      thresholds contradicted the policy value of 90.
+- [x] Remaining open, and **the highest-value item on this list**: `main` has no
+      branch ruleset — CI is not a required check, and 0 of 8 PRs were approved
+      before merge. Until a ruleset requires the four `build (3.x)` legs plus
+      `secret-scan`, every gate above is advisory. A repository-settings change,
+      not code.
+- [ ] **`audit` (dependency vulnerability scanning) is still unenforced at root.**
+      Declared in `KNOWN_GAPS`; wiring osv-scanner adds a toolchain dependency and
+      can turn CI red on a pre-existing advisory, so it needs its own change.
+- [x] **Three more gates failed open, and one gate module was left unprotected.**
+      `size_budget_lines`, `check_dedup.load_config` and
+      `check_py_compat.load_skip_dirs` all degraded to their built-in defaults on
+      a malformed policy — the same inversion `COV_MIN` had, missed three more
+      times while fixing the first. All three now separate *absent* (the adopter
+      path, still defaults) from *malformed* (exit 1 with the reason). Because
+      every default was byte-identical to its policy value, each gate also gained
+      a probe driving a distinguishable value through to the behaviour.
+      `test_coverage_policy_enforcement.py` is now protected and in the
+      `CRITICAL_PATTERNS` floor. 5/5 mutants killed.
+- [x] **The `specs` gate has behavioural tests.** It was wired into `make ci`
+      with only a name check behind it — the script could have been gutted to
+      `exit 0` with the suite green. `test_validate_specs.py` drives it against
+      fixtures; 8/8 mutants killed. Its strict tier (`openspec`) is unenforced at
+      root and is now declared in `PARTIAL_COVERAGE["specs"]`, with a test that
+      removes the waiver the moment the root pipeline enforces it.
+- [ ] **3,526 lines of production TypeScript have no coverage floor.**
+      `make test-node` runs `vitest run` with **no `--coverage`**, so
+      `vitest.config.ts` — which correctly reads all five thresholds from the
+      policy and fails closed on a malformed one — is never invoked with coverage
+      on. This is the largest unmeasured surface in the repository, and closing it
+      would let three of the four entries in `UNENFORCED_IN_ROOT_CI` be deleted.
+      Deliberately a separate change: it is a protected one-line edit that will
+      turn CI red on six already-measured files, which needs its own review.
+- [ ] **`harness/SHA256SUMS.txt` is a manifest that lies and nothing reads.**
+      It pins `governance-policy.json` and `agent-policy.json` at digests that no
+      longer match, and no code anywhere reads the file. Either wire it into
+      `make digest-regen` behind `git diff --exit-code`, or delete it — a stale
+      manifest that looks authoritative is worse than none.
 
 ### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
 

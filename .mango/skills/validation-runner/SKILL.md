@@ -28,13 +28,20 @@ gate should call.
 ## What it runs (in order)
 
 ```bash
-make ci   # ruff + mypy + pytest + coverage + check-dedup + validate_invariants
+make ci   # lint (ruff + mypy + py-compat) -> coverage -> test-node -> zero-skips
+          # -> specs -> remotes -> validate -> check-dedup -> digest-regen
 ```
 
 `make ci` is the source of truth; this skill does not re-declare the stages
 (they live in the Makefile and governance-policy.json so they cannot drift).
-The coverage threshold is read dynamically from
-`governance-policy.json` → `coverage.lines` (currently 90).
+The stage list above is a reading aid, not a second declaration: run
+`make help`, or read the `ci:` prerequisites, for the authoritative order.
+`test_ci_gate_coverage.py` asserts that every `ci_required_targets` entry is
+either reachable from `make ci` or declared a known gap with a reason.
+
+The coverage threshold is read dynamically from `governance-policy.json` →
+`coverage.lines`. Never restate the number here — quoting it creates exactly
+the drift the dynamic lookup exists to prevent.
 
 ## Verdict structure
 
