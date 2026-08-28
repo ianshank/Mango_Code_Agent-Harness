@@ -245,13 +245,16 @@ class ExecutionBroker:
         # Enforcing it only in `write_file` left `run_command` as an unguarded
         # second door to the same paths: `echo x > .git/hooks/pre-commit` is
         # `echo` by argv[0] and a host-executed hook installation by effect.
+        # `write_denial` is deliberately not named `denial`: that name already holds
+        # the PDP's `ExecutionResult | None` above, and reusing it silently widens
+        # the type. mypy caught it; the reader would not have.
         for target in write_targets(command):
-            denial = write_denial_reason(target)
-            if denial is not None:
+            write_denial = write_denial_reason(target)
+            if write_denial is not None:
                 logger.warning("Denied a command writing to a governed path: %s", target)
                 return ExecutionResult(
-                    "BLOCKED", "", f"BLOCKED: {denial}", 1,
-                    reason=f"BLOCKED: the command writes to {target}, which is denied: {denial}",
+                    "BLOCKED", "", f"BLOCKED: {write_denial}", 1,
+                    reason=f"BLOCKED: the command writes to {target}, which is denied: {write_denial}",
                     action=action,
                 )
 
