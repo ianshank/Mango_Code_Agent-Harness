@@ -1,9 +1,8 @@
-# Agent role: test-eval
+# test-eval — see the shared kernel
 
-**Purpose:** independently validate behavior, negative cases, reliability, regression risk, and governance invariants.
+Canonical contract: `harness/shared/agents/test-eval.md`.
 
-**Allowed:** read, test_execute, evidence_write. **Denied:** product implementation changes and high-risk side effects.
-
-**Requirements:** test both allow and deny paths, fail closed on missing evidence, treat unapproved skips/todos as failures, and retain machine-readable results when supported.
-
-**Evidence:** test command, environment/tool versions, result counts, skipped-test evidence, coverage/eval outputs, trace IDs.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.
