@@ -20,14 +20,11 @@ from pathlib import Path
 from typing import Any, Optional, cast
 
 from harness.shared.json_logging import setup_json_logging
+from harness.shared.policy_loader import nemotron_defaults
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-# Fallbacks when NEMOTRON_TIMEOUT_MS / NEMOTRON_MAX_RETRIES are unset (see
-# .env.example). Retries default to 0 so behavior is opt-in.
-DEFAULT_TIMEOUT_SEC = 30
-DEFAULT_MAX_RETRIES = 0
 # Backoff between retry attempts: RETRY_BACKOFF_BASE_SEC * 2**attempt.
 RETRY_BACKOFF_BASE_SEC = 1.0
 # Transient HTTP statuses worth retrying; everything else fails immediately.
@@ -102,8 +99,8 @@ def complete_chat(
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
-    temperature: float = 0.2,
-    max_tokens: int = 4096,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
     timeout_sec: Optional[int] = None,
     tools: Optional[list[dict[str, Any]]] = None,
     tool_choice: Optional[Any] = None,
@@ -111,23 +108,27 @@ def complete_chat(
 ) -> dict[str, Any]:
     """Execute a chat completion request against NVIDIA Nemotron API.
 
-    ``timeout_sec`` and ``max_retries`` default to the NEMOTRON_TIMEOUT_MS /
-    NEMOTRON_MAX_RETRIES environment configuration when not passed explicitly;
-    retries cover transient failures (HTTP 429/5xx and connection errors) with
-    exponential backoff and default to 0 (off).
+    Request defaults resolve with the precedence: explicit argument >
+    environment variable (NEMOTRON_TIMEOUT_MS / NEMOTRON_MAX_RETRIES) >
+    governance-policy.json `nemotron` block > built-in default. Retries cover
+    transient failures (HTTP 429/5xx and connection errors) with exponential
+    backoff and default to 0 (off).
     """
+    policy = nemotron_defaults()
     env_config = resolve_environment()
     key = api_key if api_key is not None else env_config["api_key"]
     if not key:
         raise ValueError("NVIDIA_API_KEY is not configured. Set environment variable or define in .env.")
 
+    if temperature is None:
+        temperature = policy["temperature"]
+    if max_tokens is None:
+        max_tokens = policy["max_tokens"]
     if timeout_sec is None:
-        timeout_ms = _int_from_env(
-            env_config.get("timeout_ms", ""), DEFAULT_TIMEOUT_SEC * 1000, "NEMOTRON_TIMEOUT_MS"
-        )
+        timeout_ms = _int_from_env(env_config.get("timeout_ms", ""), policy["timeout_ms"], "NEMOTRON_TIMEOUT_MS")
         timeout_sec = max(1, timeout_ms // 1000)
     if max_retries is None:
-        max_retries = _int_from_env(env_config.get("max_retries", ""), DEFAULT_MAX_RETRIES, "NEMOTRON_MAX_RETRIES")
+        max_retries = _int_from_env(env_config.get("max_retries", ""), policy["max_retries"], "NEMOTRON_MAX_RETRIES")
     max_retries = max(0, max_retries)
 
     endpoint = base_url or env_config["base_url"] or DEFAULT_BASE_URL
@@ -213,7 +214,10 @@ def main() -> None:
         help="System instruction prompt",
     )
     parser.add_argument("--model", default=None, help="Target model ID")
-    parser.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
+    parser.add_argument(
+        "--temperature", type=float, default=None,
+        help="Sampling temperature (default: governance-policy.json nemotron.temperature)",
+    )
     parser.add_argument("--json", action="store_true", help="Output raw JSON response")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()

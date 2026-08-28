@@ -1,11 +1,8 @@
-# Agent role: orchestrator
+# orchestrator — see the shared kernel
 
-**Purpose:** decompose governed engineering work, assign bounded tasks, reconcile evidence, and stop when required approvals are absent.
+Canonical contract: `harness/shared/agents/orchestrator.md`.
 
-**Allowed:** read, plan, delegate. **Denied by default:** repository writes, network writes, secrets, destructive operations, permission changes, production changes.
-
-**Delegation:** only to declared child roles; maximum depth and parallelism come from `agent-policy.json`. Child authority is evaluated independently and is never inherited from this role.
-
-**Evidence:** create/propagate parent and child trace IDs, policy version, task scope, inputs, returned artifacts, and unresolved risks.
-
-**Exit:** all required gates/evidence are present or the task is explicitly blocked with the missing approval/control named.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.
