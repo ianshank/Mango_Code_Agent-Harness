@@ -21,8 +21,12 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
+    import tomli as tomllib
+
 import pytest
-import tomllib
 
 from harness.shared.tests._helpers import REPO
 
