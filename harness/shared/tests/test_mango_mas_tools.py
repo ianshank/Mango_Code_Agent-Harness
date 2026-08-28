@@ -11,7 +11,10 @@ def mock_workspace(tmp_path):
     # Setup mock workspace with a fake agent definition
     agents_dir = tmp_path / ".mango" / "agents"
     agents_dir.mkdir(parents=True)
-    (agents_dir / "test-agent.md").write_text("Test agent system prompt")
+    # The active roles, not a fictional one: execution is now evaluated against
+    # the authority model, and a role that model does not declare is denied.
+    for role in ("planner", "nemotron-reasoner", "verifier"):
+        (agents_dir / f"{role}.md").write_text(f"{role} system prompt")
     return tmp_path
 
 
@@ -37,7 +40,7 @@ def test_tool_write_file_success(mock_workspace):
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
         mock_complete.side_effect = [mock_response_1, mock_response_2]
 
-        result = orchestrator.execute_agent("test-agent", "Write output.txt")
+        result = orchestrator.execute_agent("nemotron-reasoner", "Write output.txt")
 
         # Verify result
         assert result == "I have successfully written the file."
@@ -49,7 +52,12 @@ def test_tool_write_file_success(mock_workspace):
 
 
 def test_tool_run_command_success(mock_workspace):
-    """Test that the orchestrator can run a bash command."""
+    """Test that the orchestrator can run a bash command.
+
+    Driven as `nemotron-reasoner` rather than the previous fictional `test-agent`:
+    execution is evaluated against the authority model, and a role that model
+    does not declare is denied as an unknown identity (spec R-AC-11).
+    """
     orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
 
     mock_tool_call = {
@@ -64,7 +72,7 @@ def test_tool_run_command_success(mock_workspace):
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
         mock_complete.side_effect = [mock_response_1, mock_response_2]
 
-        result = orchestrator.execute_agent("test-agent", "Run echo")
+        result = orchestrator.execute_agent("nemotron-reasoner", "Run echo")
 
         assert result == "Command executed successfully."
 
@@ -101,4 +109,4 @@ def test_tool_max_iterations(mock_workspace):
         mock_complete.return_value = mock_response
 
         with pytest.raises(RuntimeError, match="exceeded maximum tool iterations"):
-            orchestrator.execute_agent("test-agent", "Loop forever")
+            orchestrator.execute_agent("nemotron-reasoner", "Loop forever")

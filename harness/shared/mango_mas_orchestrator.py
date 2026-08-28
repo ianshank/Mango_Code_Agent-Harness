@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import logging
 import os
@@ -10,9 +8,9 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.agent_authority import tools_for_role
+from harness.shared.agent_authority import execution_identity, tools_for_role
 from harness.shared.debug_dump import credential_env_names, write_dump
-from harness.shared.governance.pretooluse_guard import check_command
+from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
@@ -61,6 +59,24 @@ def _normalize_tool_arguments(raw: typing.Any, func_name: typing.Any) -> dict[st
     return parsed
 
 
+def _format_execution_result(result: ExecutionResult) -> str:
+    """Render a broker result as the tool message the model receives.
+
+    Kept pure and separate from execution so the three output shapes stay
+    testable without spawning a process.
+    """
+    if result.status == "BLOCKED":
+        return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
+    if result.reason:
+        return f"Error: {result.reason}"
+    output = result.stdout
+    if result.stderr:
+        output += "\n[STDERR]\n" + result.stderr
+    if not output.strip():
+        return f"Command executed with return code {result.exit_code}, but generated no output."
+    return output
+
+
 AUTONOMOUS_AGENT_GUARDRAIL = (
     "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
     "and fail closed when approval is required."
@@ -75,7 +91,9 @@ REASONER_PROMPT_TEMPLATE = (
     "Execute the following plan using backward-compatible, modular code. "
     "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the filesystem.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL} "
-    "Use run_command to run standard terminal commands like pip, uvicorn, and pytest.\n\n"
+    "Use run_command to run the repository's own gates -- pytest, make, ruff, mypy. Commands that "
+    "install packages or reach the network are classified as external actions and will be denied; "
+    "if you need one, record the need with knowledge_gap_log rather than retrying.\n\n"
     "Plan:\n{plan}"
 )
 
@@ -135,6 +153,8 @@ class MangoMASOrchestrator:
         max_iterations: int | None = None,
         api_timeout: int | None = None,
         tool_timeout: int | None = None,
+        broker: ExecutionBroker | None = None,
+        active_role: str = "nemotron-reasoner",
     ) -> None:
         # Operational limits come from governance-policy.json (the
         # `orchestrator` block); explicit constructor arguments still override
@@ -149,6 +169,16 @@ class MangoMASOrchestrator:
         self.api_timeout = api_timeout if api_timeout is not None else limits["api_timeout_sec"]
         self.tool_timeout = tool_timeout if tool_timeout is not None else limits["tool_timeout_sec"]
         self.max_tool_calls_per_task = max_tool_calls_per_task()
+        # Injected rather than imported at the call site so an adopter can supply
+        # their own broker -- `harness/CONTRACT.md` places the authoritative
+        # broker outside the governed repository -- and so tests can drive the
+        # unavailable path without spawning anything.
+        self._broker = broker or ExecutionBroker()
+        # `execute_agent` overrides this per turn. The default is the implementer
+        # contract, which is what a directly-driven orchestrator is doing; it is
+        # not the widest role -- it holds neither external_write, destructive nor
+        # secret_access.
+        self._active_role = active_role
         self.agents_dir = self.workspace_dir / ".mango" / "agents"
         self.hooks_dir = self.workspace_dir / ".mango" / "hooks"
         self.conversation_history: list[dict[str, str]] = []
@@ -229,63 +259,28 @@ class MangoMASOrchestrator:
             # tool_calls message unanswered and stall the conversation.
             return f"Error writing file {filepath}: {str(e)}"
 
-    def _consult_guard(self, command: str) -> str | None:
-        """Return a refusal string when the guard denies ``command``, else ``None``.
-
-        The guard is imported from the installed harness rather than resolved from
-        ``workspace_dir``. Two defects motivate that (spec R-AC-2, R-AC-3):
-
-        * the workspace is agent-writable, so a guard loaded from it could be
-          replaced by the model whose commands it is meant to check; and
-        * the previous implementation ran the guard only ``if guard_script.exists()``
-          and executed the command otherwise -- a guard that is optional is not a
-          control. Any failure to reach a verdict now denies.
-
-        The subprocess also carried a payload the guard could not parse, so it
-        evaluated the empty string and allowed everything. In-process there is no
-        envelope to mismatch.
-        """
-        stderr = io.StringIO()
-        try:
-            with contextlib.redirect_stderr(stderr):
-                verdict = check_command(command)
-        except Exception as exc:  # noqa: BLE001 - a guard that cannot reach a verdict
-            # must deny. Narrowing this would let an unanticipated failure become an
-            # implicit allow, which is the fail-open shape this change exists to close.
-            logger.warning("Guard evaluation failed; denying command: %s", exc)
-            return f"Error: Command blocked by policy guard. The guard could not reach a verdict: {exc}"
-        if verdict != 0:
-            detail = stderr.getvalue().strip()
-            logger.warning("Guard denied command with verdict %d", verdict)
-            return f"Error: Command blocked by policy guard. Guard output:\n{detail}"
-        return None
-
     def _execute_run_command(self, command: str) -> str:
-        """Local tool implementation to execute a command."""
-        refusal = self._consult_guard(command)
-        if refusal is not None:
-            return refusal
-        try:
-            result = subprocess.run(
-                ["bash", "-c", command],
-                cwd=self.workspace_dir,
-                capture_output=True,
-                text=True,
-                timeout=self.tool_timeout,
-            )
+        """Run a command through the approved execution broker (INV-8).
 
-            output = result.stdout
-            if result.stderr:
-                output += "\n[STDERR]\n" + result.stderr
+        Previously this shelled out directly. The broker is what makes INV-8 true
+        on the live path: it derives the action from the command, asks the
+        authority model for a verdict, runs the command guard, and pins the
+        working directory, the timeout and the captured output size. It never
+        falls back to host execution when its backend is unavailable (INV-9), and
+        a denial is terminal -- nothing here retries or downgrades one (INV-10).
 
-            if not output.strip():
-                return f"Command executed with return code {result.returncode}, but generated no output."
-            return output
-        except subprocess.TimeoutExpired:
-            return f"Error: Command '{command}' timed out after {self.tool_timeout} seconds."
-        except Exception as e:  # noqa: BLE001 - same tool-result contract as
-            # _execute_write_file: report the failure, never propagate it.
-            return f"Error executing command '{command}': {str(e)}"
+        The guard is no longer called here as well: it is on the broker's path,
+        and calling it twice would mean two places to keep in step.
+        """
+        result = self._broker.execute_command(
+            command,
+            {"agent_id": execution_identity(self._active_role)},
+            cwd=self.workspace_dir,
+            timeout=self.tool_timeout,
+        )
+        if result.status == "BLOCKED":
+            logger.warning("Broker denied command for role %s: %s", self._active_role, result.reason)
+        return _format_execution_result(result)
 
     def _dispatch_tool_calls(
         self, messages: list[dict[str, typing.Any]], tool_calls: list[dict[str, typing.Any]]
@@ -347,6 +342,11 @@ class MangoMASOrchestrator:
         Executes a single agent's reasoning loop using ReAct (Reasoning and Acting).
         Returns the final string output from the agent.
         """
+        # The tool handlers are zero-argument closures over `self`, so the acting
+        # role has to be recorded here for `_execute_run_command` to name it. A
+        # verifier turn must be evaluated as the verifier, not as whatever role
+        # ran last.
+        self._active_role = agent_name
         self._run_hook("pre-nemotron-run", task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 

@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from harness.shared import mango_mas_orchestrator as orch_module
+from harness.shared.governance.broker import ExecutionBroker, ProcessBackend
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
 # Bash hook tests require a POSIX shell; skip on Windows where `bash` cannot
@@ -215,43 +216,35 @@ class TestExecuteRunCommand:
         result = orch._execute_run_command("echo 'guard ok'")
         assert "guard ok" in result
 
-    def test_guard_failure_denies(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A guard that cannot reach a verdict denies (INV-9, spec R-AC-3)."""
-
-        def _boom(_cmd: str) -> int:
-            raise RuntimeError("guard exploded")
-
-        monkeypatch.setattr(orch_module, "check_command", _boom)
+    def test_a_denied_command_reports_the_policy_reason(self, mock_workspace: Path) -> None:
+        """The reason has to reach the model: a bare refusal invites a retry."""
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        result = orch._execute_run_command("echo hi")
+        result = orch._execute_run_command("rm -rf /")
         assert result.startswith("Error: Command blocked by policy guard")
-        assert "could not reach a verdict" in result
-        assert "guard exploded" in result
+        assert "destructive" in result
 
-    def test_no_output(self, mock_workspace: Path) -> None:
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        result = orch._execute_run_command("true")
-        assert "generated no output" in result
+    def test_an_unmapped_role_cannot_execute(self, mock_workspace: Path) -> None:
+        """Execution is evaluated against the authority model, so a role that
+        model does not declare is denied rather than defaulting to a permissive
+        identity."""
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5, active_role="not-a-role")
+        assert "unknown agent identity" in orch._execute_run_command("echo hi")
 
-    def test_stderr_captured(self, mock_workspace: Path) -> None:
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        result = orch._execute_run_command("echo oops >&2")
-        assert "[STDERR]" in result
-        assert "oops" in result
+    def test_a_backend_that_cannot_start_is_reported(self, mock_workspace: Path) -> None:
+        """Replaces a test that monkeypatched `orch_module.subprocess.run`. That
+        patch is inert now that execution lives behind the broker -- it would have
+        passed while asserting nothing, which is the failure mode the regression
+        tier exists to prevent."""
 
-    def test_timeout(self, mock_workspace: Path) -> None:
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=1)
-        result = orch._execute_run_command("sleep 5")
-        assert "timed out" in result
+        class Broken(ProcessBackend):
+            def _spawn(self, command: str, cwd: Path | None, timeout: int) -> Any:
+                raise OSError("kaboom")
 
-    def test_generic_exception(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        def _boom(*_a: Any, **_kw: Any) -> Any:
-            raise OSError("kaboom")
-
-        monkeypatch.setattr(orch_module.subprocess, "run", _boom)
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        result = orch._execute_run_command("anything")
-        assert result.startswith("Error executing command")
+        orch = MangoMASOrchestrator(
+            workspace_dir=mock_workspace, tool_timeout=5, broker=ExecutionBroker(backend=Broken())
+        )
+        result = orch._execute_run_command("echo hi")
+        assert result.startswith("Error:")
         assert "kaboom" in result
 
 

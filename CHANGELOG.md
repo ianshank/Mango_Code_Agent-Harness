@@ -7,6 +7,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent containment — INV-8 becomes true on the live path
+
+`run_command` routes through `ExecutionBroker`. Generated code now executes
+through the approved broker, which derives the action from the command, obtains
+a policy verdict, runs the command guard, and pins the working directory, the
+timeout and the captured output size. Nothing falls back to host execution when
+the backend is unavailable (INV-9), and a denial is terminal (INV-10).
+
+#### Added
+
+- `test_invariant_liveness.py`, generalising the insight behind
+  `test_protected_path_liveness.py` — *a pattern that matches nothing protects
+  nothing, silently* — one layer up, to invariants whose enforcement mechanism
+  has no caller. It asserts on **resolved imports parsed from the AST**, not on
+  text: a symbol appearing in a comment is not a caller. **3/3 mutants killed** —
+  removing the orchestrator's broker import fails INV-8, INV-9 and the positive
+  control with the intended message.
+
+  It ships with an **empty** waiver dict. Landing it earlier alongside a waiver
+  for INV-8 was considered and rejected: a self-destructing waiver introduced in
+  the same commit as its own fix can never fire, and a gate whose first act is to
+  waive the invariant it exists to catch is the defect wearing a test file.
+- `agent_authority.execution_identity` — the canonical contract each active role
+  executes as. The active roles are not declared in `agent-policy.json`, and
+  adding them would be the agent's own governing policy gaining an execution
+  grant. The narrowest contract that covers the role's work is used instead, and
+  `test_execution_identity_is_no_wider_than_the_role` pins that it never exceeds
+  the role's derived authority.
+- `_format_execution_result`, a pure function, so the three output shapes stay
+  testable without spawning a process.
+
+#### Changed — accepted consequences
+
+- **An active role the mapping does not declare cannot execute at all.** It is
+  denied as an unknown identity rather than defaulting to a permissive one.
+- **`pip install` and other external or destructive commands are denied for the
+  reasoner.** The reasoner prompt instructed running `pip`; it now names the
+  repository's own gates and directs the agent to `knowledge_gap_log` instead of
+  retrying a command policy will keep refusing.
+- Two classifier defects found by the existing suite rather than by inspection:
+  `>&2` and `2>&1` were read as command chains, denying ordinary commands; and
+  `sleep`, `sort`, `cut` and similar were unmodelled and therefore denied.
+- `test_generic_exception` monkeypatched `orch_module.subprocess.run`. With
+  execution behind the broker that patch is inert — it would have passed while
+  asserting nothing. Replaced with an injected backend that cannot start.
+
 ### Agent containment — the execution broker becomes real
 
 Third in the containment sequence. `ExecutionBroker` is the approved execution

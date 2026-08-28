@@ -37,6 +37,20 @@ ACTIVE_TO_CANONICAL: typing.Mapping[str, tuple[str, ...]] = {
     "verifier": ("test-eval", "peer-reviewer", "security-reviewer", "release-auditor"),
 }
 
+#: The canonical role an active role *executes as* when the broker asks the
+#: authority model for a verdict. The active roles are not themselves declared in
+#: `agent-policy.json`, and adding them would be the agent's own governing policy
+#: gaining an execution grant -- a change that also requires new canonical
+#: contract files to satisfy the bidirectional role/contract equality gates.
+#: Choosing the narrowest existing contract that still covers what the role must
+#: do keeps execution authority no wider than the role's tool exposure, which
+#: `test_execution_identity_is_no_wider_than_the_role` pins.
+EXECUTION_IDENTITY: typing.Mapping[str, str] = {
+    "planner": "orchestrator",
+    "nemotron-reasoner": "implementer",
+    "verifier": "test-eval",
+}
+
 #: The action each tool exercises. This is a reviewed decision rather than a
 #: derivation -- the policy declares actions, the orchestrator declares tools, and
 #: something has to join them -- so it is declared once, here, with the reason.
@@ -115,3 +129,13 @@ def tools_for_role(
         if required is not None and required in permitted:
             kept.append(tool)
     return kept
+
+
+def execution_identity(active_role: str) -> str:
+    """The canonical role id the broker evaluates ``active_role`` against.
+
+    An unknown active role resolves to a name no policy declares, so the decision
+    point denies it as an unknown identity rather than defaulting to a permissive
+    one.
+    """
+    return EXECUTION_IDENTITY.get(active_role, f"unmapped-active-role:{active_role}")

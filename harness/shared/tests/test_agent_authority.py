@@ -15,8 +15,10 @@ from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.agent_authority import (
     ACTIVE_TO_CANONICAL,
     DEFAULT_AGENT_POLICY_PATH,
+    EXECUTION_IDENTITY,
     TOOL_REQUIRED_ACTION,
     allowed_actions,
+    execution_identity,
     load_agent_policy,
     tools_for_role,
 )
@@ -124,3 +126,28 @@ class TestPolicyLoading:
             encoding="utf-8",
         )
         assert allowed_actions("nemotron-reasoner", policy_path=odd) == frozenset({"write"})
+
+
+class TestExecutionIdentity:
+    """The broker asks the authority model about a *canonical* role. The active
+    roles are not declared there, and declaring them would be the agent's own
+    governing policy gaining an execution grant."""
+
+    def test_execution_identity_is_no_wider_than_the_role(self) -> None:
+        policy = load_agent_policy()
+        effective = {
+            r["id"]: set(r.get("allowed_actions", [])) - set(r.get("human_approval_required_for", []))
+            for r in policy["agents"]
+        }
+        for active in ACTIVE_TO_CANONICAL:
+            identity = execution_identity(active)
+            assert effective[identity] <= allowed_actions(active), (
+                f"{active} executes as {identity}, which holds actions the role itself does not"
+            )
+
+    def test_an_unmapped_role_resolves_to_an_identity_no_policy_declares(self) -> None:
+        declared = {r["id"] for r in load_agent_policy()["agents"]}
+        assert execution_identity("some-future-role") not in declared
+
+    def test_every_active_role_has_an_execution_identity(self) -> None:
+        assert set(EXECUTION_IDENTITY) == set(ACTIVE_TO_CANONICAL)

