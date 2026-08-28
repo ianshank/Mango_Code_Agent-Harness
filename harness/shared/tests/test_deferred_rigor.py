@@ -90,14 +90,6 @@ DEFERRED_RUFF_RULES = (
         revisit_below=5,
     ),
     Deferral(
-        "DTZ", 8,
-        "datetime.date.today() without a timezone. Real but minor (a waiver could expire a day "
-        "early or late depending on server TZ). Deferred only because one of the two source "
-        "sites is inside a file the open policy-single-source PR rewrites; fixing it here would "
-        "conflict with reviewed work. Enable once that lands.",
-        revisit_below=1,
-    ),
-    Deferral(
         "PTH", 30,
         "os.path -> pathlib. Cosmetic in a codebase that already uses pathlib for new code; "
         "three source sites, the rest tests.",

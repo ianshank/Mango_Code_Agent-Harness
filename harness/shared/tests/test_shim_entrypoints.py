@@ -23,16 +23,57 @@ SHARED = REPO / "harness" / "shared"
 pytestmark = pytest.mark.governance
 
 
-def _run_shim_without_repo_root(monkeypatch: pytest.MonkeyPatch, shim: Path, run_name: str = "shim"):
-    """Execute a shim with the repo root absent from sys.path.
+def _resolves_to_repo(entry: str) -> bool:
+    try:
+        return Path(entry or ".").resolve() == REPO
+    except (OSError, ValueError):
+        return False
 
-    That is the environment the bootstrap exists for (a bare
-    `python harness/shared/<shim>.py` from anywhere): the insert branch must
-    fire and the delegated import must then succeed.
+
+def _is_editable_finder(finder: object) -> bool:
+    return "editable" in type(finder).__module__.lower() or "editable" in getattr(finder, "__name__", "").lower()
+
+
+class _FailFirstHarnessImport:
+    """Meta-path finder failing the first ``harness*`` import, then deferring.
+
+    Since the shims moved to the import-first try/except bootstrap (spec:
+    policy-single-source), stripping the repo root from sys.path is no longer
+    enough to make the insert leg fire under pytest: the editable-install
+    finder and the ``sys.modules`` cache still satisfy the first import. Same
+    device as test_bootstrap_fallbacks."""
+
+    def __init__(self) -> None:
+        self.fired = False
+
+    def find_spec(self, name, path=None, target=None):
+        if not self.fired and (name == "harness" or name.startswith("harness.")):
+            self.fired = True
+            raise ImportError("simulated bare-script environment: repo root not importable yet")
+        return None
+
+
+def _run_shim_without_repo_root(monkeypatch: pytest.MonkeyPatch, shim: Path, run_name: str = "shim"):
+    """Execute a shim in the bare-script environment its bootstrap exists for.
+
+    The first ``harness`` import must fail (repo root off sys.path, editable
+    finder removed, module cache purged, fail-once finder armed) so the
+    except-leg resolves and inserts the repo root, and the retry import
+    succeeds.
     """
-    stripped = [p for p in sys.path if Path(p).resolve() != REPO]
-    monkeypatch.setattr(sys, "path", stripped)
-    return runpy.run_path(str(shim), run_name=run_name)
+    saved_modules = dict(sys.modules)
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if not _resolves_to_repo(p)])
+    monkeypatch.setattr(
+        sys, "meta_path", [_FailFirstHarnessImport()] + [f for f in sys.meta_path if not _is_editable_finder(f)]
+    )
+    for name in [n for n in sys.modules if n == "harness" or n.startswith("harness.")]:
+        monkeypatch.delitem(sys.modules, name)
+    try:
+        return runpy.run_path(str(shim), run_name=run_name)
+    finally:
+        for name in [n for n in sys.modules if n not in saved_modules]:
+            del sys.modules[name]
+        sys.modules.update(saved_modules)
 
 
 class TestBootstrapInsertBranch:

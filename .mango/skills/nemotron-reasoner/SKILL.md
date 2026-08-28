@@ -14,7 +14,7 @@ Use this skill when you need high-capacity chain-of-thought reasoning, multi-tur
 
 ```bash
 # Basic reasoning query
-npx tsx harness/node/src/ai/nemotron/cli.ts --prompt "Analyze the deterministic collision system in src/pong/core/physics.ts"
+npx tsx harness/node/src/ai/nemotron/cli.ts --prompt "Analyze the circuit breaker states in src/ai/nemotron/circuit-breaker.ts"
 
 # Query with specific model and temperature
 npx tsx harness/node/src/ai/nemotron/cli.ts \

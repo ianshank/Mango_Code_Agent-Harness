@@ -14,7 +14,29 @@ import json
 import re
 from pathlib import Path
 
-ID_RE = re.compile(r"\b(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\.[0-9]+)\b")
+# Fallback decision-ID grammar for the adopter path (no policy file). The
+# authoritative copy is governance-policy.json `decision_id_pattern`; the
+# lockstep test in test_policy_consistency.py pins this literal to it.
+FALLBACK_ID_PATTERN = r"\b(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\.[0-9]+)\b"
+_POLICY_PATH = Path(__file__).resolve().parent.parent / "governance-policy.json"
+
+
+def _decision_id_regex() -> re.Pattern[str]:
+    """Decision-ID grammar from the policy, converted from the anchored
+    ``^(...)$`` form to the ``\\b(...)\\b`` search form. No policy file is the
+    adopter path (fallback literal); a present-but-malformed policy fails
+    closed. Standalone stdlib by design — no harness imports."""
+    if not _POLICY_PATH.is_file():
+        return re.compile(FALLBACK_ID_PATTERN)
+    try:
+        pattern = json.loads(_POLICY_PATH.read_text(encoding="utf-8"))["decision_id_pattern"]
+        body = re.fullmatch(r"\^\((.*)\)\$", pattern).group(1)  # type: ignore[union-attr]
+    except (OSError, ValueError, KeyError, AttributeError, TypeError) as exc:
+        raise SystemExit(f"zero-skip: unusable decision_id_pattern in {_POLICY_PATH}: {exc}") from exc
+    return re.compile(r"\b(" + body + r")\b")
+
+
+ID_RE = _decision_id_regex()
 
 
 def known_ids(path: str) -> set[str]:
@@ -31,7 +53,10 @@ def waivers(path: str, ids: set[str]) -> list[dict]:
         # registry must stop the run, because we cannot prove any skip is governed.
         raise SystemExit(f"zero-skip: cannot read waiver registry: {e}")
     out: list[dict] = []
-    today = dt.date.today()
+    # UTC, not the runner's local date: waiver `expires` values are calendar
+    # dates, and dt.date.today() would expire a waiver a day early or late
+    # depending on which timezone the CI runner happens to sit in.
+    today = dt.datetime.now(dt.timezone.utc).date()
     for w in data.get("waivers", []):
         common = ("framework", "decision_id", "reason", "owner", "expires")
         if any(not w.get(k) for k in common):

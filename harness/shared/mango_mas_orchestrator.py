@@ -11,6 +11,7 @@ from pathlib import Path
 from harness.shared.debug_dump import write_dump
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
+from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 
 logger = logging.getLogger(__name__)
@@ -126,16 +127,23 @@ class MangoMASOrchestrator:
         workspace_dir: Path,
         api_key: str | None = None,
         model: str | None = None,
-        max_iterations: int = 10,
-        api_timeout: int = 300,
-        tool_timeout: int = 30,
+        max_iterations: int | None = None,
+        api_timeout: int | None = None,
+        tool_timeout: int | None = None,
     ) -> None:
+        # Operational limits come from governance-policy.json (the
+        # `orchestrator` block); explicit constructor arguments still override
+        # (spec: policy-single-source). The policy loader's built-in defaults
+        # mirror the previous literals, so adopters without a policy file see
+        # identical behavior.
+        limits = orchestrator_defaults()
         self.workspace_dir = workspace_dir
         self.api_key = api_key
         self.model = model
-        self.max_iterations = max_iterations
-        self.api_timeout = api_timeout
-        self.tool_timeout = tool_timeout
+        self.max_iterations = max_iterations if max_iterations is not None else limits["max_iterations"]
+        self.api_timeout = api_timeout if api_timeout is not None else limits["api_timeout_sec"]
+        self.tool_timeout = tool_timeout if tool_timeout is not None else limits["tool_timeout_sec"]
+        self.max_tool_calls_per_task = max_tool_calls_per_task()
         self.agents_dir = self.workspace_dir / ".mango" / "agents"
         self.hooks_dir = self.workspace_dir / ".mango" / "hooks"
         self.conversation_history: list[dict[str, str]] = []
@@ -312,6 +320,9 @@ class MangoMASOrchestrator:
         self.conversation_history.extend(messages)
 
         active_tools = tools if tools is not None else NEMOTRON_TOOLS
+        # Cumulative budget across the whole task, from
+        # agent_defaults.max_tool_calls_per_task in governance-policy.json.
+        executed_tool_calls = 0
 
         for _iteration in range(self.max_iterations):
             try:
@@ -344,6 +355,13 @@ class MangoMASOrchestrator:
                 return final_content
 
             logger.info("[%s] requested %d tool calls.", agent_name, len(tool_calls))
+            executed_tool_calls += len(tool_calls)
+            if executed_tool_calls > self.max_tool_calls_per_task:
+                self._run_hook(f"post-{agent_name}-run", status="budget_exceeded")
+                raise RuntimeError(
+                    f"Agent {agent_name} exceeded the tool-call budget "
+                    f"({self.max_tool_calls_per_task} per task; policy agent_defaults.max_tool_calls_per_task)."
+                )
             self._dispatch_tool_calls(messages, tool_calls)
 
         self._run_hook(f"post-{agent_name}-run", status="timeout")

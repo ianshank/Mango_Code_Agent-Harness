@@ -143,6 +143,92 @@ def test_effective_remote_not_found(tmp_git_repo: Path):
         destinations(tmp_git_repo, seg)
 
 
+def test_effective_remote_prefers_origin_among_many(tmp_git_repo: Path):
+    """With no push config and several remotes, 'origin' wins."""
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "origin", "https://github.com/org/repo.git"], check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "mirror", "https://github.com/org/mirror.git"], check=True
+    )
+    assert destinations(tmp_git_repo, ["git", "push"]) == ["https://github.com/org/repo.git"]
+
+
+def test_effective_remote_single_non_origin_remote(tmp_git_repo: Path):
+    """A repository with exactly one remote (not named origin) pushes there."""
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "upstream", "https://github.com/org/only.git"], check=True
+    )
+    assert destinations(tmp_git_repo, ["git", "push"]) == ["https://github.com/org/only.git"]
+
+
+def test_destinations_non_git_segment_is_ignored(tmp_git_repo: Path):
+    assert destinations(tmp_git_repo, ["ls", "-la"]) == []
+
+
+def test_destinations_inline_C_and_c_options(tmp_git_repo: Path):
+    """Attached-value forms (-C/path, -chttp.x=y) advance one token, not two."""
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "origin", "https://github.com/org/repo.git"], check=True
+    )
+    seg = ["git", "-C/some/path", "-chttp.sslVerify=false", "push", "origin", "main"]
+    assert destinations(tmp_git_repo, seg) == ["https://github.com/org/repo.git"]
+
+
+def test_destinations_other_dashed_global_option(tmp_git_repo: Path):
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "origin", "https://github.com/org/repo.git"], check=True
+    )
+    seg = ["git", "--no-pager", "push", "origin", "main"]
+    assert destinations(tmp_git_repo, seg) == ["https://github.com/org/repo.git"]
+
+
+def test_destinations_non_push_git_subcommand(tmp_git_repo: Path):
+    assert destinations(tmp_git_repo, ["git", "commit", "-m", "x"]) == []
+
+
+def test_destinations_git_with_only_options_and_no_push(tmp_git_repo: Path):
+    assert destinations(tmp_git_repo, ["git", "-c", "a=b"]) == []
+
+
+def test_destinations_double_dash_falls_back_to_effective_remote(tmp_git_repo: Path):
+    """`git push -- main` names no repo before `--`, so the configured
+    effective remote is the destination."""
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "origin", "https://github.com/org/repo.git"], check=True
+    )
+    seg = ["git", "push", "--", "main"]
+    assert destinations(tmp_git_repo, seg) == ["https://github.com/org/repo.git"]
+
+
+def test_destinations_value_taking_push_option_is_skipped(tmp_git_repo: Path):
+    subprocess.run(
+        ["git", "-C", str(tmp_git_repo), "remote", "add", "origin", "https://github.com/org/repo.git"], check=True
+    )
+    seg = ["git", "push", "-o", "ci.skip", "origin", "main"]
+    assert destinations(tmp_git_repo, seg) == ["https://github.com/org/repo.git"]
+
+
+def test_destinations_unresolvable_named_remote_raises(tmp_git_repo: Path):
+    with pytest.raises(ValueError, match="cannot resolve URL for remote nosuch"):
+        destinations(tmp_git_repo, ["git", "push", "nosuch", "main"])
+
+
+def test_governance_module_main_dispatch_leg(monkeypatch):
+    """The governance module's own `__main__` leg (not the shim's): a benign
+    command must exit 0 through the same dispatch a direct
+    `python harness/shared/governance/pretooluse_guard.py` run uses."""
+    import runpy
+    import sys
+
+    import harness.shared.governance.pretooluse_guard as guard_module
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"tool_input": {"command": "git status"}})))
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(guard_module.__file__, run_name="__main__")
+    assert exc.value.code == 0
+
+
 # --- Test Regex Filters (DANGER / UNMODELED) ---
 def test_block_dangerous_rm():
     assert bool(DANGER.search("git push origin main")) is True
