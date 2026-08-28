@@ -81,7 +81,8 @@ line-length = 120
 #
 # S (bandit) stays off deliberately: the subprocess-heavy gate scripts would
 # need blanket waivers, which CLAUDE.md forbids without decision-log entries.
-select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID", "A", "C4", "PIE"]
+select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID", "A", "C4",
+          "PIE", "DTZ"]
 # Control-plane tools are intentionally compact CLI scripts; the per-stack
 # re-export shims must insert sys.path before importing (E402).
 # Every entry below is pinned live by test_lint_config_liveness.py: each pattern
@@ -89,7 +90,7 @@ select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID",
 # Ruff has no unused-ignore check, so without that test this block only ever
 # grows -- three patterns (scratch/*.py for a directory that does not exist,
 # and the check_*/validate_* globs) had already stopped suppressing anything.
-per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702"], "harness/node/scripts/*.py" = ["E402"], "harness/jvm/scripts/*.py" = ["E402"], "harness/shared/verify_*.py" = ["E402"], "harness/shared/remotes.py" = ["E402"], "harness/shared/pretooluse_guard.py" = ["E402"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501"] }
+per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702"], "harness/node/scripts/*.py" = ["E402"], "harness/jvm/scripts/*.py" = ["E402"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["harness"]

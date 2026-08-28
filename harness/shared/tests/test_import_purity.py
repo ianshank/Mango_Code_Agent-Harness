@@ -37,29 +37,17 @@ pytestmark = pytest.mark.slow
 
 # Modules that still act at import, each with the reason it is not fixed here.
 #
-# These three are already fixed in the open policy-single-source PR (#18),
-# which rewrites all of them. Re-fixing them on this branch would guarantee an
-# unresolvable conflict with review that has already been spent, so they are
-# declared instead. The waiver is designed to self-destruct:
-# ``test_every_waiver_is_still_necessary`` fails once a module becomes pure,
-# forcing the entry to be deleted rather than quietly outliving the defect.
-KNOWN_IMPORT_SIDE_EFFECTS: dict[str, str] = {
-    "harness/control-plane/tool_broker_reference.py": (
-        "argparse runs at module scope, so importing it exits 2 with a usage message. "
-        "Fixed in the open policy-single-source PR (#18), which moves argparse under main(); "
-        "re-fixing it here would conflict with that reviewed change."
-    ),
-    "harness/control-plane/verify_repository.py": (
-        "argparse runs at module scope, so importing it exits 2 with a usage message. "
-        "Fixed in the open policy-single-source PR (#18), which moves argparse under main(); "
-        "re-fixing it here would conflict with that reviewed change."
-    ),
-    "harness/shared/check_projections.py": (
-        "reads .governance/projections.json relative to the CWD at module scope, so importing "
-        "it raises FileNotFoundError. Fixed in the open policy-single-source PR (#18), which "
-        "moves argparse and the config read under main(); re-fixing it here would conflict."
-    ),
-}
+# Empty, and meant to stay that way. The three entries this registry was born
+# with (``tool_broker_reference.py``, ``verify_repository.py`` and
+# ``check_projections.py``) were waived only because the policy-single-source
+# change that fixes them was open and unmerged; once it landed,
+# ``test_every_waiver_is_still_necessary`` failed on all three and the entries
+# came out. That is the whole design: a waiver that cannot outlive its defect.
+#
+# Adding an entry here removes a module from the purity gate, so an entry earns
+# its place only by naming the specific defect and why it is not being fixed in
+# the same change -- not "later".
+KNOWN_IMPORT_SIDE_EFFECTS: dict[str, str] = {}
 
 # Two probes, because the two roots are importable in different ways.
 #

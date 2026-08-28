@@ -20,6 +20,7 @@ module while it still imports normally as ``harness.shared.tests._helpers``.
 from __future__ import annotations
 
 import contextlib
+import datetime as dt
 import importlib.util
 import json
 import subprocess
@@ -35,6 +36,19 @@ REPO = Path(__file__).resolve().parents[3]
 HARNESS = REPO / "harness"
 SHARED = HARNESS / "shared"
 CONTROL_PLANE = HARNESS / "control-plane"
+
+
+def utc_today() -> dt.date:
+    """Today's date in UTC.
+
+    The validators under test anchor their own "today" to UTC so a waiver or a
+    review date does not expire a day early or late depending on the CI
+    runner's timezone. A test that built its fixture dates from
+    ``dt.date.today()`` would disagree with them for the hours where the local
+    date and the UTC date differ -- a genuine, timezone-dependent flake, not a
+    lint preference. Tests use this so both sides share one clock.
+    """
+    return dt.datetime.now(dt.timezone.utc).date()
 
 
 def load_module_by_path(path: Path | str, name: str, register: bool = True) -> ModuleType:

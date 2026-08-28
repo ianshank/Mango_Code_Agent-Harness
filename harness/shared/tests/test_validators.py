@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import datetime as dt
 import hashlib
 import json
 import os
@@ -12,6 +11,8 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
+
+from harness.shared.tests._helpers import utc_today
 
 
 def run_script(
@@ -197,7 +198,7 @@ def mock_repo(tmp_path: Path):
     (docs / "PROJECT-CHARTER.md").write_text("# Charter v1.0\n")
 
     # GOVERNANCE_SKILL.md
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2020-01-01\nDEC-123")
 
     return tmp_path
