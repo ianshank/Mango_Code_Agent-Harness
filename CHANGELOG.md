@@ -7,6 +7,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security — three policy readers could not tell an absent policy from an unusable one
+
+`policy_loader.load_policy`, `check_projections.decision_id_regex` and
+`verify_zero_skips._decision_id_regex` each documented the same contract — no
+policy file is the adopter path, a present-but-malformed policy fails closed —
+and each implemented it with a bare `Path.is_file()`, which cannot express it.
+`is_file()` answers False both for a path with nothing at it and for one holding
+a directory, a dangling symlink, a FIFO or a device node.
+
+The failure is a deployment away, not a hypothetical: a container mount whose
+source is missing leaves a directory, and a moved or unextracted target leaves a
+dangling symlink. Either one sent all three readers down the adopter branch, so
+every threshold and the decision-ID grammar silently fell back to built-in
+defaults and the run went green — the gate reporting success precisely because
+it had stopped reading the policy that governs it.
+
+Worse, the `Path` predicates also swallow `OSError`. `is_file()`, `exists()` and
+`is_symlink()` all answer False when the policy is *present and merely
+inaccessible* — a parent directory without execute permission, a path component
+that turned out to be a file (`NotADirectoryError`), a symlink loop. No
+predicate can express the question; only the errno can.
+
+All three readers now probe with `stat`/`lstat` and branch on the error.
+`FileNotFoundError` from both is the adopter path; anything else stops the run.
+`lstat` is what separates "nothing here" from "the symlink target is gone",
+since `stat` follows the link and reports both as `FileNotFoundError` — while a
+symlink to a *real* policy file must still be followed and read, so rejecting
+every symlink would be a fail-closed bug of its own. `policy_loader` exposes the
+rule as `policy_file_is_absent`; the other two inline it, because both are
+standalone-stdlib by contract (the adopter path copies them, so they take no
+harness imports).
+
+`test_policy_path_fail_closed.py` pins it twice over. Behaviourally, each reader
+is driven with a directory, a dangling symlink and a FIFO, and must raise with a
+reason — while a genuinely absent policy must still return the fallback, so the
+fix cannot quietly break the adopter case it stands in front of. Structurally, a
+source scan bans the shape outright: a policy path is never guarded by
+`is_file()`, because there is no correct way to answer this question with it.
+(An earlier version of the scan required a compensating `is_symlink()` nearby,
+which a guard checking *only* `is_symlink()` would have satisfied while still
+failing open on a directory.) The scan carries both a positive and a negative
+control, so neither a pattern that matches nothing nor one that matches the
+fixed form can pass unnoticed. Every claim about the stdlib that makes this a
+regression rather than a style choice is asserted too, not left in a comment.
+
+All of it was verified failing against the reverted code, including a guard
+written the way the first review round suggested.
+
 ### Remediation programme v3 — peer review of the v2 tech-debt programme
 
 An objective review of PRs #15-#19 plus a wider gap analysis, shipped as three
