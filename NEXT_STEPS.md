@@ -82,6 +82,22 @@ round-trip.
       fixtures; 8/8 mutants killed. Its strict tier (`openspec`) is unenforced at
       root and is now declared in `PARTIAL_COVERAGE["specs"]`, with a test that
       removes the waiver the moment the root pipeline enforces it.
+- [x] **Python branch coverage is measured and enforced** as its own floor:
+      `branch = true` + `coverage_gate.py` applying `coverage.lines` and
+      `coverage.branches` separately (a single `--cov-fail-under` would gate a
+      blended number mislabeled as the lines floor). Lines 94.10%, branches
+      89.46% at enablement; the `branches` waiver in `UNENFORCED_IN_ROOT_CI`
+      is deleted.
+- [x] **The bundle's top-level policy digests are regenerable in CI**:
+      `build_policy_bundle.py` is wired into `make digest-regen` behind
+      `git diff --exit-code`; previously nothing invoked the only tool that
+      could refresh the digests `verify_repository.py` checks.
+- [ ] **Specs-gate refinements (recorded 2026-08-28):** the structural tier
+      accepts an entirely unfilled template scaffold (placeholder
+      `R-EXAMPLE-*` IDs satisfy every rule), and an `AC-*` bullet containing
+      MUST can never pass the `[CR]-` requirement-ID regex — acceptance
+      criteria must avoid the word or use `C-*` IDs. Both are gate-quality
+      follow-ups, not urgent.
 - [ ] **3,526 lines of production TypeScript have no coverage floor.**
       `make test-node` runs `vitest run` with **no `--coverage`**, so
       `vitest.config.ts` — which correctly reads all five thresholds from the
