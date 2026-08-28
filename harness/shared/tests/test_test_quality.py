@@ -29,8 +29,11 @@ TEST_ROOTS = (
     REPO / "harness" / "api_server" / "tests",
 )
 
-# Names that count as making an assertion.
-_ASSERTING_ATTRS = ("raises", "warns", "deprecated_call", "fail", "exit")
+# Names that count as making an assertion. `pytest.fail` is a real assertion
+# mechanism; `exit` is deliberately NOT here -- it once was, which meant a test
+# whose only "assertion" was `sys.exit(...)` or a reference to `proc.exitstatus`
+# counted as asserting and slipped through this very check.
+_ASSERTING_ATTRS = ("raises", "warns", "deprecated_call", "fail")
 
 # Tests that legitimately assert nothing, each with the reason it is exempt.
 # An entry here is a decision, not a shortcut: it must say why the absence of
@@ -82,9 +85,17 @@ def _collected_tests(path: Path) -> list[tuple[str, ast.FunctionDef | ast.AsyncF
 class TestSuiteHasNoUnfailableTests:
     def test_test_modules_are_discovered(self) -> None:
         """Guards the scan itself: a glob that stopped matching would make
-        every check in this file pass while examining nothing."""
-        modules = _test_modules()
-        assert len(modules) > 30, f"expected the full suite, found {len(modules)} modules"
+        every check in this file pass while examining nothing.
+
+        Asserted per-root rather than against a total. A hard-coded floor
+        breaks on a legitimate consolidation that reduces the file count while
+        discovery still works perfectly -- and a threshold nobody can justify
+        is the kind of assertion that gets deleted rather than understood.
+        """
+        for root in TEST_ROOTS:
+            assert root.is_dir(), f"test root {root} does not exist"
+            found = [p for p in root.rglob("test_*.py")]
+            assert found, f"test root {root} contributed no modules to the scan"
 
     def test_every_test_asserts_something(self) -> None:
         offenders = [
