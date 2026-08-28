@@ -177,9 +177,11 @@ def complete_chat(
 
     # Explicit/env-resolved max_retries wins over the mapping's value; the rest
     # of the backoff shape (base, cap, jitter) comes from the same mapping.
-    policy = replace(RetryPolicy.from_mapping(env_config), max_retries=max_retries)
+    # Named `retry` rather than `policy`: `policy` above is the governance
+    # nemotron block, and shadowing it here would silently discard it.
+    retry = replace(RetryPolicy.from_mapping(env_config), max_retries=max_retries)
 
-    for attempt in range(policy.max_retries + 1):
+    for attempt in range(retry.max_retries + 1):
         # Built per attempt: a urllib Request accumulates per-opener state (and
         # is mutated by redirect handling), so reusing one instance across
         # retries replays a request that is no longer the one we composed.
@@ -192,25 +194,25 @@ def complete_chat(
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")
             sanitized = err_msg.replace(key, mask_secret(key))
-            if e.code in RETRYABLE_HTTP_STATUSES and policy.should_retry(attempt):
+            if e.code in RETRYABLE_HTTP_STATUSES and retry.should_retry(attempt):
                 # A server-supplied Retry-After is an instruction, not a hint:
                 # honor it (capped) instead of guessing with exponential backoff.
                 header = e.headers.get("Retry-After") if e.headers is not None else None
-                backoff = policy.backoff(attempt, retry_after=parse_retry_after(header))
+                backoff = retry.backoff(attempt, retry_after=parse_retry_after(header))
                 logger.warning(
                     "Nemotron API HTTP %d (attempt %d/%d); retrying in %.1fs",
-                    e.code, attempt + 1, policy.max_retries + 1, backoff,
+                    e.code, attempt + 1, retry.max_retries + 1, backoff,
                 )
                 time.sleep(backoff)
                 continue
             raise RuntimeError(f"Nemotron API HTTP {e.code} Error: {sanitized}") from e
         except Exception as e:
             sanitized = str(e).replace(key, mask_secret(key))
-            if is_retryable_connection_error(e) and policy.should_retry(attempt):
-                backoff = policy.backoff(attempt)
+            if is_retryable_connection_error(e) and retry.should_retry(attempt):
+                backoff = retry.backoff(attempt)
                 logger.warning(
                     "Nemotron connection error (attempt %d/%d): %s; retrying in %.1fs",
-                    attempt + 1, policy.max_retries + 1, sanitized, backoff,
+                    attempt + 1, retry.max_retries + 1, sanitized, backoff,
                 )
                 time.sleep(backoff)
                 continue
