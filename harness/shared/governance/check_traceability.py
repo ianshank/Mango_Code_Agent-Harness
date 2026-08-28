@@ -40,7 +40,21 @@ def _gate_logger() -> logging.Logger:
 
         return configure_gate_logging(__name__)
     except Exception:  # noqa: BLE001 - logging setup must never break a gate
-        return logging.getLogger(__name__)
+        return _fallback_logger()
+
+
+def _fallback_logger() -> logging.Logger:
+    """A stderr logger that does not propagate, for when the shared helper is absent.
+
+    Propagating would hand diagnostics to the root logger, and `setup_json_logging`
+    in this same package attaches a root handler on **stdout** — so the fallback
+    could put diagnostics into the verdict channel the separation exists to protect.
+    """
+    logger = logging.getLogger(__name__)
+    logger.propagate = False
+    if not logger.handlers:
+        logger.addHandler(logging.StreamHandler(sys.stderr))
+    return logger
 
 
 logger = _gate_logger()

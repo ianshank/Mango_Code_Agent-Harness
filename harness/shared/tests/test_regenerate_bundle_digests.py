@@ -174,6 +174,14 @@ class TestMain:
         assert "gone.json" not in captured.out
         assert "[PASS] Regenerated digests" in captured.out
 
+    def test_main_tolerates_a_stack_absent_from_the_bundle(self, tmp_path: Path, capsys):
+        """main() iterates stack_roots; a stack the bundle does not declare must
+        report zero rather than raising KeyError, matching regenerate()."""
+        root = _stack(tmp_path, "node", {"p.json": "x"})
+        bundle_path = _bundle(tmp_path, {"node": {"protected_files": {"p.json": "o"}}})
+        assert regen.main(bundle_path, {"node": root, "absent": tmp_path / "nope"}) == 0
+        assert "absent: 0 protected file digests" in capsys.readouterr().out
+
     def test_defaults_point_at_the_real_repository_bundle(self):
         """The zero-argument form the Makefile uses must still resolve correctly."""
         assert regen.BUNDLE.is_file()

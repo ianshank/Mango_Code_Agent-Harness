@@ -151,3 +151,42 @@ class TestRealGateStdoutContract:
         loud = self._run({LOG_LEVEL_ENV_VAR: "DEBUG"})
         assert "glob" in loud.stderr, "DEBUG produced no glob diagnostics"
         assert "glob" not in loud.stdout
+
+
+class TestFallbackLoggerDoesNotLeakToStdout:
+    """When the shared helper is unimportable, the fallback must still not
+    propagate: `setup_json_logging` attaches a ROOT handler on **stdout**, so a
+    propagating fallback would put diagnostics into the verdict channel."""
+
+    @pytest.mark.parametrize(
+        "module_path",
+        [
+            "harness/shared/governance/check_traceability.py",
+            "harness/control-plane/regenerate_bundle_digests.py",
+        ],
+    )
+    def test_gate_fallback_logger_does_not_propagate(self, module_path, monkeypatch):
+        import builtins
+        import importlib.util
+
+        real_import = builtins.__import__
+
+        def explode(name, *args, **kwargs):
+            if "json_logging" in name:
+                raise ImportError("simulated missing shared package")
+            return real_import(name, *args, **kwargs)
+
+        spec = importlib.util.spec_from_file_location(
+            f"probe_{Path(module_path).stem}", REPO / module_path
+        )
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setattr(builtins, "__import__", explode)
+        spec.loader.exec_module(module)  # module-level _gate_logger() takes the fallback
+        monkeypatch.setattr(builtins, "__import__", real_import)
+
+        assert module.logger.propagate is False, (
+            f"{module_path} fallback logger propagates to root; a root handler on "
+            "stdout would leak diagnostics into the gate's verdict channel"
+        )
+        assert module.logger.handlers, f"{module_path} fallback logger has no handler"

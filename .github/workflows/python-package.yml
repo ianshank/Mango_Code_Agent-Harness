@@ -102,6 +102,15 @@ jobs:
           # Full history: INV-1 requires scanning past commits, not just the tree.
           fetch-depth: 0
 
+      # `make secrets-install` shells out to `go install`. GitHub's ubuntu image
+      # happens to ship Go today, but relying on that makes INV-1 enforcement an
+      # implicit dependency on the runner image: a base-image change would break
+      # the scan rather than fail it loudly. Pin the toolchain explicitly.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
       - name: Install pinned gitleaks
         # Version is pinned in the Makefile so the local and CI gates cannot drift.
         run: make secrets-install

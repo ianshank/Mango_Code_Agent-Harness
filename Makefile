@@ -38,6 +38,10 @@ lint-python: ## Run ruff check + mypy across all first-party Python (sources, to
 	$(RUFF) check .
 	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases
 
+.PHONY: lint-cold
+lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
+	$(MYPY) $(SHARED_SRC) harness/api_server --explicit-package-bases --no-incremental
+
 .PHONY: check-compat
 check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
 	$(PYTHON) $(SHARED_SRC)/check_py_compat.py --repo-root .
@@ -164,7 +168,7 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
 
 .PHONY: pre-pr
-pre-pr: ci review ## Pre-PR validation gate (full CI + mechanical review checklist)
+pre-pr: ci review lint-cold ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts

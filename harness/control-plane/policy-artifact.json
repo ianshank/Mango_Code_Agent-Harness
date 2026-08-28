@@ -3,7 +3,7 @@
   "artifact_id": "governance-policy",
   "policy_id": "agentic-ssd-governance",
   "policy_version": "300f4840dc5bcfd9",
-  "created_at": "2026-08-28T00:24:00.504198+00:00",
+  "created_at": "2026-08-28T00:30:38.166948+00:00",
   "files": {
     "harness/shared/governance-policy.json": {
       "sha256": "300f4840dc5bcfd9e124fda33ed4a92eb7c5df7bf33e1506a70844a2ab6d1b68",

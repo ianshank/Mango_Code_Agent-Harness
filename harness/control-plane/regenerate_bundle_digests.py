@@ -42,7 +42,14 @@ def _gate_logger() -> logging.Logger:
 
         return configure_gate_logging(__name__)
     except Exception:  # noqa: BLE001 - logging setup must never break a gate
-        return logging.getLogger(__name__)
+        # Non-propagating: the root logger may be configured to write to stdout
+        # (setup_json_logging does exactly that), which would put diagnostics into
+        # the stdout summary this script's callers parse.
+        fallback = logging.getLogger(__name__)
+        fallback.propagate = False
+        if not fallback.handlers:
+            fallback.addHandler(logging.StreamHandler(sys.stderr))
+        return fallback
 
 
 logger = _gate_logger()
@@ -96,7 +103,10 @@ def main(
     bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
     print(f"[PASS] Regenerated digests for {bundle_path}")
     for stack in stack_roots:
-        count = len(bundle["profiles"][stack]["protected_files"])
+        # `.get()` chain mirrors regenerate(): a stack_roots override naming a stack
+        # the bundle does not declare must report zero, not raise KeyError.
+        profile = bundle.get("profiles", {}).get(stack, {})
+        count = len(profile.get("protected_files", {}))
         print(f"  {stack}: {count} protected file digests")
     for stack, entries in dropped.items():
         # stderr, so the stdout summary above stays a stable, parseable shape.
