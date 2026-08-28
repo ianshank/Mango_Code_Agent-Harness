@@ -1,5 +1,13 @@
 title = "Agentic SSD Gitleaks Root Policy"
 
+# Without this, --config REPLACES gitleaks' built-in ruleset rather than
+# extending it, so a config that declares no [[rules]] detects nothing. The
+# allowlist below then reads as a careful narrowing of a scan that was never
+# running: a planted AKIA... key scanned clean under this config and was found
+# immediately under the defaults. INV-1 depends on this line.
+[extend]
+useDefault = true
+
 [allowlist]
 description = "Strict allowlist: only explicitly reviewed non-secret fixture identifiers are permitted."
 paths = [
@@ -11,5 +19,6 @@ paths = [
   '''harness/shared/tests/test_validate_invariants\.py''',
   '''harness/shared/tests/test_evidence_manifest\.py''',
   '''harness/shared/tests/test_governance_broker\.py''',
-  '''harness/shared/tests/test_validation_scripts_extra\.py'''
+  '''harness/shared/tests/test_validation_scripts_extra\.py''',
+  '''harness/shared/tests/test_debug_dump\.py'''
 ]

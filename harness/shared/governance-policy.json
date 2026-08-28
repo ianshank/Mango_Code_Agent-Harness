@@ -140,6 +140,11 @@
     "harness/control-plane/tool_broker_reference.py",
     "harness/shared/write_policy.py",
     "harness/shared/mango_mas_orchestrator.py",
+    "harness/shared/agent_authority.py",
+    "harness/shared/debug_dump.py",
+    "harness/shared/policy_loader.py",
+    ".claude/settings.local.json",
+    ".mango/settings.local.json",
     "harness/shared/tests/test_protected_path_liveness.py",
     "harness/shared/tests/test_ci_gate_coverage.py",
     "harness/shared/tests/test_coverage_policy_enforcement.py"

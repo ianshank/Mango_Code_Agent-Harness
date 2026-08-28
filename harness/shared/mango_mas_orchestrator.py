@@ -209,7 +209,8 @@ class MangoMASOrchestrator:
                 # hook ran on the host holding NVIDIA_API_KEY, API_SERVER_KEY and
                 # AGENT_EVIDENCE_KEY. The hooks this repository ships need none of
                 # them -- `pre-nemotron-run.sh` runs validate_invariants.py.
-                env = {k: v for k, v in os.environ.items() if k not in set(credential_env_names())}
+                denied = set(credential_env_names())
+                env = {k: v for k, v in os.environ.items() if k not in denied}
                 for k, v in kwargs.items():
                     env[f"MANGO_HOOK_{k.upper()}"] = str(v)
                 subprocess.run(

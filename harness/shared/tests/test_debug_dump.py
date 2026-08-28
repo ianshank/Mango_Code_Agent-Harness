@@ -219,3 +219,33 @@ class TestProviderShapes:
     def test_ordinary_text_is_untouched(self):
         text = "the model wrote a function called make_key and a token parser"
         assert redact_text(text) == text
+
+
+class TestRedactionOrderingIsLoadBearing:
+    """Regression for a defect found by probing rather than reading.
+
+    `redact_text` replaces by substring in list order. When one credential is a
+    prefix of another -- two keys sharing an issuer prefix, or a truncated copy of
+    the same key -- replacing the shorter first consumed its head and left the
+    remainder of the longer one in clear text: `<REDACTED_API_KEY>efgh5678`.
+    """
+
+    COLLIDING = {"API_SERVER_KEY": "abcd1234", "AGENT_EVIDENCE_KEY": "abcd1234efgh5678"}
+
+    def test_the_longer_credential_is_redacted_first(self):
+        assert resolve_credentials(None, self.COLLIDING) == ["abcd1234efgh5678", "abcd1234"]
+
+    def test_no_tail_of_a_longer_credential_survives(self):
+        secrets = resolve_credentials(None, self.COLLIDING)
+        out = redact_text("token abcd1234efgh5678 here", secrets)
+        assert "efgh5678" not in out, "the tail of the longer credential leaked"
+        assert out == f"token {REDACTED} here"
+
+    def test_both_credentials_are_still_redacted_independently(self):
+        secrets = resolve_credentials(None, self.COLLIDING)
+        assert redact_text("short abcd1234 only", secrets) == f"short {REDACTED} only"
+
+    def test_equal_length_values_keep_their_declared_order(self):
+        """`sorted` is stable, so the reviewed list still leads."""
+        got = resolve_credentials("explicit", {"NVIDIA_API_KEY": "from-env"})
+        assert got == ["explicit", "from-env"]

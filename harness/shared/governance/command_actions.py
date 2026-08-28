@@ -35,8 +35,23 @@ UNCLASSIFIED_ACTION = "destructive"
 #:
 #: `&` is excluded when it follows `>`, because `2>&1` and `>&2` are redirections
 #: of one command, not a chain of two. Treating them as chains denied ordinary
-#: commands -- caught by `test_stderr_captured`, which runs `echo oops >&2`.
+#: commands -- pinned by `test_redirections_are_not_command_chains` in
+#: `test_command_actions.py`.
 _COMPOUND = re.compile(r"[;|]|(?<!>)&|\$\(|`|\n")
+
+
+#: Redirection operators. A redirect makes any command a write, whatever its
+#: program: `echo x > .git/hooks/pre-commit` is `echo` by argv[0] and a hook
+#: installation by effect. The action model grades the effect.
+_REDIRECT = re.compile(r"(?<![0-9<>&])(?:>>|>)(?!&)")
+
+#: Programs whose non-flag arguments name files they create or overwrite. Their
+#: targets go through the same write policy as the write tool, so `cp evil
+#: .mango/hooks/x.sh` is refused for the same reason `write_file` would refuse it.
+WRITE_TARGET_PROGRAMS: typing.Mapping[str, int] = {
+    # program -> index of the first argument that is a write target
+    "cp": 1, "mv": 1, "tee": 0, "touch": 0, "mkdir": 0, "install": 1,
+}
 
 
 class Classification(typing.NamedTuple):
@@ -123,6 +138,12 @@ def classify(command: str) -> Classification:
             "the command chains or substitutes, so no single action describes it",
         )
 
+    if _REDIRECT.search(text):
+        # Not UNCLASSIFIED: `pytest -q > out.txt` is ordinary work. The write is
+        # real, so it is graded `write` and its target is checked separately by
+        # `write_targets`, exactly as the write tool's target would be.
+        return Classification("write", "the command redirects output into a file")
+
     for pattern, action, why in _BY_SHAPE:
         if pattern.search(text):
             return Classification(action, why)
@@ -150,3 +171,47 @@ def classify(command: str) -> Classification:
         return Classification(by_prog, program)
 
     return Classification(UNCLASSIFIED_ACTION, f"{program} is not a modelled program")
+
+
+def write_targets(command: str) -> list[str]:
+    """Paths ``command`` would create or overwrite, best effort.
+
+    The broker checks each against the same write policy as the file-write tool.
+    Without this, ``run_command`` re-opens every path ``write_file`` closes:
+    ``echo x > .git/hooks/pre-commit`` is ``echo`` by ``argv[0]``, classifies as
+    a read, and installs a host-executed hook.
+
+    Best effort is stated deliberately. A shape this cannot parse is graded
+    ``UNCLASSIFIED_ACTION`` by :func:`classify` and denied there, so the failure
+    mode of missing a target is a denial, not an allow.
+    """
+    try:
+        argv = shlex.split(command.strip())
+    except ValueError:
+        return []
+
+    targets: list[str] = []
+    pending_redirect = False
+    for token in argv:
+        if pending_redirect:
+            # `2>&1` and `>&2` duplicate a descriptor rather than naming a file.
+            if not token.startswith("&"):
+                targets.append(token)
+            pending_redirect = False
+            continue
+        if _REDIRECT.fullmatch(token):
+            pending_redirect = True
+            continue
+        match = _REDIRECT.search(token)
+        if match and match.end() < len(token):
+            # `>file` written without a space, or `2>file`.
+            tail = token[match.end():]
+            if tail and not tail.startswith("&"):
+                targets.append(tail)
+
+    program = argv[0].rsplit("/", 1)[-1] if argv else ""
+    start = WRITE_TARGET_PROGRAMS.get(program)
+    if start is not None:
+        operands = [a for a in argv[1:] if not a.startswith("-") and not _REDIRECT.search(a)]
+        targets.extend(operands[start:] if start else operands)
+    return targets

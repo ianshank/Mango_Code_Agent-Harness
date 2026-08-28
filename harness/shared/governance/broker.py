@@ -35,11 +35,17 @@ import typing
 from dataclasses import dataclass
 from pathlib import Path
 
-from .command_actions import classify
+from .command_actions import classify, write_targets
 from .policy_decision import decide
 from .pretooluse_guard import check_command
 
 logger = logging.getLogger(__name__)
+
+# Imported from the shared layer rather than re-implemented: two matchers would be
+# two behaviours, and the write tool's gate is the one with the liveness suite
+# behind it.
+from harness.shared.debug_dump import redact_text  # noqa: E402
+from harness.shared.write_policy import write_denial_reason  # noqa: E402
 
 #: The authority model, resolved next to this package so it travels with the
 #: installed harness rather than being read out of the agent's workspace.
@@ -113,9 +119,18 @@ class ProcessBackend:
 
 
 def _cap(text: str, limit: int) -> str:
-    if len(text) <= limit:
+    """Truncate ``text`` to ``limit`` **bytes**, not characters.
+
+    ``len(text)`` counts code points, so a character cap named in bytes lets
+    multibyte output exceed its own limit several times over -- and this cap is a
+    containment control, because captured output becomes a prompt, a signal-sink
+    entry and an HTTP response body. Slicing encoded bytes can split a character,
+    so the tail is decoded with ``errors="ignore"`` to drop a partial one.
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) <= limit:
         return text
-    return text[:limit] + f"\n[truncated at {limit} bytes]"
+    return encoded[:limit].decode("utf-8", errors="ignore") + f"\n[truncated at {limit} bytes]"
 
 
 class ExecutionBroker:
@@ -154,7 +169,11 @@ class ExecutionBroker:
     def _policy_decision(self, command: str, context: typing.Mapping[str, typing.Any]) -> ExecutionResult | None:
         """Return a BLOCKED result when policy denies, else ``None``."""
         agent_id = context.get("agent_id", "unknown")
-        human_approved = bool(context.get("human_approved", False))
+        # Identity, not truthiness. `bool("false")` is True, so a caller passing a
+        # string -- from a config file, a query parameter, an environment variable
+        # -- would grant approval for an action whose whole point is that a human
+        # signs first. Only a real boolean True approves.
+        human_approved = context.get("human_approved", False) is True
 
         # The action is derived from the command, never taken from the caller.
         # A caller-supplied constant grades `pytest` and `rm -rf /` identically,
@@ -206,7 +225,9 @@ class ExecutionBroker:
 
         # INV-9: no host-process fallback when the backend cannot be used.
         if not self.verify_sandbox():
-            logger.warning("Backend unavailable; blocking execution of: %s", command)
+            # Redacted: a denial is precisely when the command is most likely to carry a
+            # credential -- `git push https://user:TOKEN@host`, `curl -H "Authorization: ..."`.
+            logger.warning("Backend unavailable; blocking execution of: %s", redact_text(command))
             return ExecutionResult(
                 "BLOCKED", "",
                 "BLOCKED: Sandbox unavailable; host-process execution fallback is strictly prohibited.",
@@ -220,9 +241,23 @@ class ExecutionBroker:
             denial.stderr = denial.reason
             return denial
 
+        # The write policy is a property of the broker, not of one tool handler.
+        # Enforcing it only in `write_file` left `run_command` as an unguarded
+        # second door to the same paths: `echo x > .git/hooks/pre-commit` is
+        # `echo` by argv[0] and a host-executed hook installation by effect.
+        for target in write_targets(command):
+            denial = write_denial_reason(target)
+            if denial is not None:
+                logger.warning("Denied a command writing to a governed path: %s", target)
+                return ExecutionResult(
+                    "BLOCKED", "", f"BLOCKED: {denial}", 1,
+                    reason=f"BLOCKED: the command writes to {target}, which is denied: {denial}",
+                    action=action,
+                )
+
         # INV-8: every execution request passes the command guard.
         if check_command(command) != 0:
-            logger.warning("PreToolUse guard blocked command: %s", command)
+            logger.warning("PreToolUse guard blocked command: %s", redact_text(command))
             return ExecutionResult(
                 "BLOCKED", "", "BLOCKED: Command failed pretooluse_guard policy evaluation.", 2,
                 reason="BLOCKED: the command guard denied this command", action=action,

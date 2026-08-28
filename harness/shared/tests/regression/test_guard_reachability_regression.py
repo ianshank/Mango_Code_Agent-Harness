@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.governance.pretooluse_guard import BLOCK_EXIT
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.tests._helpers import REPO
@@ -72,15 +73,18 @@ class TestGuardIsReachedEvenWithNoGuardInTheWorkspace:
         assert "ok" in orch._execute_run_command("echo ok")
 
     def test_the_refusal_names_a_policy_reason_not_a_crash(self, agent_workspace: Path) -> None:
-        """A denial that happens because the guard blew up is not enforcement.
+        """A denial that happens because something blew up is not enforcement.
 
-        Distinguishing the two is the point: the guard also fails closed when it
-        cannot read its allowlist, and that is a configuration fault wearing a
-        policy verdict's clothes.
+        The first version of this test asserted the absence of the substring
+        "could not reach a verdict", which no code path emits -- so it passed
+        against every mutant of every module it named. It now asserts the reason
+        the code actually produces.
         """
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace, tool_timeout=5)
         result = orch._execute_run_command(DANGEROUS)
-        assert "could not reach a verdict" not in result, result
+        assert "external_write" in result and "not granted" in result, result
+        for fault in ("could not be read", "backend is unavailable", "could not be started"):
+            assert fault not in result, f"the refusal is a fault, not a policy verdict: {result}"
 
 
 class TestGuardParsesTheEnvelopeTheOrchestratorSends:
@@ -103,3 +107,37 @@ class TestGuardParsesTheEnvelopeTheOrchestratorSends:
 
     def test_a_payload_shape_the_guard_cannot_model_is_denied(self) -> None:
         assert self._guard('{"tool_input": {"no_command_here": true}}').returncode == BLOCK_EXIT
+
+
+class TestTheCommandGuardIsOnThePath:
+    """The tests above deny at the *policy* layer, so they would all stay green
+    with `check_command` deleted from the broker: an `external_write` command is
+    refused before the guard is consulted. This drives a command policy
+    **allows** so that only the guard can refuse it.
+
+    `release-auditor` holds `external_write` with `human_approval_required_for`,
+    so with an explicit approval the policy verdict is ALLOW and the remote
+    allowlist is the only thing left standing between the command and the shell.
+    """
+
+    def test_a_policy_allowed_push_is_still_refused_by_the_guard(self, agent_workspace: Path) -> None:
+        broker = ExecutionBroker()
+        result = broker.execute_command(
+            DANGEROUS,
+            {"agent_id": "release-auditor", "human_approved": True},
+            cwd=agent_workspace,
+            timeout=5,
+        )
+        assert result.status == "BLOCKED", "the guard did not refuse a policy-allowed push"
+        assert "guard" in result.stderr.lower() or "allowlist" in result.stderr.lower(), result.stderr
+
+    def test_the_same_identity_may_run_an_unguarded_command(self, agent_workspace: Path) -> None:
+        """The control: the approval is real, so the denial above is the guard's
+        and not the policy's."""
+        result = ExecutionBroker().execute_command(
+            "curl https://example.test",
+            {"agent_id": "release-auditor", "human_approved": True},
+            cwd=agent_workspace,
+            timeout=10,
+        )
+        assert result.status != "BLOCKED", result.reason

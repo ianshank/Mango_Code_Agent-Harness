@@ -114,7 +114,14 @@ def resolve_credentials(explicit: str | None = None, env: Mapping[str, str] | No
         candidate = source.get(name, "")
         if len(candidate) >= MIN_ENV_CREDENTIAL_LENGTH and candidate not in found:
             found.append(candidate)
-    return found
+
+    # Longest first, and this ordering is load-bearing rather than cosmetic.
+    # `redact_text` replaces by substring in list order, so when one credential is
+    # a prefix of another -- two keys sharing an issuer prefix, or a truncated
+    # copy of the same key -- replacing the shorter one first consumes its head
+    # and leaves the remainder of the longer one in clear text. `sorted` is
+    # stable, so equal-length values keep their declared order.
+    return sorted(found, key=len, reverse=True)
 
 
 def credential_env_names(env: Mapping[str, str] | None = None) -> list[str]:

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import fnmatch
 import sys
+from pathlib import Path
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -110,6 +111,45 @@ class TestPerFileIgnoresAreLive:
             f"per-file-ignores[{pattern!r}] declares {sorted(declared - firing)} which suppress "
             "nothing. Remove them, or the config claims a rule is needed where it is not -- "
             "and the day it is genuinely needed, nobody can tell the difference."
+        )
+
+
+class TestGitleaksActuallyScans:
+    """An allowlist over an empty ruleset is a scan that cannot fail.
+
+    Passing `--config` to gitleaks **replaces** its built-in ruleset rather than
+    extending it. All three configs in this repository declared only an
+    `[allowlist]` and no `[[rules]]`, so `make secrets` and the `secret-scan` CI
+    job reported "no leaks found" for every input: a planted `AKIA...` key
+    scanned clean under the repo config and was found immediately under the
+    defaults. INV-1 was published as enforced and detected nothing.
+
+    The allowlist tests below are meaningful only while this one passes.
+    """
+
+    CONFIGS = (
+        REPO / ".gitleaks.toml",
+        REPO / "harness" / "node" / ".gitleaks.toml",
+        REPO / "harness" / "jvm" / ".gitleaks.toml",
+    )
+
+    @pytest.mark.parametrize("config", CONFIGS, ids=lambda c: str(c.relative_to(REPO)))
+    def test_the_config_declares_a_ruleset(self, config: Path) -> None:
+        """Parsed, not grepped.
+
+        The first draft of this test used `"[[rules]]" in text`, and the comment
+        it sits next to contains that literal -- so the check matched its own
+        prose and both mutants survived. Parsing also settles placement for free:
+        an `[extend]` written after `[allowlist]` becomes `allowlist.extend`, a
+        nested key gitleaks never reads, and `parsed.get("extend")` is then None.
+        """
+        parsed = tomllib.loads(config.read_text(encoding="utf-8"))
+        extend = parsed.get("extend") or {}
+        assert extend.get("useDefault") is True or parsed.get("rules"), (
+            f"{config.relative_to(REPO)} declares neither `[[rules]]` nor a top-level "
+            "`[extend] useDefault = true`. Passing it to --config replaces gitleaks' built-in "
+            "ruleset with nothing, so the scan detects no secret in any file or any commit "
+            "while still reporting success."
         )
 
 

@@ -102,6 +102,17 @@ class TestMappingsStayHonest:
         invented = [{"type": "function", "function": {"name": "launch_missiles"}}]
         assert tools_for_role("nemotron-reasoner", invented) == []
 
+    @pytest.mark.parametrize(
+        "malformed",
+        [["not-a-dict"], [{"function": None}], [{"function": "nope"}], [{"type": "function"}], [{}]],
+    )
+    def test_a_malformed_tool_entry_is_skipped_not_raised_on(self, malformed: list[Any]) -> None:
+        """The registry is assembled from several sources; one bad entry must not
+        end the agent loop. Skipping is also the safe direction -- an entry that
+        cannot be named cannot be matched to an action, and an unmatched tool is
+        withheld."""
+        assert tools_for_role("nemotron-reasoner", malformed) == []
+
 
 class TestPolicyLoading:
     def test_default_policy_travels_with_the_installed_harness(self) -> None:

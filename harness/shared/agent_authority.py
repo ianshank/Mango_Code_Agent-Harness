@@ -124,7 +124,15 @@ def tools_for_role(
     permitted = allowed_actions(active_role, policy_path)
     kept = []
     for tool in tools:
-        name = tool.get("function", {}).get("name", "")
+        if not isinstance(tool, dict):
+            # A malformed entry is skipped rather than raised on: the tool
+            # registry is assembled from several sources, and one bad entry must
+            # not end the agent loop. Skipping is also the safe direction -- an
+            # entry that cannot be named cannot be matched to an action, and an
+            # unmatched tool is withheld.
+            continue
+        function = tool.get("function")
+        name = function.get("name", "") if isinstance(function, dict) else ""
         required = TOOL_REQUIRED_ACTION.get(name)
         if required is not None and required in permitted:
             kept.append(tool)

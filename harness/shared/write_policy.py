@@ -26,7 +26,7 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-6, R-AC-7).
 from __future__ import annotations
 
 import posixpath
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from harness.shared.validate_invariants import is_protected, load_protected_patterns
 
@@ -34,12 +34,23 @@ from harness.shared.validate_invariants import is_protected, load_protected_patt
 #: rather than being read out of whatever tree the agent is working in.
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent / "governance-policy.json"
 
-#: Denied regardless of ``protected_paths``. Git's own directory is invisible to
+#: Denied regardless of ``protected_paths``, matched as a whole **path segment**
+#: rather than a prefix. Git's own directory is invisible to
 #: ``validate_invariants``: it enumerates staged, tracked-modified and untracked
 #: files, and ``git ls-files``/``git diff`` never report anything under ``.git``.
 #: A hook written there, or a ``core.fsmonitor`` entry in ``.git/config``, runs on
 #: the host at the next commit or index refresh with no gate able to see it.
-ALWAYS_DENIED_PREFIXES = (".git/",)
+#:
+#: Segment matching rather than prefix matching because a prefix check allows
+#: ``sub/.git/hooks/pre-commit`` -- a nested repository or submodule is still a
+#: git directory, and writing a hook into one is the same escape one level down.
+#: It must also not catch ``.gitignore`` or ``.gitleaks.toml``, which share the
+#: prefix but are ordinary files; both are pinned by tests.
+ALWAYS_DENIED_SEGMENTS = (".git",)
+
+#: Retained so an existing caller importing the old name keeps working; the
+#: segment tuple above is what the gate evaluates.
+ALWAYS_DENIED_PREFIXES = tuple(f"{segment}/" for segment in ALWAYS_DENIED_SEGMENTS)
 
 
 def _normalise(relpath: str) -> str:
@@ -67,10 +78,20 @@ def write_denial_reason(relpath: str, policy_path: Path | None = None) -> str | 
     where an unreadable policy silently relaxed the control it configured.
     """
     candidate = _normalise(relpath)
+    segments = candidate.split("/")
 
-    for prefix in ALWAYS_DENIED_PREFIXES:
-        if candidate == prefix.rstrip("/") or candidate.startswith(prefix):
-            return f"{candidate} is inside the git directory, which no agent write may target"
+    # Defence in depth. The orchestrator rejects both of these before calling
+    # here, via `is_relative_to(workspace)`; repeating the check keeps this
+    # function safe for any other caller, because a helper that only holds when
+    # its caller already checked is a helper waiting to be misused.
+    if PurePosixPath(candidate).is_absolute():
+        return f"{candidate} is an absolute path, and a write target must be workspace-relative"
+    if ".." in segments:
+        return f"{candidate} climbs out of the workspace"
+
+    for denied in ALWAYS_DENIED_SEGMENTS:
+        if denied in segments:
+            return f"{candidate} is inside a {denied} directory, which no agent write may target"
 
     try:
         patterns = load_protected_patterns(policy_path or DEFAULT_POLICY_PATH)

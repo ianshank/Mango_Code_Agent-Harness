@@ -26,6 +26,7 @@ from harness.shared.governance.broker import (
     ExecutionBroker,
     ExecutionResult,
     ProcessBackend,
+    _cap,
 )
 
 pytestmark = pytest.mark.governance
@@ -251,3 +252,78 @@ def test_the_real_backend_runs_a_command(tmp_path: Path) -> None:
 def test_execution_result_fields() -> None:
     r = ExecutionResult(status="SUCCESS", stdout="o", stderr="e", exit_code=0)
     assert (r.status, r.stdout, r.stderr, r.exit_code, r.reason, r.action) == ("SUCCESS", "o", "e", 0, "", "")
+
+
+class TestApprovalIsIdentityNotTruthiness:
+    """`bool("false")` is True. A caller passing a string -- from a config file, a
+    query parameter, an environment variable -- would otherwise grant approval for
+    an action whose whole point is that a human signs first."""
+
+    @pytest.mark.parametrize("value", ["yes", "false", "true", 1, "0", [1], object()])
+    def test_a_truthy_non_boolean_does_not_approve(self, value: typing.Any) -> None:
+        ctx = {"agent_id": "release-auditor", "human_approved": value}
+        result = ExecutionBroker(backend=RecordingBackend()).execute_command("curl https://example.test", ctx)
+        assert result.status == "BLOCKED", f"{value!r} was accepted as human approval"
+        assert "human approval" in result.reason
+
+    def test_only_the_boolean_approves(self) -> None:
+        ctx = {"agent_id": "release-auditor", "human_approved": True}
+        backend = RecordingBackend()
+        assert ExecutionBroker(backend=backend).execute_command("curl https://example.test", ctx).status == "SUCCESS"
+        assert backend.calls
+
+
+class TestOutputCapIsMeasuredInBytes:
+    """The cap is a containment control: captured output becomes a prompt, a
+    signal-sink entry and an HTTP response body. `len(text)` counts code points,
+    so a character cap named in bytes lets multibyte output exceed its own limit
+    several times over."""
+
+    @pytest.mark.parametrize("limit", [10, 100, 1000])
+    def test_multibyte_output_respects_the_byte_limit(self, limit: int) -> None:
+        capped = _cap("é" * 5000, limit)
+        payload = capped.split("\n[truncated")[0]
+        assert len(payload.encode("utf-8")) <= limit, "the cap counted characters, not bytes"
+
+    def test_a_partial_character_is_dropped_not_mangled(self) -> None:
+        """Slicing encoded bytes can split a character; the tail must not become
+        a replacement char or raise."""
+        capped = _cap("é" * 100, 5)
+        assert capped.split("\n[truncated")[0] == "éé"
+
+    def test_output_under_the_limit_is_untouched(self) -> None:
+        assert _cap("short", DEFAULT_MAX_OUTPUT_BYTES) == "short"
+
+    def test_the_truncation_marker_names_the_limit(self) -> None:
+        assert "[truncated at 10 bytes]" in _cap("x" * 500, 10)
+
+
+class TestExecutionEdgeCases:
+    def test_a_missing_working_directory_is_a_failure_with_a_reason(self, tmp_path: Path) -> None:
+        result = ExecutionBroker().execute_command("echo hi", IMPLEMENTER, cwd=tmp_path / "absent", timeout=5)
+        assert result.status == "FAILED"
+        assert "could not be started" in result.reason
+
+    def test_a_missing_context_denies_rather_than_defaulting(self) -> None:
+        """No caller context means no identity, and an unknown identity denies."""
+        result = ExecutionBroker(backend=RecordingBackend()).execute_command("echo hi")
+        assert result.status == "BLOCKED"
+        assert "unknown agent identity" in result.reason
+
+
+class TestTheBackendReallyEnforcesItsBudgets:
+    """Every other backend test overrides `_spawn`, so `timeout=timeout` and
+    `cwd=cwd` could both be deleted from `ProcessBackend._spawn` with the suite
+    green. The branch also deleted the one real timeout test that existed
+    (`sleep 5` under `tool_timeout=1`). These spawn for real."""
+
+    @pytest.mark.slow
+    def test_the_runtime_bound_is_enforced(self, tmp_path: Path) -> None:
+        result = ProcessBackend().run("sleep 5", tmp_path, 1, DEFAULT_MAX_OUTPUT_BYTES)
+        assert result.status == "FAILED"
+        assert "timed out" in result.reason
+
+    def test_the_working_directory_is_pinned(self, tmp_path: Path) -> None:
+        result = ProcessBackend().run("pwd", tmp_path, 10, DEFAULT_MAX_OUTPUT_BYTES)
+        assert result.status == "SUCCESS"
+        assert str(tmp_path.resolve()) in result.stdout, "the command did not run in the pinned directory"

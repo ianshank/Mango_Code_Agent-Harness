@@ -29,7 +29,9 @@ never a matter of taste.
 ## 2. Procedure (the E2E steps)
 
 ```bash
-python harness/shared/validate_invariants.py
+make validate   # `python harness/shared/validate_invariants.py` is denied from inside
+                # the loop: a bare `python <script>.py` is unmodelled by
+                # command_actions.classify, so it resolves to an action no role holds.
 ```
 
 1. **Run** it against the branch before pushing.
@@ -40,8 +42,9 @@ python harness/shared/validate_invariants.py
 
 | Check | Predicts a failure in | Typical remedy |
 |---|---|---|
+| `coverage` (a separate gate, `coverage_gate.py`, not this validator) | `governance-policy.json` → `coverage.lines` and `coverage.branches`, plus the per-file lines floor when `coverage.per_file` is true | write unit tests |
 | `protected_paths` | The enforcement layer (Makefile, workflows, validators, roots of trust) and the agent control surface (CLAUDE.md, agent-policy, skills, hooks) | land the change with the `infra-reviewed` human attestation, or use `knowledge_gap_log` |
-| `test_coverage` | `pytest --cov-fail-under=$(COV_MIN)`, sourced from `governance-policy.json` → `coverage.lines` | write unit tests |
+| `size_budget` | `governance-policy.json` → `limits.size_budget_lines` (per-file ceiling on non-test Python) | split the module |
 | `no_hardcoded_secrets` | CI secret scan | move strings to `.env.example` and read from `os.environ` |
 
 ## 4. Limits worth knowing

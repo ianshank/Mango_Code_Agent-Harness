@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.write_policy import ALWAYS_DENIED_PREFIXES, DEFAULT_POLICY_PATH, write_denial_reason
+from harness.shared.write_policy import (
+    ALWAYS_DENIED_PREFIXES,
+    ALWAYS_DENIED_SEGMENTS,
+    DEFAULT_POLICY_PATH,
+    write_denial_reason,
+)
 
 pytestmark = pytest.mark.governance
 
@@ -130,5 +135,53 @@ def test_policy_path_travels_with_the_installed_harness() -> None:
     assert DEFAULT_POLICY_PATH.name == "governance-policy.json"
 
 
-def test_always_denied_prefixes_are_declared_not_inlined() -> None:
+def test_always_denied_segments_are_declared_not_inlined() -> None:
+    assert ".git" in ALWAYS_DENIED_SEGMENTS
+    # The prefix form is retained for callers that imported the previous name.
     assert ".git/" in ALWAYS_DENIED_PREFIXES
+
+
+class TestGitDirectoryIsMatchedBySegment:
+    """Regression for a prefix-matching defect in this module's second draft.
+
+    The check was ``candidate.startswith(".git/")``, which allows
+    ``sub/.git/hooks/pre-commit``: a nested repository or a submodule is still a
+    git directory, and a hook written into one executes on the host exactly the
+    same way. Found by probing the function rather than by reading it.
+    """
+
+    @pytest.mark.parametrize(
+        "nested",
+        ["sub/.git/config", "deep/a/b/.git/hooks/pre-commit", "vendor/lib/.git/config"],
+    )
+    def test_a_nested_git_directory_is_denied(self, nested: str) -> None:
+        assert write_denial_reason(nested) is not None, f"{nested} escaped the git-directory check"
+
+    @pytest.mark.parametrize("lookalike", [".gitignore", "src/.gitkeep", "docs/gitops.md"])
+    def test_files_that_merely_share_the_prefix_are_not_denied_for_that_reason(self, lookalike: str) -> None:
+        """A segment match must not swallow `.gitignore`. `.gitleaks.toml` is
+        excluded from this list because it *is* protected, for a different and
+        legitimate reason."""
+        reason = write_denial_reason(lookalike) or ""
+        assert "git directory" not in reason, f"{lookalike} was denied as a git directory"
+
+
+class TestPathShapesTheCallerAlreadyRejects:
+    """The orchestrator rejects these via ``is_relative_to(workspace)`` before
+    calling here. Repeating the check keeps the helper safe for any other caller:
+    a helper that only holds when its caller already checked is one waiting to be
+    misused."""
+
+    @pytest.mark.parametrize("absolute", ["/etc/passwd", "/tmp/evil.sh"])
+    def test_absolute_paths_are_denied(self, absolute: str) -> None:
+        reason = write_denial_reason(absolute)
+        assert reason is not None and "absolute" in reason
+
+    @pytest.mark.parametrize("escaping", ["../escape.py", "../../etc/passwd"])
+    def test_paths_that_climb_out_are_denied(self, escaping: str) -> None:
+        reason = write_denial_reason(escaping)
+        assert reason is not None and "climbs out" in reason
+
+    def test_interior_dot_dot_that_resolves_back_inside_is_allowed(self) -> None:
+        """`a/../b.py` is `b.py`. Denying it would deny ordinary work."""
+        assert write_denial_reason("a/../b.py") is None

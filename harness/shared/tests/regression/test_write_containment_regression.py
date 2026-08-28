@@ -1,4 +1,4 @@
-"""Regressions for the agent's file-write tool reaching the control surface.
+"""Regressions for the agent reaching the control surface, by either write path.
 
 Defects reproduced here (all present on ``main`` before this change):
 
@@ -13,6 +13,13 @@ Defects reproduced here (all present on ``main`` before this change):
    required checks the CI gate is advisory.
 3. A write that escaped the workspace was refused but logged nothing, so the most
    interesting thing this tool can do left no trace.
+
+4. The write policy was enforced only in ``_execute_write_file``. ``run_command``
+   was a second, unguarded door to the same paths: shell redirection is invisible
+   to a classifier that reads ``argv[0]``, so ``echo x > .git/hooks/pre-commit``
+   graded as ``read`` -- the one action *every* role holds -- and installed a
+   host-executed hook. ``cp``/``mv``/``tee`` reached the same targets without
+   needing a redirect. Confirmed by execution, not by reading: the file landed.
 
 The chain those compose into: the verifier role receives ``write_file``, writes
 ``.mango/hooks/post-verifier-run.sh``, and ``_run_hook`` executes it on the host
@@ -115,3 +122,51 @@ class TestVerifierDoesNotReceiveTheWriteTool:
 
     def test_reasoner_keeps_the_implementer_surface(self, agent_workspace: Path, mocker) -> None:
         assert {"write_file", "run_command"} <= self._tools_offered(agent_workspace, "nemotron-reasoner", mocker)
+
+
+class TestRunCommandCannotWriteWhereWriteFileCannot:
+    """Defect 4. A gate on one tool while an unguarded second tool reaches the
+    same paths is worse than no gate: the regression suite above proves the
+    ``write_file`` door is shut, which reads as assurance that the paths are
+    protected.
+
+    Asserted on the filesystem. A refusal message with the file already written
+    would be the same false assurance one layer down.
+    """
+
+    @pytest.mark.parametrize(
+        ("command", "target"),
+        [
+            ("echo PAYLOAD > .git/hooks/pre-commit", ".git/hooks/pre-commit"),
+            ("echo PAYLOAD >> .mango/hooks/pre-nemotron-run.sh", ".mango/hooks/pre-nemotron-run.sh"),
+            ("echo PAYLOAD > .mango/hooks/post-verifier-run.sh", ".mango/hooks/post-verifier-run.sh"),
+            ("echo PAYLOAD > harness/shared/governance/pretooluse_guard.py", "harness/shared/governance/pretooluse_guard.py"),
+            ("echo PAYLOAD > harness/shared/agent_authority.py", "harness/shared/agent_authority.py"),
+            ("echo PAYLOAD >> harness/shared/agent-policy.json", "harness/shared/agent-policy.json"),
+            ("echo PAYLOAD > .claude/settings.json", ".claude/settings.json"),
+            ("tee CLAUDE.md", "CLAUDE.md"),
+        ],
+    )
+    def test_a_redirect_or_copy_cannot_reach_a_governed_path(
+        self, agent_workspace: Path, command: str, target: str
+    ) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
+        result = orch._execute_run_command(command)
+        assert result.startswith("Error"), f"{command!r} was permitted"
+        landed = agent_workspace / target
+        content = landed.read_text(encoding="utf-8") if landed.is_file() else ""
+        assert "PAYLOAD" not in content, f"{target} was written despite the refusal"
+
+    def test_a_redirect_to_ordinary_output_still_works(self, agent_workspace: Path) -> None:
+        """The control. Denying every redirect would pass every assertion above
+        and make the harness unable to run its own gates."""
+        orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
+        assert not orch._execute_run_command("echo ok > generated.txt").startswith("Error")
+        assert (agent_workspace / "generated.txt").read_text(encoding="utf-8").strip() == "ok"
+
+    def test_descriptor_duplication_is_not_read_as_a_file_target(self, agent_workspace: Path) -> None:
+        """`2>&1` and `>&2` duplicate a descriptor; treating `&1` as a filename
+        would deny ordinary commands."""
+        orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
+        assert not orch._execute_run_command("echo hi 2>&1").startswith("Error")
+        assert not orch._execute_run_command("echo hi >&2").startswith("Error")

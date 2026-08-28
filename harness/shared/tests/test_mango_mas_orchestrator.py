@@ -487,3 +487,51 @@ class TestPolicySourcedLimits:
         mock_complete_chat.side_effect = [_resp(None, tool_calls=[tc]), _resp("done")]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         assert orch.execute_agent("test-agent", "small task") == "done"
+
+
+class TestHookEnvironmentIsStrippedOfCredentials:
+    """`agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`
+    and nothing enforced it: `_run_hook` handed every hook `os.environ.copy()`.
+    The filter that fixes it had no test at all -- reverting the line to
+    `os.environ.copy()` killed nothing, while `debug_dump.py` still reported 100%
+    coverage because `credential_env_names` was *executed* and never *asserted on*.
+    """
+
+    def _hook(self, workspace: Path) -> Path:
+        hooks = workspace / ".mango" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        marker = workspace / "env-marker.txt"
+        (hooks / "pre-nemotron-run.sh").write_text(
+            f'printf "%s|%s|%s" "${{NVIDIA_API_KEY:-}}" "${{AGENT_EVIDENCE_KEY:-}}" "${{PATH:+set}}" > {marker}\n',
+            encoding="utf-8",
+        )
+        return marker
+
+    def test_credentials_do_not_reach_a_hook(
+        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch, mock_complete_chat
+    ) -> None:
+        marker = self._hook(mock_workspace)
+        monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-should-not-appear")
+        monkeypatch.setenv("AGENT_EVIDENCE_KEY", "evidence-should-not-appear")
+        mock_complete_chat.return_value = _resp("done")
+
+        MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=10).execute_agent("planner", "task")
+
+        api_key, evidence, path_set = marker.read_text(encoding="utf-8").split("|")
+        assert api_key == "", "NVIDIA_API_KEY reached the hook"
+        assert evidence == "", "AGENT_EVIDENCE_KEY reached the hook"
+        assert path_set == "set", "the filter stripped the whole environment, not just credentials"
+
+    def test_hook_arguments_still_reach_the_hook(
+        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch, mock_complete_chat
+    ) -> None:
+        """The control: filtering must not break the hook contract itself."""
+        hooks = mock_workspace / ".mango" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        marker = mock_workspace / "agent-marker.txt"
+        (hooks / "pre-nemotron-run.sh").write_text(
+            f'printf "%s" "${{MANGO_HOOK_AGENT:-missing}}" > {marker}\n', encoding="utf-8"
+        )
+        mock_complete_chat.return_value = _resp("done")
+        MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=10).execute_agent("planner", "task")
+        assert marker.read_text(encoding="utf-8") == "planner"

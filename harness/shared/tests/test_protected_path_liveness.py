@@ -75,6 +75,14 @@ CRITICAL_PATTERNS = {
         "the enforcement point for the write gate and the command guard; unprotected, an "
         "agent could remove the checks rather than evade them"
     ),
+    "harness/shared/agent_authority.py": (
+        "decides which tools each role receives and which canonical identity the broker "
+        "evaluates; one write remapping EXECUTION_IDENTITY hands every role everything"
+    ),
+    "harness/shared/debug_dump.py": (
+        "decides what is redacted before a history leaves over HTTP and what is stripped "
+        "from every hook environment; unprotected, an agent could widen its own disclosure"
+    ),
     "harness/shared/tests/test_protected_path_liveness.py": "this gate",
     "harness/shared/tests/test_ci_gate_coverage.py": "the CI gate-coverage gate",
     "harness/shared/tests/test_coverage_policy_enforcement.py": (
@@ -102,6 +110,11 @@ DORMANT_PATTERNS = {
     "docs/PROJECT-CHARTER.md": "single-stack layout; this repo has harness/<stack>/docs/",
     ".github/CODEOWNERS": "no CODEOWNERS exists yet; arms the guard when one is added",
     "**/.github/CODEOWNERS": "no nested CODEOWNERS exists yet; arms the guard when one is added",
+    ".claude/settings.local.json": (
+        "no local override file exists yet; Claude Code reads it and it can declare hooks, "
+        "so the guard is armed before one appears rather than after"
+    ),
+    ".mango/settings.local.json": "no local override file exists yet; arms the guard when one is added",
 }
 
 # One sentinel per reason the control surface is gated at all. If any of these

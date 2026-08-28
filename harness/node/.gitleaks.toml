@@ -1,3 +1,11 @@
 title = "Agentic SSD Gitleaks baseline"
+
+# Without this, --config REPLACES gitleaks' built-in ruleset rather than
+# extending it, so a config that declares no [[rules]] detects nothing. The
+# allowlist below then reads as a careful narrowing of a scan that was never
+# running: a planted AKIA... key scanned clean under this config and was found
+# immediately under the defaults. INV-1 depends on this line.
+[extend]
+useDefault = true
 [allowlist]
 description = "No blanket path allowlists; add only reviewed fingerprints/regexes with a decision."
