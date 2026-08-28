@@ -221,7 +221,7 @@ class ExecutionBroker:
             return denial
 
         # INV-8: every execution request passes the command guard.
-        if check_command(command) != 0:
+        if check_command(command, timeout=timeout) != 0:
             logger.warning("PreToolUse guard blocked command: %s", command)
             return ExecutionResult(
                 "BLOCKED", "", "BLOCKED: Command failed pretooluse_guard policy evaluation.", 2,

@@ -200,7 +200,7 @@ def destinations(root: Path, seg: list[str]) -> list[str]:
     return urls
 
 
-def check_command(cmd: str) -> int:
+def check_command(cmd: str, timeout: int | None = None) -> int:
     if not DANGER.search(cmd):
         return 0
     if re.search(r"\bgh\b[^\n]*\brepo\b[^\n]*\bcreate\b[^\n]*--public\b", cmd, re.I):
@@ -236,18 +236,25 @@ def check_command(cmd: str) -> int:
                 # We use the module directly if possible, else subprocess
                 # For safety in the guard we stick to the subprocess or we can just import it
                 remotes_path = Path(__file__).resolve().parent / "remotes.py"
-                p = subprocess.run(
-                    [
-                        sys.executable,
-                        str(remotes_path),
-                        "--check-url",
-                        url,
-                        "--allowlist",
-                        str(root / ".governance/allowed-remotes.txt"),
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    p = subprocess.run(
+                        [
+                            sys.executable,
+                            str(remotes_path),
+                            "--check-url",
+                            url,
+                            "--allowlist",
+                            str(root / ".governance/allowed-remotes.txt"),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                    )
+                except subprocess.TimeoutExpired:
+                    return block(
+                        f"push destination check timed out after {timeout}s",
+                        "remote-destination-timeout",
+                    )
                 if p.returncode != 0:
                     # Captured rather than inherited: the destination check runs in a
                     # child process, so its stderr went to fd 2 and never reached the
