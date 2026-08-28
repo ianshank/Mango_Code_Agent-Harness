@@ -11,9 +11,14 @@ Ruff has no unused-ignore check (``RUF100`` covers inline ``# noqa``, not
 config-level per-file-ignores), so a one-time prune would simply rot again.
 These tests make the prune stick.
 
-Deliberately *not* enabling ``RUF100``: it would delete the documented
-fail-closed justifications carried by the ``# noqa: BLE001`` comments, which
-are reasoning, not noise.
+``RUF100`` *is* enabled, and only because ``BLE`` is enabled alongside it.
+On its own it flagged 20 inert directives, 13 of them the ``# noqa: BLE001``
+comments documenting deliberate fail-closed boundaries -- so enabling it alone
+would have invited deleting that reasoning. With ``BLE`` selected those become
+live, the count drops to the genuinely dead directives, and ``RUF100`` keeps
+every ``noqa`` in the tree load-bearing instead of threatening the ones that
+matter. The pair is recorded in ``test_deferred_rigor.py::TestEnabledRulesStayEnabled``
+so neither can be dropped without the other being reconsidered.
 
 Marked ``slow``: each check shells out to ruff over the whole tree.
 """
