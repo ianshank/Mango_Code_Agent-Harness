@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+> **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
+> gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
+
 ## [Unreleased]
 
 Hygiene remediation batch (DEC-004), shaped by three adversarial reviews of its

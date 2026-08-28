@@ -1,4 +1,4 @@
-# Production Multi-Stage Dockerfile for Agentic SSD Pong & Nemotron AI Runner
+# Production Multi-Stage Dockerfile for the Nemotron AI Runner (Node stack)
 FROM node:22-alpine AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
@@ -23,6 +23,7 @@ WORKDIR /app/harness/node
 COPY --from=build /app/harness /app/harness
 ENV NODE_ENV=production
 
-# Healthcheck & Default CLI Autoplay Entrypoint
+# Default entrypoint: the Nemotron CLI. Without NVIDIA_API_KEY (or an explicit
+# prompt) it prints usage instead of making a network call.
 EXPOSE 8080
-CMD ["node", "--loader", "tsx", "src/pong/cli/pong-cli.ts", "--autoplay", "--ticks", "300"]
+CMD ["node", "--loader", "tsx", "src/ai/nemotron/cli.ts", "--help"]

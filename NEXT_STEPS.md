@@ -7,6 +7,13 @@
 
 ## 0. Completed Milestones
 
+> **Document scope:** this file is the single roadmap for the repository.
+> The former `NEXT_STEPS_PLAN_v2.md` phased implementation plan was retired in
+> v2.1.10 hygiene: its Phase 0/1 items shipped (PRs #7, #9, #11, #13, #14) and
+> its remaining themes (per-file coverage enforcement, policy single-sourcing,
+> gate hardening) are tracked in `docs/specs/` under the tech-debt reduction
+> program.
+
 ### ✅ v2.1.9 — Governance Follow-Ups (protected-path frame, CI wiring, Docker)
 
 Lands the findings v2.1.8 recorded rather than patched, each of which needed a
@@ -171,7 +178,7 @@ no UC-4 experiment evidence is claimed by this milestone.
 ### ✅ v2.1.6 — Live Smoke Test Resilience & Native Agent Skill Binding
 
 - [x] Implemented resilient handling for live NIM API rate limits (429) and model deprecation (404/410) with graceful skip triggers.
-- [x] Bound `nemotron_bridge.py` as a native Antigravity / Agent Skill (`.agents/skills/nemotron-reasoner/SKILL.md`).
+- [x] Bound `nemotron_bridge.py` as a native Antigravity / Agent Skill (now canonical at `.mango/skills/nemotron-reasoner/SKILL.md`).
 - [x] Configured Upstash Context7 MCP environment template integration.
 - [x] Refactored `nemotron_bridge.py` with structured `logging` module, `--debug` flags, and full type annotations.
 - [x] Verified full 7-tier test pyramid compliance across 243+ tests and 85%+ coverage gates.

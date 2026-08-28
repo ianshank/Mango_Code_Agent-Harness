@@ -76,3 +76,35 @@ def test_api_orchestrate_unauthorized(_api_server_key):
         headers={"X-API-Key": "wrong-key"},
     )
     assert response.status_code == 401
+
+
+def _run_dev_runner(monkeypatch):
+    """Execute main.py's __main__ block with a stubbed uvicorn, returning the run kwargs."""
+    import runpy
+    import sys
+    import types
+
+    calls = {}
+    fake_uvicorn = types.ModuleType("uvicorn")
+    fake_uvicorn.run = lambda app, **kwargs: calls.update(kwargs)
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    runpy.run_module("harness.api_server.main", run_name="__main__")
+    return calls
+
+
+def test_dev_runner_defaults_match_container(monkeypatch):
+    """The dev runner must default to the container port with reload off."""
+    monkeypatch.delenv("API_SERVER_PORT", raising=False)
+    monkeypatch.delenv("API_SERVER_RELOAD", raising=False)
+    calls = _run_dev_runner(monkeypatch)
+    assert calls["port"] == 8080
+    assert calls["reload"] is False
+
+
+def test_dev_runner_env_overrides(monkeypatch):
+    """Port and reload are opt-in via environment, never hard-coded."""
+    monkeypatch.setenv("API_SERVER_PORT", "9001")
+    monkeypatch.setenv("API_SERVER_RELOAD", "1")
+    calls = _run_dev_runner(monkeypatch)
+    assert calls["port"] == 9001
+    assert calls["reload"] is True
