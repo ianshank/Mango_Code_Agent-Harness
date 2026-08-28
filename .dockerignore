@@ -8,8 +8,8 @@
 node_modules/
 dist/
 coverage/
-.governance/vitest-results.json
-.governance/coverage/
+**/.governance/vitest-results.json
+**/.governance/coverage/
 __pycache__/
 *.pyc
 
