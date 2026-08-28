@@ -15,6 +15,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +38,7 @@ from harness.shared.shadow_planner import (
     run_shadow_comparison,
     shadow_planner_enabled,
 )
+from harness.shared.tests._helpers import REPO
 
 DISABLED_VALUES = [None, "0", "true", "yes", "", " 1", "TRUE"]
 
@@ -375,13 +379,42 @@ class TestBoundaryStatic:
         assert "shadow_planner_enabled()" in source
         assert f'environ.get("{SHADOW_PLANNER_ENV}")' not in source  # no inline re-encoding
 
-    def test_import_smoke(self) -> None:
+    def test_import_is_side_effect_free_and_leaves_the_flag_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Flag-off rollback stance: importing the orchestrator (and thus the
-        shadow module) must always succeed with no side effects."""
+        shadow module) must succeed and must not switch the shadow path on.
+
+        The previous version reloaded both modules and asserted nothing, so it
+        could only fail on an import error -- it did not check the "no side
+        effects" half of its own docstring, which is the part that matters for
+        a rollback stance.
+        """
         import importlib
 
-        importlib.reload(shadow_module)
-        importlib.reload(orch_module)
+        monkeypatch.delenv(SHADOW_PLANNER_ENV, raising=False)
+        reloaded_shadow = importlib.reload(shadow_module)
+        reloaded_orch = importlib.reload(orch_module)
+
+        assert reloaded_shadow.shadow_planner_enabled() is False
+        assert hasattr(reloaded_orch, "MangoMASOrchestrator")
+
+    def test_import_writes_nothing_to_stdout_or_stderr(self) -> None:
+        """A module that prints at import corrupts the machine-read stdout of
+        any gate that imports it. Checked in a subprocess so this process's
+        already-imported modules cannot mask it."""
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(REPO) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        result = subprocess.run(
+            [sys.executable, "-c", "import harness.shared.mango_mas_orchestrator"],
+            cwd=str(REPO), capture_output=True, text=True, timeout=60, env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == "", f"import printed to stdout: {result.stdout!r}"
+        # stderr too, as the name promises. A DeprecationWarning or a stray
+        # logging handler firing at import is the same defect wearing a
+        # different stream: it means module scope is doing work.
+        assert result.stderr == "", f"import wrote to stderr: {result.stderr!r}"
 
 
 # ---------------------------------------------------------------------------

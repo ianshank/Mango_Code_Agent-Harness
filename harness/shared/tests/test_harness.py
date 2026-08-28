@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
@@ -12,19 +11,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-HARNESS = Path(__file__).resolve().parents[2]
+from harness.shared.tests._helpers import REPO, load_module_by_path
+
+HARNESS = REPO / "harness"
 SHARED = HARNESS / "shared"
 
-
-def load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    m = importlib.util.module_from_spec(spec)
-    sys.modules[name] = m
-    spec.loader.exec_module(m)
-    return m
-
-
-rem = load(SHARED / "remotes.py", "remotes")
+# Loaded under a private name. Registering the bare name "remotes" in
+# sys.modules at collection time -- which this module used to do, and never
+# undo -- is a live collision hazard: harness/shared/remotes.py and the
+# per-stack shims both want that name, so whichever suite pytest collects
+# first wins and the other silently exercises the wrong object.
+rem = load_module_by_path(SHARED / "remotes.py", "harness_test_remotes")
 
 
 class HarnessTests(unittest.TestCase):
