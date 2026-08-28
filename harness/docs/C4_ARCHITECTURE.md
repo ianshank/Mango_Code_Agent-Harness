@@ -61,9 +61,7 @@ graph TD
 
         subgraph "Node.js Container - harness/node"
             TSClient[NemotronClient<br/>TypeScript Adapter & Circuit Breaker]
-            PongEngine[Pong Game Engine<br/>Physics, FSM, Renderers]
-            VitestRunner[Vitest Test Runner<br/>95 Tests / 7 Tiers]
-            PongCli[Pong CLI Runner<br/>Autoplay & Tournament]
+            VitestRunner[Vitest Test Runner<br/>Multi-Tier Matrix]
         end
 
         subgraph "Python Shared Runtime - harness/shared"
@@ -103,10 +101,8 @@ graph TD
         end
     end
 
-    CLI --> PongCli
     CLI --> TSClient
     CLI --> PyBridge
-    Browser --> PongEngine
 
     SubAgents --> TSClient
     SubAgents --> PyBridge
@@ -137,24 +133,6 @@ graph TD
     
     Config -.-> EnvVar[(.env / Process Env<br/>NVIDIA_API_KEY)]
     Client -->|Authorized HTTPS POST| Cloud[NVIDIA NIM Endpoint]
-```
-
-### 3.2 Deterministic Pong Engine Subsystem (`harness/node/src/pong/`)
-
-```mermaid
-graph TD
-    GL[Fixed-Timestep GameLoop<br/>60Hz Accumulator] --> GE[GameEngine Orchestrator]
-    Input[InputManager & KeyboardDriver] --> GE
-    AI[AIOpponent<br/>Predictive Raycaster] --> GE
-
-    subgraph "Deterministic Core"
-        GE --> Vec[Pure 2D Vector Math]
-        GE --> Phys[Continuous Collision Detection]
-        GE --> FSM[6-State Finite State Machine]
-    end
-
-    GE --> Audio[AudioManager -> WebAudioDriver / NullAudioDriver]
-    GE --> Render[RenderManager -> CanvasRenderer / TerminalRenderer / NullRenderer]
 ```
 
 ---

@@ -1,5 +1,9 @@
 # Changelog
 
+> **Scope:** versions of the harness gate contract (`harness/CONTRACT.md`)
+> and its enforcement surface. Repository-level changes live in the root
+> `CHANGELOG.md`.
+
 ## v2.1.5 — .mango Architecture, Continuous Learning & Persona Topology
 
 - **Continuous Learning Meta-Tools (`data_agent` synthesis):**

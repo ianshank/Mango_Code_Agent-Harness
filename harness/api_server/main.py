@@ -72,4 +72,11 @@ app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("harness.api_server.main:app", host="127.0.0.1", port=8000, reload=True)
+    # Port matches the container's EXPOSE (see Dockerfile); auto-reload is a
+    # dev-only behavior and must be opted into, never the default.
+    uvicorn.run(
+        "harness.api_server.main:app",
+        host="127.0.0.1",
+        port=int(os.environ.get("API_SERVER_PORT", "8080")),
+        reload=os.environ.get("API_SERVER_RELOAD") == "1",
+    )

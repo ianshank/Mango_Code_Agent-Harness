@@ -4,7 +4,7 @@
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (744 tests passing across Python + Node — 659 Python / 85 Node — 0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem** and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -53,18 +53,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   │   ├── nemotron-client.ts   # Core client with SSE streaming & jittered backoff
 │   │   │   │   ├── secret-masker.ts     # Invariant INV-1 credential redactor
 │   │   │   │   └── types.ts             # Strict TypeScript contracts
-│   │   │   └── pong/                    # Deterministic Pong 2026 Engine
-│   │   │       ├── ai/ai-opponent.ts    # Raycasting trajectory predictive AI
-│   │   │       ├── audio/               # Web Audio procedural oscillator & null driver
-│   │   │       ├── core/                # Continuous collision detection (CCD) & FSM
-│   │   │       ├── input/               # Decoupled keyboard & action polling
-│   │   │       ├── loop/game-loop.ts    # Fixed-timestep accumulator loop
-│   │   │       ├── render/              # High-DPI Canvas 2D & ANSI Terminal renderers
-│   │   │       └── web/index.html       # Standalone 2026 Web UI with Telemetry HUD
-│   │   ├── tests/                       # 7-Tier Vitest Matrix (95 tests / 34 files)
-│   │   │   ├── ai/                      # 33 Nemotron AI tests across 7 tiers
-│   │   │   └── pong/                    # 62 Pong engine tests across 7 tiers
-│   │   └── docs/specs/                  # 15 Bidirectionally-traced formal specifications
+│   │   ├── tests/                       # Multi-tier Vitest matrix
+│   │   │   └── ai/                      # Nemotron AI tests across 7 tiers
+│   │   └── docs/specs/                  # Bidirectionally-traced formal specifications
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator
@@ -121,14 +112,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **Secret Sanitization (`INV-1`):** `SecretMasker` masks keys (`nvapi-sSeC...NcWq`) in all error strings and logs.
 - **Dual Runtimes:** TypeScript client with native SSE streaming + zero-dependency Python bridge (`nemotron_bridge.py`).
 
-### 2.3 Deterministic Pong 2026 Engine (`harness/node/src/pong/`)
-
-- **Physics & Math:** Pure 2D vector mathematics with Continuous Collision Detection (CCD) and dynamic paddle spin deflection.
-- **Predictive AI:** Multi-tier AI featuring raycasted bounce trajectory estimation and adaptive edge targeting.
-- **Multi-Target Rendering:** High-DPI HTML5 Canvas 2D with CRT glow & particle bursts, plus text-mode ANSI Terminal renderer.
-- **Procedural Audio:** Web Audio API procedural oscillator synthesis without external audio files.
-
-### 2.4 Governance Kernel (`harness/shared/governance/`)
+### 2.3 Governance Kernel (`harness/shared/governance/`)
 
 - **`ExecutionBroker`** (`broker.py`): Fail-closed execution gate enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Returns `BLOCKED` when sandbox is unavailable — never falls back to direct host execution. PDP policy verdicts configurable; `check_command()` is the inner guard.
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
@@ -188,30 +172,18 @@ Optional environment variables for the shadow planner comparison channel
 | `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout. |
 | `MANGO_SIGNAL_DIR` | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`). |
 
-### 4.2 Running the Pong Game
-
-```bash
-cd harness/node
-
-# Launch standalone terminal CLI game (autoplay tournament)
-npx tsx src/pong/cli/pong-cli.ts --autoplay --ticks 100 --difficulty hard
-
-# Open the Web Canvas UI
-# Simply open harness/node/src/pong/web/index.html in any browser
-```
-
-### 4.3 Querying NVIDIA Nemotron Ultra
+### 4.2 Querying NVIDIA Nemotron Ultra
 
 ```bash
 # Via TypeScript CLI (Node)
 cd harness/node
-npx tsx src/ai/nemotron/cli.ts --prompt "Analyze state machine transitions in src/pong/core/state-machine.ts" --stream
+npx tsx src/ai/nemotron/cli.ts --prompt "Audit the circuit breaker states in src/ai/nemotron/circuit-breaker.ts" --stream
 
 # Via Python Bridge
 python harness/shared/nemotron_bridge.py --prompt "Audit INV-1 secret scan rules"
 ```
 
-### 4.4 Running Automated Verification
+### 4.3 Running Automated Verification
 
 ```bash
 # 1. Install dependencies
