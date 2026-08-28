@@ -7,6 +7,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Hardened — `_run_hook` executed any script whose name it was handed
+
+`_run_hook(name)` spawned `<hooks_dir>/<name>.sh` on the host whenever the file
+existed, and `execute_agent` builds that name by interpolating its `agent_name`
+argument: `f"post-{agent_name}-run"`. `hooks_dir` is inside the workspace, and
+in the deployed configuration the workspace *is* the repository, so the pair is
+a host-execution primitive keyed on a caller-supplied string.
+
+**Stated precisely, because the distinction matters:** this was not reachable by
+the agent. `agent_name` comes from `execute_sequential_thinking_loop`, which
+passes the three fixed roles; the model never chooses it. The write policy
+already refuses to create a file under `.mango/hooks/**`. This is
+defence-in-depth on a primitive whose safety otherwise rested on an argument
+being trustworthy — true today, and nothing enforced it.
+
+`_run_hook` now refuses any name outside `PERMITTED_HOOK_NAMES`, checked before
+the path is built so the verdict does not depend on whether the file exists.
+The set is *derived* — `{PRE_RUN_HOOK} | {f"post-{role}-run" for role in
+ACTIVE_TO_CANONICAL}` — so a role added to the authority model gets its hook
+without a second edit, and a hand-maintained list cannot go stale into a
+permission. Refusal raises rather than returning: a name the orchestrator never
+constructs indicates a bug or an injection, and skipping quietly would make it
+look like a hook that simply is not installed.
+
+`test_the_allowlist_covers_every_name_the_orchestrator_constructs` parses the
+`_run_hook` call sites out of the module and checks the set covers them, so a
+new call site the allowlist omits fails here rather than at runtime on whichever
+role happens to run last. **5/5 mutants killed**, including an empty allowlist —
+which every other assertion in the class would have passed.
+
+The orchestrator tests drove `execute_agent` with a fictional `test-agent`
+role. That is no longer a neutral placeholder: the authority model does not
+declare it, so `post-test-agent-run` is a name the orchestrator could not have
+constructed. Those tests and the regression-tier fixture now use the active
+roles, as `test_mango_mas_tools.py` already did.
+
+Raised by review on `mango_mas_orchestrator.py:203`. The companion comment on
+`:214` — `set(credential_env_names())` rebuilt once per environment variable
+inside the filter comprehension — was already hoisted.
+
 ### Fixed — the command guard could hang instead of returning a verdict
 
 `check_command` delegates push-destination decisions to `remotes.py` in a

@@ -14,10 +14,14 @@ import pytest
 
 @pytest.fixture
 def agent_workspace(tmp_path: Path) -> Path:
-    """A workspace with the ``.mango/agents`` prompts the orchestrator loads."""
+    """A workspace with the ``.mango/agents`` prompts the orchestrator loads.
+
+    Active roles only: `_run_hook` refuses a hook name the orchestrator could
+    not have constructed, and `post-<fictional role>-run` is one of those.
+    """
     agents = tmp_path / ".mango" / "agents"
     agents.mkdir(parents=True, exist_ok=True)
-    for name in ("planner", "nemotron-reasoner", "verifier", "test-agent"):
+    for name in ("planner", "nemotron-reasoner", "verifier"):
         (agents / f"{name}.md").write_text(f"# {name}\nYou are the {name} agent.", encoding="utf-8")
     return tmp_path
 

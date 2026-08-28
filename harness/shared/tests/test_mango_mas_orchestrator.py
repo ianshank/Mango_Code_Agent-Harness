@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -18,8 +19,13 @@ from typing import Any
 import pytest
 
 from harness.shared import mango_mas_orchestrator as orch_module
+from harness.shared.agent_authority import ACTIVE_TO_CANONICAL
 from harness.shared.governance.broker import ExecutionBroker, ProcessBackend
-from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+from harness.shared.mango_mas_orchestrator import (
+    PERMITTED_HOOK_NAMES,
+    PRE_RUN_HOOK,
+    MangoMASOrchestrator,
+)
 
 # Bash hook tests require a POSIX shell; skip on Windows where `bash` cannot
 # interpret Windows absolute paths without WSL.
@@ -40,10 +46,16 @@ def _mk_agent_dirs(workspace: Path, names: list[str]) -> None:
 
 @pytest.fixture
 def mock_workspace(tmp_path: Path) -> Path:
-    """A temp workspace pre-populated with the agents the MAS loop expects."""
-    _mk_agent_dirs(
-        tmp_path, ["planner", "nemotron-reasoner", "verifier", "test-agent"]
-    )
+    """A temp workspace pre-populated with the agents the MAS loop expects.
+
+    The active roles only. A fictional `nemotron-reasoner` used to stand in here, and
+    the tests below drove `execute_agent` with it -- but execution is evaluated
+    against the authority model now, and `_run_hook` refuses a name the
+    orchestrator could not have constructed, so a role that model does not
+    declare is not a neutral placeholder any more. `test_mango_mas_tools.py`
+    was moved off fictional roles for the same reason.
+    """
+    _mk_agent_dirs(tmp_path, ["planner", "nemotron-reasoner", "verifier"])
     return tmp_path
 
 
@@ -125,8 +137,8 @@ class TestInit:
 class TestLoadAgentPrompt:
     def test_success(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        prompt = orch.load_agent_prompt("test-agent")
-        assert "test-agent" in prompt
+        prompt = orch.load_agent_prompt("nemotron-reasoner")
+        assert "nemotron-reasoner" in prompt
 
     def test_missing_agent_raises(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
@@ -257,12 +269,12 @@ class TestExecuteAgent:
     def test_plain_text_response(self, mock_workspace: Path, mock_complete_chat) -> None:
         mock_complete_chat.return_value = _resp("All done.")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "say hi") == "All done."
+        assert orch.execute_agent("nemotron-reasoner", "say hi") == "All done."
 
     def test_model_passed_in_kwargs(self, mock_workspace: Path, mock_complete_chat) -> None:
         mock_complete_chat.return_value = _resp("ok")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, model="custom-model")
-        orch.execute_agent("test-agent", "go")
+        orch.execute_agent("nemotron-reasoner", "go")
         kwargs = mock_complete_chat.call_args.kwargs
         assert kwargs["model"] == "custom-model"
 
@@ -270,7 +282,7 @@ class TestExecuteAgent:
         mock_complete_chat.side_effect = ValueError("network down")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(RuntimeError, match="API failed"):
-            orch.execute_agent("test-agent", "go")
+            orch.execute_agent("nemotron-reasoner", "go")
 
     def test_write_file_tool_call(self, mock_workspace: Path, mock_complete_chat) -> None:
         mock_complete_chat.side_effect = [
@@ -278,7 +290,7 @@ class TestExecuteAgent:
             _resp("Wrote the file."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "write out.txt") == "Wrote the file."
+        assert orch.execute_agent("nemotron-reasoner", "write out.txt") == "Wrote the file."
         assert (mock_workspace / "out.txt").read_text(encoding="utf-8") == "data"
 
     def test_run_command_tool_call(self, mock_workspace: Path, mock_complete_chat) -> None:
@@ -287,7 +299,7 @@ class TestExecuteAgent:
             _resp("Command done."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        assert orch.execute_agent("test-agent", "run echo") == "Command done."
+        assert orch.execute_agent("nemotron-reasoner", "run echo") == "Command done."
 
     def test_invalid_tool_args_json(self, mock_workspace: Path, mock_complete_chat) -> None:
         mock_complete_chat.side_effect = [
@@ -295,7 +307,7 @@ class TestExecuteAgent:
             _resp("Recovered."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "go") == "Recovered."
+        assert orch.execute_agent("nemotron-reasoner", "go") == "Recovered."
 
     def test_unknown_tool(self, mock_workspace: Path, mock_complete_chat) -> None:
         mock_complete_chat.side_effect = [
@@ -303,7 +315,7 @@ class TestExecuteAgent:
             _resp("Done."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "go") == "Done."
+        assert orch.execute_agent("nemotron-reasoner", "go") == "Done."
 
     def test_meta_tools_knowledge_gap_and_hypothesis(
         self, mock_workspace: Path, mock_complete_chat, monkeypatch: pytest.MonkeyPatch
@@ -327,7 +339,7 @@ class TestExecuteAgent:
             _resp("Done."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "go") == "Done."
+        assert orch.execute_agent("nemotron-reasoner", "go") == "Done."
         assert calls == ["gap", "hyp"]
 
     def test_empty_content_fallback_uses_tool_result(self, mock_workspace: Path, mock_complete_chat) -> None:
@@ -336,7 +348,7 @@ class TestExecuteAgent:
             _resp(""),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch.execute_agent("test-agent", "go")
+        result = orch.execute_agent("nemotron-reasoner", "go")
         assert result.startswith("Completed via tool execution.")
         assert "Success: Wrote" in result
 
@@ -350,10 +362,10 @@ class TestExecuteAgent:
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=secret)
-        result = orch.execute_agent("test-agent", "go")
+        result = orch.execute_agent("nemotron-reasoner", "go")
         assert secret in result
         dump_dir = tmp_path / "mango_debug"
-        dumps = list(dump_dir.glob("debug_test-agent_*.json"))
+        dumps = list(dump_dir.glob("debug_nemotron-reasoner_*.json"))
         assert dumps, "expected a debug dump file to be created"
         dumped = json.loads(dumps[0].read_text(encoding="utf-8"))
         joined = json.dumps(dumped)
@@ -365,7 +377,7 @@ class TestExecuteAgent:
         mock_complete_chat.return_value = _resp(None, tool_calls=[tc])
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=2)
         with pytest.raises(RuntimeError, match="exceeded maximum tool iterations"):
-            orch.execute_agent("test-agent", "loop")
+            orch.execute_agent("nemotron-reasoner", "loop")
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +429,7 @@ class TestLiveOrchestrator:
 
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=os.environ.get("NVIDIA_API_KEY"))
-        assert orch.execute_agent("test-agent", "Reply with the word: OK")
+        assert orch.execute_agent("nemotron-reasoner", "Reply with the word: OK")
 
 
 # ---------------------------------------------------------------------------
@@ -480,13 +492,13 @@ class TestPolicySourcedLimits:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=50)
         orch.max_tool_calls_per_task = 3
         with pytest.raises(RuntimeError, match="tool-call budget"):
-            orch.execute_agent("test-agent", "budget")
+            orch.execute_agent("nemotron-reasoner", "budget")
 
     def test_budget_not_hit_when_under_limit(self, mock_workspace: Path, mock_complete_chat) -> None:
         tc = _tool_call("write_file", {"filepath": "ok.txt", "content": "x"})
         mock_complete_chat.side_effect = [_resp(None, tool_calls=[tc]), _resp("done")]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.execute_agent("test-agent", "small task") == "done"
+        assert orch.execute_agent("nemotron-reasoner", "small task") == "done"
 
 
 class TestHookEnvironmentIsStrippedOfCredentials:
@@ -535,3 +547,76 @@ class TestHookEnvironmentIsStrippedOfCredentials:
         mock_complete_chat.return_value = _resp("done")
         MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=10).execute_agent("planner", "task")
         assert marker.read_text(encoding="utf-8") == "planner"
+
+
+class TestOnlyKnownHooksExecute:
+    """`hooks_dir` sits inside the workspace, and in the deployed configuration
+    the workspace *is* the repository -- so "execute whatever `.sh` matches this
+    name" is a host-execution primitive keyed on a string `execute_agent`
+    interpolates a caller-supplied role into. Raised by review on
+    `mango_mas_orchestrator.py:203`.
+
+    The write policy already refuses to create a file under `.mango/hooks/`.
+    This makes the two failures that would be required to reach host code
+    independent rather than sequential: creating the file, and getting it run.
+    """
+
+    def test_an_unrecognised_hook_name_is_refused(self, mock_workspace: Path) -> None:
+        """Refused on the *name*, before the path is built -- so the verdict does
+        not depend on whether the attacker also managed to create the file."""
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        with pytest.raises(ValueError, match="unrecognised hook"):
+            orch._run_hook("post-../../../etc/evil-run")
+
+    def test_a_planted_hook_with_an_unlisted_name_does_not_execute(
+        self, mock_workspace: Path
+    ) -> None:
+        """The behavioural half: the script exists and is still never run."""
+        if not _POSIX:
+            pytest.skip("bash hook tests require POSIX platform")
+        hooks = mock_workspace / ".mango" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        (hooks / "post-attacker-run.sh").write_text(
+            "echo pwned > planted_marker.txt\n", encoding="utf-8"
+        )
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        with pytest.raises(ValueError):
+            orch._run_hook("post-attacker-run")
+        assert not (mock_workspace / "planted_marker.txt").exists(), (
+            "an unlisted hook executed; the allowlist is not reached before the spawn"
+        )
+
+    @pytest.mark.parametrize("name", sorted(PERMITTED_HOOK_NAMES))
+    def test_every_permitted_hook_still_runs(self, name: str, mock_workspace: Path) -> None:
+        """Positive control. Every assertion above is satisfied by an allowlist
+        that denies everything, including the hooks the orchestrator depends on.
+        Parametrised over the derived set, so a role added to
+        `ACTIVE_TO_CANONICAL` is covered without editing this test."""
+        if not _POSIX:
+            pytest.skip("bash hook tests require POSIX platform")
+        hooks = mock_workspace / ".mango" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        (hooks / f"{name}.sh").write_text(f"echo ran > {name}_marker.txt\n", encoding="utf-8")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        orch._run_hook(name)
+        assert (mock_workspace / f"{name}_marker.txt").exists()
+
+    def test_the_allowlist_covers_every_name_the_orchestrator_constructs(self) -> None:
+        """The allowlist and the call sites are two lists that must agree. This
+        reads the call sites out of the source and checks the set, so adding a
+        `_run_hook("...")` the allowlist omits fails here rather than at runtime
+        on whichever role happens to be exercised last.
+        """
+        source = Path(orch_module.__file__).read_text(encoding="utf-8")
+        literal = set(re.findall(r'_run_hook\(\s*"([a-z0-9-]+)"', source))
+        interpolated = {
+            template.replace("{agent_name}", role)
+            for template in re.findall(r'_run_hook\(\s*f"([^"]+)"', source)
+            for role in ACTIVE_TO_CANONICAL
+        }
+        constructed = literal | interpolated | {PRE_RUN_HOOK}
+        assert constructed, "found no _run_hook call sites; this parser needs updating"
+        assert constructed <= PERMITTED_HOOK_NAMES, (
+            f"the orchestrator constructs hook names the allowlist refuses: "
+            f"{sorted(constructed - PERMITTED_HOOK_NAMES)}"
+        )

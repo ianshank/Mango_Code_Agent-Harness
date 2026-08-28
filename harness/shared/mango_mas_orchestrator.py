@@ -8,7 +8,7 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.agent_authority import execution_identity, tools_for_role
+from harness.shared.agent_authority import ACTIVE_TO_CANONICAL, execution_identity, tools_for_role
 from harness.shared.debug_dump import credential_env_names, write_dump
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 # How much of a task string is echoed into log lines (avoids flooding logs
 # with full prompts while keeping enough to correlate runs).
 TASK_LOG_PREVIEW_CHARS = 100
+
+#: The hook fired once at the start of every agent turn. Named rather than
+#: repeated so the allowlist below and the call site cannot drift apart.
+PRE_RUN_HOOK = "pre-nemotron-run"
+
+#: Hook names `_run_hook` will execute. Derived from the active roles rather
+#: than listed: a role added to `ACTIVE_TO_CANONICAL` gets its post-hook without
+#: a second edit, and a list maintained by hand is exactly the thing that goes
+#: stale into a permission. Every name here is one this module constructs
+#: itself; nothing a caller passes can widen the set.
+PERMITTED_HOOK_NAMES = frozenset(
+    {PRE_RUN_HOOK} | {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL}
+)
 # Default confidence when the model omits it from a hypothesis_register call.
 DEFAULT_HYPOTHESIS_CONFIDENCE = 0.5
 
@@ -198,7 +211,26 @@ class MangoMASOrchestrator:
         }
 
     def _run_hook(self, hook_name: str, **kwargs: typing.Any) -> None:
-        """Executes a pre- or post- hook script if it exists."""
+        """Executes a pre- or post- hook script if it exists.
+
+        The name is checked against the set the orchestrator can legitimately
+        construct. `hooks_dir` is inside the workspace, and in the deployed
+        configuration the workspace is the repository -- so "run whatever `.sh`
+        matches this name" is a host-execution primitive keyed on a string that
+        `execute_agent` interpolates a caller-supplied role into. The write
+        policy already refuses to *create* a file there; this refuses to *run*
+        one, and the two failures required to reach host code are then
+        independent rather than sequential.
+        """
+        if hook_name not in PERMITTED_HOOK_NAMES:
+            # Raise rather than skip: an unrecognised name is the orchestrator
+            # asking for something it never legitimately asks for. Returning
+            # quietly would make a typo look like a hook that simply is not
+            # installed -- the failure mode this repository keeps finding.
+            raise ValueError(
+                f"refusing to run unrecognised hook {hook_name!r}; "
+                f"permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
+            )
         hook_path = self.hooks_dir / f"{hook_name}.sh"
         if hook_path.exists():
             logger.info("Executing hook: %s", hook_name)
@@ -348,7 +380,7 @@ class MangoMASOrchestrator:
         # verifier turn must be evaluated as the verifier, not as whatever role
         # ran last.
         self._active_role = agent_name
-        self._run_hook("pre-nemotron-run", task=task, agent=agent_name)
+        self._run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 
         messages: list[dict[str, typing.Any]] = [

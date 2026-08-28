@@ -69,14 +69,14 @@ class TestMalformedToolArguments:
         calls = [chat_response(None, tool_calls=[tool_call("write_file", None)]), chat_response("done")]
         with patch.object(orch_module, "complete_chat", side_effect=calls):
             orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-            result = orch.execute_agent("test-agent", "go")
+            result = orch.execute_agent("nemotron-reasoner", "go")
         assert result == "done"
 
     def test_array_arguments_do_not_crash_the_agent_loop(self, agent_workspace: Path) -> None:
         calls = [chat_response(None, tool_calls=[tool_call("write_file", "[]")]), chat_response("done")]
         with patch.object(orch_module, "complete_chat", side_effect=calls):
             orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-            result = orch.execute_agent("test-agent", "go")
+            result = orch.execute_agent("nemotron-reasoner", "go")
         assert result == "done"
 
 
@@ -136,9 +136,9 @@ class TestDebugDumpRedaction:
         with patch.object(orch_module, "complete_chat", return_value=chat_response(f"leaked {secret}")):
             orch = MangoMASOrchestrator(workspace_dir=agent_workspace)  # note: no api_key=
             assert orch.api_key is None
-            orch.execute_agent("test-agent", "go")
+            orch.execute_agent("nemotron-reasoner", "go")
 
-        dumps = list((tmp_path / "mango_debug").glob("debug_test-agent_*.json"))
+        dumps = list((tmp_path / "mango_debug").glob("debug_nemotron-reasoner_*.json"))
         assert dumps, "expected a debug dump"
         written = dumps[0].read_text(encoding="utf-8")
         assert secret not in written
@@ -154,7 +154,7 @@ class TestDebugDumpRedaction:
         stray = "nvapi-echoed-back-by-a-tool-9999"
 
         with patch.object(orch_module, "complete_chat", return_value=chat_response(f"tool said {stray}")):
-            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("test-agent", "go")
+            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("nemotron-reasoner", "go")
 
         written = next((tmp_path / "mango_debug").glob("*.json")).read_text(encoding="utf-8")
         assert stray not in written
@@ -167,7 +167,7 @@ class TestDebugDumpRedaction:
         monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         with patch.object(orch_module, "complete_chat", return_value=chat_response("ok")):
-            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("test-agent", "go")
+            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("nemotron-reasoner", "go")
         assert (tmp_path / "mango_debug").stat().st_mode & 0o777 == 0o700
 
     def test_dump_is_written_as_utf8(
@@ -178,7 +178,7 @@ class TestDebugDumpRedaction:
         monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         with patch.object(orch_module, "complete_chat", return_value=chat_response("naïve — 日本語")):
-            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("test-agent", "go")
+            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("nemotron-reasoner", "go")
         written = next((tmp_path / "mango_debug").glob("*.json")).read_text(encoding="utf-8")
         assert "日本語" in json.dumps(json.loads(written), ensure_ascii=False)
 
@@ -188,5 +188,5 @@ class TestDebugDumpRedaction:
         monkeypatch.delenv("MANGO_DEBUG_DUMP", raising=False)
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         with patch.object(orch_module, "complete_chat", return_value=chat_response("ok")):
-            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("test-agent", "go")
+            MangoMASOrchestrator(workspace_dir=agent_workspace).execute_agent("nemotron-reasoner", "go")
         assert not (tmp_path / "mango_debug").exists()
