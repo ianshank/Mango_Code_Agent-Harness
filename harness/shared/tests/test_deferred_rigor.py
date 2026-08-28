@@ -15,9 +15,7 @@ enough for the decline to make sense.
 
 from __future__ import annotations
 
-import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 
@@ -28,7 +26,7 @@ else:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
 
 import pytest
 
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._helpers import REPO, ruff_json, run_ruff
 
 pytestmark = pytest.mark.slow
 
@@ -144,12 +142,19 @@ def _enabled_rule_codes() -> set[str]:
     not enable ``ARG`` (flake8-unused-arguments), so a naive ``startswith``
     check reports ARG as enabled when it is not.
     """
-    result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "--show-settings", "pyproject.toml"],
-        cwd=str(REPO), capture_output=True, text=True, timeout=120,
+    result = run_ruff(["check", "--show-settings", "pyproject.toml"], timeout=120)
+    marker = "linter.rules.enabled = ["
+    # Checked before splitting: if --show-settings ever changes shape, an
+    # IndexError here would surface as an unrelated test error rather than
+    # "this probe no longer understands ruff's output".
+    assert marker in result.stdout, (
+        "ruff --show-settings no longer contains "
+        f"{marker!r}; this probe needs updating before its verdict means anything"
     )
-    block = result.stdout.split("linter.rules.enabled = [", 1)[1].split("\n]", 1)[0]
-    return set(re.findall(r"\(([A-Z]+[0-9]+)\)", block))
+    block = result.stdout.split(marker, 1)[1].split("\n]", 1)[0]
+    codes = set(re.findall(r"\(([A-Z]+[0-9]+)\)", block))
+    assert codes, "parsed ruff's enabled-rule block but found no rule codes in it"
+    return codes
 
 
 def _rule_family(code: str) -> str:
@@ -160,12 +165,13 @@ def _rule_family(code: str) -> str:
 
 
 def _ruff_count(rule: str) -> int:
-    result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", ".", "--select", rule, "--no-cache",
-         "--output-format", "json"],
-        cwd=str(REPO), capture_output=True, text=True, timeout=300,
-    )
-    return len(json.loads(result.stdout or "[]"))
+    """Findings for one rule. Raises rather than returning 0 on a failed run.
+
+    This is the load-bearing case for that distinction: a silent 0 here reads
+    as "the rule got cheap", and the caller turns that into "enable it, or
+    rewrite the reason" -- a tool failure reported as a policy conclusion.
+    """
+    return len(ruff_json(["check", ".", "--select", rule, "--no-cache"]))
 
 
 class TestDeferralsAreHonest:
