@@ -94,7 +94,20 @@ KNOWN_GAPS = {
 
 # Root mechanisms that satisfy a gate only partially. Documented rather than
 # asserted away, so the weaker coverage stays visible to a reviewer.
-PARTIAL_COVERAGE: dict[str, str] = {}
+PARTIAL_COVERAGE: dict[str, str] = {
+    "specs": (
+        "`make specs` runs validate_specs.sh, which is two-tier. The *structural* "
+        "tier always runs and does real work (required sections, a requirement ID "
+        "on every normative MUST, no unfalsifiable acceptance language). The "
+        "*strict* tier (`openspec validate`) does not: `openspec` is pinned "
+        "nowhere, and REQUIRE_STRICT_SPEC_VALIDATOR=1 is set only in "
+        "harness/{node,jvm}/.github/workflows/ci.yml -- adopter templates GitHub "
+        "never executes -- so root CI silently takes the WARNING branch on every "
+        "run. Installing an unpinned, unverified validator as a hard CI dependency "
+        "is a product decision, not a gate fix, so the strict tier is declared "
+        "absent here rather than advertised as enforced."
+    ),
+}
 
 
 def _expand_make_vars(makefile_text: str, line: str) -> str:
@@ -402,6 +415,29 @@ class TestEveryRequiredGateIsAccountedFor:
             assert gate in required_gates, (
                 f"PARTIAL_COVERAGE['{gate}'] describes a gate the policy no longer requires"
             )
+            assert len(PARTIAL_COVERAGE[gate].strip()) > 40, (
+                f"PARTIAL_COVERAGE['{gate}'] needs a real reason, not a placeholder"
+            )
+
+    def test_specs_strict_tier_waiver_is_removed_once_the_root_pipeline_enforces_it(self):
+        """Falsifiable in the direction that matters: the waiver must not outlive the gap.
+
+        A stale "we don't enforce this" note is worse than none -- it tells a
+        reviewer to stop looking. Once anything in the root pipeline sets
+        REQUIRE_STRICT_SPEC_VALIDATOR=1, the strict tier *is* enforced and this
+        entry has to go, so the assertion is written to fail at that moment.
+        """
+        enforced_at_root = any(
+            "REQUIRE_STRICT_SPEC_VALIDATOR=1" in text
+            for text in [*_root_workflow_texts(), ROOT_MAKEFILE.read_text(encoding="utf-8")]
+        )
+        assert enforced_at_root == ("specs" not in PARTIAL_COVERAGE), (
+            "the root pipeline now sets REQUIRE_STRICT_SPEC_VALIDATOR=1; drop the "
+            "PARTIAL_COVERAGE['specs'] waiver"
+            if enforced_at_root
+            else "the strict spec tier is unenforced at root but no longer declared in "
+            "PARTIAL_COVERAGE['specs']"
+        )
 
 
 class TestRootPipelineShape:

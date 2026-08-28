@@ -80,8 +80,9 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
     """Build config from the governance policy, allowing an explicit override.
 
     Precedence: explicit argument > `MAX_SHIM_LINES` env > policy `dedup.max_shim_lines`
-    > module default. Missing or malformed policy degrades to defaults rather than
-    failing, because the gate's own discovery does not depend on the policy.
+    > module default. A *missing* policy degrades to defaults (the adopter path); a
+    policy that exists but cannot be parsed fails closed, because degrading there
+    would silently relax the shim budget.
     """
     cfg = DedupConfig(repo_root=repo_root)
     policy_path = repo_root / POLICY_RELPATH
@@ -96,8 +97,16 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
         logger.debug("Loaded dedup config from %s: %s", policy_path, dedup)
     except FileNotFoundError:
         logger.debug("No governance policy at %s; using defaults", policy_path)
-    except Exception as e:  # noqa: BLE001 - config is advisory; discovery still works
-        logger.warning("Could not parse dedup config from %s: %s", policy_path, e)
+    except OSError as e:
+        # Present but unreadable (permissions, I/O) is not the adopter path either.
+        logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
+        raise SystemExit(1) from e
+    except (ValueError, TypeError) as e:
+        # Absent policy -> defaults (adopter path). Present but unparseable ->
+        # corruption, and degrading to defaults would silently relax the shim
+        # budget. Governance fails closed, as load_protected_patterns does.
+        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
+        raise SystemExit(1) from e
 
     env_override = os.environ.get("MAX_SHIM_LINES")
     if env_override:

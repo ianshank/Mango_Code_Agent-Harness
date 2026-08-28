@@ -137,9 +137,16 @@ def load_skip_dirs(repo_root: Path) -> frozenset[str]:
         if isinstance(extra, list):
             skip.update(str(x) for x in extra)
     except FileNotFoundError:
-        pass
-    except Exception as e:  # noqa: BLE001 - policy is advisory here
-        logger.debug("Could not read py_compat config: %s", e)
+        pass  # Absent policy is the adopter path; the built-in skip set applies.
+    except OSError as e:
+        # Present but unreadable (permissions, I/O) is not the adopter path either.
+        logger.error("[FAIL] Could not read governance policy: %s", e)
+        raise SystemExit(1) from e
+    except (ValueError, TypeError) as e:
+        # Present but unparseable is corruption: silently using the built-in set
+        # could skip directories the policy meant to scan. Fail closed.
+        logger.error("[FAIL] Malformed governance policy: %s", e)
+        raise SystemExit(1) from e
     return frozenset(skip)
 
 

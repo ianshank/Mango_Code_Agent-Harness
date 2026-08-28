@@ -65,6 +65,10 @@ CRITICAL_PATTERNS = {
     "harness/control-plane/regenerate_bundle_digests.py": "computes the digest-regen baseline",
     "harness/shared/tests/test_protected_path_liveness.py": "this gate",
     "harness/shared/tests/test_ci_gate_coverage.py": "the CI gate-coverage gate",
+    "harness/shared/tests/test_coverage_policy_enforcement.py": (
+        "owns the coverage-threshold classification; unprotected, it could be deleted "
+        "outright with every gate still green"
+    ),
 }
 
 # Patterns that intentionally match nothing today. Each entry must say why, so

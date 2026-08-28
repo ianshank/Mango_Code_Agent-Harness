@@ -220,6 +220,67 @@ and the two gate test modules themselves. Protected files: 104 → 111.
   stable shape. Exit semantics are unchanged: `digest-regen` still pairs this with
   `git diff --exit-code`, which is what turns a drop red.
 
+### Security — three more gates that failed open, and a gate module left unprotected
+
+Found by reviewing a *plan* rather than a diff: a proposal to classify unused
+policy keys was reframed into "which gate reports PASS without doing its job",
+which is the failure class this release exists to eliminate. The keys turned out
+to be a non-issue; three fail-open gates and an unprotected gate module did not.
+
+- **Three governance gates degraded to their defaults on a malformed policy.**
+  `validate_invariants.size_budget_lines`, `check_dedup.load_config`, and
+  `check_py_compat.load_skip_dirs` each wrapped the policy read in a broad
+  `except` that returned the built-in default. This is the same inversion
+  `COV_MIN` had two commits earlier — a gate that lowers itself on exactly the
+  input that should stop it — and all three were missed while fixing the first.
+  Confirmed by running against a corrupted policy: all three returned their
+  defaults and reported PASS.
+- The three now distinguish **absent** from **malformed**. An absent policy still
+  defaults, because that is the adopter path and the shared kernel must run
+  outside this repository. A policy that exists but cannot be parsed or read
+  (`OSError`, including permissions) exits 1 with the reason. `FileNotFoundError`
+  is ordered ahead of `OSError` so the two legs stay separable, and a test pins
+  that ordering.
+- **Every one of these defaults was byte-identical to its policy value**
+  (`size_budget_lines: 500` vs `SIZE_BUDGET_LINES = 500`; `max_shim_lines: 40` vs
+  `DEFAULT_MAX_SHIM_LINES = 40`), so no existing assertion could tell whether the
+  policy was read at all. Each gate now has a probe test driving a deliberately
+  distinguishable value through to the *behaviour* — a 7-line size budget must
+  reject a 10-line file — which is what makes deleting the block detectable.
+- **`test_coverage_policy_enforcement.py` was not in `protected_paths`**, though
+  the two sibling gate modules added in the same branch were. It owns the entire
+  coverage-threshold classification, so an agent could have deleted that gate
+  outright with `make ci` green and no `infra-reviewed` label. It is now
+  protected and in the `CRITICAL_PATTERNS` floor, which makes removal — not just
+  decay — detectable.
+
+### Testing — the spec gate had no behavioural tests
+
+- **`make specs` was wired into `make ci` last release with nothing asserting it
+  does anything.** The only coverage was `test_ci_gate_coverage.py` checking that
+  the Makefile *invokes* it: a name check that would pass if the script were
+  gutted to `exit 0`. `test_validate_specs.py` drives the real script against
+  fixture spec directories and asserts on exit status and diagnostics. Verified
+  against 8 mutants (gutted structural tier, each rule removed individually,
+  `rglob`→`glob`, `*`-bullets unscanned, empty-directory pass, strict tier failing
+  open) — all killed.
+- The suite pins the negative space as well: prose containing "MUST", bullets
+  without "MUST", and nested spec files must *not* be rejected, so the rules
+  cannot be tightened into uselessness either.
+- **The strict tier does not run in root CI, and now says so.**
+  `validate_specs.sh` is two-tier; `openspec` is pinned nowhere and
+  `REQUIRE_STRICT_SPEC_VALIDATOR=1` is set only in
+  `harness/{node,jvm}/.github/workflows/ci.yml` — adopter templates GitHub never
+  executes — so root CI takes the WARNING branch on every run. Declared in
+  `PARTIAL_COVERAGE["specs"]` with a measured reason rather than left implied.
+  Installing an unpinned validator as a hard CI dependency is a product decision,
+  not a gate fix. A test asserts the waiver is **removed** the moment anything in
+  the root pipeline sets the flag, so it cannot outlive the gap it excuses.
+- The structural tier is genuinely load-bearing and is now shown to be: it
+  rejects a missing required section, a normative `MUST` without a requirement ID,
+  and unfalsifiable acceptance language, and it still does all three with the
+  strict tier absent. "Degraded" and "off" are now distinguishable by test.
+
 ### Testing
 
 - `test_protected_path_liveness.py` replaces a tautological test that asserted

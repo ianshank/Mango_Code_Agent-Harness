@@ -66,6 +66,35 @@ round-trip.
 - [ ] **`audit` (dependency vulnerability scanning) is still unenforced at root.**
       Declared in `KNOWN_GAPS`; wiring osv-scanner adds a toolchain dependency and
       can turn CI red on a pre-existing advisory, so it needs its own change.
+- [x] **Three more gates failed open, and one gate module was left unprotected.**
+      `size_budget_lines`, `check_dedup.load_config` and
+      `check_py_compat.load_skip_dirs` all degraded to their built-in defaults on
+      a malformed policy — the same inversion `COV_MIN` had, missed three more
+      times while fixing the first. All three now separate *absent* (the adopter
+      path, still defaults) from *malformed* (exit 1 with the reason). Because
+      every default was byte-identical to its policy value, each gate also gained
+      a probe driving a distinguishable value through to the behaviour.
+      `test_coverage_policy_enforcement.py` is now protected and in the
+      `CRITICAL_PATTERNS` floor. 5/5 mutants killed.
+- [x] **The `specs` gate has behavioural tests.** It was wired into `make ci`
+      with only a name check behind it — the script could have been gutted to
+      `exit 0` with the suite green. `test_validate_specs.py` drives it against
+      fixtures; 8/8 mutants killed. Its strict tier (`openspec`) is unenforced at
+      root and is now declared in `PARTIAL_COVERAGE["specs"]`, with a test that
+      removes the waiver the moment the root pipeline enforces it.
+- [ ] **3,526 lines of production TypeScript have no coverage floor.**
+      `make test-node` runs `vitest run` with **no `--coverage`**, so
+      `vitest.config.ts` — which correctly reads all five thresholds from the
+      policy and fails closed on a malformed one — is never invoked with coverage
+      on. This is the largest unmeasured surface in the repository, and closing it
+      would let three of the four entries in `UNENFORCED_IN_ROOT_CI` be deleted.
+      Deliberately a separate change: it is a protected one-line edit that will
+      turn CI red on six already-measured files, which needs its own review.
+- [ ] **`harness/SHA256SUMS.txt` is a manifest that lies and nothing reads.**
+      It pins `governance-policy.json` and `agent-policy.json` at digests that no
+      longer match, and no code anywhere reads the file. Either wire it into
+      `make digest-regen` behind `git diff --exit-code`, or delete it — a stale
+      manifest that looks authoritative is worse than none.
 
 ### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
 

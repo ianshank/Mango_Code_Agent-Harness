@@ -32,21 +32,40 @@ SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cach
 
 
 def size_budget_lines(policy_path: Path | None = None) -> int:
-    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override."""
-    raw = os.environ.get("MAX_FILE_LINES")
-    if raw:
+    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override.
+
+    Fails closed on a *malformed* policy: an absent policy is the adopter path and
+    legitimately falls back to the built-in budget, but one that exists and cannot
+    be parsed is corruption, and silently substituting the default would relax the
+    gate on exactly the input that should stop it.
+    """
+    override = os.environ.get("MAX_FILE_LINES")
+    if override:
         try:
-            return int(raw)
+            return int(override)
         except ValueError:
-            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", raw)
+            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", override)
     policy_path = policy_path or DEFAULT_POLICY_PATH
     try:
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        raw = policy_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # A policy that is simply absent is the adopter path; defaults apply.
+        logger.debug("No governance policy at %s; using the built-in size budget", policy_path)
+        return SIZE_BUDGET_LINES
+    except OSError as e:
+        logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
+        sys.exit(1)
+    try:
+        policy = json.loads(raw)
         limits = policy.get("limits", {})
         budget = limits.get("size_budget_lines", policy.get("size_budget_lines", SIZE_BUDGET_LINES))
         return int(budget)
-    except Exception:
-        return SIZE_BUDGET_LINES
+    except (ValueError, TypeError) as e:
+        # A policy that exists but cannot be parsed is corruption, not an adopter
+        # default. Returning the built-in budget here let a malformed policy
+        # silently relax the gate -- the same fail-open inversion COV_MIN had.
+        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
+        sys.exit(1)
 
 
 def is_protected(path: str, protected_patterns: list[str]) -> bool:
