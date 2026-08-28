@@ -7,6 +7,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security — three policy readers could not tell an absent policy from an unusable one
+
+`policy_loader.load_policy`, `check_projections.decision_id_regex` and
+`verify_zero_skips._decision_id_regex` each documented the same contract — no
+policy file is the adopter path, a present-but-malformed policy fails closed —
+and each implemented it with a bare `Path.is_file()`, which cannot express it.
+`is_file()` answers False both for a path with nothing at it and for one holding
+a directory, a dangling symlink, a FIFO or a device node.
+
+The failure is a deployment away, not a hypothetical: a container mount whose
+source is missing leaves a directory, and a moved or unextracted target leaves a
+dangling symlink. Either one sent all three readers down the adopter branch, so
+every threshold and the decision-ID grammar silently fell back to built-in
+defaults and the run went green — the gate reporting success precisely because
+it had stopped reading the policy that governs it.
+
+All three now distinguish the two. `exists()` is checked alongside `is_symlink()`
+because `exists()` follows symlinks and answers False for a dangling one, which
+would otherwise read as absence. `policy_loader` exposes the rule as
+`policy_file_is_absent`; the other two inline it, because both are standalone-
+stdlib by contract (the adopter path copies them, so they take no harness
+imports).
+
+`test_policy_path_fail_closed.py` pins it twice over. Behaviourally, each reader
+is driven with a directory, a dangling symlink and a FIFO, and must raise with a
+reason — while a genuinely absent policy must still return the fallback, so the
+fix cannot quietly break the adopter case it stands in front of. Structurally, a
+source scan fails on the *shape* — a `POLICY_PATH.is_file()` guard with nothing
+nearby distinguishing absence — so a fourth reader is caught the day it is
+written rather than the day it is deployed. Both halves were verified failing
+against the reverted code: 3 tests for `policy_loader`, 7 for the other two.
+
 ### Remediation programme v3 — peer review of the v2 tech-debt programme
 
 An objective review of PRs #15-#19 plus a wider gap analysis, shipped as three

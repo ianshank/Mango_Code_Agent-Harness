@@ -27,6 +27,17 @@ def _decision_id_regex() -> re.Pattern[str]:
     adopter path (fallback literal); a present-but-malformed policy fails
     closed. Standalone stdlib by design — no harness imports."""
     if not _POLICY_PATH.is_file():
+        # Absent is the adopter path; present-but-not-a-regular-file is a broken
+        # deployment and must stop the run. is_file() answers False for both, so
+        # branching on it alone would silently use the fallback grammar when the
+        # governing policy is a directory or a dangling symlink. exists() is
+        # checked alongside is_symlink() because exists() follows symlinks and
+        # answers False for a dangling one.
+        if _POLICY_PATH.exists() or _POLICY_PATH.is_symlink():
+            raise SystemExit(
+                f"zero-skip: policy path {_POLICY_PATH} exists but is not a regular file; "
+                "refusing to fall back to the built-in decision-ID grammar"
+            )
         return re.compile(FALLBACK_ID_PATTERN)
     try:
         pattern = json.loads(_POLICY_PATH.read_text(encoding="utf-8"))["decision_id_pattern"]

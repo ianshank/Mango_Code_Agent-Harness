@@ -26,13 +26,42 @@ class PolicyError(ValueError):
     """A policy file exists but cannot be used. Never swallowed."""
 
 
+def policy_file_is_absent(path: Path) -> bool:
+    """True when nothing exists at ``path`` -- the adopter path.
+
+    Raises PolicyError when something *is* there but is not a regular file: a
+    directory, a dangling symlink, a FIFO, a device node.
+
+    ``Path.is_file()`` alone cannot tell those apart from absence -- it answers
+    False for both -- so a reader that branches on it treats a broken
+    deployment as a repository that simply has no policy. That is the
+    difference between "this adopter has not adopted the policy yet", which is
+    supported, and "the policy that governs this run is not readable", which
+    must stop the run. Get it wrong and a bad volume mount or a half-extracted
+    archive drops every threshold to its built-in default while every gate
+    keeps reporting success.
+
+    A dangling symlink is checked explicitly because ``exists()`` follows
+    symlinks and answers False for one, which would otherwise read as absence.
+    """
+    if path.is_file():
+        return False
+    if path.exists() or path.is_symlink():
+        raise PolicyError(
+            f"governance policy path {path} exists but is not a regular file; "
+            "refusing to fall back to built-in defaults"
+        )
+    return True
+
+
 def load_policy(policy_path: Path | None = None) -> dict:
     """Return the parsed policy, or {} when no policy file exists (adopter path).
 
-    A present-but-unparseable policy raises PolicyError (fail-closed).
+    A present-but-unparseable policy raises PolicyError (fail-closed), and so
+    does a policy path that exists without being a regular file.
     """
     path = POLICY_PATH if policy_path is None else policy_path
-    if not path.is_file():
+    if policy_file_is_absent(path):
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
