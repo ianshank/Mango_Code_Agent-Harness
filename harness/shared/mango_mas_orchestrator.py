@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import logging
 import os
@@ -9,6 +11,7 @@ import typing
 from pathlib import Path
 
 from harness.shared.debug_dump import write_dump
+from harness.shared.governance.pretooluse_guard import check_command
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
@@ -202,31 +205,43 @@ class MangoMASOrchestrator:
             # tool_calls message unanswered and stall the conversation.
             return f"Error writing file {filepath}: {str(e)}"
 
+    def _consult_guard(self, command: str) -> str | None:
+        """Return a refusal string when the guard denies ``command``, else ``None``.
+
+        The guard is imported from the installed harness rather than resolved from
+        ``workspace_dir``. Two defects motivate that (spec R-AC-2, R-AC-3):
+
+        * the workspace is agent-writable, so a guard loaded from it could be
+          replaced by the model whose commands it is meant to check; and
+        * the previous implementation ran the guard only ``if guard_script.exists()``
+          and executed the command otherwise -- a guard that is optional is not a
+          control. Any failure to reach a verdict now denies.
+
+        The subprocess also carried a payload the guard could not parse, so it
+        evaluated the empty string and allowed everything. In-process there is no
+        envelope to mismatch.
+        """
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                verdict = check_command(command)
+        except Exception as exc:  # noqa: BLE001 - a guard that cannot reach a verdict
+            # must deny. Narrowing this would let an unanticipated failure become an
+            # implicit allow, which is the fail-open shape this change exists to close.
+            logger.warning("Guard evaluation failed; denying command: %s", exc)
+            return f"Error: Command blocked by policy guard. The guard could not reach a verdict: {exc}"
+        if verdict != 0:
+            detail = stderr.getvalue().strip()
+            logger.warning("Guard denied command with verdict %d", verdict)
+            return f"Error: Command blocked by policy guard. Guard output:\n{detail}"
+        return None
+
     def _execute_run_command(self, command: str) -> str:
         """Local tool implementation to execute a command."""
+        refusal = self._consult_guard(command)
+        if refusal is not None:
+            return refusal
         try:
-            # Route command execution through pretooluse guard
-            guard_script = self.workspace_dir / "harness" / "shared" / "pretooluse_guard.py"
-            if guard_script.exists():
-                payload = json.dumps({"tool": "run_command", "args": {"command": command}})
-                env = os.environ.copy()
-                env["PYTHONPATH"] = str(self.workspace_dir)
-                guard_result = subprocess.run(
-                    ["python", str(guard_script)],
-                    input=payload,
-                    cwd=self.workspace_dir,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.tool_timeout,
-                )
-                if guard_result.returncode != 0:
-                    return (
-                        f"Error: Command blocked by policy guard. Guard output:\n"
-                        f"{guard_result.stdout}\n{guard_result.stderr}"
-                    )
-
-            # If guard passes (or doesn't exist), execute the command
             result = subprocess.run(
                 ["bash", "-c", command],
                 cwd=self.workspace_dir,

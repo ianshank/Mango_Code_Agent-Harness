@@ -7,6 +7,7 @@ fast local enforcement and delegates destination decisions to remotes.py.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shlex
@@ -17,10 +18,71 @@ from pathlib import Path
 DANGER = re.compile(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\brepo\b[^\n]*\bcreate\b[^\n]*--public\b", re.I)
 UNMODELED = re.compile(r"`|\$\(|\bGIT_CONFIG_(?:COUNT|KEY_[0-9]+|VALUE_[0-9]+)\b")
 
+#: PreToolUse block code. Claude Code treats 2 as "deny the tool call" and 1 as a
+#: non-blocking error, so a denial that returns 1 is read as a broken hook rather
+#: than a policy verdict. Named so no return site restates the number.
+BLOCK_EXIT = 2
+ALLOW_EXIT = 0
 
-def block(msg: str) -> int:
+#: Envelope keys that may carry the tool payload. ``tool_input`` is the Claude Code
+#: PreToolUse shape. ``args`` is the shape ``MangoMASOrchestrator`` sent, which this
+#: guard read as an absent key and therefore evaluated as the empty string -- a
+#: silent allow for every command (docs/specs/agent-containment.md, R-AC-1/R-AC-4).
+COMMAND_ENVELOPE_KEYS = ("tool_input", "args")
+
+#: Sentinel distinguishing "the envelope carried no command" from "the command was
+#: the empty string". The former is a payload this guard does not model and must
+#: deny; the latter is a real, harmless command.
+UNRECOGNISED_ENVELOPE = object()
+
+
+def _gate_logger() -> logging.Logger:
+    """Return the shared gate logger, degrading to a bare one if unimportable.
+
+    This module runs both as an imported function (the orchestrator calls
+    ``check_command`` directly) and as ``python harness/shared/pretooluse_guard.py``,
+    where the repo root may not be on ``sys.path``. Diagnostics must never be able
+    to fail the gate, so an import problem degrades rather than raising.
+    """
+    try:
+        from harness.shared.json_logging import configure_gate_logging
+
+        return configure_gate_logging(__name__)
+    except Exception:  # noqa: BLE001 - logging setup must never break a gate
+        # Non-propagating: the root logger may be configured to write to stdout
+        # (setup_json_logging does exactly that), and this gate's stdout is the
+        # verdict channel its callers parse.
+        fallback = logging.getLogger(__name__)
+        fallback.propagate = False
+        if not fallback.handlers:
+            fallback.addHandler(logging.StreamHandler(sys.stderr))
+        return fallback
+
+
+logger = _gate_logger()
+
+
+def block(msg: str, reason_code: str = "policy") -> int:
+    """Deny the tool call, on stderr, with a stable reason code for log scraping."""
+    logger.warning("guard blocked: reason=%s detail=%s", reason_code, msg)
     print("BLOCKED: " + msg, file=sys.stderr)
-    return 2
+    return BLOCK_EXIT
+
+
+def extract_command(payload: dict) -> object:
+    """Return the command carried by a recognised envelope, else the sentinel.
+
+    Accepting both envelope shapes is deliberate: it converts the historical
+    ``args`` payload from a silent allow into an evaluated command, so an adopter
+    still emitting it gets a verdict rather than a bypass.
+    """
+    for key in COMMAND_ENVELOPE_KEYS:
+        section = payload.get(key)
+        if isinstance(section, dict) and "command" in section:
+            value = section["command"]
+            logger.debug("guard envelope matched key=%s", key)
+            return value if isinstance(value, str) else ""
+    return UNRECOGNISED_ENVELOPE
 
 
 def git_output(root: Path, args: list[str]) -> str:
@@ -149,9 +211,14 @@ def check_command(cmd: str) -> int:
         segs = segments(cmd)
     except ValueError as e:
         return block(f"cannot tokenize dangerous command: {e}")
-    root = Path(
-        os.environ.get("CLAUDE_PROJECT_DIR") or git_output(Path.cwd(), ["rev-parse", "--show-toplevel"]) or Path.cwd()
-    ).resolve()
+    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
+    root = Path(env_root or git_output(Path.cwd(), ["rev-parse", "--show-toplevel"]) or Path.cwd()).resolve()
+    logger.debug(
+        "guard resolved root=%s source=%s allowlist=%s",
+        root,
+        "CLAUDE_PROJECT_DIR" if env_root else "git-toplevel-or-cwd",
+        root / ".governance/allowed-remotes.txt",
+    )
     saw = False
     for seg in segs:
         if "git" in seg and "push" in seg:
@@ -177,10 +244,16 @@ def check_command(cmd: str) -> int:
                         url,
                         "--allowlist",
                         str(root / ".governance/allowed-remotes.txt"),
-                    ]
+                    ],
+                    capture_output=True,
+                    text=True,
                 )
                 if p.returncode != 0:
-                    return 2
+                    # Captured rather than inherited: the destination check runs in a
+                    # child process, so its stderr went to fd 2 and never reached the
+                    # caller that has to explain the refusal (spec R-AC-5).
+                    detail = (p.stderr or p.stdout or "").strip()
+                    return block(detail or f"push destination {url} is not allowlisted", "remote-destination")
     return 0 if saw else block("dangerous-shaped command was not attributable to a supported segment")
 
 def main():
@@ -189,10 +262,24 @@ def main():
         payload = json.loads(raw)
     except Exception:  # noqa: BLE001 - fail closed on an unparseable payload: if it
         # still looks dangerous textually, block it. An allow-by-exception here
-        # would be a guard bypass.
-        return block("unanalyzable payload contains a dangerous-shaped command") if DANGER.search(raw) else 0
-    cmd = str(payload.get("tool_input", {}).get("command", ""))
-    return check_command(cmd)
+        # would be a guard bypass. This leg is deliberately unchanged: it is the
+        # path a non-JSON PreToolUse payload takes, and denying every one of those
+        # would block tool calls this guard does not model (spec C-AC-1).
+        if DANGER.search(raw):
+            return block("unanalyzable payload contains a dangerous-shaped command", "unparseable")
+        return ALLOW_EXIT
+    if not isinstance(payload, dict):
+        # Previously an AttributeError escaped here and exited 1, which reads as a
+        # broken hook rather than a denial.
+        return block(f"guard payload is a JSON {type(payload).__name__}, not an object", "not-an-object")
+    cmd = extract_command(payload)
+    if cmd is UNRECOGNISED_ENVELOPE:
+        keys = ", ".join(COMMAND_ENVELOPE_KEYS)
+        return block(
+            f"guard payload carries no recognised command envelope (expected one of {keys} with a 'command' key)",
+            "unrecognised-envelope",
+        )
+    return check_command(str(cmd))
 
 
 if __name__ == "__main__":

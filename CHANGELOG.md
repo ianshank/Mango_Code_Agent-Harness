@@ -7,6 +7,66 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent containment — the policy guard is reached, and fails closed
+
+Spec: `docs/specs/agent-containment.md`. Peer-reviewed before implementation by
+the Architecture, QA, Security and SDLC/Product personas plus a sandbox-viability
+design review; all five rejected two earlier drafts of this work, and the
+findings reshaped its sequencing and scope.
+
+#### Fixed — the orchestrator's guard call could not block anything
+
+- **The guard evaluated the empty string for every command.** The orchestrator
+  sent `{"tool": ..., "args": {"command": ...}}` while `main()` read
+  `tool_input.command`, so `check_command` received `""` and returned 0. A
+  `git push` to an arbitrary remote exited 0 through the orchestrator's payload
+  shape. The guard now canonicalises both envelopes, so the historical payload is
+  evaluated rather than silently allowed, and a JSON object carrying neither
+  envelope is denied with the PreToolUse block code (DEC-006).
+- **The guard was optional and loaded from agent-writable ground.** It was
+  resolved at `workspace_dir / "harness/shared/pretooluse_guard.py"` and skipped
+  entirely when absent — the comment on the following line recorded the fail-open
+  as intended. It is now imported from the installed harness and consulted
+  in-process; absence, import failure and evaluation errors all deny (DEC-005).
+- **Non-object JSON exited 1** through an uncaught `AttributeError`, which a
+  PreToolUse consumer reads as a broken hook rather than a denial. It now exits 2.
+- **A denial's reason never reached the caller.** The remote-destination check
+  runs in a child process, so its stderr went to fd 2 rather than into the tool
+  result explaining the refusal. It is captured and routed through the guard's
+  own block path.
+
+#### Added
+
+- `harness/shared/tests/regression/test_guard_reachability_regression.py` — each
+  test confirmed failing against the pre-fix commit on **behaviour**, not on a
+  missing symbol: the pre-fix run executes the command (`fatal: not a git
+  repository`) where the fixed run refuses it, and the historical payload asserts
+  `0 == 2`.
+- Structured gate logging in the guard, which previously had no logger at all —
+  only a bare `print` to stderr. Blocks now carry a stable reason code, and DEBUG
+  records the resolved root, its source, and the allowlist path, so a denial
+  caused by a missing allowlist is distinguishable from a policy verdict.
+- `TestEnvelopeCanonicalisation`, `TestExtractCommand`, and a test pinning the
+  guard's *unmodelled* surface (`rm -rf /`, `curl | sh`, `cat .env`,
+  `pip install`) so its advertised scope cannot drift from its real scope.
+
+#### Changed
+
+- `test_block_dangerous_rm` renamed to `test_danger_matches_git_push_forms`: it
+  asserted on `git push`, in a guard whose `DANGER` pattern has never modelled
+  `rm`. The name advertised a control that does not exist.
+- The two orchestrator guard tests materialised a fake `pretooluse_guard.py` in
+  the workspace and asserted the orchestrator honoured its exit code — pinning
+  the wiring while leaving the payload contract, the thing that was broken,
+  unexercised. They now drive real commands through the real matcher.
+
+#### Known scope limit
+
+This change does **not** make `run_command` safe. `DANGER` models `git push` and
+`gh repo create --public` and nothing else, so `rm -rf /`, `curl | sh`,
+`cat .env` and `pip install` remain unblocked — now pinned by a test rather than
+left implicit. Command-level containment arrives with the execution broker.
+
 ### Remediation programme v3 — peer review of the v2 tech-debt programme
 
 An objective review of PRs #15-#19 plus a wider gap analysis, shipped as three
