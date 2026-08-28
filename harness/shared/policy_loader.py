@@ -1,11 +1,15 @@
 """Single source of truth for operational values in governance-policy.json.
 
-Precedence contract (matching check_dedup.load_config): explicit argument >
-environment variable > policy file > built-in default. Fail-closed semantics
-(matching coverage_gate.load_thresholds): an *absent* policy file is the
-adopter path and yields built-in defaults; a *present but malformed* policy
-raises, because silently falling back would let a corrupted policy weaken a
-gate or a runtime limit.
+This module resolves: explicit argument > policy file > built-in default.
+Environment-variable overrides are deliberately NOT read here — they are the
+caller's layer where one exists (nemotron_bridge reads NEMOTRON_TIMEOUT_MS /
+NEMOTRON_MAX_RETRIES before falling back to these policy values, completing
+the full arg > env > policy > builtin chain for those knobs; orchestrator
+limits define no env override). Fail-closed semantics match
+coverage_gate.load_thresholds: an *absent* policy file is the adopter path
+and yields built-in defaults; a *present but malformed* policy raises,
+because silently falling back would let a corrupted policy weaken a gate or
+a runtime limit.
 
 Spec: docs/specs/policy-single-source.md.
 """
