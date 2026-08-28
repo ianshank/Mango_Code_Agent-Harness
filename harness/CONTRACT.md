@@ -56,12 +56,13 @@ Untracked files in protected paths are also caught (fail-closed) — `validate_i
 
 ## Coverage gate
 
-The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`) so the gate and the policy cannot silently drift, and it **fails closed**: an unreadable or malformed policy aborts `coverage-python` rather than falling back to a weaker literal. (It previously degraded to 80 while the policy declared 90 — a gate that lowers itself when it cannot read its own policy.) `pyproject.toml` deliberately declares no competing `fail_under`.
+Coverage thresholds are read dynamically from `governance-policy.json` by `harness/shared/coverage_gate.py`, so the gate and the policy cannot silently drift, and the gate **fails closed**: an unreadable or malformed policy or report aborts `coverage-python` rather than falling back to a weaker literal. (The predecessor `COV_MIN` mechanism degraded to 80 while the policy declared 90 — a gate that lowers itself when it cannot read its own policy.) `pyproject.toml` deliberately declares no competing `fail_under`, and `[tool.coverage.run] branch = true` keeps branch arcs measured — which is also why the gate applies `coverage.lines` and `coverage.branches` as two separate floors instead of gating pytest-cov's blended total.
 
-**Which thresholds are actually enforced.** `governance-policy.json` declares `lines`, `statements`, `functions`, `branches` and `per_file`. Only `lines` is enforced by the root pipeline, and only in aggregate. The others are declared-but-unenforced, each recorded with a measured reason in `test_coverage_policy_enforcement.py`, which fails if a new threshold key is added without either enforcing it or declaring the gap:
+**Which thresholds are actually enforced.** `governance-policy.json` declares `lines`, `statements`, `functions`, `branches` and `per_file`; since the gate-hardening change every one of them is enforced by the root pipeline:
 
-- **`per_file`** — six measured Python files fall below `lines` today, and aggregate headroom is roughly 60 statements, so a new untested module can ship green.
-- **`statements` / `functions` / `branches`** — enforced by `harness/node/vitest.config.ts`, which `make test-node` never activates because it runs without `--coverage`; enabling it fails six Node files at present. Python declares no `branch = true`, so branch coverage is not even measured there.
+- **Python** (`coverage_gate.py`): `lines` and `branches` in aggregate, plus `lines` per measured file when `per_file` is true — a single new untested module turns CI red regardless of aggregate headroom.
+- **Node** (`vitest.config.ts`, activated by `make test-node`, which runs vitest with `--coverage`): `lines`, `statements`, `branches`, `functions`, and `perFile`.
+- `statements` and `functions` have no distinct Python-side metric (coverage.py's statement and line counts are the same measure, and it produces no per-function number); their enforcement is Node-side, recorded with reasons in `test_coverage_policy_enforcement.py`, which fails if a declared threshold key ever loses its enforcement or its classification.
 
 Node thresholds are read from this same policy rather than restated as literals, so the two cannot drift.
 

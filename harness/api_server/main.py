@@ -101,7 +101,7 @@ async def orchestrate_task(request: TaskRequest) -> TaskResponse:
     except Exception:
         # Avoid leaking internals to clients; log the real cause server-side.
         logger.exception("Orchestration failed")
-        raise HTTPException(status_code=500, detail="Internal orchestration error")
+        raise HTTPException(status_code=500, detail="Internal orchestration error") from None
 
 
 # Mount the static files for the frontend UI

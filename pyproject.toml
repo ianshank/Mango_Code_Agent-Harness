@@ -38,23 +38,15 @@ omit = [
     "harness/shared/pre_push_scan.sh",
     "harness/shared/pretooluse_guard.sh",
     "harness/shared/run_vitest.sh",
-    "harness/shared/validate_specs.sh",
-    # These two run argparse at module scope with required arguments and have no
-    # `if __name__ == "__main__"` guard, so they cannot be imported in-process at all.
-    # They read 0% as a measurement artifact, not as a quality signal, and would drag
-    # the aggregate below the gate for a reason unrelated to test quality.
-    # build_policy_bundle.py and regenerate_bundle_digests.py are deliberately NOT
-    # omitted: both are __main__-guarded and loadable, so their gaps are real signal.
-    "harness/control-plane/tool_broker_reference.py",
-    "harness/control-plane/verify_repository.py"
+    "harness/shared/validate_specs.sh"
 ]
 
 [tool.coverage.report]
 # No `fail_under` here on purpose. It previously hard-coded 80 while
 # governance-policy.json declared 90, so any `pytest --cov` run that did not pass
-# the Makefile's explicit flag silently enforced the weaker number. The threshold
-# has one source: governance-policy.json -> coverage.lines, applied by the
-# Makefile as --cov-fail-under=$(COV_MIN). Use `make coverage-python`.
+# the gate silently enforced the weaker number. The thresholds have one source:
+# governance-policy.json -> coverage.{lines,branches,per_file}, applied by
+# harness/shared/coverage_gate.py. Use `make coverage-python`.
 show_missing = true
 
 [tool.ruff]
@@ -79,10 +71,15 @@ line-length = 120
 # protects the justifications instead of threatening them -- every noqa in the
 # tree has to be load-bearing.
 #
+# B (bugbear) and G (logging format) arrive with the gate-hardening change.
+# This line is the union of two independently reviewed sets, not a pick: the
+# two changes were written in parallel against the same line, and dropping
+# either half would silently retire rules that a reviewer had already approved.
+#
 # S (bandit) stays off deliberately: the subprocess-heavy gate scripts would
 # need blanket waivers, which CLAUDE.md forbids without decision-log entries.
 select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID", "A", "C4",
-          "PIE", "DTZ"]
+          "PIE", "DTZ", "B", "G"]
 # Control-plane tools are intentionally compact CLI scripts; the per-stack
 # re-export shims must insert sys.path before importing (E402).
 # Every entry below is pinned live by test_lint_config_liveness.py: each pattern
