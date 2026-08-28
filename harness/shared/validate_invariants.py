@@ -80,15 +80,20 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
     """Return the set of files modified (staged + unstaged + untracked + PR diff)."""
     modified: set[str] = set()
     base_ref = os.environ.get("GITHUB_BASE_REF")
+    # `core.quotePath=false` is load-bearing, not cosmetic: with git's default the
+    # output for a non-ASCII path is C-escaped and wrapped in double quotes
+    # (`"harness/shared/validate_caf\303\251.py"`), and the leading quote defeats
+    # every anchored fnmatch pattern -- a protected file would pass the gate.
+    git = ["git", "-c", "core.quotePath=false"]
     commands = [
-        ["git", "diff", "--cached", "--name-only"],
-        ["git", "diff", "--name-only"],
+        [*git, "diff", "--cached", "--name-only"],
+        [*git, "diff", "--name-only"],
         # Untracked files are not listed by `git diff`; include them so a newly-created
         # file in a protected path is caught before it is staged (fail-closed).
-        ["git", "ls-files", "--others", "--exclude-standard"],
+        [*git, "ls-files", "--others", "--exclude-standard"],
     ]
     if base_ref:
-        commands.append(["git", "diff", f"origin/{base_ref}...HEAD", "--name-only"])
+        commands.append([*git, "diff", f"origin/{base_ref}...HEAD", "--name-only"])
     for cmd in commands:
         try:
             out = subprocess.check_output(cmd, text=True, cwd=workspace_dir)

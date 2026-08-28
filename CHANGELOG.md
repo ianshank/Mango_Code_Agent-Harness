@@ -104,6 +104,91 @@ were recorded rather than patched in 2.1.8.
   measured counts, and the C4 gate diagram includes the spec, remote,
   protected-path, and CI-gate-coverage gates. Diagram re-validated as Mermaid.
 
+### Security — the new gates verified names, not substance
+
+An adversarial review of the gates added earlier in this release found they
+asserted a target's *name* was wired in without ever asserting the target still
+*did* anything. Every case below was confirmed by mutation — the suite stayed
+green — and every one is now killed.
+
+- **The protected-path gate could be deleted outright.** Removing the
+  `validate_invariants.py` line from the `validate` recipe left its name in `ci`
+  and the whole suite passing, disarming every guarantee
+  `test_protected_path_liveness.py` exists to make. The same held for `ruff` and
+  `mypy` (`lint`), and for the remote-allowlist recipe. `GATE_TO_EVIDENCE` now
+  requires each mapped gate's recipe — and its prerequisites' — to still invoke the
+  enforcing artifact.
+- **Deleting a `protected_paths` pattern was invisible.** Liveness only caught
+  patterns that stayed but matched nothing, so `Makefile`, `.mango/settings.json`,
+  `remotes.py`, `install_hooks.sh` and `pre_push_scan.sh` could each be
+  un-protected with the suite green. `CRITICAL_PATTERNS` is now an explicit floor.
+- **The secret-scan gate had four independent false positives**: commented-out
+  scan commands satisfied the check (a raw recipe capture includes `#` lines); the
+  `fetch-depth: 0` assertion was global, so the *build* job's checkout satisfied it
+  while the scanning job went shallow and its history scan turned vacuous; and an
+  `if:` guard on the job or step could disable it entirely. Checks are now scoped
+  to the job that actually runs `make secrets`, comment lines are stripped, and any
+  conditional on that job fails the test.
+- **The coverage threshold could be set to zero.** The test inspected `COV_MIN`'s
+  *definition*, never its use, so `--cov-fail-under=0`, dropping the flag, or
+  deselecting governance tests via `-m` all passed.
+- **Makefile parsing accepted fiction as fact.** A single-`#` comment (which Make
+  ignores) parsed as prerequisites, so `ci: lint coverage # was: specs remotes …`
+  reported every commented-out stage as reachable. Prerequisites are now truncated
+  at the first unescaped `#`, line continuations are spliced, and every reachable
+  name must resolve to a real rule.
+- **Four `make ci` stages were unguarded** — `test-node`, `verify-zero-skips`,
+  `check-dedup` and `digest-regen` could all be dropped silently.
+  `REQUIRED_CI_STAGES` pins them with a reason each.
+- **`--cov={source}` was a substring test**, so broadening the declared coverage
+  source to `["harness"]` read as measured while most of the tree was not. Now an
+  exact token comparison, with the pyproject read scoped to `[tool.coverage.run]`.
+- **Non-ASCII protected paths evaded the gate entirely.** With git's default
+  `core.quotePath`, such a path is reported C-escaped and double-quoted, and the
+  leading quote defeats every anchored `fnmatch` pattern. Both `validate_invariants`
+  and the liveness suite now pass `-c core.quotePath=false`; covered by a regression
+  test that fails without it.
+- Corrected a factually wrong justification in the dormant-pattern rationale:
+  `validate_policy.py` does **not** backstop the shared policy — it runs with
+  CWD=`harness/node` and reads that stack's own `policy.json`.
+
+Also newly protected: `.gitleaks.toml` (allowlist edits neuter the INV-1 scan),
+`requirements-dev.txt`, the per-stack `Makefile`s, `regenerate_bundle_digests.py`,
+and the two gate test modules themselves. Protected files: 104 → 111.
+
+### Added — gate diagnostics
+
+- `json_logging.configure_gate_logging()` — a reusable, operator-controlled gate
+  logger. Level comes from `LOG_LEVEL` (names or numerics, case-insensitive); an
+  unusable value **degrades to the default rather than raising**, because
+  misconfigured verbosity must never be able to fail a governance gate. Writes to
+  **stderr**, never stdout: gates print their verdict to stdout and both CI and the
+  test suite match on those exact strings, so raising verbosity is structurally
+  incapable of changing a verdict. The handler resolves `sys.stderr` at emit time
+  rather than at construction, so diagnostics stay visible to pytest capture and to
+  any caller that redirects the stream, and `propagate` is off so a stray
+  `basicConfig()` elsewhere cannot reroute them onto stdout.
+- The traceability gate now names **which side** each requirement is missing from
+  (`absent from implementation and tests`) instead of only that something is
+  missing, and at `DEBUG` reports which globs matched which files — which is how a
+  glob scoped to a single stack, silently checking nothing outside it, becomes
+  visible. The original leading sentence is preserved, so existing CI-log and test
+  matches are unaffected.
+
+### Fixed — an untested script inside `make ci`
+
+- `regenerate_bundle_digests.py` ran in the `digest-regen` stage with **0% test
+  coverage**, because its paths were module constants that could not be pointed at
+  a fixture. Paths are now parameters with the same repo-relative defaults (the
+  zero-argument form the Makefile uses is unchanged), and the digest computation is
+  separated from persistence so drift behaviour is testable without writing to the
+  real bundle. Coverage 0% → 92.59%.
+- Stale manifest entries were dropped **silently** — a deleted protected file
+  vanished from the bundle with no output at all. Drops are now logged at WARNING
+  with the specific paths and summarised on stderr, leaving the stdout summary a
+  stable shape. Exit semantics are unchanged: `digest-regen` still pairs this with
+  `git diff --exit-code`, which is what turns a drop red.
+
 ### Testing
 
 - `test_protected_path_liveness.py` replaces a tautological test that asserted

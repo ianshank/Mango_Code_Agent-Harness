@@ -38,6 +38,36 @@ gate, whose patterns are proven live by `test_protected_path_liveness.py`.
 
 ---
 
+## 1a. Debugging a failing gate
+
+Every gate prints its verdict to **stdout** and its diagnostics to **stderr**, so
+raising verbosity can never change what a gate reports. Set `LOG_LEVEL` to see
+what a gate actually inspected:
+
+```bash
+LOG_LEVEL=DEBUG make validate            # all governance validators, verbose
+cd harness/node && LOG_LEVEL=DEBUG python ../shared/governance/check_traceability.py
+```
+
+`LOG_LEVEL` accepts level names (case-insensitive) and numeric levels; an
+unusable value degrades to the default rather than failing the gate — verbosity
+misconfiguration must never turn a passing gate red. The helper is
+`harness/shared/json_logging.configure_gate_logging`, shared by every stack via
+the existing re-export shims.
+
+Worked example — the traceability gate at `DEBUG` reports which globs matched
+which files, which is the fastest way to spot a glob scoped to one stack that is
+silently checking nothing outside it:
+
+```
+DEBUG: spec_globs glob 'docs/specs/**/*.md' matched 3 file(s)
+DEBUG: discovered 15 requirement ID(s): [...]
+```
+
+On failure it also names *which side* each requirement is missing from
+(`absent from implementation and tests`), rather than only that something is
+missing.
+
 ## 2. 7-Tier Test Matrix Coverage
 
 ```text

@@ -52,6 +52,34 @@ GATE_TO_ROOT_TARGET = {
     "secrets": "secrets",  # dedicated workflow job; see INV-1 note above
 }
 
+# What each gate's recipe must still *do*. Reachability only proves the target
+# name is wired into `ci`; without this, emptying `validate` (which would delete
+# the only invocation of the protected-path gate) leaves every test green.
+GATE_TO_EVIDENCE = {
+    "cov": r"--cov-fail-under",
+    "lint": r"\$\(RUFF\)|ruff",
+    "types": r"\$\(MYPY\)|mypy",
+    "specs": r"validate_specs\.sh",
+    "remotes": r"remotes\.py",
+    "projections": r"check_projections",
+    "traceability": r"check_traceability",
+    "governance": r"validate_invariants\.py",
+    "secrets": r"\$\(GITLEAKS\)|gitleaks",
+}
+
+# Stages that must remain direct prerequisites of `ci`. Checked against `ci`'s own
+# prerequisite list rather than transitive reachability, which a stray token could
+# otherwise pollute.
+REQUIRED_CI_STAGES = {
+    "test-node": "the Node suite; without it the TypeScript stack is ungated",
+    "verify-zero-skips": "INV-2 (no unapproved skips)",
+    "check-dedup": "named non-negotiable in CLAUDE.md; detects copied governance scripts",
+    "digest-regen": "the control-plane drift baseline `git diff --exit-code` compares against",
+    "specs": "the spec structural gate",
+    "remotes": "INV-3 (push destination allowlist)",
+    "validate": "the governance validator set, including the protected-path gate",
+}
+
 # Gates with no root equivalent. Each needs a reason; adding an entry here is a
 # deliberate, reviewable statement that the root pipeline does not run this gate.
 KNOWN_GAPS = {
@@ -104,28 +132,136 @@ def _workflow_run_commands(workflow_text: str) -> str:
     lines = workflow_text.splitlines()
     index = 0
     while index < len(lines):
-        match = re.match(r"^(\s*)(?:-\s+)?run:\s*([|>][-+]?)?\s*(.*)$", lines[index])
+        raw = lines[index]
+        match = re.match(r"^(\s*)(?:-\s+)?run:\s*([|>][-+]?)?\s*(.*)$", raw)
         if not match:
             index += 1
             continue
-        indent, block_scalar, inline = match.group(1), match.group(2), match.group(3)
+        # A `run:` nested under `with:`/`env:` is an action input or a variable
+        # value, not executed shell. Find the nearest shallower mapping key.
+        run_col = raw.index("run:")
+        parent = ""
+        for prior in reversed(lines[:index]):
+            if not prior.strip():
+                continue
+            prior_indent = len(prior) - len(prior.lstrip())
+            if prior_indent < run_col:
+                parent = prior.strip().rstrip(":").lstrip("- ")
+                break
         index += 1
+        if parent in {"with", "env"}:
+            continue
+        block_scalar, inline = match.group(2), match.group(3)
         if not block_scalar:
             commands.append(inline)
             continue
-        base = len(indent)
+        # Base is the column of the `run` key itself, never the leading dash: for
+        # `- run: |`, sibling keys of the step sit deeper than the dash and would
+        # otherwise be swallowed into "executed shell" — re-arming the very
+        # step-name false positive this function exists to prevent.
         while index < len(lines):
             line = lines[index]
-            if line.strip() and (len(line) - len(line.lstrip())) <= base:
+            if line.strip() and (len(line) - len(line.lstrip())) <= run_col:
                 break
             commands.append(line)
             index += 1
     return "\n".join(commands)
 
 
+def _root_workflow_texts() -> list[str]:
+    """Root workflows that actually fire on a pull request or push.
+
+    A `workflow_dispatch`-only helper never runs on a PR, so counting it as
+    enforcement would be the same mistake as trusting the per-stack templates that
+    GitHub does not execute at all.
+    """
+    files = sorted(ROOT_WORKFLOW_DIR.glob("*.yml")) + sorted(ROOT_WORKFLOW_DIR.glob("*.yaml"))
+    texts = []
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        trigger = re.search(r"^on:\s*$(.*?)^\S", text, re.M | re.S) or re.search(
+            r"^on:.*$", text, re.M
+        )
+        block = trigger.group(0) if trigger else ""
+        if re.search(r"^\s*(pull_request|push):", block, re.M):
+            texts.append(text)
+    return texts
+
+
+def _workflow_jobs(workflow_text: str) -> dict[str, str]:
+    """Split a workflow into job blocks keyed by job id.
+
+    Scoping matters: a global substring search for `fetch-depth: 0` is satisfied by
+    *another* job's checkout, so the secret-scan job could silently go shallow — and
+    a shallow clone makes its history scan vacuous — with the assertion still green.
+    """
+    lines = workflow_text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if re.match(r"^jobs:\s*$", line))
+    except StopIteration:
+        return {}
+    jobs: dict[str, str] = {}
+    current: str | None = None
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        header = re.match(r"^(\s{2})([A-Za-z0-9_-]+):\s*$", line)
+        if header:
+            if current:
+                jobs[current] = "\n".join(body)
+            current, body = header.group(2), []
+            continue
+        if re.match(r"^\S", line):  # back to a top-level key; jobs block is over
+            break
+        body.append(line)
+    if current:
+        jobs[current] = "\n".join(body)
+    return jobs
+
+
+def _splice_continuations(makefile_text: str) -> str:
+    """Join Make backslash continuations so a wrapped rule parses as one line."""
+    return re.sub(r"\\\n\s*", " ", makefile_text)
+
+
+# A Make target name; excludes `|` (order-only separator) and `#` so neither can
+# be mistaken for a prerequisite.
+_TARGET_TOKEN = re.compile(r"[A-Za-z0-9_.\-/]+")
+
+
 def _make_prerequisites(makefile_text: str, target: str) -> list[str]:
-    match = re.search(rf"^{re.escape(target)}:\s*(.*?)(?:##|$)", makefile_text, re.M)
-    return match.group(1).split() if match else []
+    """Prerequisites of `target`, with Make's comment and continuation rules applied."""
+    spliced = _splice_continuations(makefile_text)
+    match = re.search(rf"^{re.escape(target)}\s*::?(?!=)([^\n]*)$", spliced, re.M)
+    if not match:
+        return []
+    # Make treats an unescaped `#` as a comment to end of line -- not only `##`.
+    # Splitting on `##` alone let a commented-out stage list read as prerequisites.
+    prereqs = re.split(r"(?<!\\)#", match.group(1))[0]
+    return [t for t in prereqs.split() if _TARGET_TOKEN.fullmatch(t)]
+
+
+def _make_targets(makefile_text: str) -> set[str]:
+    """Every name defined as a rule, so a fabricated prerequisite is detectable."""
+    spliced = _splice_continuations(makefile_text)
+    return set(re.findall(r"^([A-Za-z0-9_.\-/]+)\s*::?(?!=)", spliced, re.M))
+
+
+def _recipe_body(makefile_text: str, target: str) -> str:
+    """The executed recipe lines of `target`, with Make comment lines removed.
+
+    Comment stripping is load-bearing: a commented-out command still appears in a
+    raw recipe capture, so a substring check would accept a gate whose real work
+    had been disabled.
+    """
+    spliced = _splice_continuations(makefile_text)
+    match = re.search(
+        rf"^{re.escape(target)}\s*::?(?!=)[^\n]*\n((?:\t[^\n]*\n)*)", spliced, re.M
+    )
+    if not match:
+        return ""
+    return "\n".join(
+        line for line in match.group(1).splitlines() if not re.match(r"^\t\s*[@-]*\s*#", line)
+    )
 
 
 def _reachable_from(makefile_text: str, root: str) -> set[str]:
@@ -139,6 +275,15 @@ def _reachable_from(makefile_text: str, root: str) -> set[str]:
         seen.add(target)
         stack.extend(_make_prerequisites(makefile_text, target))
     return seen
+
+
+def _evidence_text(makefile_text: str, target: str) -> str:
+    """Union of the recipe bodies of `target` and everything it depends on.
+
+    Reachability proves a gate's *name* is wired in; this is what proves the gate
+    still *does* something. Without it, emptying a recipe leaves the suite green.
+    """
+    return "\n".join(_recipe_body(makefile_text, t) for t in _reachable_from(makefile_text, target))
 
 
 @pytest.fixture(scope="module")
@@ -156,9 +301,9 @@ def required_gates() -> list[str]:
 @pytest.fixture(scope="module")
 def root_workflows() -> str:
     """Concatenated root workflows — the only ones GitHub actually executes."""
-    files = sorted(ROOT_WORKFLOW_DIR.glob("*.yml")) + sorted(ROOT_WORKFLOW_DIR.glob("*.yaml"))
-    assert files, "no workflows in the repository-root .github/workflows/"
-    return "\n".join(f.read_text(encoding="utf-8") for f in files)
+    texts = _root_workflow_texts()
+    assert texts, "no PR/push-triggered workflows in the repository-root .github/workflows/"
+    return "\n".join(texts)
 
 
 @pytest.fixture(scope="module")
@@ -206,6 +351,27 @@ class TestEveryRequiredGateIsAccountedFor:
             elif target not in ci_reachable:
                 broken[gate] = f"root target '{target}' is not reachable from `make ci`"
         assert not broken, f"required gates mapped to unreachable root targets: {broken}"
+
+    @pytest.mark.parametrize("gate", sorted(GATE_TO_EVIDENCE))
+    def test_mapped_gate_recipe_still_does_its_work(self, gate, makefile, required_gates):
+        """Reachability is not enforcement: prove the recipe still runs something.
+
+        Emptying `validate` deletes the only invocation of the protected-path gate
+        while leaving its name wired into `ci` — reachability alone stays green.
+        """
+        assert gate in required_gates, f"GATE_TO_EVIDENCE covers a gate the policy dropped: {gate}"
+        target = GATE_TO_ROOT_TARGET[gate]
+        evidence = _evidence_text(makefile, target)
+        assert re.search(GATE_TO_EVIDENCE[gate], evidence), (
+            f"gate '{gate}' maps to target '{target}', but nothing in that target's "
+            f"recipe (or its prerequisites') matches {GATE_TO_EVIDENCE[gate]!r}. The "
+            "target name is wired in but the work is gone."
+        )
+
+    def test_evidence_map_covers_every_mapped_gate(self):
+        """A mapped gate with no evidence rule is unverified substance."""
+        unverified = sorted(set(GATE_TO_ROOT_TARGET) - set(GATE_TO_EVIDENCE))
+        assert not unverified, f"mapped gates with no evidence assertion: {unverified}"
 
     def test_no_stale_mappings(self, required_gates):
         """A mapping for a gate the policy no longer requires is dead weight."""
@@ -260,27 +426,59 @@ class TestRootPipelineShape:
 
     def test_secret_scan_gate_fails_closed_and_scans_history(self, makefile, root_workflows):
         """INV-1: a missing tool must fail, and the history scan must not be vacuous."""
-        recipe = re.search(r"^secrets:.*?\n((?:\t.*\n|\t@.*\n)+)", makefile, re.M)
-        assert recipe, "root Makefile has no secrets recipe"
-        body = recipe.group(1)
+        # _recipe_body strips Make comment lines: a commented-out scan still appears
+        # in a raw capture, so a substring check would accept a disabled gate.
+        body = _recipe_body(makefile, "secrets")
+        assert body, "root Makefile has no secrets recipe"
         assert "command -v" in body and "exit 1" in body, (
             "the secrets gate must fail closed when gitleaks is absent, never skip"
         )
-        assert re.search(r"gitleaks\S*\s+dir\b", body) or "$(GITLEAKS) dir" in body, (
-            "secrets gate does not scan the working tree"
-        )
-        assert re.search(r"gitleaks\S*\s+git\b", body) or "$(GITLEAKS) git" in body, (
-            "secrets gate does not scan git history"
-        )
-        # Word-boundary match against executed shell only: plain `make secrets`, never
-        # the `make secrets-install` step that fetches the tool and enforces nothing.
-        assert re.search(r"\bmake\s+secrets\b(?!-)", _workflow_run_commands(root_workflows)), (
-            "no root workflow invokes `make secrets`; INV-1 would have no live "
+        for mode, what in (("dir", "the working tree"), ("git", "git history")):
+            assert re.search(rf"(?:\$\(GITLEAKS\)|gitleaks\S*)\s+{mode}\b", body), (
+                f"secrets gate does not scan {what}"
+            )
+        # Scoped per job: a global search for `fetch-depth: 0` is satisfied by the
+        # build job's checkout, so the scanning job could go shallow undetected.
+        scanning = [
+            (job, block)
+            for text in _root_workflow_texts()
+            for job, block in _workflow_jobs(text).items()
+            if re.search(r"\bmake\s+secrets\b(?!-)", _workflow_run_commands(block))
+        ]
+        assert scanning, (
+            "no root workflow job invokes `make secrets`; INV-1 would have no live "
             "enforcement, since GitHub never runs harness/*/.github/workflows/"
         )
-        assert "fetch-depth: 0" in root_workflows, (
-            "the secret-scan job needs a full clone (fetch-depth: 0); the default "
-            "shallow checkout makes the history scan vacuous"
+        for job, block in scanning:
+            assert "fetch-depth: 0" in block, (
+                f"job '{job}' runs the secret scan without a full clone; the default "
+                "shallow checkout makes the history half of INV-1 vacuous"
+            )
+            # A conditional can disable the gate while the invocation remains:
+            # `if: github.event_name == 'push'` would exempt every pull request.
+            guards = re.findall(r"^\s*(?:-\s+)?if:\s*(.+)$", block, re.M)
+            assert not guards, (
+                f"job '{job}' gates the secret scan behind conditional(s) {guards}; "
+                "INV-1 must run unconditionally on every triggering event"
+            )
+
+    @pytest.mark.parametrize("stage", sorted(REQUIRED_CI_STAGES))
+    def test_required_stage_is_a_direct_prerequisite_of_ci(self, stage, makefile):
+        """Checked against `ci`'s own prerequisites, not transitive reachability,
+        which a stray token in a comment could otherwise satisfy."""
+        prereqs = _make_prerequisites(makefile, "ci")
+        assert stage in prereqs, (
+            f"`make ci` no longer runs '{stage}' — {REQUIRED_CI_STAGES[stage]}. "
+            f"Current prerequisites: {prereqs}"
+        )
+
+    def test_every_ci_prerequisite_is_a_real_target(self, makefile):
+        """A fabricated name must never satisfy a reachability assertion."""
+        defined = _make_targets(makefile)
+        phantom = sorted(t for t in _reachable_from(makefile, "ci") if t not in defined)
+        assert not phantom, (
+            f"`make ci` depends on names with no rule in the Makefile: {phantom}. "
+            "Either they are typos, or the parser accepted comment text as targets."
         )
 
     def test_coverage_threshold_is_not_hardcoded(self, makefile):
@@ -291,18 +489,47 @@ class TestRootPipelineShape:
             "COV_MIN must be read from governance-policy.json, not hard-coded"
         )
 
+    def test_coverage_threshold_is_actually_applied(self, makefile):
+        """Defining COV_MIN proves nothing if the recipe does not use it: setting
+        `--cov-fail-under=0`, or dropping the flag, disables the gate entirely."""
+        body = _recipe_body(makefile, "coverage-python")
+        assert body, "root Makefile has no coverage-python recipe"
+        assert "--cov-fail-under=$(COV_MIN)" in body, (
+            "the coverage gate must apply $(COV_MIN); a literal or absent "
+            "--cov-fail-under lets the threshold drift from policy or vanish"
+        )
+
+    def test_coverage_run_does_not_exclude_tests(self, makefile):
+        """Deselecting governance tests would silently drop these very gates."""
+        body = _recipe_body(makefile, "coverage-python")
+        for flag in ("--ignore", "--deselect"):
+            assert flag not in body, f"coverage-python excludes tests via {flag}"
+        markers = re.findall(r'-m\s+"([^"]+)"', body)
+        for expression in markers:
+            assert "not governance" not in expression, (
+                f"coverage-python deselects governance tests via -m {expression!r}"
+            )
+
     def test_coverage_measures_every_declared_source_root(self, makefile):
         """A source root in pyproject's coverage config that the gate never measures
         is configured-but-unmeasured — the state harness/control-plane was in."""
         pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
-        source_block = re.search(r"^source\s*=\s*\[(.*?)\]", pyproject, re.M | re.S)
+        # Scoped to the [tool.coverage.run] table: an unscoped search takes the
+        # first `source = [` anywhere in the file, which any other [tool.*] table
+        # could silently become.
+        table = re.search(r"^\[tool\.coverage\.run\]\s*$(.*?)(?=^\[)", pyproject, re.M | re.S)
+        assert table, "pyproject declares no [tool.coverage.run] table"
+        source_block = re.search(r"^source\s*=\s*\[(.*?)\]", table.group(1), re.M | re.S)
         assert source_block, "pyproject declares no [tool.coverage.run] source"
         declared = re.findall(r'"([^"]+)"', source_block.group(1))
         assert declared, "coverage source list is empty"
-        recipe = re.search(r"^coverage-python:.*?\n((?:\t.*\n)+)", makefile, re.M)
-        assert recipe, "root Makefile has no coverage-python recipe"
-        body = _expand_make_vars(makefile, recipe.group(1))
-        unmeasured = sorted(s for s in declared if f"--cov={s}" not in body)
+        body = _expand_make_vars(makefile, _recipe_body(makefile, "coverage-python"))
+        assert body, "root Makefile has no coverage-python recipe"
+        # Exact token comparison: `"--cov=harness" in body` is satisfied by
+        # `--cov=harness/shared`, so broadening the declared source to ["harness"]
+        # would read as measured while most of the tree stayed unmeasured.
+        measured = set(re.findall(r"--cov=(\S+)", body))
+        unmeasured = sorted(s for s in declared if s not in measured)
         assert not unmeasured, (
             f"coverage source root(s) declared in pyproject but never measured by the "
             f"gate: {unmeasured}. The Makefile's explicit --cov flags take precedence "

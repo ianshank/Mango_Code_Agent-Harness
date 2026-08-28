@@ -4,7 +4,7 @@
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (652 tests passing across Python + Node — 567 Python / 85 Node — 0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **NVIDIA Nemotron Ultra AI Reasoner**, and the **Deterministic Pong 2026 Simulation Engine**, backed by a full **7-tier test matrix** (744 tests passing across Python + Node — 659 Python / 85 Node — 0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -80,7 +80,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (567 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (659 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
 │   │       ├── test_governance_broker.py # 11 tests: INV-8/INV-9, PDP, BLOCKED semantics

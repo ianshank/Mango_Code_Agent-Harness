@@ -40,15 +40,46 @@ POLICY = REPO / "harness" / "shared" / "governance-policy.json"
 
 pytestmark = pytest.mark.governance
 
+# Patterns that must never be removed. The liveness checks below only catch a
+# pattern that exists but matches nothing; **deleting** one was entirely invisible,
+# so `Makefile`, `.mango/settings.json` and the push-control scripts could each be
+# un-protected with the whole suite green. This is the floor.
+CRITICAL_PATTERNS = {
+    "Makefile": "defines every CI gate; editing it can disable all of them",
+    "pyproject.toml": "lint, type and coverage gate configuration",
+    ".github/workflows/**": "the only workflows GitHub actually executes",
+    "**/.governance/**": "roots of trust, skip waivers, remote allowlists",
+    "harness/shared/governance-policy.json": "the policy this list lives in",
+    "harness/shared/validate_invariants.py": "the gate that enforces this list",
+    "harness/shared/remotes.py": "push-destination control (INV-3)",
+    "harness/shared/install_hooks.sh": "installs the git hooks",
+    "harness/shared/pre_push_scan.sh": "the pre-push guard",
+    ".mango/settings.json": "registers hooks that execute shell",
+    ".claude/settings.json": "registers the hook Claude Code actually runs",
+    ".mango/hooks/**": "hook scripts execute shell on tool use",
+    ".claude/hooks/**": "executes shell on every session start",
+    "CLAUDE.md": "the operating instructions every agent reads",
+    ".gitleaks.toml": "the INV-1 scanner's config; an allowlist entry neuters the scan",
+    "requirements-dev.txt": "pins the tool versions CI installs before running any gate",
+    "harness/*/Makefile": "the per-stack targets ci_required_targets is written against",
+    "harness/control-plane/regenerate_bundle_digests.py": "computes the digest-regen baseline",
+    "harness/shared/tests/test_protected_path_liveness.py": "this gate",
+    "harness/shared/tests/test_ci_gate_coverage.py": "the CI gate-coverage gate",
+}
+
 # Patterns that intentionally match nothing today. Each entry must say why, so
 # that "this pattern is dead" is a reviewed statement rather than an accident.
 #
 # The first four are retained from the single-stack layout an adopter of this
-# harness would have. They are deliberately NOT removed: `validate_policy.py`
-# requires the literal `.governance/**` string, and a diff deleting a protected
-# path reads as policy weakening. Their `**/`-prefixed twins cover this repo's
-# multi-stack layout. Note `fnmatch`'s `**/` needs at least one character before
-# the slash, so a twin covers only the nested case -- the pair is what covers both.
+# harness would have, and their `**/`-prefixed twins cover this repo's multi-stack
+# one. Note `fnmatch`'s `**/` needs at least one character before the slash, so a
+# twin covers only the nested case -- the pair is what covers both.
+#
+# They are retained because deleting a protected path reads as policy weakening,
+# NOT because `validate_policy.py` backstops them: that validator runs with
+# CWD=harness/node and reads `harness/node/.governance/policy.json`, never this
+# file. Pointed at the shared policy it would in fact fail, since its critical
+# list still names the pre-migration `scripts/*` paths.
 DORMANT_PATTERNS = {
     ".governance/**": "single-stack layout; this repo has harness/<stack>/.governance/",
     "agents/**": "single-stack layout; this repo has harness/<stack>/agents/",
@@ -76,8 +107,15 @@ CONTROL_SURFACE = {
 
 
 def _tracked_files() -> list[str]:
+    # `core.quotePath=false` matches validate_invariants: with git's default a
+    # non-ASCII path comes back C-escaped and quoted, so it would be neither
+    # discovered here nor matched by an anchored pattern there.
     out = subprocess.run(
-        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
+        ["git", "-c", "core.quotePath=false", "ls-files"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     return [line for line in out.splitlines() if line.strip()]
 
@@ -121,6 +159,20 @@ class TestPatternLiveness:
             "patterns declared dormant now match real files; remove them from "
             f"DORMANT_PATTERNS so the liveness gate covers them: { {k: v[:3] for k, v in awake.items()} }"
         )
+
+    @pytest.mark.parametrize("pattern", sorted(CRITICAL_PATTERNS))
+    def test_critical_pattern_is_still_present(self, pattern, patterns):
+        """Deleting a pattern was invisible: liveness only catches ones that stay
+        but match nothing. This is the floor that makes removal detectable."""
+        assert pattern in patterns, (
+            f"protected_paths no longer contains {pattern!r} — "
+            f"{CRITICAL_PATTERNS[pattern]}. Removing it silently un-protects real files."
+        )
+
+    def test_critical_patterns_are_not_declared_dormant(self):
+        """A floor pattern waived as dormant would be present but unenforced."""
+        waived = sorted(set(CRITICAL_PATTERNS) & set(DORMANT_PATTERNS))
+        assert not waived, f"critical patterns declared dormant: {waived}"
 
     def test_dormant_declarations_all_reference_real_patterns(self, patterns):
         """Stale dormancy waivers must not outlive the patterns they excuse."""
