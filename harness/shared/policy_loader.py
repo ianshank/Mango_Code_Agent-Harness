@@ -17,6 +17,7 @@ Spec: docs/specs/policy-single-source.md.
 from __future__ import annotations
 
 import json
+import stat
 from pathlib import Path
 
 POLICY_PATH = Path(__file__).resolve().parent / "governance-policy.json"
@@ -26,13 +27,60 @@ class PolicyError(ValueError):
     """A policy file exists but cannot be used. Never swallowed."""
 
 
+def policy_file_is_absent(path: Path) -> bool:
+    """True when nothing exists at ``path`` -- the adopter path.
+
+    Raises PolicyError for anything else: a directory, a dangling symlink, a
+    FIFO, a device node, a path whose parent component is not a directory, an
+    unreadable parent, a symlink loop.
+
+    Deliberately probes with ``stat``/``lstat`` rather than the ``Path``
+    predicates. ``is_file()``, ``exists()`` and ``is_symlink()`` all swallow
+    OSError and answer False, so each of them reports "absent" for a policy
+    that is present and merely inaccessible -- a parent directory without
+    execute permission, or a path component that turned out to be a file. The
+    predicates cannot express the question; only the errno can.
+
+    That distinction is the whole point of this function. "This adopter has not
+    adopted the policy yet" is supported and yields built-in defaults. "The
+    policy that governs this run cannot be read" must stop the run. Collapse
+    them and a bad volume mount or a half-extracted archive drops every
+    threshold to its default while every gate still reports success.
+    """
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        # Either nothing is here at all, or a symlink whose target is gone --
+        # stat() follows the link and cannot tell them apart. lstat() does not
+        # follow it, so it answers the question stat() just lost.
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return True
+        except OSError as exc:
+            raise PolicyError(f"governance policy path {path} is not readable: {exc}") from exc
+        raise PolicyError(
+            f"governance policy path {path} is a symlink whose target does not exist; "
+            "refusing to fall back to built-in defaults"
+        ) from None
+    except OSError as exc:
+        raise PolicyError(f"governance policy path {path} is not readable: {exc}") from exc
+    if not stat.S_ISREG(info.st_mode):
+        raise PolicyError(
+            f"governance policy path {path} exists but is not a regular file; "
+            "refusing to fall back to built-in defaults"
+        )
+    return False
+
+
 def load_policy(policy_path: Path | None = None) -> dict:
     """Return the parsed policy, or {} when no policy file exists (adopter path).
 
-    A present-but-unparseable policy raises PolicyError (fail-closed).
+    A present-but-unparseable policy raises PolicyError (fail-closed), and so
+    does a policy path that exists without being a regular file.
     """
     path = POLICY_PATH if policy_path is None else policy_path
-    if not path.is_file():
+    if policy_file_is_absent(path):
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
