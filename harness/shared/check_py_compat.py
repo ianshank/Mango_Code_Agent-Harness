@@ -30,6 +30,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
+except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
+    from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -133,6 +138,8 @@ def load_skip_dirs(repo_root: Path) -> frozenset[str]:
     skip = set(DEFAULT_SKIP_DIRS)
     try:
         policy = json.loads((repo_root / POLICY_RELPATH).read_text(encoding="utf-8"))
+        if not isinstance(policy, dict):
+            raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
         extra = (policy.get("py_compat") or {}).get("skip_dirs") or []
         if isinstance(extra, list):
             skip.update(str(x) for x in extra)
@@ -296,13 +303,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=DEFAULT_REPO_ROOT)
     parser.add_argument("--min-version", default=None, help="override the minimum version, e.g. 3.9")
     parser.add_argument("--json", action="store_true", help="emit a machine-readable report")
-    parser.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "INFO"))
+    parser.add_argument("--log-level", default=os.environ.get(LOG_LEVEL_ENV_VAR, "INFO"))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=str(args.log_level).upper(), format="%(levelname)s: %(message)s")
+    # resolve_log_level degrades an unusable level to the default; passing the raw
+    # string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a red gate.
+    logging.basicConfig(level=resolve_log_level(str(args.log_level)), format="%(levelname)s: %(message)s")
 
     repo_root = args.repo_root.resolve()
     min_version = resolve_min_version(repo_root, args.min_version)

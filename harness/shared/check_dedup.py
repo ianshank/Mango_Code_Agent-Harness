@@ -27,6 +27,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
+except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
+    from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -88,6 +93,8 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
     policy_path = repo_root / POLICY_RELPATH
     try:
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        if not isinstance(policy, dict):
+            raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
         dedup = policy.get("dedup", {}) or {}
         if isinstance(dedup.get("max_shim_lines"), int):
             cfg.max_shim_lines = int(dedup["max_shim_lines"])
@@ -259,13 +266,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum lines a delegating shim may have (overrides policy/env)",
     )
     parser.add_argument("--json", action="store_true", help="emit a machine-readable report on stdout")
-    parser.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "INFO"))
+    parser.add_argument("--log-level", default=os.environ.get(LOG_LEVEL_ENV_VAR, "INFO"))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=str(args.log_level).upper(), format="%(levelname)s: %(message)s")
+    # resolve_log_level degrades an unusable level to the default; passing the raw
+    # string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a red gate.
+    logging.basicConfig(level=resolve_log_level(str(args.log_level)), format="%(levelname)s: %(message)s")
 
     repo_root = args.repo_root.resolve()
     cfg = load_config(repo_root, max_shim_lines=args.max_shim_lines)

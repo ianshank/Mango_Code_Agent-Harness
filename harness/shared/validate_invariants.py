@@ -1,7 +1,9 @@
 """Repository invariant checks: protected paths, hardcoded secrets, and file size budget.
 
-These checks are intentionally deterministic and dependency-free so they can run as a
-git pre-push hook, a CI gate, or an orchestrator pre-flight (`.mango/hooks/pre-nemotron-run.sh`).
+These checks are intentionally deterministic and free of third-party dependencies so
+they can run as a CI gate (`make validate`), a skill step
+(`.mango/skills/repo-invariant-review`), or an orchestrator pre-flight; sibling
+modules in `harness/shared/` are the only non-stdlib imports.
 
 Output goes through the stdlib `logging` module so callers can route or silence it; the
 CLI entrypoint configures a plain `LEVEL: message` format on stderr. Set `LOG_LEVEL=DEBUG`
@@ -57,8 +59,10 @@ def size_budget_lines(policy_path: Path | None = None) -> int:
         sys.exit(1)
     try:
         policy = json.loads(raw)
+        if not isinstance(policy, dict):
+            raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
         limits = policy.get("limits", {})
-        budget = limits.get("size_budget_lines", policy.get("size_budget_lines", SIZE_BUDGET_LINES))
+        budget = limits.get("size_budget_lines", SIZE_BUDGET_LINES)
         return int(budget)
     except (ValueError, TypeError) as e:
         # A policy that exists but cannot be parsed is corruption, not an adopter
@@ -222,8 +226,15 @@ def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> 
 
 
 if __name__ == "__main__":
+    try:
+        from harness.shared.json_logging import resolve_log_level
+    except ImportError:  # direct `python harness/shared/validate_invariants.py`
+        from json_logging import resolve_log_level  # type: ignore[no-redef]
+    # resolve_log_level degrades an unusable level to the default; passing the raw
+    # env string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a
+    # red gate -- misconfigured verbosity must never fail a governance gate.
     logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        level=resolve_log_level(),
         format="%(levelname)s: %(message)s",
     )
     sys.exit(main())

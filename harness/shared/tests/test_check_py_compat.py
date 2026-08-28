@@ -323,3 +323,32 @@ def test_find_pep604_assignments(repo: Path):
     assert not report.ok
     assert any("runtime type alias" in v for v in report.violations)
 
+
+
+def test_cli_survives_a_bogus_log_level(repo: Path):
+    """LOG_LEVEL=BOGUS previously crashed the gate with ValueError before any check ran.
+
+    Subprocess deliberately: under pytest the root logger already has a handler,
+    and `logging.basicConfig` only applies `level` when there is none -- an
+    in-process version of this test passes identically with and without the fix.
+    """
+    import os
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, str(Path(cc.__file__).resolve()), "--repo-root", str(repo)],
+        env={**os.environ, "LOG_LEVEL": "BOGUS"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Unknown level" not in result.stderr
+
+
+def test_load_skip_dirs_fails_closed_on_a_non_object_policy(repo: Path):
+    """Valid JSON that is not an object previously escaped as a raw AttributeError."""
+    (repo / cc.POLICY_RELPATH).write_text("[]", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cc.load_skip_dirs(repo)
+    assert exc.value.code == 1

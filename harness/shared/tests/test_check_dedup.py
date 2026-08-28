@@ -322,3 +322,34 @@ def test_real_repository_has_no_shim_drift():
     report = cd.run(cfg)
     assert report.ok, f"shim drift detected: {report.failures}"
     assert report.checked, "expected the real repo to contain per-stack governance shims"
+
+
+def test_cli_survives_a_bogus_log_level(repo: Path):
+    """LOG_LEVEL=BOGUS previously crashed the gate with ValueError before any check ran.
+
+    Subprocess deliberately: under pytest the root logger already has a handler,
+    and `logging.basicConfig` only applies `level` when there is none -- an
+    in-process version of this test passes identically with and without the fix.
+    """
+    import os
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, str(Path(cd.__file__).resolve()), "--repo-root", str(repo)],
+        env={**os.environ, "LOG_LEVEL": "BOGUS"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Unknown level" not in result.stderr
+
+
+def test_load_config_fails_closed_on_a_non_object_policy(repo: Path, caplog):
+    """Valid JSON that is not an object previously escaped as a raw AttributeError."""
+    _write(repo / "harness" / "shared" / "governance-policy.json", "[]")
+    with caplog.at_level(logging.ERROR, logger=cd.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            cd.load_config(repo)
+    assert excinfo.value.code == 1
+    assert "Malformed governance policy" in caplog.text
