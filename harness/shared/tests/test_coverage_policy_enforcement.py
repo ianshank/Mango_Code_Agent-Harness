@@ -61,6 +61,27 @@ PYTHON_EQUIVALENT_NOTES = {
 UNENFORCED_IN_ROOT_CI: dict[str, str] = {}
 
 
+
+def _recipe_for(makefile: str, target: str) -> str:
+    """The recipe lines of a Make target, i.e. the tab-indented body."""
+    match = re.search(rf"^{re.escape(target)}:.*$", makefile, re.M)
+    assert match, f"Makefile declares no {target} target"
+    body = makefile[match.end():]
+    lines = []
+    for line in body.splitlines()[1:]:
+        if line and not line.startswith(("\t", " ")):
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _prerequisites_of(makefile: str, target: str) -> list[str]:
+    """The prerequisite list of a Make target, with any ## comment stripped."""
+    match = re.search(rf"^{re.escape(target)}:([^\n]*)$", makefile, re.M)
+    assert match, f"Makefile declares no {target} target"
+    return match.group(1).split("##")[0].split()
+
+
 @pytest.fixture(scope="module")
 def policy() -> dict:
     loaded: dict = json.loads(POLICY.read_text(encoding="utf-8"))
@@ -281,6 +302,56 @@ class TestPerFileEnforcement:
         assert cg.main(
             ["--coverage-json", str(report), "--policy", str(self._policy(tmp_path, per_file=False))]
         ) == 0
+
+    @pytest.mark.parametrize("bad", [0, 1, [], {}, None, "true", "no"])
+    def test_a_non_boolean_per_file_fails_closed(self, tmp_path, bad):
+        """The toggle that decides whether a gate runs must not be coerced.
+
+        bool(0), bool([]) and bool(None) are all False, so a policy that meant
+        to enable per-file enforcement and mistyped the value would disable it
+        while the gate still reported success -- the failure mode where the
+        gate is green precisely because it stopped checking.
+        """
+        from harness.shared import coverage_gate as cg
+
+        policy = tmp_path / "policy.json"
+        policy.write_text(
+            json.dumps({"coverage": {"lines": 90, "branches": 80, "per_file": bad}}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit) as exc:
+            cg.per_file_enabled(policy)
+        assert exc.value.code == 1
+
+    def test_an_absent_per_file_key_is_simply_off(self, tmp_path):
+        """Absent is opt-out, and must stay distinguishable from malformed."""
+        from harness.shared import coverage_gate as cg
+
+        policy = tmp_path / "policy.json"
+        policy.write_text(json.dumps({"coverage": {"lines": 90, "branches": 80}}), encoding="utf-8")
+        assert cg.per_file_enabled(policy) is False
+
+
+class TestNodeThresholdsActuallyRun:
+    """The Node floors in the policy are enforced only if vitest is invoked with
+    --coverage. Nothing checked that, so the flag could be dropped and five
+    thresholds would stop being enforced with every meta-test in this module
+    still green -- the classification above would describe an intention rather
+    than a fact."""
+
+    def test_test_node_runs_vitest_with_coverage(self, makefile):
+        recipe = _recipe_for(makefile, "test-node")
+        assert "vitest run" in recipe, f"test-node no longer runs vitest:\n{recipe}"
+        assert "--coverage" in recipe, (
+            "make test-node runs vitest without --coverage, so the Node thresholds in "
+            f"governance-policy.json ({sorted(NODE_ENFORCED)}) are not enforced:\n{recipe}"
+        )
+
+    def test_ci_reaches_test_node(self, makefile):
+        prereqs = _prerequisites_of(makefile, "ci")
+        assert "test-node" in prereqs or any(
+            "test-node" in _prerequisites_of(makefile, target) for target in prereqs
+        ), f"make ci no longer reaches test-node; its prerequisites are {prereqs}"
 
 
 class TestDedupBypassIsNotSilentlyOpen:

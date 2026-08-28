@@ -106,13 +106,31 @@ def measure(coverage_json: Path) -> dict[str, float]:
 
 
 def per_file_enabled(policy_path: Path) -> bool:
-    """True when the policy declares per-file enforcement (coverage.per_file)."""
+    """True when the policy declares per-file enforcement (coverage.per_file).
+
+    Absent means off -- per-file enforcement is opt-in. But *present and not a
+    boolean* fails closed rather than being coerced: this value decides whether
+    a gate runs at all, so `bool(...)` would read ``0``, ``[]``, ``null`` or the
+    string ``"no"`` as a decision instead of as the malformed policy it is, and
+    silently disable enforcement while the gate reported success. Every other
+    reader in this module does the same strict check.
+    """
     policy = _load_json_object(policy_path, "governance policy")
     coverage = policy.get("coverage")
     if not isinstance(coverage, dict):
         logger.error("[FAIL] Governance policy %s has no coverage block", policy_path)
         raise SystemExit(1)
-    return bool(coverage.get("per_file", False))
+    if "per_file" not in coverage:
+        return False
+    per_file = coverage["per_file"]
+    if not isinstance(per_file, bool):
+        logger.error(
+            "[FAIL] Governance policy %s declares coverage.per_file as %r (%s); "
+            "it must be true or false",
+            policy_path, per_file, type(per_file).__name__,
+        )
+        raise SystemExit(1)
+    return per_file
 
 
 def check_per_file(coverage_json: Path, lines_floor: float) -> bool:
