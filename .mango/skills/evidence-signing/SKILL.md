@@ -1,5 +1,6 @@
 ---
 name: evidence-signing
+Reviewed: 2026-08-28
 description: >
   Reusable skill for creating tamper-evident, HMAC-signed audit trails using
   EvidenceBuilder. Use when an agent action requires an immutable evidence bundle

@@ -1,5 +1,6 @@
 ---
 name: nemotron-reasoner
+Reviewed: 2026-08-28
 description: Invoke NVIDIA Nemotron Ultra API for deep reasoning, architectural audits, and spec verification.
 ---
 

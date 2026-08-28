@@ -11,10 +11,6 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ## 1. Repository Layout
 
 ```text
-├── .agents/                             # Native Antigravity Agent Skill Registry
-│   └── skills/
-│       └── nemotron-reasoner/SKILL.md   # NVIDIA Nemotron AI operational skill
-│
 ├── .claude/                             # Claude Code project settings (the file it actually reads)
 │   ├── hooks/session-start.sh           # Installs pinned dev dependencies on remote sessions
 │   └── settings.json                    # SessionStart binding; the only live hook (see DEC-003)
@@ -31,13 +27,14 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 10 reusable skills; see .mango/skills/
+│   ├── skills/                          # 11 reusable skills; the only skill root
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
 │   │   ├── harness-engineering/         # Harness inspection & extension rules
 │   │   ├── nemotron-reasoner/           # NVIDIA Nemotron AI operational cheatsheet
 │   │   ├── openspec-peer-review/        # Architecture/SDLC/QA/Product peer review
+│   │   ├── protected-path-attestation/  # Produces the per-file attestation block
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections

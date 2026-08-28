@@ -7,6 +7,45 @@
 
 ## 0. Completed Milestones
 
+### 🚧 v2.1.10 — Remediation programme v3 (in review)
+
+An objective peer review of the v2 tech-debt programme (PRs #15-#19), shipped
+as three sequential PRs so each `infra-reviewed` attestation answers one
+question.
+
+- [x] **PR A — runtime correctness** (no label): six defects in the Nemotron
+      bridge, the MAS orchestrator and the API server, each pinned by a
+      regression test confirmed failing against the pre-fix commit. Introduces
+      the regression/AQA tier and two extracted modules (`retry_policy.py`,
+      `debug_dump.py`).
+- [x] **PR B — gate reach** (labelled): import purity becomes a rule rather
+      than a series of fixes; bare `pytest` passes again; lint and mypy expand
+      by measurement, with every decline recorded against its finding count.
+- [x] **PR C — agent surface** (labelled): skills dated and classified, hook
+      invocation and path references corrected while staying dormant per
+      DEC-003, session-start brought to parity with `make ci`, and the first
+      scheduled (notify-only) automation in the repository.
+
+**Deliberately out of scope**, because #18 and #19 already implement them and
+duplicating on `main` would conflict with reviewed work: policy
+single-sourcing, the cumulative tool-call budget, per-file coverage
+enforcement, and the policy-loaded decision-ID grammar.
+
+**Follow-ups this programme identified but did not take:**
+
+- Enable per-file **branch** enforcement once #19 lands (`per_file_branches`);
+  it needs the per-file machinery that only exists there.
+- Enable `DTZ` (8 findings) once #18 lands — one of its two source sites is in
+  a file that PR rewrites.
+- Six files sit below the per-file coverage floor on `main`
+  (`publish_policy_artifact.py`, `check_traceability.py`, `coverage_gate.py`,
+  `governance/pretooluse_guard.py`, `validate_adoption.py`,
+  `validate_invariants.py`). #18 carries the lift; if it is abandoned, that
+  work needs re-doing before per-file enforcement can be switched on.
+- Annotating the test suite is a separate project: `--disallow-untyped-defs`
+  reports 533 findings, essentially all `no-untyped-def` on test functions.
+
+
 > **Document scope:** this file is the single roadmap for the repository.
 > The former `NEXT_STEPS_PLAN_v2.md` phased implementation plan was retired in
 > v2.1.10 hygiene: its Phase 0/1 items shipped (PRs #7, #9, #11, #13, #14) and

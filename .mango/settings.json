@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.mango/hooks/block_dangerous.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.mango/hooks/block_dangerous.sh\""
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.mango/hooks/loop_detection.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.mango/hooks/loop_detection.sh\""
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.mango/hooks/pre_completion_checklist.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.mango/hooks/pre_completion_checklist.sh\""
           }
         ]
       }
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.mango/hooks/save_state_before_compact.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.mango/hooks/save_state_before_compact.sh\""
           }
         ]
       }
@@ -45,10 +45,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.mango/hooks/session_start.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.mango/hooks/session_start.sh\""
           }
         ]
       }
     ]
-  }
+  },
+  "$comment": "Mango agent lifecycle hook bindings. DORMANT BY DECISION DEC-003: these are declared here but deliberately NOT mirrored into .claude/settings.json, which is the file Claude Code reads, so none of them run. Commands are routed through `bash` (matching .claude/settings.json) because every tracked .sh in this repository is mode 644 by convention -- invoking the bare path would fail with Permission denied the moment these were woken. test_mango_hooks_stay_dormant pins the dormancy; test_every_hook_references_only_existing_paths pins that the scripts stay correct while dormant."
 }

@@ -1,0 +1,199 @@
+# Scheduled drift detection. These jobs OPEN ISSUES; they never block a PR.
+#
+# The distinction is deliberate. A blocking gate must be deterministic and must
+# fail only for a reason the author can act on right now. Everything here is
+# either clock-dependent (skill staleness crosses a date boundary on a day
+# nobody changed anything) or caused by interleaved merges on main rather than
+# by the PR in front of you. Making those block would train people to re-run
+# CI until it passes, which is how a real signal gets ignored.
+name: Scheduled drift
+
+on:
+  schedule:
+    # Nightly at 04:17 UTC. Off the hour on purpose: GitHub's scheduler is
+    # heavily contended at :00 and delays runs by tens of minutes.
+    - cron: "17 4 * * *"
+    # Weekly, Mondays.
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  main-drift:
+    name: nightly drift on main
+    # Nightly only; the weekly cron is for the staleness jobs below.
+    if: github.event.schedule == '17 4 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+
+      # Drift that no single PR can cause: two PRs each green against their own
+      # base can still leave main with a stale digest bundle or a duplicated
+      # shim once both have merged.
+      - name: Check for drift on main
+        id: drift
+        run: |
+          set +e
+          {
+            echo "## Drift detected on \`main\`"
+            echo
+            echo "Each check below is green on a PR branch but can break on \`main\`"
+            echo "when two changes merge in sequence."
+            echo
+          } > drift.md
+          failed=0
+          for target in digest-regen check-dedup validate; do
+            if output=$(make "$target" 2>&1); then
+              echo "- \`make $target\`: OK" >> drift.md
+            else
+              failed=1
+              {
+                echo "- \`make $target\`: **FAILED**"
+                echo
+                echo '<details><summary>output</summary>'
+                echo
+                echo '```'
+                echo "$output" | tail -40
+                echo '```'
+                echo
+                echo '</details>'
+              } >> drift.md
+            fi
+          done
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the drift issue
+        if: steps.drift.outputs.failed == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Nightly drift detected on main"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file drift.md
+          else
+            gh issue create --title "$title" --body-file drift.md --label "drift"
+          fi
+
+  skill-staleness:
+    name: weekly skill staleness
+    if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Presence of a `Reviewed:` date is a blocking test
+      # (test_agent_surface_liveness.py). Age is not: a clock-dependent gate
+      # turns unrelated PRs red at a date boundary, on a day nobody touched the
+      # skill. Age belongs here, as a notification.
+      - name: Report skills past skill_max_age_days
+        id: staleness
+        run: |
+          python - <<'PY' > staleness.md
+          import datetime, json, pathlib, re
+          policy = json.loads(pathlib.Path("harness/shared/governance-policy.json").read_text())
+          max_age = int(policy.get("skill_max_age_days", 90))
+          today = datetime.date.today()
+          stale = []
+          for skill in sorted(pathlib.Path(".mango/skills").iterdir()):
+              doc = skill / "SKILL.md"
+              if not doc.is_file():
+                  continue
+              match = re.search(r"^Reviewed:\s*(\d{4}-\d{2}-\d{2})", doc.read_text(), re.M)
+              if not match:
+                  continue
+              age = (today - datetime.date.fromisoformat(match.group(1))).days
+              if age > max_age:
+                  stale.append((skill.name, match.group(1), age))
+          if stale:
+              print(f"## Skills past `skill_max_age_days` ({max_age} days)\n")
+              print("A stale skill is one whose instructions may no longer match the code.")
+              print("Re-read it, change what is wrong, and bump its `Reviewed:` date.\n")
+              print("| Skill | Reviewed | Age (days) |")
+              print("|---|---|---|")
+              for name, reviewed, age in stale:
+                  print(f"| `{name}` | {reviewed} | {age} |")
+          PY
+          if [ -s staleness.md ]; then echo "stale=1" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Open or update the staleness issue
+        if: steps.staleness.outputs.stale == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Skills past their review horizon"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file staleness.md
+          else
+            gh issue create --title "$title" --body-file staleness.md --label "governance"
+          fi
+
+  hook-install-drift:
+    name: weekly hook-install drift
+    if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # install_hooks.sh writes .git/hooks/pre-push. If it ever selects a
+      # per-stack copy instead of the shared kernel scan, the local pre-push
+      # gate silently diverges from what CI runs -- and nothing on a PR would
+      # show it, because CI does not use .git/hooks at all.
+      - name: Verify the installer selects the shared-kernel scan
+        id: hooks
+        run: |
+          set +e
+          bash harness/shared/install_hooks.sh > install.log 2>&1
+          installed=".git/hooks/pre-push"
+          {
+            echo "## Hook installer drift"
+            echo
+            echo "\`install_hooks.sh\` no longer installs the shared-kernel pre-push scan."
+            echo "The local gate and CI have diverged; a developer running \`git push\`"
+            echo "is being checked by something other than what CI enforces."
+            echo
+            echo '```'
+            tail -30 install.log
+            echo '```'
+          } > hookdrift.md
+          if [ -f "$installed" ] && grep -q "shared" "$installed"; then
+            echo "drift=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "drift=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the hook drift issue
+        if: steps.hooks.outputs.drift == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Hook installer no longer selects the shared-kernel scan"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file hookdrift.md
+          else
+            gh issue create --title "$title" --body-file hookdrift.md --label "governance"
+          fi

@@ -1,5 +1,6 @@
 ---
 name: boundary-invariant-review
+Reviewed: 2026-08-28
 description: >
   Review a change against the one-directional cognitive/execution boundary —
   the cognitive plane proposes, the harness disposes. Checks that no

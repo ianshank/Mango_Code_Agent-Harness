@@ -7,6 +7,97 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Remediation programme v3 — peer review of the v2 tech-debt programme
+
+An objective review of PRs #15-#19 plus a wider gap analysis, shipped as three
+sequential PRs. Three of the review's own initial claims were wrong and were
+corrected against git before any work started: per-file coverage and the
+policy-loaded decision-ID grammar do **not** exist on `main` (they arrive with
+the open #18/#19), while the `socket.timeout` retry defect is in `main` *and*
+in #19 — neither open PR fixes it.
+
+#### Fixed — six runtime defects, each pinned by a failing-first regression test
+
+- **Retry was dead on Python 3.9**, a live CI matrix leg. `urlopen` read
+  timeouts raise `socket.timeout`, which only became an alias of `TimeoutError`
+  in 3.10, so `NEMOTRON_MAX_RETRIES` did nothing for the most common transient
+  failure. Peer resets were unretried on every version.
+- The `urllib.Request` was built once and replayed across retry attempts;
+  `Retry-After` was ignored; backoff had no ceiling (~34 minutes by the 11th
+  retry). A non-JSON body on an HTTP 200 was reported as "Connection Error".
+- `resolve_environment()` returned as soon as the key and model were in the
+  process environment, making `NEMOTRON_TIMEOUT_MS` / `NEMOTRON_MAX_RETRIES`
+  unreachable from `.env` in exactly the normal configuration.
+- Orchestrator tool dispatch crashed on `arguments: null` (`json.loads(None)`
+  raises `TypeError` past an `except json.JSONDecodeError`) and on
+  `arguments: "[]"`. A raising handler aborted the agent loop, leaving the
+  model's `tool_calls` message unanswered and skipping the post-run hook.
+- **Debug-history redaction never ran.** It was guarded on `self.api_key`,
+  which the orchestrator normally leaves `None` because the bridge resolves the
+  credential downstream — so `MANGO_DEBUG_DUMP=1` wrote plaintext credentials
+  to a predictably named file in the shared temp directory, with default
+  directory permissions. The existing test passed `api_key=` explicitly, the
+  one configuration where the old code did redact.
+- The API server compared its key with `!=` (a timing oracle) and returned
+  `conversation_history` verbatim over HTTP. Both fixed; note the hardening's
+  own second-order bug, caught by its test: `compare_digest` raises `TypeError`
+  on non-ASCII `str`, and header bytes are latin-1 decoded, so a naive fix
+  would have traded a timing leak for an unauthenticated 500.
+
+#### Added — enforcement where there was only intention
+
+- **Regression / AQA tier** (`harness/shared/tests/regression/`), selected by
+  path rather than by a marker, with one reproduction per defect above. Every
+  module was confirmed failing against the pre-fix commit.
+- **`test_import_purity.py`** — every shared and control-plane module must
+  import from a foreign working directory with exit 0, no output and no writes.
+  `validate_adoption.py` ran its entire gate at module scope; two sibling CLIs
+  had been fixed by hand in the previous programme and the third survived
+  because there was no rule.
+- **`test_test_quality.py`** — ten tests in the suite could not fail. It found
+  the tenth after the manual pass had found nine.
+- **`test_lint_config_liveness.py`** — three `per-file-ignores` patterns
+  suppressed nothing (including one for a gitignored directory that does not
+  exist), plus a dozen unused codes. Measured with `ruff --isolated`; a normal
+  run applies the very ignores under test.
+- **`test_deferred_rigor.py`** — every declined lint rule and mypy flag carries
+  its measured finding count and a reason, and the register fails in both
+  directions.
+- **`test_agent_surface_liveness.py`**, **`test_documentation_truth.py`**,
+  **`test_makefile_contracts.py`** — skills dated and classified, hooks
+  referencing only real paths, `.mango` proven the only skill root, the README
+  layout tree checked against the filesystem.
+- Three **scheduled workflows** that open issues and never block: nightly drift
+  on `main`, weekly skill staleness, weekly hook-install drift.
+- One new skill, `protected-path-attestation`, which produces the artifact the
+  labelled PRs in this programme need.
+
+#### Changed — measured, not speculative
+
+- ruff gains `BLE`, `RUF100`, `ICN`, `ISC`, `RSE`, `TID`, `A`, `C4`, `PIE`.
+  `BLE` turns 27 `# noqa: BLE001` justifications from prose into enforced
+  decisions. `RUF100` is safe *because* `BLE` is on: it flagged 20 inert
+  directives before, 13 of them exactly those justifications.
+- mypy gains `--check-untyped-defs` (14 findings, all fixed), which checks the
+  bodies of unannotated functions. Full `--strict` (604) and
+  `--disallow-untyped-defs` (533) are deferred with those numbers.
+- **Bare `pytest` now passes.** `addopts` deselects `live`, and the live suite
+  that lacked its sibling's `skipif` has one.
+- `.claude/hooks/session-start.sh` installs Node dependencies through
+  `make node-deps`, the same recipe CI uses. `make pre-pr` could not complete
+  in a web session before this.
+- `.mango/settings.json` routes hook commands through `bash`, matching
+  `.claude/settings.json`. Every tracked `.sh` is mode 644 and stays that way —
+  the defect was the invocation, not the mode.
+
+#### Removed
+
+- `.github/skills/code-review/` — a second skill root, fully orphaned, naming a
+  different project and asserting a >80% coverage bar against a policy of 90.
+- Pong ignore rules from `.gitignore`, two PRs after the demo was deleted.
+- `.agents/skills/` from the README layout tree; the directory does not exist.
+
+
 Hygiene remediation batch (DEC-004), shaped by three adversarial reviews of its
 own plan -- nine elements of the first draft were rejected as wrong or
 net-negative before implementation (among them: a branch-coverage change that

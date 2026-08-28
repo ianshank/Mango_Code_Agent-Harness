@@ -1,5 +1,6 @@
 ---
 name: shadow-channel-analysis
+Reviewed: 2026-08-28
 description: >
   Analyze the cognitive-signal JSONL sink produced by the shadow planner channel
   and report plan agreement, wall-clock ratio, and token ratio against the

@@ -1,5 +1,6 @@
 ---
 name: coverage-gate
+Reviewed: 2026-08-28
 description: >
   Enforce and report the test-coverage policy gate. Reads the threshold
   dynamically from harness/shared/governance-policy.json (coverage.lines) so the

@@ -1,5 +1,6 @@
 ---
 name: validation-runner
+Reviewed: 2026-08-28
 description: >
   Run the full deterministic validation gate for this repository — ruff, mypy,
   pytest, coverage, check-dedup, and validate_invariants — and collect the
