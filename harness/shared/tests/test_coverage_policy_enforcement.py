@@ -26,16 +26,17 @@ VITEST_CONFIG = REPO / "harness" / "node" / "vitest.config.ts"
 
 pytestmark = pytest.mark.governance
 
-# Thresholds the *Python* aggregate gate applies.
-PYTHON_ENFORCED = {"lines"}
+# Thresholds the *Python* gate applies (coverage_gate.py, one floor per metric).
+PYTHON_ENFORCED = {"lines", "branches"}
 
 # Declared thresholds with no enforcement in the root pipeline. Each needs a
 # measured reason: these are the numbers that turn CI red if enabled today, so a
 # future change can weigh the cost instead of rediscovering it.
 UNENFORCED_IN_ROOT_CI = {
     "per_file": (
-        "The Python gate is aggregate-only (--cov-fail-under). Measured at the "
-        "policy's lines=90, six measured files fail per-file today: "
+        "The Python gate is aggregate-only (coverage_gate.py reads only the "
+        "totals block). Measured at the policy's lines=90, six measured files "
+        "fail per-file today: "
         "pretooluse_guard.py (75%), remotes.py (75%), publish_policy_artifact.py "
         "(77.85%), validate_adoption.py (85.71%), verify_zero_skips.py (87.5%), "
         "governance/pretooluse_guard.py (87.58%). Aggregate headroom is ~60 "
@@ -43,21 +44,23 @@ UNENFORCED_IN_ROOT_CI = {
         "harness/CONTRACT.md as a documented follow-up."
     ),
     "statements": (
-        "Python: coverage.py reports statements but the gate applies only lines. "
-        "Node: enforced by vitest.config.ts, which `make test-node` never "
-        "activates because it runs without --coverage."
+        "Python: coverage.py's statement and line counts are the same measure at "
+        "this granularity (totals carry num_statements/covered_lines), so the "
+        "lines floor already covers it. Node: enforced by vitest.config.ts, "
+        "which `make test-node` never activates because it runs without "
+        "--coverage."
     ),
     "functions": (
         "No Python equivalent is applied. Node enforces it only under --coverage, "
         "which root CI does not pass; measured, circuit-breaker.ts (85.71%) and "
         "web/app.ts (58.33%) would fail."
     ),
-    "branches": (
-        "pyproject declares no `branch = true`, so branch coverage is not even "
-        "measured on the Python side. Node would fail nemotron-client.ts (70.42%), "
-        "web/app.ts (31.57%) and terminal-renderer.ts (61.11%) at the policy's 80."
-    ),
 }
+
+# Node-side note for the enforced keys: `lines` and `branches` are enforced for
+# Python by coverage_gate.py; on the Node side vitest.config.ts declares both but
+# `make test-node` runs without --coverage, the declared follow-up. Recorded here
+# so moving a key to PYTHON_ENFORCED does not read as "enforced everywhere".
 
 
 @pytest.fixture(scope="module")
@@ -136,23 +139,67 @@ class TestThresholdSourcing:
 
 
 class TestCoverageGateFailsClosed:
-    def test_cov_min_has_no_permissive_fallback(self, makefile):
-        """Governance fails closed everywhere else; this gate used to *lower itself*
-        to 80 when it could not read the policy that says 90."""
-        line = re.search(r"^COV_MIN\s*\?=\s*(.+)$", makefile, re.M)
-        assert line, "root Makefile does not define COV_MIN"
-        assert not re.search(r"\|\|\s*echo\s*\d+", line.group(1)), (
-            "COV_MIN falls back to a literal when the policy is unreadable; an "
-            "unreadable policy must fail the gate, not weaken it"
+    """The old COV_MIN mechanism lowered itself to 80 on an unreadable policy.
+
+    Its replacement, coverage_gate.py, must keep both fail-closed properties:
+    no silent numeric fallback, and no way to pass without a real report.
+    These are behavioural probes against the actual script, not string checks
+    on the Makefile -- the Makefile wiring is pinned in test_ci_gate_coverage.
+    """
+
+    def test_branch_measurement_is_enabled(self):
+        """coverage.branches is enforceable only while branch arcs are recorded.
+
+        Deleting `branch = true` would make num_branches vanish from
+        coverage.json, and the gate script would then fail closed rather than
+        silently pass -- but the honest state is measuring, so this pins it.
+        """
+        pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
+        run_block = re.search(r"^\[tool\.coverage\.run\]\s*$(.*?)(?=^\[)", pyproject, re.M | re.S)
+        assert run_block, "pyproject.toml has no [tool.coverage.run] table"
+        assert re.search(r"^branch\s*=\s*true\s*$", run_block.group(1), re.M), (
+            "[tool.coverage.run] no longer sets branch = true; branch coverage "
+            "would be unmeasured and coverage.branches unenforceable"
         )
 
-    def test_coverage_target_aborts_when_the_threshold_is_unresolved(self, makefile):
-        recipe = re.search(r"^coverage-python:.*?\n((?:\t[^\n]*\n)+)", makefile, re.M)
-        assert recipe, "root Makefile has no coverage-python recipe"
-        assert re.search(r'test\s+-n\s+"?\$\(COV_MIN\)"?', recipe.group(1)), (
-            "coverage-python does not guard against an empty COV_MIN, so an "
-            "unreadable policy would run pytest with no threshold at all"
-        )
+    def test_gate_fails_closed_when_the_report_is_missing(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        with pytest.raises(SystemExit) as exc:
+            cg.main(["--coverage-json", str(tmp_path / "absent.json")])
+        assert exc.value.code == 1
+
+    def test_gate_fails_closed_on_a_malformed_policy(self, tmp_path):
+        from harness.shared import coverage_gate as cg
+
+        report = tmp_path / "coverage.json"
+        report.write_text('{"totals": {"covered_lines": 9, "num_statements": 10, '
+                          '"covered_branches": 9, "num_branches": 10}}', encoding="utf-8")
+        policy = tmp_path / "policy.json"
+        policy.write_text("{not json", encoding="utf-8")
+        with pytest.raises(SystemExit) as exc:
+            cg.main(["--coverage-json", str(report), "--policy", str(policy)])
+        assert exc.value.code == 1
+
+    def test_gate_applies_lines_and_branches_as_separate_floors(self, tmp_path):
+        """The defect this script replaces: a blended total can satisfy the lines
+        floor while branch coverage is far below its own. Lines 91% / branches
+        40% must FAIL; the blend (~65%) is never consulted."""
+        from harness.shared import coverage_gate as cg
+
+        policy = tmp_path / "policy.json"
+        policy.write_text(json.dumps({"coverage": {"lines": 90, "branches": 80}}), encoding="utf-8")
+        report = tmp_path / "coverage.json"
+        report.write_text(json.dumps({"totals": {
+            "covered_lines": 91, "num_statements": 100,
+            "covered_branches": 40, "num_branches": 100,
+        }}), encoding="utf-8")
+        assert cg.main(["--coverage-json", str(report), "--policy", str(policy)]) == 1
+        report.write_text(json.dumps({"totals": {
+            "covered_lines": 91, "num_statements": 100,
+            "covered_branches": 81, "num_branches": 100,
+        }}), encoding="utf-8")
+        assert cg.main(["--coverage-json", str(report), "--policy", str(policy)]) == 0
 
 
 class TestDedupBypassIsNotSilentlyOpen:

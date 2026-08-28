@@ -2,6 +2,94 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Hygiene remediation batch (DEC-004), shaped by three adversarial reviews of its
+own plan -- nine elements of the first draft were rejected as wrong or
+net-negative before implementation (among them: a branch-coverage change that
+would have silently blended the metric it claimed to gate, regression tests
+that could never fail, and deletions that broke the policy template/instance
+relation).
+
+### Security — coverage is now two floors, not one blend
+
+- **Branch coverage was not measured at all.** `shadow_planner.py` read 100%
+  line-covered while half its branches — including the "no api_key / no model,
+  defer to the bridge" leg — had never executed. `branch = true` is now set,
+  and measurement exposed a trap: with branch arcs recorded, pytest-cov's
+  single total is a blended statements+branches number, so keeping
+  `--cov-fail-under` would have gated that blend against `coverage.lines` —
+  line coverage could regress below 90 while the blend stayed green, the same
+  "gate that lowers itself" inversion the COV_MIN=80 fallback had.
+- New `harness/shared/coverage_gate.py` enforces `coverage.lines` and
+  `coverage.branches` as **separate floors** from `coverage.json` + policy,
+  fail-closed on a missing/malformed report or policy, with no numeric default
+  anywhere. `branches` moved from `UNENFORCED_IN_ROOT_CI` to `PYTHON_ENFORCED`
+  (waiver deleted, not reworded). Measured: lines 94.10% ≥ 90, branches
+  89.46% ≥ 80. The four worst branch offenders were brought to 100% branches
+  with behavioural tests (bridge-defaults leg; shim bootstrap and `__main__`
+  dispatch legs via runpy, asserting the pretooluse guard's real verdicts).
+
+### Fixed — two crash paths in the policy-reading gates
+
+- `LOG_LEVEL=BOGUS` crashed all three gates with `ValueError` before any check
+  ran; `resolve_log_level()` existed for exactly this and none used it. All
+  three now degrade bad verbosity instead of failing the gate. Regression
+  tests are subprocesses on purpose: under pytest the root logger already has
+  a handler and `basicConfig` ignores `level`, so an in-process test passes
+  identically with and without the fix.
+- A policy of valid JSON that is not an object (`[]`) escaped as a raw
+  `AttributeError` traceback; it now routes to the same fail-closed
+  "[FAIL] Malformed governance policy" path as a syntax error, with a probe
+  per gate.
+
+### Added — cross-file policy consistency gates
+
+- `test_policy_consistency.py` (25 tests): the shared policy is pinned as a
+  **superset** of both per-stack instances (value-equal on common keys,
+  `protected_paths` the one declared divergence); five unwired keys are
+  classified in `DECLARED_NOT_YET_ENFORCED` with reviewed reasons — mirroring
+  `UNENFORCED_IN_ROOT_CI` — instead of deleted, because the per-stack mirrors
+  sit under root-of-trust + bundle digests and two of the five are
+  declarations other artifacts still reference; the decision-ID grammar is
+  equality-checked across **all five copies** (three policies, two scanners,
+  extracted via AST); `agent_defaults` is cross-checked against
+  `agent-policy.json` in all three stacks; `GITLEAKS_VERSION` must be
+  identical across the three Makefiles. 5/5 mutants killed.
+
+### Changed — the bundle's top level is finally regenerable
+
+- `build_policy_bundle.py` — the only regenerator of the bundle's top-level
+  `governance_policy_sha256`/`agent_policy_sha256`, which
+  `verify_repository.py` checks and CI exercises — was invoked by nothing. It
+  is now `main()`-guarded, tested, coverage-measured, and wired into
+  `make digest-regen` behind the existing `git diff --exit-code` (rebuild
+  verified byte-identical before wiring, so the first run is a zero-diff
+  no-op). A per-stack policy edit can no longer leave the committed bundle
+  stale unnoticed.
+- `check_traceability.py` gained the `sys.path` bootstrap it was the only shim
+  to lack, structured import-first-then-retry (no E402 exemption). Its
+  regression test runs under `python -S`, where the editable install cannot
+  mask a gutted bootstrap.
+
+### Removed
+
+- `harness/SHA256SUMS.txt`: pinned 10 files (9 digests stale, 5 entries in a
+  deleted directory), read by nothing. The live equivalents are
+  `policy-artifact.json` and `policy-bundle.example.json` + `digest-regen`.
+- The dead top-level `size_budget_lines` fallback in `validate_invariants.py`
+  (no policy file ever carried the key at top level), and the stale claim that
+  the module runs as a git pre-push hook.
+
+### Recorded, not built
+
+- The specs gate accepts an entirely unfilled template scaffold (placeholder
+  `R-EXAMPLE-*` IDs satisfy it), and an `AC-*` bullet containing MUST can
+  never pass its `[CR]-` ID regex — both are future gate refinements.
+- `validate_policy.py`'s `scripts/*` critical-path list is CORRECT for its
+  actual input (the per-stack policy it validates from CWD); it never reads
+  the shared file.
+
 ## [2.1.9] - 2026-08-27
 
 Governance follow-ups from the 2.1.8 review passes. Each needed a protected-path
