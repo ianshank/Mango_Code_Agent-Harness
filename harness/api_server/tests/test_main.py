@@ -86,7 +86,15 @@ def _run_dev_runner(monkeypatch):
 
     calls = {}
     fake_uvicorn = types.ModuleType("uvicorn")
-    fake_uvicorn.run = lambda app, **kwargs: calls.update(kwargs)
+    # monkeypatch.setattr, not a direct assignment and not the builtin setattr:
+    # ModuleType declares no `run`, so `fake_uvicorn.run = ...` is an
+    # attr-defined error under --check-untyped-defs, while bare setattr with a
+    # constant name is B010. This form satisfies both and is undone for us at
+    # teardown. raising=False because the attribute is being created, not
+    # replaced -- without it pytest rejects the patch on a missing attribute.
+    monkeypatch.setattr(
+        fake_uvicorn, "run", lambda app, **kwargs: calls.update(kwargs), raising=False
+    )
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
     runpy.run_module("harness.api_server.main", run_name="__main__")
     return calls

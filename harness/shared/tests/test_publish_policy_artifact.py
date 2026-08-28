@@ -28,8 +28,8 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "control-plane" /
 
 def _load_module():
     spec = importlib.util.spec_from_file_location("publish_policy_artifact", _MODULE_PATH)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
@@ -115,7 +115,12 @@ class TestBuild:
 class TestCheck:
     def test_clean_round_trip_passes(self, policy_repo: Path) -> None:
         artifact = ppa.build_artifact(policy_repo)
-        ppa.check_artifact(policy_repo, artifact)  # no exception
+        ppa.check_artifact(policy_repo, artifact)
+        # "did not raise" is the point, but on its own it would also pass
+        # against an artifact builder that returned {}. Pin the shape the
+        # tamper cases below rely on being present.
+        assert isinstance(artifact, dict)
+        assert artifact.get("files"), "a clean artifact must carry a file manifest"
 
     def test_byte_flip_in_non_identity_file_denies_on_digest(self, policy_repo: Path) -> None:
         """agent-policy.json does not feed policy_id/policy_version, so a
@@ -238,6 +243,9 @@ class TestCheck:
             ppa._reject_unsafe_relpath(malicious_key)
 
     def test_reject_unsafe_relpath_guard_accepts_governed_files(self) -> None:
+        # Without this the loop is vacuous: an empty POLICY_FILES would make
+        # the test pass while proving nothing about the guard.
+        assert ppa.POLICY_FILES, "POLICY_FILES is empty; the loop below checks nothing"
         for rel in ppa.POLICY_FILES:
             ppa._reject_unsafe_relpath(rel)  # must not raise
 

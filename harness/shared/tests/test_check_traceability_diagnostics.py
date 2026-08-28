@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -154,11 +155,17 @@ class TestGateLoggerDegradation:
 
         monkeypatch.setattr(builtins, "__import__", explode)
         logger = ct._gate_logger()
-        assert logger is not None
+        # `assert logger is not None` cannot fail -- _gate_logger returns a
+        # Logger or raises. Assert the properties the fallback exists for: a
+        # usable logger that does not propagate into a root handler (which
+        # would let a gate's diagnostics contaminate machine-read stdout).
+        assert isinstance(logger, logging.Logger)
+        assert logger.propagate is False
         logger.debug("must not raise")
 
     def test_repo_root_bootstrap_targets_the_actual_repository(self):
         """parents[3] must resolve to the repo root, or the sys.path insert is wrong."""
+        assert ct.__file__ is not None
         module_path = Path(ct.__file__).resolve()
         assert (module_path.parents[3] / "harness" / "shared" / "json_logging.py").is_file()
         assert os.path.basename(module_path.parents[3]) != "harness"

@@ -33,11 +33,14 @@ from `governance-policy.json`" — yet the runtime violates it structurally:
   `api_timeout_sec`, `tool_timeout_sec`) and `nemotron` (`temperature`,
   `max_tokens`, `timeout_ms`, `max_retries`) blocks mirroring the previous
   literals, and both MUST have code readers in the same change.
-- R-POL-2: A shared loader (`harness/shared/policy_loader.py`) MUST implement
-  the precedence explicit argument > environment > policy > built-in default
-  (as `check_dedup.load_config` does) with fail-closed semantics: absent
-  policy = adopter defaults; present-but-malformed policy = raise (as
-  `coverage_gate.load_thresholds` does).
+- R-POL-2: A shared loader (`harness/shared/policy_loader.py`) MUST resolve
+  explicit argument > policy > built-in default with fail-closed semantics:
+  absent policy = adopter defaults; present-but-malformed policy = raise (as
+  `coverage_gate.load_thresholds` does). Environment-variable overrides stay
+  in the callers that define them (the bridge reads NEMOTRON_TIMEOUT_MS /
+  NEMOTRON_MAX_RETRIES before falling back to the loader's policy values,
+  completing arg > env > policy > builtin for those knobs); the loader itself
+  reads no environment so gates and runtimes share one deterministic reader.
 - R-POL-3: `MangoMASOrchestrator` limits MUST resolve through the loader with
   constructor kwargs still overriding; `agent_defaults.max_tool_calls_per_task`
   MUST gain its first code reader as a cumulative tool-call budget per task.

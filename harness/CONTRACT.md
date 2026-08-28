@@ -75,3 +75,64 @@ The `synthesis` section of `governance-policy.json` carries additional config-dr
 ## Python compatibility gate
 
 `check_py_compat.py` enforces that all first-party Python uses only syntax available in the minimum CI matrix version (currently 3.9). It detects: PEP 604 union syntax (`X | Y`), `datetime.UTC` (3.11+), and annotated assignments (`ast.AnnAssign`) that use union types without `from __future__ import annotations`. Run via `make check-compat`.
+
+## Regression / AQA tier
+
+`harness/shared/tests/regression/` holds one reproduction per defect that has
+already reached `main`. Every module there was confirmed **failing against the
+pre-fix commit** before its fix landed; a test in that directory that cannot
+fail is worse than no test, because it converts an open question into a false
+assurance.
+
+The tier is selected **by path**, not by a pytest marker: the directory is
+already the selector, and a marker would additionally have to be registered in
+`pyproject.toml` for no extra selectivity. Run it alone with
+`make test-regression`; it also runs inside `make test-python`, and therefore
+inside `make ci`, which `test_makefile_contracts.py` pins.
+
+## Static analysis: what is enforced, and what is deliberately not
+
+Every ruff rule and mypy flag is either **selected** or **recorded as deferred
+with the finding count that justified deferring it**. `test_deferred_rigor.py`
+is the register, and it fails in both directions: a deferral that names a
+now-enabled rule is stale cover and must be deleted, and a rule whose cost has
+fallen below its recorded revisit threshold must be enabled or re-argued.
+
+Two selections were bought with real work and must not be dropped silently:
+
+- **`BLE`** — the repository carried 16 `# noqa: BLE001` comments explaining why
+  particular broad `except Exception` handlers are deliberate fail-closed
+  boundaries. With `BLE` unselected those comments were inert prose. Selecting
+  it turned all 27 into enforced decisions.
+- **`RUF100`** — safe *only because* `BLE` is on. It previously flagged 20 inert
+  `noqa` directives, 13 of which were exactly those `BLE001` justifications, so
+  enabling it alone would have invited deleting the reasoning. With `BLE`
+  selected the count drops to the genuinely dead directives, and `RUF100` now
+  keeps every `noqa` in the tree load-bearing.
+
+mypy runs with `--check-untyped-defs` (via `MYPY_FLAGS`), which checks the
+bodies of unannotated functions — where latent test defects live, such as a
+`re.search(...).group()` that raises `AttributeError` instead of failing with a
+message. Measured at 14 findings, all fixed in the change that enabled it.
+Full `--strict` (604) and `--disallow-untyped-defs` (533) are deferred: both
+are dominated by `no-untyped-def` on test functions, which buys annotations
+rather than correctness.
+
+## Configuration liveness
+
+Suppressions and allowlists are write-only unless something checks them, so two
+gates keep them honest:
+
+- `test_lint_config_liveness.py` — every `per-file-ignores` pattern must still
+  match a file, and every code in it must still suppress a real finding
+  (measured with `ruff --isolated`, since a normal run applies the very ignores
+  under test). Ruff has no unused-ignore check for config-level ignores, so
+  without this a one-time prune simply rots again. It also asserts every literal
+  path in `.gitleaks.toml`'s allowlist still exists — an allowlist entry that
+  outlives its file is a widening blind spot.
+- `test_import_purity.py` — every module under `harness/shared` and
+  `harness/control-plane` must import, from a working directory that is *not*
+  the repo root, with exit 0, empty stdout, and no writes. Modules that still
+  act at import are declared in `KNOWN_IMPORT_SIDE_EFFECTS` with a reason, and
+  the declaration self-destructs: a separate test fails once the module imports
+  cleanly, so a waiver cannot outlive the defect it describes.

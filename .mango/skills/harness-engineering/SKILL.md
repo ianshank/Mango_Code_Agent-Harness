@@ -1,5 +1,6 @@
 ---
 name: harness-engineering
+Reviewed: 2026-08-28
 description: Use when the user wants to inspect, extend, or debug this agent's own harness (hooks, subagents, CLAUDE.md rules) rather than application code. Also use when repeated agent mistakes should be turned into durable repo-level guardrails.
 ---
 

@@ -50,9 +50,15 @@ def waivers(path: str, ids: set[str]) -> list[dict]:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception as e:
+        # Fail closed: an unreadable waiver registry must stop the run, because
+        # we cannot prove any skip is governed. `from e` keeps the underlying
+        # cause attached (B904); BLE001 does not fire on a handler that raises.
         raise SystemExit(f"zero-skip: cannot read waiver registry: {e}") from e
     out: list[dict] = []
-    today = dt.date.today()
+    # UTC, not the runner's local date: waiver `expires` values are calendar
+    # dates, and dt.date.today() would expire a waiver a day early or late
+    # depending on which timezone the CI runner happens to sit in.
+    today = dt.datetime.now(dt.timezone.utc).date()
     for w in data.get("waivers", []):
         common = ("framework", "decision_id", "reason", "owner", "expires")
         if any(not w.get(k) for k in common):

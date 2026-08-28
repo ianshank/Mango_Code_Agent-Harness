@@ -16,17 +16,24 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, cast
 
+from harness.shared import retry_policy
 from harness.shared.json_logging import setup_json_logging
 from harness.shared.policy_loader import nemotron_defaults
+from harness.shared.retry_policy import RetryPolicy, is_retryable_connection_error, parse_retry_after
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-# Backoff between retry attempts: RETRY_BACKOFF_BASE_SEC * 2**attempt.
-RETRY_BACKOFF_BASE_SEC = 1.0
+# Timeout and retry fallbacks now come from governance-policy.json via
+# policy_loader.nemotron_defaults(); this module no longer carries its own.
+# Backoff between retry attempts. The arithmetic (exponential growth, cap and
+# jitter) lives in retry_policy.RetryPolicy; this alias is kept because it is
+# part of the module's public surface and is referenced by the test suite.
+RETRY_BACKOFF_BASE_SEC = retry_policy.DEFAULT_BASE_SEC
 # Transient HTTP statuses worth retrying; everything else fails immediately.
 RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
@@ -55,7 +62,12 @@ def resolve_environment() -> dict[str, str]:
     """Resolve API key, base URL, model, timeout, and retries from environment
     or a local .env file (process environment wins)."""
     env_vars = {key: os.environ.get(var, "") for var, key in _ENV_VAR_KEYS.items()}
-    if env_vars["api_key"] and env_vars["default_model"]:
+    # Short-circuit only when *every* key is already supplied by the process
+    # environment. The previous guard returned as soon as api_key and
+    # default_model were present, which made NEMOTRON_TIMEOUT_MS and
+    # NEMOTRON_MAX_RETRIES unreachable from .env in the normal case -- the
+    # .env file was only ever consulted when credentials were missing.
+    if all(env_vars.values()):
         return env_vars
 
     # Check candidate .env files
@@ -140,7 +152,7 @@ def complete_chat(
         )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
-    if not (url.startswith("https://") or url.startswith("http://")):
+    if not url.startswith(("https://", "http://")):
         raise ValueError(f"Invalid URL scheme in endpoint: {endpoint}")
 
     payload = {
@@ -156,50 +168,67 @@ def complete_chat(
         payload["tool_choice"] = tool_choice
 
     req_data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=req_data,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {key}",
-            "User-Agent": "Agentic-SSD-Nemotron-Bridge/2.0",
-        },
-        method="POST",
-    )
+    req_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {key}",
+        "User-Agent": "Agentic-SSD-Nemotron-Bridge/2.0",
+    }
 
-    for attempt in range(max_retries + 1):
+    # Explicit/env-resolved max_retries wins over the mapping's value; the rest
+    # of the backoff shape (base, cap, jitter) comes from the same mapping.
+    # Named `retry` rather than `policy`: `policy` above is the governance
+    # nemotron block, and shadowing it here would silently discard it.
+    retry = replace(RetryPolicy.from_mapping(env_config), max_retries=max_retries)
+
+    for attempt in range(retry.max_retries + 1):
+        # Built per attempt: a urllib Request accumulates per-opener state (and
+        # is mutated by redirect handling), so reusing one instance across
+        # retries replays a request that is no longer the one we composed.
+        req = urllib.request.Request(url, data=req_data, headers=req_headers, method="POST")
         start_time = time.time()
         try:
             with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # nosec B310
                 body = resp.read().decode("utf-8")
-                data = cast(dict[str, Any], json.loads(body))
-                latency_ms = int((time.time() - start_time) * 1000)
-                data["latency_ms"] = latency_ms
-                return data
+            latency_ms = int((time.time() - start_time) * 1000)
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")
             sanitized = err_msg.replace(key, mask_secret(key))
-            if e.code in RETRYABLE_HTTP_STATUSES and attempt < max_retries:
-                backoff = RETRY_BACKOFF_BASE_SEC * (2**attempt)
+            if e.code in RETRYABLE_HTTP_STATUSES and retry.should_retry(attempt):
+                # A server-supplied Retry-After is an instruction, not a hint:
+                # honor it (capped) instead of guessing with exponential backoff.
+                header = e.headers.get("Retry-After") if e.headers is not None else None
+                backoff = retry.backoff(attempt, retry_after=parse_retry_after(header))
                 logger.warning(
                     "Nemotron API HTTP %d (attempt %d/%d); retrying in %.1fs",
-                    e.code, attempt + 1, max_retries + 1, backoff,
+                    e.code, attempt + 1, retry.max_retries + 1, backoff,
                 )
                 time.sleep(backoff)
                 continue
             raise RuntimeError(f"Nemotron API HTTP {e.code} Error: {sanitized}") from e
         except Exception as e:
             sanitized = str(e).replace(key, mask_secret(key))
-            if isinstance(e, (urllib.error.URLError, TimeoutError)) and attempt < max_retries:
-                backoff = RETRY_BACKOFF_BASE_SEC * (2**attempt)
+            if is_retryable_connection_error(e) and retry.should_retry(attempt):
+                backoff = retry.backoff(attempt)
                 logger.warning(
                     "Nemotron connection error (attempt %d/%d): %s; retrying in %.1fs",
-                    attempt + 1, max_retries + 1, sanitized, backoff,
+                    attempt + 1, retry.max_retries + 1, sanitized, backoff,
                 )
                 time.sleep(backoff)
                 continue
             raise RuntimeError(f"Nemotron Connection Error: {sanitized}") from e
+
+        # Parsed outside the retry try/except on purpose: a malformed body on an
+        # otherwise successful response is a protocol error, not a connection
+        # error, and must not be reported as "Nemotron Connection Error".
+        try:
+            data = cast(dict[str, Any], json.loads(body))
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Nemotron API returned a non-JSON body: {e}") from e
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Nemotron API returned {type(data).__name__}, expected a JSON object")
+        data["latency_ms"] = latency_ms
+        return data
 
     # Unreachable: the loop either returns or raises on its final attempt.
     raise RuntimeError("Nemotron retry loop exited without a response")
@@ -243,7 +272,8 @@ def main() -> None:
                 f"{usage.get('completion_tokens', 0)} completion = "
                 f"{usage.get('total_tokens', 0)} total\n"
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - top-level CLI boundary: every failure
+        # becomes a clean one-line message and exit 1, never a traceback on stdout.
         logger.error("Nemotron Bridge Error: %s", e)
         sys.exit(1)
 

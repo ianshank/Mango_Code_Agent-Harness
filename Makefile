@@ -9,6 +9,14 @@ PYTHON   ?= python
 PYTEST   ?= $(PYTHON) -m pytest
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
+# --check-untyped-defs checks the *bodies* of unannotated functions, which is
+# where latent test bugs live (a re.search(...).group() that starts returning
+# None raises AttributeError instead of failing with a message). Measured at 14
+# findings across the tree, all fixed in the same change that enabled it.
+# Deliberately NOT --strict (604) or --disallow-untyped-defs (533): both are
+# dominated by no-untyped-def on test functions, which buys annotations rather
+# than correctness. See test_deferred_rigor.py.
+MYPY_FLAGS ?= --check-untyped-defs
 PM       ?= pnpm
 GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
@@ -41,11 +49,11 @@ MYPY_TARGETS := $(SHARED_SRC) harness/api_server harness/control-plane
 .PHONY: lint-python
 lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
 	$(RUFF) check .
-	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases
+	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases $(MYPY_FLAGS)
 
 .PHONY: lint-cold
 lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
-	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases --no-incremental
+	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases $(MYPY_FLAGS) --no-incremental
 
 .PHONY: check-compat
 check-compat: ## Fail if any module uses syntax newer than the oldest Python in the CI matrix
@@ -63,12 +71,20 @@ lint: lint-python check-compat ## Run code style, static analysis, and runtime-c
 test-python: ## Run full pytest suite (excludes live tests)
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
 
+.PHONY: test-regression
+test-regression: ## Run the regression/AQA tier on its own (one reproduction per fixed defect)
+	$(PYTEST) $(SHARED_TESTS)/regression/ -m "not live" -v
+
 .PHONY: coverage-python
 coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
 	$(PYTHON) $(SHARED_SRC)/coverage_gate.py
 
 # --- Node Testing & Zero-Skip Verification ---
+.PHONY: node-deps
+node-deps: ## Install pinned Node dependencies (shared by CI, the session hook, and local runs)
+	(cd $(NODE_DIR) && $(PM) install --frozen-lockfile)
+
 .PHONY: test-node
 test-node: ## Run Vitest with coverage (thresholds from the governance policy via vitest.config.ts) and generate test results JSON
 	(cd $(NODE_DIR) && $(PM) exec vitest run --coverage --reporter=default --reporter=json --outputFile.json=.governance/vitest-results.json)
@@ -178,7 +194,9 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "1. Mechanical invariants: PASSED (validate target)"
 	@echo "2. Run the 'openspec-peer-review' skill on the change/plan (Architecture, SDLC, QA, Product)."
 	@echo "3. Run the 'repo-invariant-review' skill to predict concrete CI failures."
-	@echo "4. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
+	@echo "4. Run the 'validation-runner' skill for a structured PASS/FAIL with evidence."
+	@echo "5. For spec-driven work, confirm docs/specs/<feature>.md exists and acceptance criteria map to checks."
+	@echo "6. For protected-path changes, run the 'protected-path-attestation' skill and paste the block into the PR."
 
 .PHONY: pre-pr
 pre-pr: ci review lint-cold ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck)

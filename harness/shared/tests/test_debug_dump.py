@@ -1,0 +1,170 @@
+"""Unit tests for conversation-history redaction and debug dumping.
+
+The behaviour under test is a safety property, so these lean on the awkward
+cases: no key anywhere, a key only in the environment, a key that reached the
+history from a source nobody tracked, and non-string payloads.
+"""
+
+from __future__ import annotations
+
+import json
+import stat
+from pathlib import Path
+
+import pytest
+
+from harness.shared.debug_dump import (
+    CREDENTIAL_PATTERN,
+    DUMP_DIR_MODE,
+    REDACTED,
+    dump_enabled,
+    redact_history,
+    redact_text,
+    resolve_credentials,
+    write_dump,
+)
+
+
+class TestResolveCredentials:
+    def test_explicit_key_comes_first(self) -> None:
+        assert resolve_credentials("explicit", {"NVIDIA_API_KEY": "from-env"}) == ["explicit", "from-env"]
+
+    def test_environment_is_read_even_without_an_explicit_key(self) -> None:
+        """The defect this module exists for: the orchestrator normally passes
+        None, and the old code then redacted nothing at all."""
+        assert resolve_credentials(None, {"NVIDIA_API_KEY": "from-env"}) == ["from-env"]
+
+    def test_no_credentials_anywhere(self) -> None:
+        assert resolve_credentials(None, {}) == []
+
+    def test_duplicates_are_collapsed(self) -> None:
+        assert resolve_credentials("same", {"NVIDIA_API_KEY": "same"}) == ["same"]
+
+    def test_empty_values_are_ignored(self) -> None:
+        assert resolve_credentials("", {"NVIDIA_API_KEY": ""}) == []
+
+    def test_falls_back_to_the_process_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NVIDIA_API_KEY", "ambient")
+        assert "ambient" in resolve_credentials()
+
+
+class TestRedactText:
+    def test_known_literal_is_replaced(self) -> None:
+        assert redact_text("before secret after", ["secret"]) == f"before {REDACTED} after"
+
+    def test_provider_shaped_token_is_replaced_without_being_known(self) -> None:
+        assert redact_text("used nvapi-abcdefgh12345678 here") == f"used {REDACTED} here"
+
+    def test_every_occurrence_is_replaced(self) -> None:
+        assert redact_text("k k k", ["k"]).count(REDACTED) == 3
+
+    def test_ordinary_text_is_untouched(self) -> None:
+        assert redact_text("nothing sensitive here", ["absent"]) == "nothing sensitive here"
+
+    def test_empty_secret_does_not_shred_the_string(self) -> None:
+        """``"".join`` semantics would otherwise insert the marker between
+        every character."""
+        assert redact_text("hello", [""]) == "hello"
+
+    @pytest.mark.parametrize("token", ["nvapi-12345678", "nvapi-" + "z" * 60])
+    def test_pattern_matches_realistic_tokens(self, token: str) -> None:
+        assert CREDENTIAL_PATTERN.fullmatch(token)
+
+    @pytest.mark.parametrize("text", ["nvapi-short", "napi-abcdefgh12345", "nvapi"])
+    def test_pattern_does_not_match_near_misses(self, text: str) -> None:
+        assert not CREDENTIAL_PATTERN.fullmatch(text)
+
+
+class TestRedactHistory:
+    def test_all_string_fields_are_covered_not_just_content(self) -> None:
+        """A redactor that covers one field is a redactor that can be routed
+        around: tool names and ids are model-influenced too."""
+        secret = "sk-live-credential"
+        history = [{"role": "assistant", "name": secret, "content": secret, "tool_call_id": secret}]
+        assert redact_history(history, secret, env={}) == [
+            {"role": "assistant", "name": REDACTED, "content": REDACTED, "tool_call_id": REDACTED}
+        ]
+
+    def test_a_short_credential_redacts_aggressively_by_design(self) -> None:
+        """A one-character key shreds ordinary prose. That is the safe
+        direction -- over-redacting a debug dump costs legibility, while
+        under-redacting it leaks a credential -- and real keys are long.
+        Pinned so the behaviour is a decision rather than a surprise.
+        """
+        assert redact_history([{"content": "assistant"}], "s", env={})[0]["content"].count(REDACTED) == 3
+
+    def test_nested_lists_and_dicts_are_walked(self) -> None:
+        secret = "sk-nested-credential"
+        history = [{"content": {"outer": [secret, {"inner": secret}]}}]
+        assert redact_history(history, secret, env={})[0]["content"] == {
+            "outer": [REDACTED, {"inner": REDACTED}]
+        }
+
+    def test_non_string_values_survive_unchanged(self) -> None:
+        history = [{"content": None, "count": 3, "ok": True, "score": 1.5}]
+        assert redact_history(history, "sk-x", env={})[0] == {
+            "content": None, "count": 3, "ok": True, "score": 1.5
+        }
+
+    def test_the_input_is_not_mutated(self) -> None:
+        history = [{"content": "sk-original"}]
+        redact_history(history, "sk-original", env={})
+        assert history[0]["content"] == "sk-original"
+
+    def test_empty_history(self) -> None:
+        assert redact_history([], "sk-x", env={}) == []
+
+
+class TestDumpEnabled:
+    @pytest.mark.parametrize(("value", "expected"), [("1", True), ("0", False), ("true", False), ("", False)])
+    def test_only_the_exact_opt_in_counts(self, value: str, expected: bool) -> None:
+        assert dump_enabled({"MANGO_DEBUG_DUMP": value}) is expected
+
+    def test_absent_flag_is_off(self) -> None:
+        assert dump_enabled({}) is False
+
+
+class TestWriteDump:
+    def test_returns_none_when_disabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MANGO_DEBUG_DUMP", raising=False)
+        assert write_dump([{"content": "x"}], "agent", dump_root=tmp_path / "d") is None
+
+    def test_writes_redacted_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
+        monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+        target = write_dump([{"content": "hold my secret"}], "planner", "secret", dump_root=tmp_path / "d")
+        assert target is not None
+        assert json.loads(target.read_text(encoding="utf-8"))[0]["content"] == f"hold my {REDACTED}"
+
+    def test_directory_is_owner_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
+        root = tmp_path / "d"
+        write_dump([], "planner", dump_root=root)
+        assert stat.S_IMODE(root.stat().st_mode) == DUMP_DIR_MODE
+
+    def test_a_pre_existing_lax_directory_is_tightened(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``mkdir``'s mode argument is ignored when the directory exists, so a
+        leftover from an earlier, laxer run would keep its permissions."""
+        monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
+        root = tmp_path / "d"
+        root.mkdir(mode=0o777)
+        write_dump([], "planner", dump_root=root)
+        assert stat.S_IMODE(root.stat().st_mode) == DUMP_DIR_MODE
+
+    def test_filename_identifies_the_agent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
+        target = write_dump([], "verifier", dump_root=tmp_path / "d")
+        assert target is not None and target.name.startswith("debug_verifier_")
+
+    def test_an_unwritable_destination_is_logged_not_raised(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A debugging aid must never be the reason an agent run dies."""
+        monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("i am a file", encoding="utf-8")
+        with caplog.at_level("WARNING"):
+            assert write_dump([], "planner", dump_root=blocker / "sub") is None
+        assert "Could not write debug dump" in caplog.text

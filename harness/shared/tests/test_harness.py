@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
@@ -12,19 +11,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-HARNESS = Path(__file__).resolve().parents[2]
+from harness.shared.tests._helpers import REPO, load_module_by_path
+
+HARNESS = REPO / "harness"
 SHARED = HARNESS / "shared"
 
-
-def load(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
-    m = importlib.util.module_from_spec(spec)
-    sys.modules[name] = m
-    spec.loader.exec_module(m)
-    return m
-
-
-rem = load(SHARED / "remotes.py", "remotes")
+# Loaded under a private name. Registering the bare name "remotes" in
+# sys.modules at collection time -- which this module used to do, and never
+# undo -- is a live collision hazard: harness/shared/remotes.py and the
+# per-stack shims both want that name, so whichever suite pytest collects
+# first wins and the other silently exercises the wrong object.
+rem = load_module_by_path(SHARED / "remotes.py", "harness_test_remotes")
 
 
 class HarnessTests(unittest.TestCase):
@@ -72,7 +69,10 @@ class HarnessTests(unittest.TestCase):
             mk = (HARNESS / stack / "Makefile").read_text()
             for g in policy["ci_required_targets"]:
                 self.assertIn(f"make {g}", ci, f"{stack} CI missing make {g}")
-            self.assertNotIn("--json\n", re.search(r"(?ms)^remotes:.*?(?=^[A-Za-z_-]+:|\Z)", mk).group(0))
+            remotes_block = re.search(r"(?ms)^remotes:.*?(?=^[A-Za-z_-]+:|\Z)", mk)
+            self.assertIsNotNone(remotes_block, f"{stack} Makefile has no remotes: target")
+            assert remotes_block is not None  # narrows for the type checker
+            self.assertNotIn("--json\n", remotes_block.group(0))
 
     def test_secret_scan_and_history_invariants(self):
         for stack in ("node", "jvm"):
@@ -106,7 +106,8 @@ class HarnessTests(unittest.TestCase):
         for stack in ("node", "jvm"):
             mk = (HARNESS / stack / "Makefile").read_text()
             m = re.search(r"^pre-pr:\s*(.+?)\s*##", mk, re.M)
-            self.assertIsNotNone(m)
+            self.assertIsNotNone(m, f"{stack} Makefile has no pre-pr: recipe")
+            assert m is not None  # narrows for the type checker
             self.assertEqual(m.group(1).split(), p["pre_pr_order"])
 
     def test_no_security_placeholders(self):
@@ -147,7 +148,8 @@ class HarnessTests(unittest.TestCase):
         for stack in ("node", "jvm"):
             mk = (HARNESS / stack / "Makefile").read_text()
             block = re.search(r"(?ms)^guard-probe:.*?(?=^[A-Za-z_-]+:|\Z)", mk)
-            self.assertIsNotNone(block)
+            self.assertIsNotNone(block, f"{stack} Makefile has no guard-probe: target")
+            assert block is not None  # narrows for the type checker
             self.assertIn("verdict: BLOCK'; exit 2", block.group(0), f"{stack} guard-probe must propagate BLOCK status")
 
     def test_guard_fail_closed_and_allows_safe(self):

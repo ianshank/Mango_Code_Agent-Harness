@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.tests._helpers import utc_today
 from harness.shared.validate_agent_policy import main as validate_agent_policy
 from harness.shared.validate_governance_docs import main as validate_governance_docs
 from harness.shared.validate_policy import main as validate_policy
@@ -58,7 +59,7 @@ def temp_workspace(tmp_path: Path) -> Path:
 
     # Valid Docs
     (docs / "PROJECT-CHARTER.md").write_text("Charter v1")
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nxyz")
     (gov / "decision-log.md").write_text("2026-01-02 | xyz | reason")
 
@@ -67,7 +68,14 @@ def temp_workspace(tmp_path: Path) -> Path:
 # --- validate_agent_policy tests ---
 
 def test_agent_policy_valid(temp_workspace):
-    validate_agent_policy(temp_workspace / ".governance/agent-policy.json")
+    """The happy path. Every sibling test asserts a SystemExit; this one is
+    what proves those failures come from the specific mutation rather than
+    from a fixture the validator would reject outright."""
+    policy = temp_workspace / ".governance/agent-policy.json"
+    validate_agent_policy(policy)
+    # Pin that the fixture really is the shape under test, so a fixture that
+    # drifted into something trivially valid cannot quietly weaken the suite.
+    assert json.loads(policy.read_text())["agents"], "fixture declares no agents to validate"
 
 def test_agent_policy_missing_roles(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -177,7 +185,11 @@ def test_agent_policy_trace_id_false(temp_workspace):
 # --- validate_policy tests ---
 
 def test_policy_valid(temp_workspace):
-    validate_policy(temp_workspace / ".governance/policy.json")
+    """Happy path; see test_agent_policy_valid for why it asserts on the
+    fixture as well as on the absence of an exception."""
+    policy = temp_workspace / ".governance/policy.json"
+    validate_policy(policy)
+    assert json.loads(policy.read_text())["target_contract"], "fixture has no target_contract to validate"
 
 def test_policy_missing_key(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -222,7 +234,10 @@ def test_policy_no_side_effects(temp_workspace):
 # --- validate_governance_docs tests ---
 
 def test_docs_valid(temp_workspace):
+    """Happy path; see test_agent_policy_valid for the fixture assertion."""
     validate_governance_docs(temp_workspace)
+    assert (temp_workspace / ".governance/policy.json").is_file()
+    assert json.loads((temp_workspace / ".governance/policy.json").read_text())["charter_version"]
 
 def test_docs_missing_version(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -248,19 +263,19 @@ def test_docs_missing_reviewed(temp_workspace):
         validate_governance_docs(temp_workspace)
 
 def test_docs_future_reviewed(temp_workspace):
-    future = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    future = (utc_today() + dt.timedelta(days=1)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {future}\n## Decisions since 2026-01-01\nxyz")
     with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
 
 def test_docs_stale_reviewed(temp_workspace):
-    past = (dt.date.today() - dt.timedelta(days=91)).isoformat()
+    past = (utc_today() - dt.timedelta(days=91)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {past}\n## Decisions since 2026-01-01\nxyz")
     with pytest.raises(SystemExit, match="governance skill review is stale"):
         validate_governance_docs(temp_workspace)
 
 def test_docs_missing_since(temp_workspace):
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\nNo decisions section")
     with pytest.raises(SystemExit, match="governance skill lacks Decisions since YYYY-MM-DD section"):
         validate_governance_docs(temp_workspace)
@@ -272,7 +287,7 @@ def test_docs_missing_log(temp_workspace):
 
 def test_docs_missing_decision_in_skill(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").write_text("2026-01-02 | missed-id | reason")
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nNot here")
     with pytest.raises(SystemExit, match="governance skill is missing recent decisions: missed-id"):
         validate_governance_docs(temp_workspace)

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
 import subprocess
-import tempfile
 import time
 import typing
 from pathlib import Path
 
+from harness.shared.debug_dump import write_dump
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
@@ -22,6 +21,40 @@ logger = logging.getLogger(__name__)
 TASK_LOG_PREVIEW_CHARS = 100
 # Default confidence when the model omits it from a hypothesis_register call.
 DEFAULT_HYPOTHESIS_CONFIDENCE = 0.5
+
+def _normalize_tool_arguments(raw: typing.Any, func_name: typing.Any) -> dict[str, typing.Any]:
+    """Coerce a tool call's ``arguments`` field into a dict of keyword args.
+
+    The field is model-generated and only conventionally a JSON object string.
+    Two shapes crashed the previous implementation:
+
+    * ``null`` -> ``json.loads(None)`` raises TypeError, which the surrounding
+      ``except json.JSONDecodeError`` did not catch;
+    * ``"[]"`` -> parses cleanly to a list, then every registry lambda dies on
+      ``.get``.
+
+    Both now degrade to no arguments, so a malformed call produces a tool
+    result the model can react to rather than an unhandled exception.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        if raw is not None:
+            logger.warning("Tool %s sent non-string arguments %r; treating as empty", func_name, type(raw).__name__)
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning("Tool %s sent unparseable arguments; treating as empty", func_name)
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "Tool %s sent JSON %s arguments, expected an object; treating as empty",
+            func_name, type(parsed).__name__,
+        )
+        return {}
+    return parsed
+
 
 AUTONOMOUS_AGENT_GUARDRAIL = (
     "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
@@ -164,7 +197,9 @@ class MangoMASOrchestrator:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding="utf-8")
             return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a tool must always answer its call
+            # with a string; an escaping exception would leave the model's
+            # tool_calls message unanswered and stall the conversation.
             return f"Error writing file {filepath}: {str(e)}"
 
     def _execute_run_command(self, command: str) -> str:
@@ -209,7 +244,8 @@ class MangoMASOrchestrator:
             return output
         except subprocess.TimeoutExpired:
             return f"Error: Command '{command}' timed out after {self.tool_timeout} seconds."
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - same tool-result contract as
+            # _execute_write_file: report the failure, never propagate it.
             return f"Error executing command '{command}': {str(e)}"
 
     def _dispatch_tool_calls(
@@ -220,18 +256,25 @@ class MangoMASOrchestrator:
         for tc in tool_calls:
             tc_id = tc.get("id")
             func_name = tc.get("function", {}).get("name")
-            func_args_str = tc.get("function", {}).get("arguments", "{}")
-
-            try:
-                args = json.loads(func_args_str)
-            except json.JSONDecodeError:
-                args = {}
+            args = _normalize_tool_arguments(tc.get("function", {}).get("arguments"), func_name)
 
             handler = self._tool_handlers.get(func_name)
-            if handler is not None:
-                tool_result = handler(args)
-            else:
+            if handler is None:
                 tool_result = f"Error: Unknown tool '{func_name}'"
+            else:
+                try:
+                    tool_result = handler(args)
+                except Exception as exc:
+                    # The wire protocol requires exactly one tool message per
+                    # requested tool call. An escaping handler exception (a
+                    # meta-tool lock timeout, say) would abandon execute_agent
+                    # mid-loop: the post-run hook never fires and the model's
+                    # tool_calls message is left unanswered, which the API
+                    # rejects on the next turn. Report the failure as the tool's
+                    # result instead -- the same contract _execute_write_file
+                    # and _execute_run_command already follow.
+                    logger.exception("Tool %s raised", func_name)
+                    tool_result = f"Error executing tool '{func_name}': {exc}"
 
             logger.info("Executed %s. Result length: %d", func_name, len(tool_result))
             messages.append({"role": "tool", "tool_call_id": tc_id, "name": func_name, "content": tool_result})
@@ -250,22 +293,15 @@ class MangoMASOrchestrator:
         return final_content
 
     def _dump_debug_history(self, agent_name: str) -> None:
-        """Write the conversation history (API key redacted) to a temp file
-        when MANGO_DEBUG_DUMP=1."""
-        if os.environ.get("MANGO_DEBUG_DUMP") != "1":
-            return
+        """Write the conversation history (credentials redacted) to a temp file
+        when MANGO_DEBUG_DUMP=1.
 
-        redacted_history = copy.deepcopy(self.conversation_history)
-        if self.api_key:
-            for msg in redacted_history:
-                if "content" in msg and isinstance(msg["content"], str):
-                    msg["content"] = msg["content"].replace(self.api_key, "<REDACTED_API_KEY>")
-
-        dump_dir = Path(tempfile.gettempdir()) / "mango_debug"
-        dump_dir.mkdir(parents=True, exist_ok=True)
-        dump_file = dump_dir / f"debug_{agent_name}_{int(time.time() * 1000)}.json"
-        with dump_file.open("w") as f:
-            json.dump(redacted_history, f, indent=2)
+        Redaction lives in ``debug_dump`` and no longer depends on
+        ``self.api_key`` being set: it usually is not, because the bridge
+        resolves the credential downstream, which meant the previous
+        implementation wrote the history unredacted.
+        """
+        write_dump(self.conversation_history, agent_name, api_key=self.api_key)
 
     def execute_agent(self, agent_name: str, task: str, tools: list[dict[str, typing.Any]] | None = None) -> str:
         """
