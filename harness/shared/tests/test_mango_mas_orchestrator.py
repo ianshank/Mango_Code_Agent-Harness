@@ -440,3 +440,41 @@ class TestToolRegistry:
         for name, handler in orch._tool_handlers.items():
             result = handler({})
             assert isinstance(result, str), f"handler {name} returned {type(result)}"
+
+
+# ---------------------------------------------------------------------------
+# Policy-sourced limits and the tool-call budget (spec: policy-single-source)
+# ---------------------------------------------------------------------------
+
+
+class TestPolicySourcedLimits:
+    def test_defaults_come_from_the_policy_block(self, mock_workspace: Path) -> None:
+        """Constructor defaults now resolve through governance-policy.json."""
+        from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
+
+        limits = orchestrator_defaults()
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        assert orch.max_iterations == limits["max_iterations"]
+        assert orch.api_timeout == limits["api_timeout_sec"]
+        assert orch.tool_timeout == limits["tool_timeout_sec"]
+        assert orch.max_tool_calls_per_task == max_tool_calls_per_task()
+
+    def test_explicit_arguments_still_override_policy(self, mock_workspace: Path) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=3, api_timeout=42, tool_timeout=7)
+        assert (orch.max_iterations, orch.api_timeout, orch.tool_timeout) == (3, 42, 7)
+
+    def test_tool_call_budget_is_enforced(self, mock_workspace: Path, mock_complete_chat) -> None:
+        """agent_defaults.max_tool_calls_per_task now has a code reader: the
+        cumulative budget across one task's ReAct loop."""
+        tc = _tool_call("write_file", {"filepath": "loop.txt", "content": "x"})
+        mock_complete_chat.return_value = _resp(None, tool_calls=[tc, tc])
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=50)
+        orch.max_tool_calls_per_task = 3
+        with pytest.raises(RuntimeError, match="tool-call budget"):
+            orch.execute_agent("test-agent", "budget")
+
+    def test_budget_not_hit_when_under_limit(self, mock_workspace: Path, mock_complete_chat) -> None:
+        tc = _tool_call("write_file", {"filepath": "ok.txt", "content": "x"})
+        mock_complete_chat.side_effect = [_resp(None, tool_calls=[tc]), _resp("done")]
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        assert orch.execute_agent("test-agent", "small task") == "done"

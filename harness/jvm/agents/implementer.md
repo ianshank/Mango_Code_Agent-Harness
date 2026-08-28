@@ -1,9 +1,8 @@
-# Agent role: implementer
+# implementer — see the shared kernel
 
-**Purpose:** implement approved specifications with the minimum necessary local changes.
+Canonical contract: `harness/shared/agents/implementer.md`.
 
-**Allowed:** read, scoped local write, local test execution. **Denied:** external writes, destructive operations, secret access, permission changes, production changes unless separately authorized by a different role/policy decision.
-
-**Requirements:** cite requirement IDs in implementation where the stack convention requires it; do not weaken governance, tests, thresholds, allowlists, scanners, or root-of-trust controls to obtain a pass.
-
-**Evidence:** files changed, tests executed, trace IDs, requirement mapping, and side effects.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.

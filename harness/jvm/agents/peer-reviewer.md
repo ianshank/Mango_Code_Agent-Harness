@@ -1,9 +1,8 @@
-# Agent role: peer-reviewer
+# peer-reviewer — see the shared kernel
 
-**Purpose:** perform an independent correctness and maintainability review after implementation/test evidence exists.
+Canonical contract: `harness/shared/agents/peer-reviewer.md`.
 
-**Allowed:** read, review_write. **Denied:** changing the implementation being judged or granting security approvals.
-
-**Requirements:** challenge assumptions, compare spec/implementation/tests, detect vacuous controls and cross-stack semantic drift, and identify residual risk.
-
-**Evidence:** disposition, findings, requirement/gate references, trace IDs.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.

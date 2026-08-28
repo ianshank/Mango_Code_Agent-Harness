@@ -184,39 +184,44 @@ class TestDeclaredNotYetEnforced:
         )
 
 
-def _compiled_pattern_from_source(path: Path, name: str) -> str:
-    """Extract the literal passed to re.compile in `NAME = re.compile(r"...")`.
+def _string_literal_from_source(path: Path, name: str) -> str:
+    """Extract the string literal in a `NAME = r"..."` module-level assignment.
 
     AST, not text regex: parsing a raw-string literal that *contains* a regex
-    with a regex breaks on incidental reformatting. Import is not an option for
-    check_projections.py, which runs argparse at module scope.
+    with a regex breaks on incidental reformatting. AST rather than import so
+    the pin also holds for a scanner whose import-time state depends on the
+    policy file being present.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Assign)
             and any(isinstance(t, ast.Name) and t.id == name for t in node.targets)
-            and isinstance(node.value, ast.Call)
-            and node.value.args
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
         ):
-            return cast(str, ast.literal_eval(node.value.args[0]))
-    raise AssertionError(f"no `{name} = re.compile(...)` assignment found in {path}")
+            return cast(str, node.value.value)
+    raise AssertionError(f"no `{name} = \"...\"` assignment found in {path}")
 
 
 class TestDecisionIdPatternIsSingleSourced:
     """All five copies of the decision-ID grammar must stay in lockstep.
 
-    The policies carry the anchored full-match form `^(...)$`; the scanners need
-    the word-boundary search form `\\b(...)\\b`. The *body* is the grammar, and it
-    is what must not drift -- editing any one copy without the other four turns
-    this red, which is what makes the policy key load-bearing at all.
+    The policies carry the anchored full-match form `^(...)$`. Since the
+    policy-single-source change, both scanners LOAD that pattern at runtime
+    (converting to the word-boundary search form) and keep only an adopter-path
+    FALLBACK literal for repos without a policy file; the lockstep now pins
+    those fallbacks to the policy body so the fallback grammar cannot rot.
     """
 
     SCANNERS = {
-        "check_projections.ID": (REPO / "harness" / "shared" / "check_projections.py", "ID"),
-        "verify_zero_skips.ID_RE": (
+        "check_projections.FALLBACK_ID_PATTERN": (
+            REPO / "harness" / "shared" / "check_projections.py",
+            "FALLBACK_ID_PATTERN",
+        ),
+        "verify_zero_skips.FALLBACK_ID_PATTERN": (
             REPO / "harness" / "shared" / "governance" / "verify_zero_skips.py",
-            "ID_RE",
+            "FALLBACK_ID_PATTERN",
         ),
     }
 
@@ -227,7 +232,7 @@ class TestDecisionIdPatternIsSingleSourced:
         return m.group(1)
 
     def _scanner_body(self, path: Path, name: str) -> str:
-        pattern = _compiled_pattern_from_source(path, name)
+        pattern = _string_literal_from_source(path, name)
         m = re.fullmatch(r"\\b\((.*)\)\\b", pattern)
         assert m, f"{path}: {name} is not in the `\\b(...)\\b` search form: {pattern!r}"
         return m.group(1)
@@ -293,4 +298,43 @@ class TestPinnedToolVersions:
             versions[label] = m.group(1)
         assert len(set(versions.values())) == 1, (
             f"pinned gitleaks versions drifted: {versions}; bump all together"
+        )
+
+
+class TestFallbackConstantsMirrorPolicy:
+    """Built-in fallback constants exist for the adopter path (no policy file),
+    but in this repository they must equal the policy values they shadow —
+    otherwise the adopter default silently diverges from the governed one.
+    (spec: policy-single-source)"""
+
+    def test_validate_invariants_size_budget(self):
+        from harness.shared import validate_invariants
+
+        assert validate_invariants.SIZE_BUDGET_LINES == _load(SHARED_POLICY)["limits"]["size_budget_lines"]
+
+    def test_check_dedup_max_shim_lines(self):
+        from harness.shared import check_dedup
+
+        assert check_dedup.DEFAULT_MAX_SHIM_LINES == _load(SHARED_POLICY)["dedup"]["max_shim_lines"]
+
+    def test_policy_loader_orchestrator_fallbacks_mirror_policy(self):
+        """Loader defaults (used when no policy exists) == this repo's policy values."""
+        from harness.shared import policy_loader
+
+        missing = REPO / "does-not-exist.json"
+        assert policy_loader.orchestrator_defaults(missing) == _load(SHARED_POLICY)["orchestrator"]
+
+    def test_policy_loader_nemotron_fallbacks_mirror_policy(self):
+        from harness.shared import policy_loader
+
+        missing = REPO / "does-not-exist.json"
+        assert policy_loader.nemotron_defaults(missing) == _load(SHARED_POLICY)["nemotron"]
+
+    def test_policy_loader_tool_budget_fallback_mirrors_policy(self):
+        from harness.shared import policy_loader
+
+        missing = REPO / "does-not-exist.json"
+        assert (
+            policy_loader.max_tool_calls_per_task(missing)
+            == _load(SHARED_POLICY)["agent_defaults"]["max_tool_calls_per_task"]
         )
