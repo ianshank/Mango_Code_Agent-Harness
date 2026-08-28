@@ -47,3 +47,6 @@ harness/node/src/pong/web/dist/
 # Pytest / Hypothesis temp directories created in harness/node/ during local runs
 harness/node/test-*/
 .hypothesis/
+
+# machine-readable coverage report consumed by coverage_gate.py (regenerated per run)
+coverage.json

@@ -26,17 +26,18 @@ never hard-code a percentage here.
 ## How it runs
 
 ```bash
-# threshold comes from governance-policy.json -> coverage.lines
+# thresholds come from governance-policy.json -> coverage.lines and coverage.branches,
+# applied as two separate floors by coverage_gate.py (branch = true makes pytest-cov's
+# single total a blended number, so --cov-fail-under would mislabel what 'lines' gates)
 python -m pytest harness/shared/tests/ harness/api_server/tests/ \
   -m "not live" \
-  --cov=harness/shared --cov=harness/api_server \
-  --cov-report=term-missing \
-  --cov-fail-under="$(python -c "import json,pathlib; \
-     print(json.loads(pathlib.Path('harness/shared/governance-policy.json')\
-        .read_text())['coverage']['lines'])")"
+  --cov=harness/shared --cov=harness/api_server --cov=harness/control-plane \
+  --cov-report=term-missing --cov-report=json
+python harness/shared/coverage_gate.py
 ```
 
-The gate fails closed if coverage is below the policy threshold.
+The gate fails closed if either floor is missed, or if the coverage report or
+policy is missing or malformed.
 
 ## Report
 
