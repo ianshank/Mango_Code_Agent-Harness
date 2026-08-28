@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import json
+import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -103,3 +104,53 @@ def tool_call(
         else:
             function["arguments"] = json.dumps(arguments)
     return {"id": call_id, "function": function}
+
+
+# --- ruff invocation -------------------------------------------------------
+#
+# Several meta-tests shell out to ruff and read its stdout. Ruff's exit codes
+# are 0 (clean), 1 (violations found) and 2 (the run itself failed: bad rule
+# code, unparseable config, missing binary). Only 2 is an error -- which is
+# why a plain `returncode == 0` check would be wrong here, and why these
+# helpers exist rather than each caller rolling its own.
+#
+# The failure mode this closes is quiet and actively misleading: on exit 2
+# ruff writes the diagnostic to *stderr* and leaves stdout empty, so
+# `json.loads(result.stdout or "[]")` yields an empty list. A broken
+# invocation then reads as "this rule has zero findings" -- which, in the
+# deferral register, renders as "the cost that justified deferring it is gone,
+# enable it". A tool failure would have been reported as a policy conclusion.
+
+RUFF_ERROR_EXIT = 2
+
+
+def run_ruff(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
+    """Run ruff with ``args``, raising if the invocation itself failed.
+
+    Violations (exit 1) are a normal result and are returned to the caller.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", *args],
+        cwd=str(REPO), capture_output=True, text=True, timeout=timeout,
+    )
+    if result.returncode >= RUFF_ERROR_EXIT:
+        raise AssertionError(
+            f"ruff invocation failed (exit {result.returncode}): "
+            f"{' '.join(args)}\nstderr:\n{result.stderr.strip()}"
+        )
+    return result
+
+
+def ruff_json(args: list[str], timeout: int = 300) -> list[dict]:
+    """Run ruff with JSON output and parse it, reporting either failure clearly."""
+    result = run_ruff([*args, "--output-format", "json"], timeout=timeout)
+    try:
+        parsed = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            f"ruff returned unparseable JSON for {' '.join(args)}: {exc}\n"
+            f"stdout begins: {result.stdout[:200]!r}"
+        ) from exc
+    if not isinstance(parsed, list):
+        raise AssertionError(f"ruff JSON output was {type(parsed).__name__}, expected a list")
+    return parsed

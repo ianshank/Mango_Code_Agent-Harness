@@ -26,8 +26,6 @@ Marked ``slow``: each check shells out to ruff over the whole tree.
 from __future__ import annotations
 
 import fnmatch
-import json
-import subprocess
 import sys
 
 if sys.version_info >= (3, 11):
@@ -37,7 +35,7 @@ else:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
 
 import pytest
 
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._helpers import REPO, ruff_json
 
 pytestmark = pytest.mark.slow
 
@@ -62,17 +60,15 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
     and target version are restated because isolation drops those too.
     """
     ruff_cfg = _config()["tool"]["ruff"]
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "ruff", "check", ".", "--isolated", "--no-cache",
-            "--line-length", str(ruff_cfg["line-length"]),
-            "--target-version", ruff_cfg["target-version"],
-            "--select", ",".join(codes),
-            "--output-format", "json",
-        ],
-        cwd=str(REPO), capture_output=True, text=True, timeout=300,
-    )
-    rows = json.loads(result.stdout or "[]")
+    # ruff_json raises with ruff's stderr if the invocation itself fails. Without
+    # that, an exit-2 error leaves stdout empty, parses to [], and every pattern
+    # below reports as dead -- a tool failure dressed up as a config finding.
+    rows = ruff_json([
+        "check", ".", "--isolated", "--no-cache",
+        "--line-length", str(ruff_cfg["line-length"]),
+        "--target-version", ruff_cfg["target-version"],
+        "--select", ",".join(codes),
+    ])
     prefix = str(REPO) + "/"
     return [(row["filename"].replace(prefix, ""), row["code"]) for row in rows]
 
@@ -122,8 +118,20 @@ class TestGitleaksAllowlistIsLive:
     path stays exempt, and whatever is created there later is exempt too."""
 
     def _paths(self) -> list[str]:
+        """Parse the allowlist's `paths = [...]` block.
+
+        The format is checked before splitting: an IndexError from a changed or
+        malformed .gitleaks.toml would report as "the allowlist is empty",
+        which points at the wrong problem entirely.
+        """
         text = GITLEAKS.read_text(encoding="utf-8")
-        block = text.split("paths = [", 1)[1].split("]", 1)[0]
+        assert "paths = [" in text, (
+            f"{GITLEAKS.name} has no `paths = [` block; this parser needs updating "
+            "for the new format before its verdict means anything"
+        )
+        remainder = text.split("paths = [", 1)[1]
+        assert "]" in remainder, f"{GITLEAKS.name}'s paths block is not closed"
+        block = remainder.split("]", 1)[0]
         return [line.strip().strip("',").replace("\\", "") for line in block.splitlines() if line.strip()]
 
     def test_the_allowlist_is_parsed(self) -> None:
