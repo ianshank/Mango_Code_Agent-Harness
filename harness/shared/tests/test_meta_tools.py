@@ -117,8 +117,6 @@ def test_file_lock_is_bounded_even_when_the_clock_never_advances(tmp_path, monke
     """Regression: a clock that never advances (frozen, or a monotonic/epoch
     mix-up) must not turn lock contention into an unbounded spin. The poll
     budget bounds the loop structurally, so this raises instead of hanging."""
-    import time as time_mod
-
     import pytest
 
     from harness.shared import meta_tools
@@ -134,7 +132,10 @@ def test_file_lock_is_bounded_even_when_the_clock_never_advances(tmp_path, monke
             pass
     # Bounded by the poll budget, not by the (frozen) deadline.
     assert len(sleeps) <= int(0.2 / 0.01) + 2
-    assert time_mod is not None  # sanity: real time module untouched by the patch
+    # And it really did poll: without this, a file_lock that raised
+    # immediately would satisfy the bound above and look correct.
+    assert sleeps, "the contended loop never polled"
+    assert all(s == 0.01 for s in sleeps), f"unexpected poll intervals: {sorted(set(sleeps))}"
 
 
 def test_file_lock_zero_poll_interval_does_not_divide_by_zero(tmp_path):
@@ -160,5 +161,12 @@ def test_file_lock_swallows_cleanup_failure(tmp_path, monkeypatch):
         raise OSError("read-only filesystem")
 
     monkeypatch.setattr(Path, "unlink", _refuse_unlink)
+    entered = False
     with file_lock(tmp_path / "data.json"):
-        pass  # exits cleanly despite the unlink failure
+        entered = True
+
+    # Without these the test passes even if file_lock became a no-op: assert
+    # the body ran, and that the lockfile really did survive (i.e. the
+    # swallowed-cleanup path was the one exercised, not an unlink that worked).
+    assert entered, "the caller's block never ran"
+    assert (tmp_path / "data.lock").exists(), "cleanup succeeded; the swallow path was not exercised"

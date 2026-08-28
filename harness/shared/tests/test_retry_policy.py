@@ -8,9 +8,11 @@ exact numbers with jitter disabled, and bounds with it enabled.
 from __future__ import annotations
 
 import datetime as dt
+import email.message
 import email.utils
 import socket
 import urllib.error
+from typing import Any
 
 import pytest
 
@@ -101,7 +103,7 @@ class TestRetryPredicate:
     @pytest.mark.parametrize(
         "exc",
         [
-            urllib.error.HTTPError("url", 500, "boom", {}, None),
+            urllib.error.HTTPError("url", 500, "boom", email.message.Message(), None),
             ValueError("bad input"),
             KeyError("missing"),
             MemoryError(),
@@ -152,7 +154,8 @@ class TestNormalisation:
         ],
     )
     def test_out_of_range_values_are_clamped(self, field: str, given: float, expected: float) -> None:
-        assert getattr(RetryPolicy(**{field: given}), field) == expected
+        kwargs: dict[str, Any] = {field: given}
+        assert getattr(RetryPolicy(**kwargs), field) == expected
 
     def test_the_policy_is_immutable(self) -> None:
         with pytest.raises(Exception):

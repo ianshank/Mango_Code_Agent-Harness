@@ -175,7 +175,12 @@ class TestDeclaredNotYetEnforced:
     @pytest.mark.parametrize("dotted", sorted(DECLARED_NOT_YET_ENFORCED))
     def test_declared_key_still_exists(self, dotted):
         """A classification for a key the policy no longer has is dead weight."""
-        _lookup(_load(SHARED_POLICY), dotted)
+        sentinel = object()
+        value = _lookup(_load(SHARED_POLICY), dotted)
+        # _lookup asserts its way down the path, but binding and checking the
+        # result is what makes this test's own success visible: a _lookup that
+        # silently started returning early would otherwise go unnoticed here.
+        assert value is not sentinel
 
     @pytest.mark.parametrize("dotted", sorted(DECLARED_NOT_YET_ENFORCED))
     def test_each_entry_has_a_substantive_reason(self, dotted):

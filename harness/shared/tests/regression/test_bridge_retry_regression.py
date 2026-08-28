@@ -14,6 +14,7 @@ Defects reproduced here (all present on ``main`` before this change):
 
 from __future__ import annotations
 
+import email.message
 import io
 import json
 import socket
@@ -39,6 +40,15 @@ def _ok_response(body: bytes = b'{"choices": [{"message": {"content": "ok"}}]}')
     return resp
 
 
+def _headers(**fields: str) -> email.message.Message:
+    """HTTPError.headers is an email Message in production, not a dict; using
+    the real type keeps header lookups (case-insensitive ``get``) faithful."""
+    message = email.message.Message()
+    for key, value in fields.items():
+        message[key.replace("_", "-")] = value
+    return message
+
+
 def _env(**overrides: str) -> dict[str, str]:
     base = {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}
     base.update(overrides)
@@ -59,7 +69,7 @@ class TestRetryPredicate:
 
     def test_http_error_is_not_a_connection_error(self) -> None:
         """HTTPError subclasses URLError; status codes, not transport, decide."""
-        err = urllib.error.HTTPError("url", 500, "boom", {}, None)
+        err = urllib.error.HTTPError("url", 500, "boom", _headers(), None)
         assert not is_retryable_connection_error(err)
 
     @patch("harness.shared.nemotron_bridge.time.sleep")
@@ -103,7 +113,7 @@ class TestRetryAfter:
         self, mock_urlopen: MagicMock, mock_sleep: MagicMock
     ) -> None:
         """A 429 carrying Retry-After is the origin telling us when to return."""
-        err = urllib.error.HTTPError("url", 429, "Too Many", {"Retry-After": "5"}, io.BytesIO(b"slow down"))
+        err = urllib.error.HTTPError("url", 429, "Too Many", _headers(Retry_After="5"), io.BytesIO(b"slow down"))
         mock_urlopen.side_effect = [err, _ok_response()]
         with patch.dict("os.environ", _env(NEMOTRON_MAX_RETRIES="2")):
             complete_chat([], api_key="secret-key")
@@ -116,7 +126,7 @@ class TestRetryAfter:
     def test_garbage_retry_after_falls_back_instead_of_disabling_retry(
         self, mock_urlopen: MagicMock, mock_sleep: MagicMock
     ) -> None:
-        err = urllib.error.HTTPError("url", 503, "Nope", {"Retry-After": "whenever"}, io.BytesIO(b"x"))
+        err = urllib.error.HTTPError("url", 503, "Nope", _headers(Retry_After="whenever"), io.BytesIO(b"x"))
         mock_urlopen.side_effect = [err, _ok_response()]
         with patch.dict("os.environ", _env(NEMOTRON_MAX_RETRIES="2")):
             complete_chat([], api_key="secret-key")
