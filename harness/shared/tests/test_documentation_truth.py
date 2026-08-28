@@ -25,6 +25,12 @@ GITIGNORE = REPO / ".gitignore"
 pytestmark = pytest.mark.governance
 
 
+def _tree_block() -> str:
+    """The fenced layout tree, or "" if the fence is gone."""
+    match = re.search(r"```text\n(.*?)```", README.read_text(encoding="utf-8"), re.S)
+    return match.group(1) if match else ""
+
+
 def _tree_entries() -> list[str]:
     """Repository paths drawn in the README's layout tree.
 
@@ -70,10 +76,14 @@ class TestReadmeLayoutIsReal:
     def test_every_skill_directory_is_listed(self) -> None:
         """The tree enumerates the skills by name. A skill added without a
         README line is invisible to anyone reading the map."""
-        text = README.read_text(encoding="utf-8")
+        # Scoped to the tree, not the whole README. Searching the whole file
+        # gives false passes: `evidence-signing` is named both in the tree and
+        # in the prose below it, so deleting its tree line would still match.
+        tree = _tree_block()
+        assert tree, "could not locate the README layout tree"
         skills = sorted(p.name for p in (REPO / ".mango" / "skills").iterdir() if p.is_dir())
-        missing = [name for name in skills if f"{name}/" not in text]
-        assert not missing, f"skills exist but are not in the README layout: {missing}"
+        missing = [name for name in skills if f"{name}/" not in tree]
+        assert not missing, f"skills exist but are not in the README layout tree: {missing}"
 
     def test_the_stated_skill_count_matches_reality(self) -> None:
         text = README.read_text(encoding="utf-8")

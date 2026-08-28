@@ -71,7 +71,7 @@ jobs:
                 echo '<details><summary>output</summary>'
                 echo
                 echo '```'
-                echo "$output" | tail -40
+                printf '%s\n' "$output" | tail -40
                 echo '```'
                 echo
                 echo '</details>'
@@ -90,7 +90,12 @@ jobs:
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body-file drift.md
           else
-            gh issue create --title "$title" --body-file drift.md --label "drift"
+            # Fall back to an unlabelled issue: `gh issue create` fails outright if
+            # the label does not exist in the repo, and losing the notification
+            # entirely is a far worse outcome than losing its label -- notifying
+            # is the whole job of this workflow.
+            gh issue create --title "$title" --body-file drift.md --label "drift" \
+              || gh issue create --title "$title" --body-file drift.md
           fi
 
   skill-staleness:
@@ -148,7 +153,12 @@ jobs:
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body-file staleness.md
           else
-            gh issue create --title "$title" --body-file staleness.md --label "governance"
+            # Fall back to an unlabelled issue: `gh issue create` fails outright if
+            # the label does not exist in the repo, and losing the notification
+            # entirely is a far worse outcome than losing its label -- notifying
+            # is the whole job of this workflow.
+            gh issue create --title "$title" --body-file staleness.md --label "governance" \
+              || gh issue create --title "$title" --body-file staleness.md
           fi
 
   hook-install-drift:
@@ -195,5 +205,10 @@ jobs:
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body-file hookdrift.md
           else
-            gh issue create --title "$title" --body-file hookdrift.md --label "governance"
+            # Fall back to an unlabelled issue: `gh issue create` fails outright if
+            # the label does not exist in the repo, and losing the notification
+            # entirely is a far worse outcome than losing its label -- notifying
+            # is the whole job of this workflow.
+            gh issue create --title "$title" --body-file hookdrift.md --label "governance" \
+              || gh issue create --title "$title" --body-file hookdrift.md
           fi
