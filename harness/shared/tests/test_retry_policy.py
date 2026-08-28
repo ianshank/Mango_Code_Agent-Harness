@@ -7,6 +7,7 @@ exact numbers with jitter disabled, and bounds with it enabled.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import email.message
 import email.utils
@@ -168,8 +169,15 @@ class TestNormalisation:
         assert getattr(RetryPolicy(**kwargs), field) == expected
 
     def test_the_policy_is_immutable(self) -> None:
-        with pytest.raises(Exception):
-            RetryPolicy().max_retries = 9  # type: ignore[misc]
+        # FrozenInstanceError, not a bare Exception: the point is that the
+        # dataclass refuses the assignment, and a broad `Exception` would pass
+        # just as happily on a typo that raised AttributeError for the wrong
+        # reason. The value is re-read afterwards so the test also proves the
+        # write did not land before the error.
+        policy = RetryPolicy()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            policy.max_retries = 9  # type: ignore[misc]
+        assert policy.max_retries == RetryPolicy().max_retries
 
 
 class TestBackoff:
