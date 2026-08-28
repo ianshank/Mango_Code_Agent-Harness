@@ -90,11 +90,11 @@ round-trip.
       would let three of the four entries in `UNENFORCED_IN_ROOT_CI` be deleted.
       Deliberately a separate change: it is a protected one-line edit that will
       turn CI red on six already-measured files, which needs its own review.
-- [ ] **`harness/SHA256SUMS.txt` is a manifest that lies and nothing reads.**
-      It pins `governance-policy.json` and `agent-policy.json` at digests that no
-      longer match, and no code anywhere reads the file. Either wire it into
-      `make digest-regen` behind `git diff --exit-code`, or delete it — a stale
-      manifest that looks authoritative is worse than none.
+- [x] **`harness/SHA256SUMS.txt` deleted.** It pinned 10 files at digests of
+      which 9 no longer matched, listed 5 files in a directory that no longer
+      exists, and had zero readers anywhere. The live equivalents are
+      `policy-artifact.json` (authoritative shared files, drift-gated in CI) and
+      `policy-bundle.example.json` + `make digest-regen` (per-stack mirrors).
 
 ### ✅ v2.1.8 — MangoMas Integration Core (Shadow Comparison Channel)
 

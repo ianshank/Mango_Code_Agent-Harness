@@ -17,7 +17,7 @@ from the working tree at `main` (merge of PR #7):
 | Research claim | Verified reality |
 |---|---|
 | Open PR stack #4→#5→#6 blocks integration sequencing | **Resolved.** The stack was consolidated and merged to `main` via PR #7 (`76bd06e`). The "merge first" precondition is already satisfied. |
-| Dynamic `COV_MIN` at 92.32% | Policy is **90%** lines/statements/functions, **80%** branches, `per_file: true` (`harness/shared/governance-policy.json`); the Makefile reads it dynamically with an 80 fallback. |
+| Dynamic `COV_MIN` at 92.32% | Policy is **90%** lines/statements/functions, **80%** branches, `per_file: true` (`harness/shared/governance-policy.json`); the Makefile reads it dynamically and fails closed when the policy is unreadable (the old 80 fallback was removed as a fail-open inversion). |
 | 3-active vs 7-canonical agent-contract drift | The mapping is now **documented and reconciled** in `.mango/agents/README.md` (planner / nemotron-reasoner / verifier ↔ 7 canonical contracts in `harness/shared/agents/`). The drift *class* still exists — reconciliation is by prose + test, not by packaging. |
 | Protected-path firewall + `ALLOW_GITHUB_CHANGES=1` prose attestation | Confirmed as implemented (`CONTRACT.md`, `validate_invariants.py`, fail-closed incl. untracked files). The attestation is still an env var + PR prose — the weakest control. |
 | External root of trust is future work | **Partially built.** `harness/control-plane/` already has `verify_repository.py`, a digest-pinned `policy-bundle.example.json`, `regenerate_bundle_digests.py` (wired into `make ci`), and a `tool_broker_reference.py`. |
