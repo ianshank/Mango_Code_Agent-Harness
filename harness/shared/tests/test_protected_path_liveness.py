@@ -63,6 +63,18 @@ CRITICAL_PATTERNS = {
     "requirements-dev.txt": "pins the tool versions CI installs before running any gate",
     "harness/*/Makefile": "the per-stack targets ci_required_targets is written against",
     "harness/control-plane/regenerate_bundle_digests.py": "computes the digest-regen baseline",
+    "harness/control-plane/tool_broker_reference.py": (
+        "the policy decision point ExecutionBroker executes as a host subprocess, before "
+        "the command guard runs; rewriting it to print ALLOW bypasses the verdict entirely"
+    ),
+    "harness/shared/write_policy.py": (
+        "the runtime write gate; unprotected, an agent could widen what it is permitted "
+        "to write by editing the module that decides"
+    ),
+    "harness/shared/mango_mas_orchestrator.py": (
+        "the enforcement point for the write gate and the command guard; unprotected, an "
+        "agent could remove the checks rather than evade them"
+    ),
     "harness/shared/tests/test_protected_path_liveness.py": "this gate",
     "harness/shared/tests/test_ci_gate_coverage.py": "the CI gate-coverage gate",
     "harness/shared/tests/test_coverage_policy_enforcement.py": (

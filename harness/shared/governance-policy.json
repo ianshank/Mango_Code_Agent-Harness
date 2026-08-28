@@ -137,6 +137,9 @@
     "harness/control-plane/publish_policy_artifact.py",
     "harness/control-plane/policy-artifact.json",
     "harness/control-plane/regenerate_bundle_digests.py",
+    "harness/control-plane/tool_broker_reference.py",
+    "harness/shared/write_policy.py",
+    "harness/shared/mango_mas_orchestrator.py",
     "harness/shared/tests/test_protected_path_liveness.py",
     "harness/shared/tests/test_ci_gate_coverage.py",
     "harness/shared/tests/test_coverage_policy_enforcement.py"

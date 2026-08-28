@@ -6,7 +6,11 @@ Defects reproduced here (all present on ``main`` before this change):
    differing byte and leaks the matching prefix length through timing.
 2. ``/api/orchestrate`` returned ``orchestrator.conversation_history``
    verbatim, so a credential that reached the history -- resolved inside the
-   bridge, or echoed by a tool -- left the process over HTTP.
+   bridge, or echoed by a tool -- left the process over HTTP. The redactor that
+   fixed it covered ``NVIDIA_API_KEY`` only, so ``API_SERVER_KEY`` and
+   ``AGENT_EVIDENCE_KEY`` still left in clear text; the second is the HMAC key
+   ``EvidenceBuilder`` signs with, so its disclosure permits forged evidence
+   manifests rather than merely leaking a secret.
 3. ``STATIC_DIR.mkdir()`` ran at module import, so merely importing the app
    (every pytest collection included) mutated the working tree.
 
@@ -224,3 +228,23 @@ class TestImportPurity:
         context runs lifespan, after which the directory exists."""
         with client:
             assert (REPO / "harness" / "api_server" / "static").is_dir()
+
+
+class TestEveryCredentialIsRedactedOnTheWayOut:
+    """Defect 2, second half. The response path was fixed; the redactor behind it
+    still knew about one provider."""
+
+    def test_evidence_and_server_keys_do_not_leave_over_http(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from harness.shared.debug_dump import redact_history
+
+        monkeypatch.setenv("AGENT_EVIDENCE_KEY", "evidence-hmac-key-value")
+        monkeypatch.setenv("API_SERVER_KEY", "api-server-key-value")
+
+        history = [
+            {"role": "tool", "content": "AGENT_EVIDENCE_KEY=evidence-hmac-key-value"},
+            {"role": "tool", "content": "X-API-Key: api-server-key-value"},
+        ]
+        serialised = str(redact_history(history, api_key=None))
+
+        assert "evidence-hmac-key-value" not in serialised, "the evidence signing key left over HTTP"
+        assert "api-server-key-value" not in serialised, "the API server key left over HTTP"

@@ -168,3 +168,54 @@ class TestWriteDump:
         with caplog.at_level("WARNING"):
             assert write_dump([], "planner", dump_root=blocker / "sub") is None
         assert "Could not write debug dump" in caplog.text
+
+
+class TestEveryCredentialEnvVarIsCovered:
+    """`main.py` returns the conversation history over HTTP through
+    `redact_history`, and the reviewed list covered only NVIDIA_API_KEY. Anything
+    a tool echoed from the other two left the process in clear text."""
+
+    def test_api_server_key_is_scrubbed(self):
+        secrets = resolve_credentials(None, {"API_SERVER_KEY": "server-key-value"})
+        assert redact_text("header X-API-Key: server-key-value", secrets) == f"header X-API-Key: {REDACTED}"
+
+    def test_evidence_signing_key_is_scrubbed(self):
+        """Leaking this one is an escalation, not a disclosure: it is the HMAC key
+        EvidenceBuilder signs with, so holding it lets an attacker forge the
+        manifests INV-7 and INV-13 rest on."""
+        secrets = resolve_credentials(None, {"AGENT_EVIDENCE_KEY": "evidence-hmac-key"})
+        assert REDACTED in redact_text("AGENT_EVIDENCE_KEY=evidence-hmac-key", secrets)
+
+    def test_a_credential_named_variable_is_swept_without_editing_this_module(self):
+        secrets = resolve_credentials(None, {"SOME_NEW_PROVIDER_TOKEN": "swept-token-value"})
+        assert "swept-token-value" in secrets
+
+    def test_a_non_credential_variable_is_not_swept(self):
+        assert resolve_credentials(None, {"NEMOTRON_DEFAULT_MODEL": "some-model-name"}) == []
+
+    def test_a_short_swept_value_is_ignored(self):
+        """`redact_text` replaces by substring, so a swept variable set to "1"
+        would rewrite every "1" in the history."""
+        assert resolve_credentials(None, {"DEBUG_TOKEN": "1"}) == []
+
+
+class TestProviderShapes:
+    """Shapes catch a credential that arrived by a route we do not control -- a
+    tool echoing it, a model pasting it back -- where value-equality cannot."""
+
+    def test_shapes_are_redacted(self):
+        for token in (
+            "ctx7sk-abcdefgh12345678",
+            "ghp_abcdefghijklmnopqrstuvwxyz012345",
+            "github_pat_abcdefghijklmnopqrstuv1234",
+            "AKIAIOSFODNN7EXAMPLE",
+            "-----BEGIN RSA PRIVATE KEY-----",
+        ):
+            assert REDACTED in redact_text(f"leaked {token} here"), f"{token!r} survived redaction"
+
+    def test_bearer_header_is_redacted(self):
+        assert REDACTED in redact_text("Authorization: Bearer abcdef.ghijkl.mnopqr")
+
+    def test_ordinary_text_is_untouched(self):
+        text = "the model wrote a function called make_key and a token parser"
+        assert redact_text(text) == text

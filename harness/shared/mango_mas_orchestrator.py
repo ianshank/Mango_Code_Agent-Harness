@@ -10,12 +10,14 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.debug_dump import write_dump
+from harness.shared.agent_authority import tools_for_role
+from harness.shared.debug_dump import credential_env_names, write_dump
 from harness.shared.governance.pretooluse_guard import check_command
 from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
+from harness.shared.write_policy import write_denial_reason
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +173,13 @@ class MangoMASOrchestrator:
         if hook_path.exists():
             logger.info("Executing hook: %s", hook_name)
             try:
-                env = os.environ.copy()
+                # `agent-policy.json` declares
+                # `secrets_may_not_be_propagated_to_subagents: true`, and nothing
+                # enforced it: every hook inherited the full environment, so a
+                # hook ran on the host holding NVIDIA_API_KEY, API_SERVER_KEY and
+                # AGENT_EVIDENCE_KEY. The hooks this repository ships need none of
+                # them -- `pre-nemotron-run.sh` runs validate_invariants.py.
+                env = {k: v for k, v in os.environ.items() if k not in set(credential_env_names())}
                 for k, v in kwargs.items():
                     env[f"MANGO_HOOK_{k.upper()}"] = str(v)
                 subprocess.run(
@@ -189,12 +197,28 @@ class MangoMASOrchestrator:
         return agent_file.read_text(encoding="utf-8")
 
     def _execute_write_file(self, filepath: str, content: str) -> str:
-        """Local tool implementation to write a file."""
+        """Local tool implementation to write a file.
+
+        Two checks, in order. Confinement keeps the write inside the workspace;
+        the write policy keeps it off the control surface *within* the workspace.
+        The second is not redundant: in the deployed path the workspace is the
+        repository root, so confinement alone permits writing the guard, the
+        policy decision point, the orchestrator's own hooks and the agent
+        personas (spec R-AC-6, R-AC-7).
+        """
         workspace = self.workspace_dir.resolve()
         target_path = (workspace / filepath).resolve()
 
         if not target_path.is_relative_to(workspace):
+            # Previously returned silently. An escape attempt is the single most
+            # interesting thing this tool can do and it left no trace anywhere.
+            logger.warning("Denied write outside the workspace: %s", filepath)
             return f"Error writing file {filepath}: path escapes workspace"
+
+        denial = write_denial_reason(str(target_path.relative_to(workspace)))
+        if denial is not None:
+            logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
+            return f"Error writing file {filepath}: {denial}"
 
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -334,7 +358,12 @@ class MangoMASOrchestrator:
         # Keep track of conversation for debugging
         self.conversation_history.extend(messages)
 
-        active_tools = tools if tools is not None else NEMOTRON_TOOLS
+        # Default exposure is derived from `agent-policy.json`, not the full
+        # schema. Defaulting to NEMOTRON_TOOLS is how the verifier came to hold
+        # `write_file` while every canonical contract it maps to denies
+        # implementation changes (spec R-AC-8). An explicit `tools=` argument still
+        # wins, so a caller can narrow further but never widen by omission.
+        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
         # Cumulative budget across the whole task, from
         # agent_defaults.max_tool_calls_per_task in governance-policy.json.
         executed_tool_calls = 0

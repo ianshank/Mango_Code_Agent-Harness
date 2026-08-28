@@ -7,6 +7,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent containment — the write tool cannot reach the control surface
+
+The second change in the containment sequence. `protected_paths` was enforced
+only by `validate_invariants.py` at CI time, against the set of files a commit
+changed. In the deployed path the agent's workspace *is* the repository root
+(`api_server/main.py` passes `workspace_dir=PROJECT_ROOT`), so `write_file` --
+correctly confined to the workspace -- had write access to the guard, the policy
+decision point, the orchestrator's own hooks, both policies, the agent personas
+and `.git/`.
+
+Enforcement was not absent, it was at the wrong granularity: `pre-nemotron-run`
+runs `validate_invariants.py` at the top of every `execute_agent` call, so a
+protected-path write is caught at the *next* agent boundary — with a whole
+tool-call budget in between, and the last agent's own writes never re-checked
+before its post-run hook fires.
+
+#### Fixed
+
+- **`_execute_write_file` consults the write policy at tool-call time**
+  (`write_policy.py`), reusing `validate_invariants.is_protected` rather than a
+  second matcher. `.git/**` is denied explicitly: `validate_invariants`
+  enumerates staged, modified and untracked files, and git never reports
+  anything under `.git`, so `protected_paths` structurally cannot cover a hook
+  or a `core.fsmonitor` entry written there.
+- **The verifier no longer receives `write_file`.** `execute_agent` passed no
+  `tools=` for the reasoner or the verifier, so both fell through to the
+  implementer schema — the role that judges the work could edit it, and could
+  write the hook `_run_hook` executes on the host at the end of its own turn.
+  Exposure is now derived from `agent-policy.json`: the union of a role's
+  canonical contracts minus each contract's `human_approval_required_for`, so
+  `release-auditor`'s approval-gated `external_write` and `production_change` do
+  not leak into the verifier either.
+- **Credentials no longer leave over HTTP.** `debug_dump` scrubbed
+  `NVIDIA_API_KEY` alone while `/api/orchestrate` returned the conversation
+  history, so `API_SERVER_KEY` and `AGENT_EVIDENCE_KEY` passed in clear text.
+  The second is the HMAC key `EvidenceBuilder` signs with: disclosing it permits
+  forged evidence manifests, so this was an escalation rather than a leak. The
+  single redactor now covers the reviewed list, sweeps any variable whose *name*
+  marks it as a credential (with a length floor, since replacement is by
+  substring), and matches seven more provider shapes.
+- **Hook environments are filtered.** `_run_hook` handed every hook
+  `os.environ.copy()`. `agent-policy.json` has always declared
+  `secrets_may_not_be_propagated_to_subagents: true` and nothing enforced it.
+- **An escape attempt now leaves a trace.** A write outside the workspace was
+  refused and logged nothing at all.
+
+#### Added
+
+- `harness/shared/write_policy.py` and `harness/shared/agent_authority.py`, both
+  at 100% line coverage.
+- `test_write_containment_regression.py`, parametrised over ten steps of a
+  published escalation path and asserting on the filesystem rather than only on
+  the returned string. Confirmed failing against the pre-fix commit: the pre-fix
+  run reports `Success: Wrote 7 characters to .../pre-nemotron-run.sh`.
+- `tool_broker_reference.py`, `write_policy.py` and `mango_mas_orchestrator.py`
+  join `protected_paths` and `CRITICAL_PATTERNS`. The PDP is executed by the
+  broker as a host subprocess *before* the command guard runs, and was
+  unprotected; so were the two enforcement points themselves.
+
+#### Note on a defect found in this change's own first draft
+
+Path normalisation used `lstrip("./")`, which strips a character *set* rather
+than a prefix: `.mango/hooks/x.sh` became `mango/hooks/x.sh` and `.git/config`
+became `git/config`, so the entire control surface read as unprotected while the
+gate reported success. Caught by running the check against real files, and
+pinned by `test_dot_prefixed_paths_are_not_mangled`.
+
 ### Agent containment — the policy guard is reached, and fails closed
 
 Spec: `docs/specs/agent-containment.md`. Peer-reviewed before implementation by
