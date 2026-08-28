@@ -41,7 +41,11 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 80
+# No `fail_under` here on purpose. It previously hard-coded 80 while
+# governance-policy.json declared 90, so any `pytest --cov` run that did not pass
+# the Makefile's explicit flag silently enforced the weaker number. The threshold
+# has one source: governance-policy.json -> coverage.lines, applied by the
+# Makefile as --cov-fail-under=$(COV_MIN). Use `make coverage-python`.
 show_missing = true
 
 [tool.ruff]

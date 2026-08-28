@@ -14,8 +14,13 @@ GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
 GITLEAKS_VERSION ?= v8.28.0
 # Coverage threshold is sourced from the governance policy (single source of truth)
-# so the gate and the policy can never silently drift. Falls back to 80 if unreadable.
-COV_MIN  ?= $(shell $(PYTHON) -c "import json,sys; p=json.load(open('harness/shared/governance-policy.json')); print(p.get('coverage',{}).get('lines',80))" 2>/dev/null || echo 80)
+# so the gate and the policy can never silently drift.
+#
+# Fails CLOSED: an unreadable or malformed policy yields an empty COV_MIN, and the
+# guard below aborts. This previously fell back to 80 while the policy said 90 —
+# a governance gate that *lowers itself* when it cannot read its own policy, the
+# opposite of how validate_invariants treats the same failure.
+COV_MIN  ?= $(shell $(PYTHON) -c "import json; p=json.load(open('harness/shared/governance-policy.json')); print(int(p['coverage']['lines']))" 2>/dev/null)
 
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
@@ -51,6 +56,7 @@ test-python: ## Run full pytest suite (excludes live tests)
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest with the coverage gate (threshold from governance-policy.json)
+	@test -n "$(COV_MIN)" || { echo 'COV_MIN unresolved: governance-policy.json is unreadable or has no coverage.lines; failing closed'; exit 1; }
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-fail-under=$(COV_MIN)
 
 # --- Node Testing & Zero-Skip Verification ---

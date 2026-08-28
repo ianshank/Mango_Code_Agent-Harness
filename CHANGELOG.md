@@ -104,6 +104,37 @@ were recorded rather than patched in 2.1.8.
   measured counts, and the C4 gate diagram includes the spec, remote,
   protected-path, and CI-gate-coverage gates. Diagram re-validated as Mermaid.
 
+### Security — the coverage gate lowered itself, and most declared thresholds ran nowhere
+
+A second audit traced every key in `governance-policy.json` to the code that reads
+it. Findings below were each confirmed by running, not by reading.
+
+- **The coverage gate failed *open*.** `COV_MIN` fell back to the literal `80`
+  whenever the policy was unreadable or its `coverage` block absent — while the
+  policy declared 90. Governance fails closed everywhere else
+  (`validate_invariants` exits non-zero on an unreadable policy); this one gate
+  silently weakened itself. It now fails closed, and `coverage-python` aborts on an
+  unresolved threshold. `pyproject.toml` separately hard-coded `fail_under = 80`,
+  so any `pytest --cov` run that did not pass the Makefile's explicit flag enforced
+  the weaker number; that declaration is removed, leaving one source of truth.
+- **`harness/node/vitest.config.ts` hard-coded all five thresholds**, duplicating
+  the policy block it was copied from with nothing detecting divergence — a direct
+  violation of CLAUDE.md's "no hard-coded values; thresholds come from
+  governance-policy.json". It now reads the policy and fails closed on a malformed
+  one.
+- **Four of the five declared thresholds are enforced nowhere in the root
+  pipeline.** Only `coverage.lines` is applied, and only in aggregate.
+  `statements`, `functions` and `branches` are enforced solely by the vitest config
+  — which `make test-node` never activates, because it runs `vitest run` **without
+  `--coverage`**. Measured: enabling it fails six Node files today, so it is
+  recorded as a quantified follow-up rather than switched on into three open PRs.
+  `per_file: true` has no Python implementation at all; six measured files fall
+  below `lines`, and aggregate headroom is ~60 statements, so an entirely untested
+  new module can ship green. `test_coverage_policy_enforcement.py` now fails if a
+  threshold key is neither enforced nor declared a gap with a measured reason.
+- **`dedup.exempt` was an unguarded bypass** — an entry silently disables the
+  shim-vs-copy drift gate for that file. It is empty today and now asserted so.
+
 ### Security — the new gates verified names, not substance
 
 An adversarial review of the gates added earlier in this release found they

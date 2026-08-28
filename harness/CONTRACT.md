@@ -56,7 +56,16 @@ Untracked files in protected paths are also caught (fail-closed) — `validate_i
 
 ## Coverage gate
 
-The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`, default 80 if unreadable) so the gate and the policy cannot silently drift. The gate enforces aggregate coverage across all first-party Python modules; per-file enforcement is a documented follow-up. The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation.
+The coverage threshold (`COV_MIN`) is read dynamically from `governance-policy.json` (`coverage.lines`) so the gate and the policy cannot silently drift, and it **fails closed**: an unreadable or malformed policy aborts `coverage-python` rather than falling back to a weaker literal. (It previously degraded to 80 while the policy declared 90 — a gate that lowers itself when it cannot read its own policy.) `pyproject.toml` deliberately declares no competing `fail_under`.
+
+**Which thresholds are actually enforced.** `governance-policy.json` declares `lines`, `statements`, `functions`, `branches` and `per_file`. Only `lines` is enforced by the root pipeline, and only in aggregate. The others are declared-but-unenforced, each recorded with a measured reason in `test_coverage_policy_enforcement.py`, which fails if a new threshold key is added without either enforcing it or declaring the gap:
+
+- **`per_file`** — six measured Python files fall below `lines` today, and aggregate headroom is roughly 60 statements, so a new untested module can ship green.
+- **`statements` / `functions` / `branches`** — enforced by `harness/node/vitest.config.ts`, which `make test-node` never activates because it runs without `--coverage`; enabling it fails six Node files at present. Python declares no `branch = true`, so branch coverage is not even measured there.
+
+Node thresholds are read from this same policy rather than restated as literals, so the two cannot drift.
+
+The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation. They are currently schema-shape guards for an unimplemented feature: no production code path consults them.
 
 ## Evidence signing
 
