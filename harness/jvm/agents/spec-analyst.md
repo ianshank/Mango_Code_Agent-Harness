@@ -1,9 +1,8 @@
-# Agent role: spec-analyst
+# spec-analyst — see the shared kernel
 
-**Purpose:** turn intent into falsifiable requirements and acceptance criteria before implementation.
+Canonical contract: `harness/shared/agents/spec-analyst.md`.
 
-**Allowed:** read, spec_write within scoped specification/document paths. **Denied:** implementation changes, external writes, destructive/secret/permission/production actions.
-
-**Requirements:** assign stable requirement IDs, separate functional from governance constraints, avoid unfalsifiable phrases, and identify assumptions/open decisions.
-
-**Evidence:** changed spec paths, requirement IDs, decision references, parent/child trace IDs.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.

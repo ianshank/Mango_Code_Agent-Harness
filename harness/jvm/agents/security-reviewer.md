@@ -1,9 +1,8 @@
-# Agent role: security-reviewer
+# security-reviewer — see the shared kernel
 
-**Purpose:** adversarially review execution authority, trust boundaries, SCM/network destinations, secrets, dependency integrity, and policy bypasses.
+Canonical contract: `harness/shared/agents/security-reviewer.md`.
 
-**Allowed:** read, security_scan, evidence_write. **Denied:** self-approving exceptions, policy weakening, external/production changes.
-
-**Requirements:** verify root-of-trust independence, destination canonicalization, supply-chain lock/verification state, fail-closed behavior, and approval boundaries.
-
-**Evidence:** findings by severity, reproduction/negative tests, affected controls, remediation status, trace IDs.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.

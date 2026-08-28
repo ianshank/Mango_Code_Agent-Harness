@@ -360,3 +360,47 @@ def test_size_budget_lines_fails_closed_on_a_non_object_policy(temp_repo: Path, 
     with pytest.raises(SystemExit) as excinfo:
         vi.size_budget_lines(policy)
     assert excinfo.value.code == 1
+
+
+def test_size_budget_lines_fails_closed_on_unreadable_policy(temp_repo: Path, monkeypatch, caplog):
+    """An OSError that is not FileNotFoundError (here: the policy path is a
+    directory) is corruption, not the adopter path — it must exit 1, never
+    silently fall back to the built-in budget."""
+    monkeypatch.delenv("MAX_FILE_LINES", raising=False)
+    policy_dir = temp_repo / "policy-as-a-directory"
+    policy_dir.mkdir()
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            vi.size_budget_lines(policy_dir)
+    assert excinfo.value.code == 1
+    assert "Could not read governance policy" in caplog.text
+
+
+def test_git_modified_files_includes_pr_diff_when_base_ref_set(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    """With GITHUB_BASE_REF set (a PR build), files committed since the base
+    ref must be part of the modified set even when the working tree is clean."""
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=temp_repo, check=True, capture_output=True
+    )
+    pr_file = temp_repo / "pr_change.py"
+    pr_file.write_text("x = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "pr_change.py"], cwd=temp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "pr change"], cwd=temp_repo, check=True, capture_output=True)
+    monkeypatch.setenv("GITHUB_BASE_REF", "main")
+    assert "pr_change.py" in vi.git_modified_files(temp_repo)
+
+
+def test_check_hardcoded_secrets_skips_its_own_module_copy(temp_repo: Path):
+    """A file named validate_invariants.py legitimately names the patterns it
+    scans for, so the scanner must exclude it from its own scan."""
+    secret_literal = "NVIDIA_" + "API_KEY = 'would-flag-anywhere-else'\n"
+    (temp_repo / "validate_invariants.py").write_text(secret_literal, encoding="utf-8")
+    assert vi.check_hardcoded_secrets(temp_repo) is True
+
+
+def test_unreadable_file_does_not_abort_secret_or_size_scans(temp_repo: Path):
+    """A .py file that cannot be decoded (invalid UTF-8) is skipped with a
+    debug note; it must not abort either scan or fail the gate on its own."""
+    (temp_repo / "binaryish.py").write_bytes(b"\xff\xfe\x00 not utf-8 \xba\xad")
+    assert vi.check_hardcoded_secrets(temp_repo) is True
+    assert vi.check_size_budget(temp_repo, budget=500) is True

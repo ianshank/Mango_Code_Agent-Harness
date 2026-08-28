@@ -272,6 +272,50 @@ def test_adoption_gradle_files_missing(project_root: Path, mock_repo: Path):
     assert "gradlew missing" in res.stderr
 
 
+def test_adoption_commented_remotes_missing_rot_and_lockfile(project_root: Path, mock_repo: Path):
+    """Three independent blockers in one pass: an allowed-remotes file with only
+    comments counts as empty, a missing root-of-trust declaration is fatal, and
+    a package.json without pnpm-lock.yaml fails the Node lock check."""
+    wf = mock_repo / ".github" / "workflows"
+    (wf / "ci.yml").write_text("uses: actions/checkout@abc123def456")
+    (mock_repo / ".governance" / "allowed-remotes.txt").write_text("# no approved destinations yet\n   \n")
+    (mock_repo / ".governance" / "root-of-trust.json").unlink()
+    (mock_repo / "package.json").write_text("{}")
+    res = run_script(project_root, mock_repo, "validate_adoption.py")
+    assert res.returncode != 0
+    assert "allowed-remotes.txt has no approved destination" in res.stderr
+    assert "root-of-trust.json missing" in res.stderr
+    assert "pnpm-lock.yaml missing" in res.stderr
+
+
+def test_adoption_rot_without_external_ref_or_valid_digest(project_root: Path, mock_repo: Path):
+    (mock_repo / ".governance" / "root-of-trust.json").write_text(
+        json.dumps({"external_policy_ref": "", "policy_sha256": "not-a-digest"})
+    )
+    res = run_script(project_root, mock_repo, "validate_adoption.py")
+    assert res.returncode != 0
+    assert "lacks external policy ref or SHA-256 digest" in res.stderr
+
+
+def test_adoption_rot_valid_but_policy_json_missing(project_root: Path, mock_repo: Path):
+    (mock_repo / ".governance" / "policy.json").unlink()
+    (mock_repo / ".governance" / "root-of-trust.json").write_text(
+        json.dumps({"external_policy_ref": "https://example.com/policy", "policy_sha256": "a" * 64})
+    )
+    res = run_script(project_root, mock_repo, "validate_adoption.py")
+    assert res.returncode != 0
+    assert ".governance/policy.json missing" in res.stderr
+
+
+def test_adoption_rot_digest_mismatch(project_root: Path, mock_repo: Path):
+    (mock_repo / ".governance" / "root-of-trust.json").write_text(
+        json.dumps({"external_policy_ref": "https://example.com/policy", "policy_sha256": "a" * 64})
+    )
+    res = run_script(project_root, mock_repo, "validate_adoption.py")
+    assert res.returncode != 0
+    assert "policy_sha256 does not match local policy.json" in res.stderr
+
+
 def test_valid_projections_pass(project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "check_projections.py")
     assert res.returncode == 0

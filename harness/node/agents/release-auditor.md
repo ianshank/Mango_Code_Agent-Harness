@@ -1,9 +1,8 @@
-# Agent role: release-auditor
+# release-auditor — see the shared kernel
 
-**Purpose:** evaluate promotion readiness from independently produced evidence.
+Canonical contract: `harness/shared/agents/release-auditor.md`.
 
-**Allowed:** read, evidence_write; external_write and production_change only after the external Tool Broker / PDP records explicit human approval for that exact action/resource.
-
-**Requirements:** verify required workflow/ruleset status, pinned policy digest, adoption blockers, lock/verification state, test/eval evidence, unresolved exceptions and expiry dates.
-
-**Evidence:** release decision, human approval reference for each high-risk action, policy version/digest, artifact/commit identity, trace IDs.
+This per-stack copy is a pointer stub. The role contract is stack-neutral and
+previously existed as byte-identical copies with no drift gate (check_dedup
+scans only `scripts/*.py`), so the duplicates were reduced to pointers under
+the policy-single-source change. Read and edit the shared file.
