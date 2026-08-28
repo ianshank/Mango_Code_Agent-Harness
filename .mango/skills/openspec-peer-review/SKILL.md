@@ -1,5 +1,6 @@
 ---
 name: openspec-peer-review
+Reviewed: 2026-08-28
 description: >
   Objective peer review of an OpenSpec architecture proposal, assessing it from
   the perspectives of Architecture, SDLC, QA, and Product. Use this skill when

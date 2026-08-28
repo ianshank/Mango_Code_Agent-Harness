@@ -158,7 +158,8 @@ def classify_shim(text: str, shared_module: Path | None = None) -> str | None:
     """
     try:
         tree = ast.parse(text)
-    except Exception:
+    except Exception:  # noqa: BLE001 - a file we cannot parse is simply not a shim;
+        # classification must never be the thing that fails the dedup gate.
         return None
 
     target_stem = shared_module.stem if shared_module is not None else None
@@ -183,7 +184,9 @@ def classify_shim(text: str, shared_module: Path | None = None) -> str | None:
             if func_name and node.args:
                 try:
                     arg_str = ast.unparse(node.args[0])
-                except Exception:
+                except Exception:  # noqa: BLE001 - ast.unparse raises a range of
+                    # errors on exotic nodes; an unrenderable argument just means
+                    # "no shared reference found", not a gate failure.
                     arg_str = ""
                 if "shared" in arg_str.lower() or "_shared" in arg_str.lower():
                     if target_stem is None or target_stem in arg_str:

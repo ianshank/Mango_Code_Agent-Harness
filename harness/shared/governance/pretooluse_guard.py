@@ -59,8 +59,8 @@ def segments(command):
     lex.whitespace_split = True
     lex.commenters = ""
     toks = list(lex)
-    out = []
-    cur = []
+    out: list[list[str]] = []
+    cur: list[str] = []
     for t in toks:
         if t and all(c in ";&|" for c in t):
             if cur:
@@ -158,7 +158,10 @@ def check_command(cmd: str) -> int:
             saw = True
             try:
                 urls = destinations(root, seg)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - fail closed: any failure to
+                # resolve push destinations must block the tool call, never allow
+                # it. Narrowing the type here would let an unanticipated error
+                # through as an implicit allow.
                 return block(str(e))
             if not urls:
                 return block("dangerous-shaped segment could not be attributed to a supported git push form")
@@ -184,7 +187,9 @@ def main():
     raw = sys.stdin.read()
     try:
         payload = json.loads(raw)
-    except Exception:
+    except Exception:  # noqa: BLE001 - fail closed on an unparseable payload: if it
+        # still looks dangerous textually, block it. An allow-by-exception here
+        # would be a guard bypass.
         return block("unanalyzable payload contains a dangerous-shaped command") if DANGER.search(raw) else 0
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     return check_command(cmd)

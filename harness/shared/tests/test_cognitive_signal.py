@@ -29,18 +29,18 @@ from harness.shared.cognitive_signal import (
     validate_signal_dict,
 )
 
-PINNED = dict(
-    schema_version=ACCEPTED_SCHEMA_VERSION,
-    signal_id="00000000-0000-4000-8000-000000000001",
-    run_id="00000000-0000-4000-8000-00000000000a",
-    task_id="deadbeefdeadbeef",
-    producer_id="planner.incumbent",
-    signal_type="plan.incumbent",
-    payload={"plan_sha256": "abc", "elapsed_ms": 12},
-    policy_id="agentic-ssd-governance",
-    policy_version="0123456789abcdef",
-    timestamp="2026-08-27T00:00:00+00:00",
-)
+PINNED = {
+    "schema_version": ACCEPTED_SCHEMA_VERSION,
+    "signal_id": "00000000-0000-4000-8000-000000000001",
+    "run_id": "00000000-0000-4000-8000-00000000000a",
+    "task_id": "deadbeefdeadbeef",
+    "producer_id": "planner.incumbent",
+    "signal_type": "plan.incumbent",
+    "payload": {"plan_sha256": "abc", "elapsed_ms": 12},
+    "policy_id": "agentic-ssd-governance",
+    "policy_version": "0123456789abcdef",
+    "timestamp": "2026-08-27T00:00:00+00:00",
+}
 
 
 def pinned_signal(**overrides) -> CognitiveSignal:

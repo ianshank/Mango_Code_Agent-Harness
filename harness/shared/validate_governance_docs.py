@@ -27,7 +27,9 @@ def main(workspace: Path = Path(".")) -> None:
             fail.append("governance skill has no Reviewed: YYYY-MM-DD")
         else:
             reviewed = dt.date.fromisoformat(m.group(1))
-            age = (dt.date.today() - reviewed).days
+            # UTC anchor: staleness is measured in whole calendar days, so a
+            # local-timezone 'today' would move the threshold by a day.
+            age = (dt.datetime.now(dt.timezone.utc).date() - reviewed).days
             if age < 0:
                 fail.append("governance skill review date is in the future")
             if age > int(p.get("skill_max_age_days", 90)):

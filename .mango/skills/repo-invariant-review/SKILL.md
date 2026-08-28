@@ -1,5 +1,6 @@
 ---
 name: repo-invariant-review
+Reviewed: 2026-08-28
 description: >
   Check a change against this repository's mechanically enforced invariants — protected
   paths, the 500-line size budget, testing thresholds, and architectural drift.

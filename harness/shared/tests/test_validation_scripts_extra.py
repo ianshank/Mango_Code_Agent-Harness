@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.tests._helpers import utc_today
 from harness.shared.validate_agent_policy import main as validate_agent_policy
 from harness.shared.validate_governance_docs import main as validate_governance_docs
 from harness.shared.validate_policy import main as validate_policy
@@ -58,7 +59,7 @@ def temp_workspace(tmp_path: Path) -> Path:
 
     # Valid Docs
     (docs / "PROJECT-CHARTER.md").write_text("Charter v1")
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nxyz")
     (gov / "decision-log.md").write_text("2026-01-02 | xyz | reason")
 
@@ -262,19 +263,19 @@ def test_docs_missing_reviewed(temp_workspace):
         validate_governance_docs(temp_workspace)
 
 def test_docs_future_reviewed(temp_workspace):
-    future = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    future = (utc_today() + dt.timedelta(days=1)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {future}\n## Decisions since 2026-01-01\nxyz")
     with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
 
 def test_docs_stale_reviewed(temp_workspace):
-    past = (dt.date.today() - dt.timedelta(days=91)).isoformat()
+    past = (utc_today() - dt.timedelta(days=91)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {past}\n## Decisions since 2026-01-01\nxyz")
     with pytest.raises(SystemExit, match="governance skill review is stale"):
         validate_governance_docs(temp_workspace)
 
 def test_docs_missing_since(temp_workspace):
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\nNo decisions section")
     with pytest.raises(SystemExit, match="governance skill lacks Decisions since YYYY-MM-DD section"):
         validate_governance_docs(temp_workspace)
@@ -286,7 +287,7 @@ def test_docs_missing_log(temp_workspace):
 
 def test_docs_missing_decision_in_skill(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").write_text("2026-01-02 | missed-id | reason")
-    today = dt.date.today().isoformat()
+    today = utc_today().isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nNot here")
     with pytest.raises(SystemExit, match="governance skill is missing recent decisions: missed-id"):
         validate_governance_docs(temp_workspace)

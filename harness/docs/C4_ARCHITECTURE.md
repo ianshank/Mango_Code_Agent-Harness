@@ -65,13 +65,20 @@ graph TD
         end
 
         subgraph "Python Shared Runtime - harness/shared"
-            PyBridge[nemotron_bridge.py<br/>Python Adapter]
-            Orchestrator[mango_mas_orchestrator.py<br/>MAS Orchestrator]
+            PyBridge[nemotron_bridge.py<br/>Python Adapter — HTTP, auth, response shape]
+            RetryPolicy[retry_policy.py<br/>Pure backoff arithmetic<br/>no I/O, no clock, no network]
+            Orchestrator[mango_mas_orchestrator.py<br/>MAS Orchestrator + tool dispatch registry]
+            DebugDump[debug_dump.py<br/>Credential redaction + debug dumps]
             MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock]
+            PyBridge -->|asks for a delay| RetryPolicy
+            Orchestrator -->|redacts history through| DebugDump
             subgraph "Cognitive Boundary — INV-16 (one-directional)"
                 Signal[cognitive_signal.py<br/>CognitiveSignal envelope + JSONL sink]
                 Shadow[shadow_planner.py<br/>Shadow-mode comparison channel<br/>MANGO_SHADOW_PLANNER, off by default]
                 Shadow -->|emits, zero tool authority| Signal
+            end
+            subgraph "Gates — policy-sourced, fail-closed"
+                CoverageGate[coverage_gate.py<br/>lines + branches as two floors<br/>from governance-policy.json]
             end
             subgraph "governance/"
                 GovGuards[pretooluse_guard.py<br/>Policy Guards]
@@ -155,8 +162,38 @@ flowchart TD
     Protected --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
     ArtifactDrift --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
     Delegation --> Boundary["INV-16: Cognitive/Execution Boundary<br/>(no CognitiveSignal field reaches a control path)"]
-    Boundary --> Pass[PR Approved for Merge]
+    Boundary --> Purity["Import Purity<br/>(every shared/control-plane module imports from a foreign CWD<br/>with exit 0, no output, no writes — test_import_purity.py)"]
+    Purity --> ConfigLive["Configuration Liveness<br/>(every per-file-ignore and gitleaks allowlist entry still<br/>suppresses something real — test_lint_config_liveness.py)"]
+    ConfigLive --> Deferrals["Deferral Register<br/>(every declined rule carries a measured count and a reason;<br/>fails if a deferred rule got enabled — test_deferred_rigor.py)"]
+    Deferrals --> Regression["Regression / AQA Tier<br/>(one reproduction per defect that already shipped;<br/>make test-regression)"]
+    Regression --> Surface["Agent Surface Liveness<br/>(skills dated and classified, hooks reference real paths,<br/>.mango is the only skill root — test_agent_surface_liveness.py)"]
+    Surface --> Pass[PR Approved for Merge]
 ```
+
+### 4.1.1 What these later gates add
+
+The first nine gates answer "is this change correct". The five added after
+INV-16 answer a different question: **"is the machinery that answers the first
+question still working?"** Each exists because the corresponding failure had
+already happened silently.
+
+- **Import purity** — `validate_adoption.py` ran its entire gate at module
+  scope, so importing it executed the gate and could exit the interpreter.
+  Two sibling CLIs had been fixed by hand; the third survived because there was
+  no rule.
+- **Configuration liveness** — three `per-file-ignores` patterns suppressed
+  nothing, including one for a directory that does not exist. Ruff has no
+  unused-ignore check for config-level ignores, so a prune alone rots.
+- **Deferral register** — a rule left unselected with no record is
+  indistinguishable from a rule nobody considered. Every decline now carries
+  the finding count that justified it, and the register fails if the rule is
+  later enabled or its cost falls away.
+- **Regression tier** — every module in it was confirmed failing against the
+  pre-fix commit. Selected by path rather than marker, so it needs no entry in
+  the protected `pyproject.toml`.
+- **Agent surface liveness** — hooks named `PLAN.md` and `NOTES.md`, neither of
+  which existed, and `.mango/settings.json` invoked mode-644 scripts by bare
+  path. A dormant hook that is wrong fails the day someone wakes it.
 
 ### 4.2 Cognitive/Execution Boundary (INV-16)
 

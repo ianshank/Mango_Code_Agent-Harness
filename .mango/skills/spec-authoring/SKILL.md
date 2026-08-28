@@ -1,5 +1,6 @@
 ---
 name: spec-authoring
+Reviewed: 2026-08-28
 description: >
   Author a spec-driven feature brief into docs/specs/ using the repo's spec
   template. Captures problem statement, acceptance criteria, invariants touched,

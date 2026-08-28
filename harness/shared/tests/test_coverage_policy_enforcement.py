@@ -116,7 +116,9 @@ class TestThresholdSourcing:
 
     def test_vitest_thresholds_cover_every_policy_key(self, policy):
         config = VITEST_CONFIG.read_text(encoding="utf-8")
-        thresholds = re.search(r"thresholds:\s*\{(.*?)\}", config, re.S).group(1)
+        match = re.search(r"thresholds:\s*\{(.*?)\}", config, re.S)
+        assert match is not None, "vitest.config.ts has no thresholds block"
+        thresholds = match.group(1)
         for key in ("lines", "statements", "branches", "functions"):
             assert f"policy.{key}" in thresholds, (
                 f"vitest threshold '{key}' is not sourced from the policy"

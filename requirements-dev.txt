@@ -1,6 +1,10 @@
 pytest==8.4.2
 pytest-cov==7.1.0
 pytest-mock==3.14.0
+# tomllib entered the stdlib in 3.11; tomli is its backport. The
+# configuration-liveness gates read pyproject.toml, so without this they would
+# fail to import on the 3.9 and 3.10 matrix legs.
+tomli==2.0.1; python_version < "3.11"
 ruff==0.6.9
 mypy==1.11.2
 # API server runtime + test deps (harness/api_server)

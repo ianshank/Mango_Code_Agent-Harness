@@ -38,10 +38,6 @@ __pycache__/
 *.pyc
 *.log
 
-# Pong Engine Artifacts
-harness/node/src/pong/web/dist/
-*.pongrec
-
 .venv
 
 # Pytest / Hypothesis temp directories created in harness/node/ during local runs

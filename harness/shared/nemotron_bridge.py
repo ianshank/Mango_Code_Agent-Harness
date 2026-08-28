@@ -152,7 +152,7 @@ def complete_chat(
         )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
-    if not (url.startswith("https://") or url.startswith("http://")):
+    if not url.startswith(("https://", "http://")):
         raise ValueError(f"Invalid URL scheme in endpoint: {endpoint}")
 
     payload = {
@@ -272,7 +272,8 @@ def main() -> None:
                 f"{usage.get('completion_tokens', 0)} completion = "
                 f"{usage.get('total_tokens', 0)} total\n"
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - top-level CLI boundary: every failure
+        # becomes a clean one-line message and exit 1, never a traceback on stdout.
         logger.error("Nemotron Bridge Error: %s", e)
         sys.exit(1)
 
