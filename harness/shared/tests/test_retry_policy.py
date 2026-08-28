@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import email.message
 import email.utils
+import io
 import socket
 import urllib.error
 from typing import Any
@@ -87,6 +88,13 @@ class TestParseRetryAfter:
 
 
 class TestRetryPredicate:
+    # Explicit ids, and a real file object for HTTPError. Both are required on
+    # Python 3.9, which is a live CI matrix leg: there `urllib.response.addbase`
+    # still inherits from `tempfile._TemporaryFileWrapper`, whose `__getattr__`
+    # raises KeyError('file') for an uninitialised wrapper instead of returning
+    # None as 3.10+ does. pytest builds parameter ids by calling
+    # `getattr(value, "__name__", None)`, so an HTTPError constructed with
+    # `fp=None` makes *collection* fail on 3.9 and pass everywhere else.
     @pytest.mark.parametrize(
         "exc",
         [
@@ -96,6 +104,7 @@ class TestRetryPredicate:
             ConnectionResetError("reset"),
             ConnectionAbortedError("aborted"),
         ],
+        ids=["urlerror", "timeouterror", "socket-timeout", "conn-reset", "conn-aborted"],
     )
     def test_transport_failures_are_retryable(self, exc: BaseException) -> None:
         assert is_retryable_connection_error(exc)
@@ -103,11 +112,12 @@ class TestRetryPredicate:
     @pytest.mark.parametrize(
         "exc",
         [
-            urllib.error.HTTPError("url", 500, "boom", email.message.Message(), None),
+            urllib.error.HTTPError("url", 500, "boom", email.message.Message(), io.BytesIO(b"")),
             ValueError("bad input"),
             KeyError("missing"),
             MemoryError(),
         ],
+        ids=["http-error", "value-error", "key-error", "memory-error"],
     )
     def test_everything_else_is_not(self, exc: BaseException) -> None:
         assert not is_retryable_connection_error(exc)
