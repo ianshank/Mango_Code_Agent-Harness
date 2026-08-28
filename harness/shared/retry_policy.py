@@ -4,10 +4,19 @@ Extracted from ``nemotron_bridge.complete_chat`` so that backoff behavior can be
 asserted **by value** rather than by counting ``time.sleep`` calls, and so the
 bridge does not grow branches for arithmetic that has nothing to do with HTTP.
 
-Everything here is pure: no environment reads, no clock, no network, no logging.
-``RetryPolicy.from_mapping`` takes an already-resolved mapping (the bridge passes
-``resolve_environment()``'s result) rather than reading ``os.environ`` itself, so
-the module can be exercised without monkeypatching global state.
+No environment reads, no network, no logging, and no I/O of any kind.
+``RetryPolicy.from_mapping`` takes an already-resolved mapping (the bridge
+passes ``resolve_environment()``'s result) rather than reading ``os.environ``
+itself, so the module can be exercised without monkeypatching global state.
+
+Two impurities remain, and both are *injectable defaults* rather than hidden
+state: ``parse_retry_after`` reads the clock via ``time.time()`` when no
+``now`` is passed, and ``RetryPolicy.backoff`` draws from ``random.random()``
+when no ``rand`` is passed. Supply either parameter and the function is
+deterministic -- which is how the tests assert exact delays. They are defaults
+rather than required arguments because forcing every caller to thread a clock
+and an RNG through the bridge's retry loop would trade real ergonomics for
+purity the callers do not need.
 """
 
 from __future__ import annotations
