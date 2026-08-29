@@ -27,7 +27,6 @@ Thumbs.db
 *.log
 
 # Mango & Agent Subsystem
-.agents/
 .mango/
 
 # Test suites whose fixtures carry credential-shaped literals. The runtime image
