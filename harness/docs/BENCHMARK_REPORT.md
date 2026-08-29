@@ -5,6 +5,18 @@
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.0 (`harness/CONTRACT.md`)  
 **Execution Environment:** Claude Agent + Antigravity Multi-Agent Orchestrator + Node.js/TypeScript 7
 
+> **Superseded — 2026-08-25.** This benchmark measured the Pong demo build,
+> which `docs/specs/remove-pong-demo.md` removed in full: `src/pong/**`,
+> `tests/pong/**`, `docs/specs/pong.md` and the game `CMD`. Every path, coverage
+> row and artifact link below refers to deleted code, and the `file:///C:/Users/…`
+> links point at one contributor's machine rather than at anything reproducible.
+> The headline speed multiple is measured against an unsourced baseline and
+> should not be quoted.
+>
+> Retained only as a record of the agentic development timeline. The governing
+> standard is now Contract **v2.1** (INV-1 … INV-16), and traceability discovers
+> 6 requirements, not 15.
+
 ---
 
 ## 1. Executive Summary & Key Performance Indicators (KPIs)

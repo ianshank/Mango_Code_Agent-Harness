@@ -94,7 +94,14 @@ round-trip.
       GitHub never executes — it reads workflows only from the repository-root
       `.github/workflows/`. Added a root `secrets` gate (fails closed on missing
       tooling; scans working tree *and* full history) and a dedicated `secret-scan`
-      CI job with `fetch-depth: 0`. Verified clean across all 73 commits.
+      CI job with `fetch-depth: 0`. **The verification recorded here was
+      vacuous:** all three `.gitleaks.toml` files declared an `[allowlist]` and
+      no `[[rules]]`, and `--config` *replaces* gitleaks' built-in ruleset
+      rather than extending it — so the scan ran with zero rules and could not
+      have found a secret in any file or any commit. Armed in the containment
+      programme (`[extend] useDefault = true` in all three configs) and pinned
+      by `test_lint_config_liveness.TestGitleaksActuallyScans`; clean on the
+      working tree under the real ruleset.
 - [x] **`make remotes` wired** — INV-3 had a shared implementation and a per-stack
       target but no root wiring.
 - [x] **INV-5 is now enforced by `test_ci_gate_coverage.py`**: every
@@ -104,11 +111,19 @@ round-trip.
 - [x] Documentation corrected where it contradicted the contract: the pre-PR
       reference misnumbered INV-5 and INV-7, and two hard-coded 80% coverage
       thresholds contradicted the policy value of 90.
-- [x] Remaining open, and **the highest-value item on this list**: `main` has no
+- [ ] Remaining open, and **the highest-value item on this list**: `main` has no
       branch ruleset — CI is not a required check, and 0 of 8 PRs were approved
-      before merge. Until a ruleset requires the four `build (3.x)` legs plus
-      `secret-scan`, every gate above is advisory. A repository-settings change,
-      not code.
+      before merge. Every gate above is advisory until one exists. A
+      repository-settings change, not code.
+
+      The check names, taken from a real run rather than from memory: the matrix
+      is **three** legs — `build (3.9)`, `build (3.10)`, `build (3.12)`, each
+      running `make ci-python` — plus `build-full` (Python 3.11, the only leg
+      that runs `make ci`, the Node stack and the regression tier) and
+      `secret-scan`. This item previously read "the four `build (3.x)` legs",
+      which names a `build (3.11)` that does not exist: a ruleset configured
+      from that sentence would require a check GitHub never reports — blocking
+      every merge — while omitting the one leg that runs the Node gates.
 - [ ] **`audit` (dependency vulnerability scanning) is still unenforced at root.**
       Declared in `KNOWN_GAPS`; wiring osv-scanner adds a toolchain dependency and
       can turn CI red on a pre-existing advisory, so it needs its own change.
@@ -263,8 +278,3 @@ no UC-4 experiment evidence is claimed by this milestone.
 - [ ] **Prompt Cache & Cost Tracking:** Add local disk/memory prompt-cache adapter to minimize repeated token costs on invariant verification prompts.
 - [ ] **Model Context Protocol (MCP) Server:** Package `NemotronClient` as an independent standard STDIO/SSE MCP server for seamless integration with external AI IDEs and clients.
 
-### 2.2 Pong Engine Enhancements
-
-- [ ] **WebSocket Multiplayer Protocol:** Add real-time deterministic rollback netcode (GGPO-style) for client-to-client PvP over WebSockets.
-- [ ] **Audio Customization:** Expose interactive sound effect waveform customization (sine/square/triangle/sawtooth) in the Web UI.
-- [ ] **Game State Recording & Replay:** Implement binary snapshot encoding to record full matches for automated test regression playback.

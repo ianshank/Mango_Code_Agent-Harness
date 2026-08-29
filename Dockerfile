@@ -21,6 +21,15 @@ WORKDIR /app/harness/node
 # also keeps that stage in the graph: BuildKit skips unreferenced stages, which
 # would silently drop its `tsc --noEmit` typecheck.
 COPY --from=build /app/harness /app/harness
+
+# Dropped here rather than in `.dockerignore`: `tsconfig.json` includes
+# `tests/**/*.ts`, so excluding them from the build context would leave the
+# `tsc --noEmit` above typechecking less while still reporting success. The
+# runtime image reads nothing under `tests/`, and the AI fixtures carry
+# `nvapi-...` literals that are allowlisted for the secret scan but have no
+# reason to ship.
+RUN rm -rf /app/harness/node/tests
+
 ENV NODE_ENV=production
 
 # Default entrypoint: the Nemotron CLI. Without NVIDIA_API_KEY (or an explicit

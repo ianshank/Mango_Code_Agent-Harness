@@ -34,7 +34,9 @@ python -m pytest harness/shared/tests/ harness/api_server/tests/ \
   -m "not live" \
   --cov=harness/shared --cov=harness/api_server --cov=harness/control-plane \
   --cov-report=term-missing --cov-report=json
-python harness/shared/coverage_gate.py
+make coverage   # runs the suite and then coverage_gate.py. Invoking the script
+                # directly is denied from inside the loop: a bare `python <script>.py`
+                # is unmodelled and resolves to an action no role holds.
 ```
 
 The gate fails closed if either floor is missed, or if the coverage report or

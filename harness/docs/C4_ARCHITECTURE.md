@@ -12,7 +12,7 @@ The System Context diagram illustrates the high-level actors, the Autonomous Man
 
 ```mermaid
 graph TD
-    User([Developer / Player]) -->|Commands, Gameplay & Prompts| Platform[Agentic SSD & Nemotron Platform]
+    User([Developer / Engineer]) -->|Commands & Prompts| Platform[Agentic SSD & Nemotron Platform]
     
     subgraph "External Cloud Services & PDP"
         NIM[NVIDIA NIM Cloud API<br/>integrate.api.nvidia.com]
@@ -22,7 +22,7 @@ graph TD
     end
 
     Platform -->|HTTPS /v1/chat/completions| NIM
-    Platform -->|Action Authorization Request| ExtPDP
+    Platform -.->|authoritative for high-risk actions;<br/>NOT on the live path — mirrored in-process<br/>by policy_decision.decide| ExtPDP
     Platform -->|Verified Push / Audit| GitServer
     Platform -->|Documentation & Context Sync| Context7
 ```
@@ -36,7 +36,6 @@ The Container diagram shows the runtime environments, repositories, tools, and e
 ```mermaid
 graph TD
     User([Developer / Engineer]) --> CLI[Terminal CLI / PowerShell / Bash]
-    User --> Browser[Web Browser<br/>HTML5 Canvas 2D UI]
 
     subgraph "Repository Runtime Containers"
         subgraph ".agents Skill Registry"
@@ -49,14 +48,14 @@ graph TD
             Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
-            MetaTools[Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) [Planned]]
+            AgentMetaTools[Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) [Planned]]
             Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
             MA --> SubAgents
             SubAgents --> Personas
             MA --> Hooks
             MA --> Skills
-            MA --> MetaTools
-            MetaTools --> Memory
+            MA --> AgentMetaTools
+            AgentMetaTools --> Memory
         end
 
         subgraph "Node.js Container - harness/node"
@@ -81,11 +80,23 @@ graph TD
                 CoverageGate[coverage_gate.py<br/>lines + branches as two floors<br/>from governance-policy.json]
             end
             subgraph "governance/"
-                GovGuards[pretooluse_guard.py<br/>Policy Guards]
+                Broker[broker.py<br/>ExecutionBroker + ProcessBackend<br/>INV-8/9/10 — contains, does not isolate]
+                PDP[policy_decision.py<br/>In-process PDP<br/>mirrors tool_broker_reference.py]
+                Actions[command_actions.py<br/>command → declared action; allowlist,<br/>unmodelled ⇒ an action no role holds]
+                GovGuards[pretooluse_guard.py<br/>Policy Guards — resolved from the installed<br/>package; unavailability denies]
                 Validators["Governance Validators<br/>traceability, zero-skips, remotes"]
                 Evidence[evidence_manifest.py<br/>EvidenceBuilder — HMAC attestation]
+                Broker --> PDP
+                Broker --> Actions
+                Broker --> GovGuards
             end
+            WritePolicy[write_policy.py<br/>protected_paths at tool-call time<br/>+ any .git segment]
+            Authority[agent_authority.py<br/>per-role tool exposure, derived from agent-policy.json]
             RootValidators["Root Validators<br/>policy, adoption, agent-policy"]
+            Orchestrator -->|run_command| Broker
+            Orchestrator -->|write_file target| WritePolicy
+            Broker -->|write targets of a command| WritePolicy
+            Orchestrator -->|tools_for_role / execution_identity| Authority
             Orchestrator -.->|guarded, observation-only| Shadow
         end
 
@@ -98,7 +109,7 @@ graph TD
         end
 
         subgraph "Python AQA Engine - harness/shared/tests"
-            AQA["Pytest AQA Suite<br/>659 tests / coverage gate per policy"]
+            AQA["Pytest AQA Suite<br/>1564 tests / coverage gate per policy"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators

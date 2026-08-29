@@ -162,6 +162,7 @@ class TestFallbackLoggerDoesNotLeakToStdout:
         "module_path",
         [
             "harness/shared/governance/check_traceability.py",
+            "harness/shared/governance/pretooluse_guard.py",
             "harness/control-plane/regenerate_bundle_digests.py",
         ],
     )

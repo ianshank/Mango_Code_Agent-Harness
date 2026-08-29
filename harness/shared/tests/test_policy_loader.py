@@ -42,11 +42,18 @@ class TestLoadPolicy:
 class TestSectionAccessors:
     def test_orchestrator_values_come_from_policy(self, tmp_path: Path) -> None:
         p = tmp_path / "policy.json"
-        p.write_text(
-            json.dumps({"orchestrator": {"max_iterations": 3, "api_timeout_sec": 7, "tool_timeout_sec": 5}}),
-            encoding="utf-8",
-        )
-        assert orchestrator_defaults(p) == {"max_iterations": 3, "api_timeout_sec": 7, "tool_timeout_sec": 5}
+        # Every key the accessor returns is set to a distinct non-default value,
+        # so exact equality proves each one is *read* rather than filled in. A
+        # new key added to the accessor and not to this literal fails here, which
+        # is the point: an accessor nobody pinned is a threshold nobody sources.
+        declared = {
+            "max_iterations": 3,
+            "api_timeout_sec": 7,
+            "tool_timeout_sec": 5,
+            "max_command_bytes": 4096,
+        }
+        p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
+        assert orchestrator_defaults(p) == declared
 
     def test_partial_section_fills_defaults(self, tmp_path: Path) -> None:
         p = tmp_path / "policy.json"

@@ -12,3 +12,5 @@ Seven reference roles are declared in `shared/agent-policy.json` and mirrored in
 - Reviewer roles do not silently become implementers: peer/security/release evidence is separable from the code being judged.
 
 `control-plane/tool_broker_reference.py` is only reference PDP logic. A production broker must authenticate identities, bind approval to the exact action/resource/destination, enforce expiry/nonces, and write tamper-resistant evidence outside the governed repository.
+
+Its decision is now **mirrored in process** by `harness/shared/governance/policy_decision.decide`, which is what `ExecutionBroker` consults on the agent's live path; `test_policy_decision.py` pins that the two agree on every representative request, so the local control and the external contract cannot drift apart unnoticed. The mirror is a fast local control that fails closed — it is not the authoritative broker, and it contains rather than isolates (DEC-009, DEC-010).

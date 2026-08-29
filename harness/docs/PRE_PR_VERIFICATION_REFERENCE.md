@@ -21,12 +21,12 @@ truth rather than an index.
 | **INV-5** | CI Gate Coverage | CI invokes every policy-required gate by Make target; meta-tests detect omissions. | `pytest harness/shared/tests/test_ci_gate_coverage.py` |
 | **INV-6** | Root of Trust | The repository is not its own root of trust; policy digests are anchored externally. | `python harness/shared/validate_policy.py` |
 | **INV-7** | Bounded Delegation | Agent delegation transfers no authority; every side effect carries actor/trace/policy evidence. | `pytest -m governance` |
-| **INV-8** | Approved Execution Broker | Generated code executes only through the approved broker. | `pytest harness/shared/tests/test_governance_broker.py` |
-| **INV-9** | Deterministic Verdict | A candidate receives a deterministic policy verdict before execution or scoring. | `pytest harness/shared/tests/test_governance_broker.py` |
-| **INV-10** | Terminal DENY | A DENY verdict is terminal; no model may override it. | `pytest harness/shared/tests/test_governance_broker.py` |
+| **INV-8** | Approved Execution Broker | Generated code executes only through the approved broker, **and that broker has a live caller**. | `pytest harness/shared/tests/test_invariant_liveness.py harness/shared/tests/test_governance_broker.py harness/shared/tests/regression/test_guard_reachability_regression.py` |
+| **INV-9** | Deterministic Verdict | A candidate receives a deterministic policy verdict before execution or scoring, and an unavailable backend denies rather than falling back to the host. | `pytest harness/shared/tests/test_invariant_liveness.py harness/shared/tests/test_governance_broker.py` |
+| **INV-10** | Terminal DENY | A DENY verdict is terminal; no model may override it. | `pytest harness/shared/tests/test_invariant_liveness.py harness/shared/tests/test_governance_broker.py` |
 | **INV-11** | Critique Evidence | Every repair attempt carries a normalized critique and immutable evidence ID. | `pytest harness/shared/tests/test_evidence_manifest.py` |
 | **INV-12** | Bounded Repair | Repair loops stop at budget and produce FAILED or BLOCKED, never synthetic success. | `pytest -m neurosym` |
-| **INV-13** | Verified Digests | A "verified" result includes policy, test, sandbox, source, and tool-version digests. | `pytest harness/shared/tests/test_evidence_manifest.py` |
+| **INV-13** | Verified Digests | A "verified" result includes policy, test, sandbox, source, and tool-version digests. **Not currently satisfiable** — `ProcessBackend` contains but does not isolate, so no sandbox digest exists to record (DEC-010, `harness/CONTRACT.md`). | `pytest harness/shared/tests/test_evidence_manifest.py` |
 | **INV-14** | Redacted Export | Exportable traces are redacted and approved before dataset export. | `pytest -k redact` |
 | **INV-15** | LATS Disabled | LATS stays disabled until its cost-adjusted threshold is met. | `pytest -m neurosym` |
 | **INV-16** | Cognitive Boundary | No `CognitiveSignal` field reaches a control path, selects a tool/model, or alters tool exposure. | `pytest -m governance` + static scan in `test_shadow_planner.py` |
@@ -60,9 +60,17 @@ which files, which is the fastest way to spot a glob scoped to one stack that is
 silently checking nothing outside it:
 
 ```
-DEBUG: spec_globs glob 'docs/specs/**/*.md' matched 3 file(s)
-DEBUG: discovered 15 requirement ID(s): [...]
+DEBUG: spec_globs glob 'docs/specs/**/*.md' matched 2 file(s)
+DEBUG: discovered 6 requirement ID(s): ['C-AI-SEC-1', 'C-GOV-1', 'R-AI-NEMO-1', 'R-AI-NEMO-2', 'R-AI-RES-3', 'R-GOV-2']
 ```
+
+Those are the real numbers. This example previously read `3 file(s)` and
+`15 requirement ID(s)`, which no run produces — and the sentence above says this
+output is the fastest way to spot a glob silently checking nothing outside one
+stack. That is exactly what it is doing: `check_traceability` runs with
+`cd harness/node`, so the nine specs under the repository-root `docs/specs/` are
+traced by nothing. Invented numbers hid the finding the example exists to
+surface.
 
 On failure it also names *which side* each requirement is missing from
 (`absent from implementation and tests`), rather than only that something is
@@ -87,7 +95,7 @@ missing.
   by `harness/shared/coverage_gate.py`, which applies `coverage.lines` and `coverage.branches`
   as two separate floors (with `branch = true`, pytest-cov's single total is a blended
   statements+branches number, so a single `--cov-fail-under` would mislabel what the lines
-  floor gates); aggregate-only (per-file is a documented follow-up — `harness/CONTRACT.md`). Never restate the number here or anywhere else: quoting it
+  floor gates), plus the `lines` floor **per measured file** whenever `coverage.per_file` is true, which it currently is — one untested module turns CI red regardless of aggregate headroom (`coverage_gate.check_per_file`). Never restate the number here or anywhere else: quoting it
   recreates the drift the dynamic lookup exists to prevent. Measured roots are `harness/shared`,
   `harness/api_server` and `harness/control-plane`; `test_ci_gate_coverage.py` fails if a root
   declared in `pyproject.toml` is not actually passed to the gate.
@@ -123,7 +131,7 @@ python harness/shared/coverage_gate.py   # lines and branches floors from govern
 make specs      # bash validate_specs.sh — `bash` is required: the script is mode 644
 make remotes    # every configured push URL against the governance allowlist
 # `secrets` is intentionally NOT part of `make ci`: the scan is interpreter-independent,
-# so the root workflow runs it once in a dedicated job rather than on all four matrix
+# so the root workflow runs it once in a dedicated job rather than on all three matrix
 # legs. Run it locally when you have the pinned tool:
 make secrets-install && make secrets
 

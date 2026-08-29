@@ -7,9 +7,10 @@
 ## Authority model
 
 1. **External tool broker / PDP** — authoritative for agent network, write, destructive, secret, permission and production actions. It is administered independently of the governed repository.
-2. **Native pre-push + PreToolUse guards** — execution-time fast controls. They fail closed for the dangerous command families they model, but are not claimed to be impossible to bypass.
-3. **Project CI** — authoritative evidence that the evaluated commit conforms to policy. CI is not described as preventing an earlier off-policy network transfer.
-4. **Organization required workflow/ruleset** — independently pins the expected governance bundle and protects governance paths.
+2. **Local policy decision point + execution broker** — `harness/shared/governance/policy_decision.decide` evaluates each request against `agent-policy.json` in process, and `ExecutionBroker` (`governance/broker.py`) is the approved execution path INV-8 names: it derives the action from the command (`command_actions.classify`, an allowlist whose unmodelled default is an action no role holds), obtains a verdict, applies the write policy to every target the command would create, runs the command guard, and executes with a pinned cwd, a policy-declared timeout, a byte-capped output and an environment stripped of credentials. It **contains but does not isolate** — neither the filesystem nor the network is confined (DEC-010) — and it is **not** the authoritative broker: `tool_broker_reference.py` remains the contract an external broker mirrors, and `test_policy_decision.py` pins that the two agree on every representative request. A local fast control that fails closed, not a replacement for layer 1.
+3. **Native pre-push + PreToolUse guards** — execution-time fast controls. They fail closed for the dangerous command families they model, but are not claimed to be impossible to bypass.
+4. **Project CI** — authoritative evidence that the evaluated commit conforms to policy. CI is not described as preventing an earlier off-policy network transfer.
+5. **Organization required workflow/ruleset** — independently pins the expected governance bundle and protects governance paths.
 
 ## Target contract
 
@@ -19,7 +20,7 @@
 
 ## Invariants
 
-- **INV-1:** secret scan covers working tree and full history and fails closed when tooling/config is absent.
+- **INV-1:** secret scan covers working tree and full history and fails closed when tooling is absent, when config is absent, **and when a config is present but declares no ruleset**. `gitleaks --config` *replaces* the built-in rules rather than extending them, so every config must carry `[extend] useDefault = true` or its own `[[rules]]`; all three in this repository declared neither, and the scan reported success on every commit while detecting nothing. Enforced by `test_lint_config_liveness.TestGitleaksActuallyScans`, which parses the TOML rather than grepping it.
 - **INV-2:** skipped tests are failures unless the individual test has a live, decision-backed exemption. Node verifies Vitest JSON; JVM listener records evidence and Gradle performs the failing assertion.
 - **INV-3:** one shared remote URL normalizer/checker is used by Node, JVM, PreToolUse, pre-push and CI. Host is lowercased; path case and significant ports are preserved.
 - **INV-4:** Git hooks install into Git's effective hooks path and never overwrite an unrelated hook silently.
@@ -27,11 +28,11 @@
 - **INV-6:** the project repository is not its own root of trust. High-risk agent authority and the expected policy digest live outside it.
 - **INV-7:** agent delegation is bounded and does not transfer authority; every side effect has actor/trace/policy evidence.
 - **INV-8:** Generated code MUST execute through an approved execution broker.
-- **INV-9:** A candidate MUST receive a deterministic policy verdict before execution or scoring.
+- **INV-9:** A candidate MUST receive a deterministic policy verdict before execution or scoring, and an execution path whose backend is unavailable MUST return that verdict as a denial — never a host-process fallback. (`broker.py`, `README.md` and `docs/specs/agent-containment.md` all used INV-9 for the second half while this line stated only the first.)
 - **INV-10:** A DENY verdict is terminal for that candidate; a model cannot override it.
 - **INV-11:** Every repair attempt MUST have a normalized critique and immutable evidence ID.
 - **INV-12:** Repair loops MUST stop at the configured budget and produce FAILED or BLOCKED, never a synthetic success.
-- **INV-13:** A “verified” result MUST include policy, test, sandbox, source, and tool-version digests.
+- **INV-13:** A “verified” result MUST include policy, test, sandbox, source, and tool-version digests. **Not currently satisfiable.** `ProcessBackend` contains — pinned cwd, bounded runtime, capped output, filtered environment — but does not isolate: it confines neither the filesystem nor the network, so there is no sandbox digest to record and no result produced today claims INV-13 (DEC-010). Isolation is a later capability profile; the primitive cannot be exercised on this repository's CI runners. Stated here rather than left to be discovered, because an invariant published as a MUST and enforced by nothing is the shape `test_invariant_liveness.py` exists to catch.
 - **INV-14:** Exportable traces MUST be redacted and marked as approved training candidates before dataset export.
 - **INV-15:** LATS MUST remain disabled by default until its cost-adjusted evaluation threshold is met.
 - **INV-16:** the cognitive/execution boundary is one-directional — the cognitive plane proposes, the harness disposes. No field of a `CognitiveSignal` (`confidence` and producer identity included) may reach a control path, select a tool or model, or alter tool exposure. Observation-mode producers run with an empty tool schema and receive value objects, never live orchestrator state, and their failures are contained so the incumbent path is unaffected. Enforced by the boundary suite (`pytest -m governance`) and the static boundary scan in `test_shadow_planner.py`.
@@ -47,6 +48,8 @@ CI examples intentionally contain `PIN_FULL_COMMIT_SHA`; adopters must replace e
 ## Protected-paths escape hatch
 
 The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files. Two groups are covered: the **enforcement layer** (`Makefile`, `pyproject.toml`, `.github/workflows/**`, the shared validators, the policy publisher and its committed artifact, and the per-stack roots of trust under `.governance/`), and the **agent control surface** — everything an agent reads to decide what it may do: `CLAUDE.md`, `harness/CONTRACT.md`, `agent-policy.json`, agent role contracts, `.mango/skills/**`, and the `.mango/` and `.claude/` hook and settings files that execute shell. `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
+
+Since DEC-007 the same matcher also runs at **tool-call granularity**: `harness/shared/write_policy.write_denial_reason` reuses `validate_invariants.is_protected` — one matcher, not two — and is consulted by the orchestrator's `write_file` handler and by `ExecutionBroker` for every target a `run_command` would create or redirect into. It additionally denies any path containing a `.git` segment, which `protected_paths` structurally cannot express: `validate_invariants` enumerates staged, tracked-modified and untracked files, and git never reports anything under `.git`. A policy that cannot be read denies the write. The CI gate remains the *review* gate; the runtime gate closes the tool-call budget between agent boundaries, which the review gate cannot see.
 
 Patterns are matched with `fnmatch` against repo-root-relative paths, so a pattern written for a different repository layout matches nothing and protects nothing — silently. `test_protected_path_liveness.py` guards against that by asserting on the set of files each pattern actually matches, and requires any intentionally-dormant pattern to be declared with a reason.
 

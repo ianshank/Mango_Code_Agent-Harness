@@ -61,21 +61,26 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── meta_tools.py                # Meta-learning, context state, and file_lock
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
 │   │   ├── schemas/                     # JSON Schema docs (agent policy, evidence, signals)
+│   │   ├── write_policy.py              # Runtime write gate: protected_paths at tool-call time
+│   │   ├── agent_authority.py           # Per-role tool exposure derived from agent-policy.json
 │   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
 │   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
-│   │   │   ├── broker.py                # ExecutionBroker — INV-8/INV-9 enforcement
+│   │   │   ├── broker.py                # ExecutionBroker — INV-8/9/10 on the live path
+│   │   │   ├── command_actions.py       # Command → declared policy action (fails closed)
+│   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (659 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (1564 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
-│   │       ├── test_governance_broker.py # 11 tests: INV-8/INV-9, PDP, BLOCKED semantics
+│   │       ├── test_governance_broker.py # 40 tests: INV-8/9/10, in-process PDP, ProcessBackend
 │   │       ├── test_harness.py          # Adversarial governance self-tests
 │   │       ├── test_protected_path_liveness.py # Asserts protected_paths match real files, not just strings
 │   │       ├── test_ci_gate_coverage.py # INV-5: every ci_required_target is reachable from `make ci`
-│   │       └── test_validation_scripts_extra.py # 21 tests covering the governance validation scripts
+│   │       ├── test_invariant_liveness.py # An invariant whose mechanism has no caller enforces nothing
+│   │       └── test_validation_scripts_extra.py # 31 tests covering the governance validation scripts
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │       ├── publish_policy_artifact.py   # Versioned, digest-pinned, attestable policy artifact
@@ -111,7 +116,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 
 ### 2.3 Governance Kernel (`harness/shared/governance/`)
 
-- **`ExecutionBroker`** (`broker.py`): Fail-closed execution gate enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Returns `BLOCKED` when sandbox is unavailable — never falls back to direct host execution. PDP policy verdicts configurable; `check_command()` is the inner guard.
+- **`ExecutionBroker`** (`broker.py`): the approved execution path INV-8 names, reached from the orchestrator's `run_command`. `execute_command` derives the action from the command (`command_actions.classify`), obtains an in-process policy verdict (`policy_decision.decide`, mirroring `tool_broker_reference.py` and pinned by `test_policy_decision.py`), runs `check_command()`, then executes via `ProcessBackend` with a pinned working directory, a timeout and a byte-capped output. `sandbox_available` defaults to probing the backend; an unavailable backend returns `BLOCKED` and never falls through (INV-9), and a denial is terminal (INV-10). **The backend contains but does not isolate** — it confines neither the filesystem nor the network — so INV-13's sandbox digest is not yet satisfiable (DEC-010).
+- **`command_actions.py`**: classifies a command into a declared policy action. An allowlist, not a denylist: anything unmodelled resolves to an action no role holds, so an unrecognised command denies for every agent.
+- **`policy_decision.py`**: the verdict, in process. Replaces a host subprocess that ran *before* the command guard, from a path inside the agent's workspace (DEC-009).
+- **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment, which `validate_invariants` structurally cannot see (DEC-007).
+- **`agent_authority.py`**: derives each active role's tool exposure from `agent-policy.json`. The verifier holds no `write_file`, which every canonical contract it maps to already denied in prose (DEC-008).
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
 - **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in Python 3.9 (PEP 604 unions, `datetime.UTC`, unannotated `AnnAssign`). Run via `make check-compat`.
@@ -122,11 +131,17 @@ A production-grade, deterministic AI & software engineering platform featuring t
 |----------------------|---------------------------------------------------------------------------------|
 | `AGENT_EVIDENCE_KEY` | HMAC signing key for `EvidenceBuilder`. Never hard-code. Set in secret store. |
 
+`debug_dump.CREDENTIAL_ENV_VARS` covers `NVIDIA_API_KEY`, `API_SERVER_KEY`,
+`AGENT_EVIDENCE_KEY` and `CONTEXT7_API_KEY`, and `credential_env_names()` also
+sweeps any variable whose *name* marks it as a credential. Those values are
+redacted from returned histories and stripped from every hook subprocess
+environment, so a hook author should not expect `MY_TOKEN` to be visible.
+
 ---
 
 ## 3. 7-Tier Test Matrix & Governance
 
-The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero unapproved test skips** (`INV-2`):
+The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero unapproved test skips** (`INV-2`):
 
 ```text
                  ▲
@@ -139,10 +154,10 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.0** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **425+ automated tests** (95 Vitest + 330+ Pytest tests across 7 tiers)
+- **Total Automated Tests:** **1620 automated tests** (56 Vitest + 1564 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server`
-- **Requirements Traceability:** **15 / 15 specifications** traced bidirectionally (`check_traceability.py`)
+- **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9
 
@@ -197,7 +212,7 @@ pnpm exec knip
 cd ../..
 
 # 3. Run Python AQA Engine & Governance Validators
-make ci              # Full pipeline: lint → coverage → test-node → zero-skips → validate → dedup → digest-regen
+make ci              # Full pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → dedup → digest-regen
 make lint            # ruff + mypy + check_py_compat (Python 3.9 compat gate)
 make test            # Full test suite (Pytest + Vitest + Zero-Skips)
 make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)

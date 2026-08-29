@@ -36,13 +36,49 @@ REDACTED = "<REDACTED_API_KEY>"
 # Environment variables that may hold a credential worth scrubbing. Keeping
 # this a module constant (rather than a literal at the call site) means adding
 # a provider is a one-line change that both consumers pick up.
-CREDENTIAL_ENV_VARS = ("NVIDIA_API_KEY",)
+#
+# This list covered only NVIDIA_API_KEY while `main.py` returned the conversation
+# history over HTTP through `redact_history`, so API_SERVER_KEY and
+# AGENT_EVIDENCE_KEY left the process in clear text whenever a tool echoed them.
+# The second is the HMAC key EvidenceBuilder signs with: disclosing it does not
+# just leak, it lets an attacker forge the manifests INV-7 and INV-13 rest on.
+CREDENTIAL_ENV_VARS = (
+    "NVIDIA_API_KEY",
+    "API_SERVER_KEY",
+    "AGENT_EVIDENCE_KEY",
+    "CONTEXT7_API_KEY",
+)
+
+# Any variable whose *name* marks it as a credential is scrubbed by value too, so
+# a provider added to .env later is covered without editing this module. The
+# named list above stays because it is the reviewed set; this is the safety net.
+CREDENTIAL_NAME_PATTERN = re.compile(r"(?:^|_)(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$")
+
+# Floor for a value discovered in the environment. `redact_text` replaces by
+# substring, so a variable set to "x" would rewrite every "x" in the history and
+# destroy it. Caller-supplied secrets are exempt: the caller knows what it passed.
+MIN_ENV_CREDENTIAL_LENGTH = 8
 
 # NVIDIA-issued keys are `nvapi-` followed by a long opaque token. Matching the
 # shape catches a key that reached the history by a route we do not control --
 # echoed by a tool, pasted into a prompt, or resolved inside the bridge -- which
 # is exactly the case the old value-equality check could not cover.
 CREDENTIAL_PATTERN = re.compile(r"nvapi-[A-Za-z0-9_\-]{8,}")
+
+# The full shape set. `.gitleaks.toml` carries only an allowlist over gitleaks'
+# built-in rules, so there is no rule table here to source these from and no
+# drift to guard against; this tuple is the single definition, and
+# CREDENTIAL_PATTERN above is retained as the NVIDIA member for existing callers.
+CREDENTIAL_PATTERNS = (
+    CREDENTIAL_PATTERN,
+    re.compile(r"ctx7sk-[A-Za-z0-9_\-]{8,}"),
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{16,}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"(?i)authorization:\s*bearer\s+\S+"),
+)
 
 # Dump files can contain prompts and tool output. The directory is created
 # owner-only; the previous code took the default 0o777 & ~umask, which on a
@@ -60,10 +96,47 @@ def resolve_credentials(explicit: str | None = None, env: Mapping[str, str] | No
     """
     source = os.environ if env is None else env
     found: list[str] = []
-    for candidate in (explicit, *(source.get(var, "") for var in CREDENTIAL_ENV_VARS)):
+    if explicit and explicit not in found:
+        found.append(explicit)
+
+    # The reviewed list carries no length floor: these names are known credentials,
+    # and applying one would silently stop scrubbing a short key. The floor applies
+    # only to names discovered by pattern, where a false positive on a short value
+    # ("DEBUG_TOKEN=1") would rewrite every "1" in the history.
+    for name in CREDENTIAL_ENV_VARS:
+        candidate = source.get(name, "")
         if candidate and candidate not in found:
             found.append(candidate)
-    return found
+
+    for name in source:
+        if name in CREDENTIAL_ENV_VARS or not CREDENTIAL_NAME_PATTERN.search(name):
+            continue
+        candidate = source.get(name, "")
+        if len(candidate) >= MIN_ENV_CREDENTIAL_LENGTH and candidate not in found:
+            found.append(candidate)
+
+    # Longest first, and this ordering is load-bearing rather than cosmetic.
+    # `redact_text` replaces by substring in list order, so when one credential is
+    # a prefix of another -- two keys sharing an issuer prefix, or a truncated
+    # copy of the same key -- replacing the shorter one first consumes its head
+    # and leaves the remainder of the longer one in clear text. `sorted` is
+    # stable, so equal-length values keep their declared order.
+    return sorted(found, key=len, reverse=True)
+
+
+def credential_env_names(env: Mapping[str, str] | None = None) -> list[str]:
+    """Names in ``env`` that hold a credential, by review or by shape of the name.
+
+    ``agent-policy.json`` declares ``secrets_may_not_be_propagated_to_subagents``
+    and nothing enforced it: the orchestrator handed every hook the full
+    ``os.environ``. This is the list a child process must not inherit.
+    """
+    source = os.environ if env is None else env
+    return [
+        name
+        for name in source
+        if name in CREDENTIAL_ENV_VARS or CREDENTIAL_NAME_PATTERN.search(name)
+    ]
 
 
 def redact_text(text: str, secrets: Iterable[str] = ()) -> str:
@@ -71,7 +144,9 @@ def redact_text(text: str, secrets: Iterable[str] = ()) -> str:
     for secret in secrets:
         if secret:
             text = text.replace(secret, REDACTED)
-    return CREDENTIAL_PATTERN.sub(REDACTED, text)
+    for pattern in CREDENTIAL_PATTERNS:
+        text = pattern.sub(REDACTED, text)
+    return text
 
 
 def redact_history(

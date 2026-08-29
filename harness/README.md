@@ -7,17 +7,16 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 - `shared/` — byte-identical policy kernel, canonical agent policy, schemas and adversarial self-tests.
   - `shared/mango_mas_orchestrator.py` — Orchestrator for the Mango Multi-Agent System (with JSON logging).
   - `shared/meta_tools.py` — Meta-learning and context state tools for autonomous synthesis.
-  - `shared/governance/` — Extracted policy evaluation mechanisms (traceability, zero-skips, guards).
+  - `shared/governance/` — Extracted policy evaluation **and execution** mechanisms: traceability, zero-skips, guards, the `ExecutionBroker` that INV-8 names, and the in-process policy decision point.
   - `shared/tests/` — **Python AQA Engine** executing governance rules in-process.
 - `node/` — Node/TypeScript adapter and full 7-tier test matrix.
 - `jvm/` — JVM/Gradle/Kotlin adapter.
 - `control-plane/` — verifier, policy bundle, required-workflow example and reference PDP intended for an independently protected governance repository/service.
-- `diagrams/` — C4 Mermaid, Lucid-importable draw.io, SVG and PNG renders.
 - `docs/` — **`BENCHMARK_REPORT.md`**, **`C4_ARCHITECTURE.md`**, and other architectural documentation.
 
 ## Trust boundary
 
-The project repository is **not its own root of trust**. CI verifies conformance and emits evidence. Network/write/destructive authority belongs to an external policy enforcement point whose policy version is pinned independently. Native pre-push and agent PreToolUse guards provide fast local enforcement but are not described as impossible to bypass.
+The project repository is **not its own root of trust**. CI verifies conformance and emits evidence. Network/write/destructive authority belongs to an external policy enforcement point whose policy version is pinned independently. Native pre-push and agent PreToolUse guards provide fast local enforcement but are not described as impossible to bypass. A local in-process decision point and execution broker apply the same authority model on the agent's live tool-call path; they fail closed, contain rather than isolate, and do not replace the external enforcement point (see `harness/CONTRACT.md`, authority model layer 2).
 
 ## Template adoption
 

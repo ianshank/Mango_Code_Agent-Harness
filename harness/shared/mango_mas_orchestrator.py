@@ -8,17 +8,39 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.debug_dump import write_dump
-from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
+from harness.shared.agent_authority import (
+    ACTIVE_TO_CANONICAL,
+    execution_identity,
+    tool_is_permitted,
+    tools_for_role,
+)
+from harness.shared.debug_dump import credential_env_names, write_dump
+from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
+from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
+from harness.shared.tool_schemas import NEMOTRON_TOOLS as _NEMOTRON_TOOLS
+from harness.shared.write_policy import write_denial_reason
 
 logger = logging.getLogger(__name__)
 
 # How much of a task string is echoed into log lines (avoids flooding logs
 # with full prompts while keeping enough to correlate runs).
 TASK_LOG_PREVIEW_CHARS = 100
+
+#: The hook fired once at the start of every agent turn. Named rather than
+#: repeated so the allowlist below and the call site cannot drift apart.
+PRE_RUN_HOOK = "pre-nemotron-run"
+
+#: Hook names `_run_hook` will execute. Derived from the active roles rather
+#: than listed: a role added to `ACTIVE_TO_CANONICAL` gets its post-hook without
+#: a second edit, and a list maintained by hand is exactly the thing that goes
+#: stale into a permission. Every name here is one this module constructs
+#: itself; nothing a caller passes can widen the set.
+PERMITTED_HOOK_NAMES = frozenset(
+    {PRE_RUN_HOOK} | {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL}
+)
 # Default confidence when the model omits it from a hypothesis_register call.
 DEFAULT_HYPOTHESIS_CONFIDENCE = 0.5
 
@@ -56,6 +78,24 @@ def _normalize_tool_arguments(raw: typing.Any, func_name: typing.Any) -> dict[st
     return parsed
 
 
+def _format_execution_result(result: ExecutionResult) -> str:
+    """Render a broker result as the tool message the model receives.
+
+    Kept pure and separate from execution so the three output shapes stay
+    testable without spawning a process.
+    """
+    if result.status == "BLOCKED":
+        return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
+    if result.reason:
+        return f"Error: {result.reason}"
+    output = result.stdout
+    if result.stderr:
+        output += "\n[STDERR]\n" + result.stderr
+    if not output.strip():
+        return f"Command executed with return code {result.exit_code}, but generated no output."
+    return output
+
+
 AUTONOMOUS_AGENT_GUARDRAIL = (
     "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
     "and fail closed when approval is required."
@@ -70,7 +110,9 @@ REASONER_PROMPT_TEMPLATE = (
     "Execute the following plan using backward-compatible, modular code. "
     "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the filesystem.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL} "
-    "Use run_command to run standard terminal commands like pip, uvicorn, and pytest.\n\n"
+    "Use run_command to run the repository's own gates -- pytest, make, ruff, mypy. Commands that "
+    "install packages or reach the network are classified as external actions and will be denied; "
+    "if you need one, record the need with knowledge_gap_log rather than retrying.\n\n"
     "Plan:\n{plan}"
 )
 
@@ -81,38 +123,9 @@ VERIFIER_PROMPT_TEMPLATE = (
     "Reasoner Output:\n{code_output}"
 )
 
-# Combine orchestrator baseline tools with meta tools for continuous learning
-NEMOTRON_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Write or overwrite a file on the filesystem with the provided content.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filepath": {"type": "string", "description": "The path to the file to write."},
-                    "content": {"type": "string", "description": "The full content to write to the file."},
-                },
-                "required": ["filepath", "content"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_command",
-            "description": "Run a shell command and return its output.",
-            "parameters": {
-                "type": "object",
-                "properties": {"command": {"type": "string", "description": "The shell command to execute."}},
-                "required": ["command"],
-                "additionalProperties": False,
-            },
-        },
-    },
-] + META_TOOLS_SCHEMA
+# Declared in `tool_schemas`; re-exported here because this module's public
+# surface includes it and callers reach it as `orch_module.NEMOTRON_TOOLS`.
+NEMOTRON_TOOLS = _NEMOTRON_TOOLS
 
 
 class MangoMASOrchestrator:
@@ -130,6 +143,8 @@ class MangoMASOrchestrator:
         max_iterations: int | None = None,
         api_timeout: int | None = None,
         tool_timeout: int | None = None,
+        broker: ExecutionBroker | None = None,
+        active_role: str = "nemotron-reasoner",
     ) -> None:
         # Operational limits come from governance-policy.json (the
         # `orchestrator` block); explicit constructor arguments still override
@@ -144,6 +159,16 @@ class MangoMASOrchestrator:
         self.api_timeout = api_timeout if api_timeout is not None else limits["api_timeout_sec"]
         self.tool_timeout = tool_timeout if tool_timeout is not None else limits["tool_timeout_sec"]
         self.max_tool_calls_per_task = max_tool_calls_per_task()
+        # Injected rather than imported at the call site so an adopter can supply
+        # their own broker -- `harness/CONTRACT.md` places the authoritative
+        # broker outside the governed repository -- and so tests can drive the
+        # unavailable path without spawning anything.
+        self._broker = broker or ExecutionBroker()
+        # `execute_agent` overrides this per turn. The default is the implementer
+        # contract, which is what a directly-driven orchestrator is doing; it is
+        # not the widest role -- it holds neither external_write, destructive nor
+        # secret_access.
+        self._active_role = active_role
         self.agents_dir = self.workspace_dir / ".mango" / "agents"
         self.hooks_dir = self.workspace_dir / ".mango" / "hooks"
         self.conversation_history: list[dict[str, str]] = []
@@ -163,12 +188,38 @@ class MangoMASOrchestrator:
         }
 
     def _run_hook(self, hook_name: str, **kwargs: typing.Any) -> None:
-        """Executes a pre- or post- hook script if it exists."""
+        """Executes a pre- or post- hook script if it exists.
+
+        The name is checked against the set the orchestrator can legitimately
+        construct. `hooks_dir` is inside the workspace, and in the deployed
+        configuration the workspace is the repository -- so "run whatever `.sh`
+        matches this name" is a host-execution primitive keyed on a string that
+        `execute_agent` interpolates a caller-supplied role into. The write
+        policy already refuses to *create* a file there; this refuses to *run*
+        one, and the two failures required to reach host code are then
+        independent rather than sequential.
+        """
+        if hook_name not in PERMITTED_HOOK_NAMES:
+            # Raise rather than skip: an unrecognised name is the orchestrator
+            # asking for something it never legitimately asks for. Returning
+            # quietly would make a typo look like a hook that simply is not
+            # installed -- the failure mode this repository keeps finding.
+            raise ValueError(
+                f"refusing to run unrecognised hook {hook_name!r}; "
+                f"permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
+            )
         hook_path = self.hooks_dir / f"{hook_name}.sh"
         if hook_path.exists():
             logger.info("Executing hook: %s", hook_name)
             try:
-                env = os.environ.copy()
+                # `agent-policy.json` declares
+                # `secrets_may_not_be_propagated_to_subagents: true`, and nothing
+                # enforced it: every hook inherited the full environment, so a
+                # hook ran on the host holding NVIDIA_API_KEY, API_SERVER_KEY and
+                # AGENT_EVIDENCE_KEY. The hooks this repository ships need none of
+                # them -- `pre-nemotron-run.sh` runs validate_invariants.py.
+                denied = set(credential_env_names())
+                env = {k: v for k, v in os.environ.items() if k not in denied}
                 for k, v in kwargs.items():
                     env[f"MANGO_HOOK_{k.upper()}"] = str(v)
                 subprocess.run(
@@ -186,12 +237,28 @@ class MangoMASOrchestrator:
         return agent_file.read_text(encoding="utf-8")
 
     def _execute_write_file(self, filepath: str, content: str) -> str:
-        """Local tool implementation to write a file."""
+        """Local tool implementation to write a file.
+
+        Two checks, in order. Confinement keeps the write inside the workspace;
+        the write policy keeps it off the control surface *within* the workspace.
+        The second is not redundant: in the deployed path the workspace is the
+        repository root, so confinement alone permits writing the guard, the
+        policy decision point, the orchestrator's own hooks and the agent
+        personas (spec R-AC-6, R-AC-7).
+        """
         workspace = self.workspace_dir.resolve()
         target_path = (workspace / filepath).resolve()
 
         if not target_path.is_relative_to(workspace):
+            # Previously returned silently. An escape attempt is the single most
+            # interesting thing this tool can do and it left no trace anywhere.
+            logger.warning("Denied write outside the workspace: %s", filepath)
             return f"Error writing file {filepath}: path escapes workspace"
+
+        denial = write_denial_reason(str(target_path.relative_to(workspace)))
+        if denial is not None:
+            logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
+            return f"Error writing file {filepath}: {denial}"
 
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,50 +270,27 @@ class MangoMASOrchestrator:
             return f"Error writing file {filepath}: {str(e)}"
 
     def _execute_run_command(self, command: str) -> str:
-        """Local tool implementation to execute a command."""
-        try:
-            # Route command execution through pretooluse guard
-            guard_script = self.workspace_dir / "harness" / "shared" / "pretooluse_guard.py"
-            if guard_script.exists():
-                payload = json.dumps({"tool": "run_command", "args": {"command": command}})
-                env = os.environ.copy()
-                env["PYTHONPATH"] = str(self.workspace_dir)
-                guard_result = subprocess.run(
-                    ["python", str(guard_script)],
-                    input=payload,
-                    cwd=self.workspace_dir,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.tool_timeout,
-                )
-                if guard_result.returncode != 0:
-                    return (
-                        f"Error: Command blocked by policy guard. Guard output:\n"
-                        f"{guard_result.stdout}\n{guard_result.stderr}"
-                    )
+        """Run a command through the approved execution broker (INV-8).
 
-            # If guard passes (or doesn't exist), execute the command
-            result = subprocess.run(
-                ["bash", "-c", command],
-                cwd=self.workspace_dir,
-                capture_output=True,
-                text=True,
-                timeout=self.tool_timeout,
-            )
+        Previously this shelled out directly. The broker is what makes INV-8 true
+        on the live path: it derives the action from the command, asks the
+        authority model for a verdict, runs the command guard, and pins the
+        working directory, the timeout and the captured output size. It never
+        falls back to host execution when its backend is unavailable (INV-9), and
+        a denial is terminal -- nothing here retries or downgrades one (INV-10).
 
-            output = result.stdout
-            if result.stderr:
-                output += "\n[STDERR]\n" + result.stderr
-
-            if not output.strip():
-                return f"Command executed with return code {result.returncode}, but generated no output."
-            return output
-        except subprocess.TimeoutExpired:
-            return f"Error: Command '{command}' timed out after {self.tool_timeout} seconds."
-        except Exception as e:  # noqa: BLE001 - same tool-result contract as
-            # _execute_write_file: report the failure, never propagate it.
-            return f"Error executing command '{command}': {str(e)}"
+        The guard is no longer called here as well: it is on the broker's path,
+        and calling it twice would mean two places to keep in step.
+        """
+        result = self._broker.execute_command(
+            command,
+            {"agent_id": execution_identity(self._active_role)},
+            cwd=self.workspace_dir,
+            timeout=self.tool_timeout,
+        )
+        if result.status == "BLOCKED":
+            logger.warning("Broker denied command for role %s: %s", self._active_role, result.reason)
+        return _format_execution_result(result)
 
     def _dispatch_tool_calls(
         self, messages: list[dict[str, typing.Any]], tool_calls: list[dict[str, typing.Any]]
@@ -259,7 +303,22 @@ class MangoMASOrchestrator:
             args = _normalize_tool_arguments(tc.get("function", {}).get("arguments"), func_name)
 
             handler = self._tool_handlers.get(func_name)
-            if handler is None:
+            if handler is not None and not tool_is_permitted(self._active_role, func_name):
+                # Filtering the advertised schema decides what the model is told
+                # about; it does not decide what runs. The verifier's schema omits
+                # `write_file`, but the name is in `conversation_history` from the
+                # reasoner's turn, and this dispatcher looked handlers up by name.
+                # R-AC-8 -- "the role that judges the work cannot edit the work" --
+                # was enforced by omission from a prompt until this check existed.
+                logger.warning(
+                    "Refused tool %s for role %s: not permitted by the authority model",
+                    func_name, self._active_role,
+                )
+                handler = None
+                tool_result = (
+                    f"Error: tool '{func_name}' is not available to the {self._active_role} role"
+                )
+            elif handler is None:
                 tool_result = f"Error: Unknown tool '{func_name}'"
             else:
                 try:
@@ -308,7 +367,12 @@ class MangoMASOrchestrator:
         Executes a single agent's reasoning loop using ReAct (Reasoning and Acting).
         Returns the final string output from the agent.
         """
-        self._run_hook("pre-nemotron-run", task=task, agent=agent_name)
+        # The tool handlers are zero-argument closures over `self`, so the acting
+        # role has to be recorded here for `_execute_run_command` to name it. A
+        # verifier turn must be evaluated as the verifier, not as whatever role
+        # ran last.
+        self._active_role = agent_name
+        self._run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 
         messages: list[dict[str, typing.Any]] = [
@@ -319,7 +383,12 @@ class MangoMASOrchestrator:
         # Keep track of conversation for debugging
         self.conversation_history.extend(messages)
 
-        active_tools = tools if tools is not None else NEMOTRON_TOOLS
+        # Default exposure is derived from `agent-policy.json`, not the full
+        # schema. Defaulting to NEMOTRON_TOOLS is how the verifier came to hold
+        # `write_file` while every canonical contract it maps to denies
+        # implementation changes (spec R-AC-8). An explicit `tools=` argument still
+        # wins, so a caller can narrow further but never widen by omission.
+        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
         # Cumulative budget across the whole task, from
         # agent_defaults.max_tool_calls_per_task in governance-policy.json.
         executed_tool_calls = 0

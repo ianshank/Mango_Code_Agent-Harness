@@ -152,11 +152,8 @@ digest-regen: ## Regenerate the control-plane policy bundle (per-file digests + 
 
 # --- Governance-specific test target ---
 .PHONY: test-governance
-test-governance: ## Run governance module tests in isolation (broker, evidence, invariants)
-	$(PYTEST) $(SHARED_TESTS)/test_governance_broker.py \
-	          $(SHARED_TESTS)/test_evidence_manifest.py \
-	          $(SHARED_TESTS)/test_validate_invariants.py \
-	          -m "not live" -v --tb=short
+test-governance: ## Run every governance-marked gate in isolation (selected by marker, cannot go stale)
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "governance and not live" -v --tb=short
 
 # --- Neuro-symbolic synthesis test target ---
 .PHONY: test-neurosym

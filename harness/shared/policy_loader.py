@@ -119,6 +119,7 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         "max_iterations": _int_value(section, "max_iterations", 10, "orchestrator"),
         "api_timeout_sec": _int_value(section, "api_timeout_sec", 300, "orchestrator"),
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
+        "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
     }
 
 

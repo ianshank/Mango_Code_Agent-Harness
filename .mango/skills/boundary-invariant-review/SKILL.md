@@ -57,10 +57,14 @@ Each is answerable from the diff; none requires judgment about intent.
    tool, filesystem path, timeout, or endpoint.
 3. **Observation call sites hold no tool authority.** Every `complete_chat`
    call on an observation path passes `tools=[]` and omits `tool_choice`.
-   Watch the default: `execute_agent(..., tools=None)` falls back to
-   `NEMOTRON_TOOLS`, which contains `write_file` and `run_command` — routing
-   an observation pass through it re-arms full authority without changing a
-   single tool literal.
+   The old hazard is gone and a new one replaces it. `execute_agent(...,
+   tools=None)` no longer falls back to `NEMOTRON_TOOLS`: it derives exposure
+   from `agent_authority.tools_for_role`, and a role absent from
+   `ACTIVE_TO_CANONICAL` receives an empty list. So the way to re-arm authority
+   without touching a tool literal is now to add an observation role to
+   `ACTIVE_TO_CANONICAL`, or to map one to a canonical contract that holds
+   `write`. Review those two tables, and `TOOL_REQUIRED_ACTION`, not the
+   constant.
 4. **Observation modules import no orchestrator surface.** They receive frozen
    value objects. A module that holds the orchestrator instance holds
    `execute_agent`, `_execute_run_command`, `_run_hook`, and mutable
@@ -76,6 +80,7 @@ python -m pytest -m governance -q
 # Reviewer's manual pass over a diff — every hit needs a justification.
 git diff origin/main...HEAD -- '*.py' | grep -nE '^\+.*(confidence|producer_id|producer_version)' 
 git diff origin/main...HEAD -- '*.py' | grep -nE '^\+.*(NEMOTRON_TOOLS|META_TOOLS_SCHEMA|execute_agent|tool_choice)'
+git diff origin/main...HEAD -- '*.py' | grep -nE '^\+.*(tools_for_role|ACTIVE_TO_CANONICAL|EXECUTION_IDENTITY|TOOL_REQUIRED_ACTION)'
 ```
 
 A grep hit is not automatically a violation — recording a field into a signal

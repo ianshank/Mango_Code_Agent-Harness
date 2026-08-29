@@ -122,6 +122,17 @@ class TestMakefileSelfConsistency:
         defined = set(_targets())
         assert not names - defined, f".PHONY names targets that do not exist: {sorted(names - defined)}"
 
+    def test_test_governance_selects_by_marker_not_by_filename(self) -> None:
+        """A hardcoded file list goes stale the moment a governance module is added,
+        and reports "governance is green" while skipping most of the suite. It named
+        three modules while 23 carried the marker."""
+        recipe = _targets().get("test-governance", "")
+        assert "-m" in recipe and "governance" in recipe, recipe
+        assert ".py" not in recipe, (
+            "test-governance names individual files; select by marker so a new governance "
+            "module is picked up without editing the Makefile"
+        )
+
     def test_every_target_is_documented(self) -> None:
         """`make help` parses `## ` comments; an undocumented target is
         invisible to anyone who did not write it."""

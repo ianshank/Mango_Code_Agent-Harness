@@ -7,6 +7,459 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security — the containment layer held against the shapes its own tests named, and little else
+
+An adversarial review of this branch, driven through the real broker in a
+temporary workspace, found four ways past the gates it added. Every one is
+reproduced by a test that fails against the code as shipped.
+
+#### `1>` and `2>` were not redirects
+
+`_REDIRECT` was `(?<![0-9<>&])(?:>>|>)(?!&)`. The `0-9` was added so `2>&1`
+would not read as a redirect — but `(?!&)` already did that, so the digit
+exclusion bought nothing and made **every fd-numbered redirect invisible**.
+`echo PWNED 1>.git/hooks/pre-commit` classified as `read`, produced no write
+targets, and installed a host-executed hook. Since the action never became
+`write`, it also let the **verifier** — which holds no `write` action at all —
+write files, and the full escalation the spec's problem statement describes was
+open end to end: write `post-verifier-run.sh` via `1>`, and the orchestrator
+runs it on the host at the end of that same turn.
+
+Now `(?<!>)>(?!&[0-9-])`: every `>` counts, including `1>`, `2>`, `&>`, `>|` and
+`<>`; only descriptor duplication and closing are excluded. The control that
+motivated the over-broad original — `2>&1` and `>&2` must not be graded writes,
+or ordinary commands are denied — is kept and pinned.
+
+#### A trailing redirect downgraded every dangerous command
+
+The redirect branch ran before the program and shape tables **and returned from
+it**, so the redirect *was* the classification. Appending ` > out.txt` regraded
+anything to `write`, the one action the implementer holds:
+
+| command | was | now |
+|---|---|---|
+| `rm -rf victim > log.txt` | `write` | `destructive` |
+| `curl --version > out.txt` | `write` | `external_write` |
+| `env > env.txt` | `write` | `secret_access` |
+| `sudo -n true > log.txt` | `write` | `permission_change` |
+
+Seven characters routed around `human_approval_required_for`,
+`external_network_default` and every entry in `high_risk_actions`. Classification
+now grades the command first and takes the **strictest** of that and the write,
+against an explicit severity order in which an action the table does not name
+sorts highest — so adding one can never make it downgradable.
+
+A command exercises a *set* of actions, and the strictest is not always the
+write: `pytest -q > x.txt` grades `test_execute`, and a role holding
+`test_execute` without `write` would still write through the redirect. The
+broker now requires `write` separately whenever a command has write targets.
+
+#### Tool authority was enforced by omission from a prompt
+
+`tools_for_role` filters the schema the model is *told* about.
+`_dispatch_tool_calls` looked handlers up by name with no reference to that
+filtered list — and `write_file` is in `conversation_history` from the reasoner's
+turn immediately before the verifier's. A verifier that named the tool anyway got
+it. The pre-existing test asserts on `chat.call_args.kwargs["tools"]`, which is
+exactly the advisory half, so it stayed green against this.
+
+`agent_authority.tool_is_permitted` now answers the same question at dispatch,
+where it decides what runs rather than what is advertised.
+
+#### Brokered commands inherited the full credential environment
+
+`_run_hook` filtered the environment; `ProcessBackend._spawn` did not — and
+`_spawn` is the path the model controls. `env` and `printenv` are graded
+`secret_access` and denied, but the action model cannot enumerate every
+spelling: `cat /proc/self/environ` is `cat`, which grades `read`, an action every
+role holds, and returned `NVIDIA_API_KEY`, `API_SERVER_KEY` and
+`AGENT_EVIDENCE_KEY` into the model's context. The last is the HMAC key evidence
+manifests are signed with, so that was forgery, not only disclosure.
+
+**14/14 mutants killed** across the four fixes, each with a control that a
+gate denying everything would fail.
+
+### Fixed — `classify` was quadratic in a model-supplied string
+
+Two `_BY_SHAPE` patterns bridged with `.*` after a repeatable literal, so the
+engine retried the tail from every match position. Measured: 0.28 s at 14 KB,
+1.07 s at 28 KB, 4.29 s at 56 KB, **17.1 s at 112 KB** — a clean 4× per
+doubling. The broker's timeout bounds the subprocess and `classify` runs before
+it, so nothing covered this: one oversized `run_command` stalled the
+orchestrator and, through `run_in_threadpool`, an API worker.
+
+Both patterns now bridge with a bounded flag run instead of `.*`, and the input
+is capped at `orchestrator.max_command_bytes` (new policy key, not a literal).
+Same input: 0.0003 s. The cap alone would have left the quadratic patterns live
+just beneath it, so both are fixed rather than one.
+
+`debug_dump`'s credential patterns were measured too and are **linear** — worst
+case 69 ms at 256 KB. No change needed there.
+
+### Fixed — `ProcessBackend.available()` returned True unconditionally
+
+That is not a probe. It is the `sandbox_available: bool = True` fail-open moved
+one method down: same unconditional yes, same unreachable INV-9 branch. And
+`test_default_probes_the_backend_rather_than_assuming` passed identically
+against both, so the test's *name* was the only thing separating the defect from
+the fix.
+
+`available()` now runs the shell. `shutil.which` would answer "a file with that
+name is on PATH", which a shell that is present but not executable also
+satisfies — and that fails at the first real command instead, with the caller
+already past the INV-9 branch. Cached, because `verify_sandbox` is consulted per
+tool call and the answer cannot change within a run. **4/4 mutants killed**,
+including the original `return True`.
+
+### Changed — the tool schema moved to `tool_schemas.py`
+
+`NEMOTRON_TOOLS` now lives in `harness/shared/tool_schemas.py` and is re-exported
+from the orchestrator unchanged; every caller reaches it as
+`orch_module.NEMOTRON_TOOLS` and none is affected. This keeps the orchestrator
+inside the 500-line budget, which the containment checks had pushed it past.
+
+`test_meta_tools_are_actually_wired_into_the_orchestrator` asserted by searching
+the orchestrator's *source text* for `META_TOOLS_SCHEMA`, `knowledge_gap_log` and
+`hypothesis_register` — which its own docstring would satisfy, and which a
+comment saying the tools are not wired would satisfy equally. It now asserts
+against the composed schema and the live dispatch registry.
+
+### Fixed — `.dockerignore` shipped a dead rule and the image shipped test fixtures
+
+`.agents/` was excluded long after the directory was consolidated into
+`.mango/skills/` (R-HYG-4). `TestGitignoreHasNoDeadRules` did not catch it: it
+reads `.gitignore` only, and its predicate is *the parent exists*, which
+`.agents/` satisfies because its parent is the repository root.
+`TestDockerignoreHasNoDeadRules` checks the rule's own path. **3/3 mutants
+killed.**
+
+`COPY harness/ /app/harness/` also put `harness/shared/tests/` — which holds a
+`ghp_...`, an `AKIA...` and `nvapi-...` literals — into the published image.
+Those are allowlisted for the *scan*; the allowlist says nothing about what
+ships. The Python and JVM suites are excluded from the build context;
+`harness/node/tests/` is removed in the runtime stage instead, because
+`tsconfig.json` includes `tests/**/*.ts` and dropping it from the context would
+not fail the build — it would quietly typecheck less.
+
+### Hardened — `_run_hook` executed any script whose name it was handed
+
+`_run_hook(name)` spawned `<hooks_dir>/<name>.sh` on the host whenever the file
+existed, and `execute_agent` builds that name by interpolating its `agent_name`
+argument: `f"post-{agent_name}-run"`. `hooks_dir` is inside the workspace, and
+in the deployed configuration the workspace *is* the repository, so the pair is
+a host-execution primitive keyed on a caller-supplied string.
+
+**Stated precisely, because the distinction matters:** this was not reachable by
+the agent. `agent_name` comes from `execute_sequential_thinking_loop`, which
+passes the three fixed roles; the model never chooses it. The write policy
+already refuses to create a file under `.mango/hooks/**`. This is
+defence-in-depth on a primitive whose safety otherwise rested on an argument
+being trustworthy — true today, and nothing enforced it.
+
+`_run_hook` now refuses any name outside `PERMITTED_HOOK_NAMES`, checked before
+the path is built so the verdict does not depend on whether the file exists.
+The set is *derived* — `{PRE_RUN_HOOK} | {f"post-{role}-run" for role in
+ACTIVE_TO_CANONICAL}` — so a role added to the authority model gets its hook
+without a second edit, and a hand-maintained list cannot go stale into a
+permission. Refusal raises rather than returning: a name the orchestrator never
+constructs indicates a bug or an injection, and skipping quietly would make it
+look like a hook that simply is not installed.
+
+`test_the_allowlist_covers_every_name_the_orchestrator_constructs` parses the
+`_run_hook` call sites out of the module and checks the set covers them, so a
+new call site the allowlist omits fails here rather than at runtime on whichever
+role happens to run last. **5/5 mutants killed**, including an empty allowlist —
+which every other assertion in the class would have passed.
+
+The orchestrator tests drove `execute_agent` with a fictional `test-agent`
+role. That is no longer a neutral placeholder: the authority model does not
+declare it, so `post-test-agent-run` is a name the orchestrator could not have
+constructed. Those tests and the regression-tier fixture now use the active
+roles, as `test_mango_mas_tools.py` already did.
+
+Raised by review on `mango_mas_orchestrator.py:203`. The companion comment on
+`:214` — `set(credential_env_names())` rebuilt once per environment variable
+inside the filter comprehension — was already hoisted.
+
+### Fixed — the command guard could hang instead of returning a verdict
+
+`check_command` delegates push-destination decisions to `remotes.py` in a
+subprocess, and that call carried no timeout. A guard that hangs produces the one
+outcome a fail-closed gate cannot: no verdict at all. The tool call waits on a
+subprocess that waits on a network read, and neither the broker's timeout nor
+INV-8 has anything to act on.
+
+Threading the broker's own budget through (`check_command(command,
+timeout=timeout)`) fixed the broker path and left the other one open.
+`main()` — the PreToolUse entry point Claude Code actually executes as a hook —
+has no tool budget to hand down, so it kept calling `check_command(str(cmd))`
+and the signature default `timeout: int | None = None` passed `None` straight
+into `subprocess.run`. A default that reads as "bounded" and is not is the same
+shape as the `sandbox_available: bool = True` fail-open removed one commit
+earlier.
+
+The default is now resolved from `orchestrator.tool_timeout_sec` in
+`governance-policy.json` rather than fixed in the signature, so the hook and the
+broker share one policy-declared bound and neither restates it. Read with
+`json.loads` rather than through `policy_loader`: Claude Code executes this
+module directly, so it takes no harness imports — the same standalone-stdlib
+contract `check_projections` and `verify_zero_skips` carry, and the reason they
+duplicate the absent-policy rule rather than importing it.
+
+Resolution is inside `check_command`, not at import time, so the value cannot be
+pinned to whatever the policy said when the hook module first loaded. An absent
+policy is the adopter path; a policy that is *present but unreadable* raises, and
+`check_command` converts that raise into a block — an exception escaping a
+PreToolUse hook is a crash, which Claude Code reads as a broken hook rather than
+as a denial. Absence is separated from inaccessibility by errno, not by a `Path`
+predicate, for the reason recorded below: `stat()` answers `NotADirectoryError`
+for a policy behind a file-where-a-directory-belongs and `ELOOP` for a symlink
+loop, and reading either as "no policy here" silently restores the default.
+
+**8/8 mutants killed** — restoring the unbounded default, dropping the
+`TimeoutExpired` catch, falling back on an unusable policy, dropping the
+positivity guard, dropping the `bool`-is-an-`int` guard (a policy of `true`
+otherwise reads as a one-second budget), letting the `ValueError` escape as a
+crash, and either of the two ways to collapse inaccessible into absent.
+
+### Agent containment — INV-8 becomes true on the live path
+
+`run_command` routes through `ExecutionBroker`. Generated code now executes
+through the approved broker, which derives the action from the command, obtains
+a policy verdict, runs the command guard, and pins the working directory, the
+timeout and the captured output size. Nothing falls back to host execution when
+the backend is unavailable (INV-9), and a denial is terminal (INV-10).
+
+#### Added
+
+- `test_invariant_liveness.py`, generalising the insight behind
+  `test_protected_path_liveness.py` — *a pattern that matches nothing protects
+  nothing, silently* — one layer up, to invariants whose enforcement mechanism
+  has no caller. It asserts on **resolved imports parsed from the AST**, not on
+  text: a symbol appearing in a comment is not a caller. **3/3 mutants killed** —
+  removing the orchestrator's broker import fails INV-8, INV-9 and the positive
+  control with the intended message.
+
+  It ships with an **empty** waiver dict. Landing it earlier alongside a waiver
+  for INV-8 was considered and rejected: a self-destructing waiver introduced in
+  the same commit as its own fix can never fire, and a gate whose first act is to
+  waive the invariant it exists to catch is the defect wearing a test file.
+- `agent_authority.execution_identity` — the canonical contract each active role
+  executes as. The active roles are not declared in `agent-policy.json`, and
+  adding them would be the agent's own governing policy gaining an execution
+  grant. The narrowest contract that covers the role's work is used instead, and
+  `test_execution_identity_is_no_wider_than_the_role` pins that it never exceeds
+  the role's derived authority.
+- `_format_execution_result`, a pure function, so the three output shapes stay
+  testable without spawning a process.
+
+#### Changed — accepted consequences
+
+- **An active role the mapping does not declare cannot execute at all.** It is
+  denied as an unknown identity rather than defaulting to a permissive one.
+- **`pip install` and other external or destructive commands are denied for the
+  reasoner.** The reasoner prompt instructed running `pip`; it now names the
+  repository's own gates and directs the agent to `knowledge_gap_log` instead of
+  retrying a command policy will keep refusing.
+- Two classifier defects found by the existing suite rather than by inspection:
+  `>&2` and `2>&1` were read as command chains, denying ordinary commands; and
+  `sleep`, `sort`, `cut` and similar were unmodelled and therefore denied.
+- `test_generic_exception` monkeypatched `orch_module.subprocess.run`. With
+  execution behind the broker that patch is inert — it would have passed while
+  asserting nothing. Replaced with an injected backend that cannot start.
+
+### Agent containment — the execution broker becomes real
+
+Third in the containment sequence. `ExecutionBroker` is the approved execution
+path INV-8 names; it had no production caller and `execute_command` ended at
+`FAILED: Execution engine not fully implemented`, so INV-8 was declared and
+unreached.
+
+#### Fixed — three fail-open shapes in the broker
+
+- **`sandbox_available: bool = True`.** A caller that never probed was told the
+  sandbox was healthy, so INV-9's no-fallback branch was unreachable from the
+  constructor most callers would write. The default is now *probe*; an explicit
+  bool is still honoured, which is what lets a test drive the unavailable path.
+- **`if _PDP_PATH.exists() and _POLICY_PATH.exists():`** skipped the policy
+  verdict entirely when either file was missing, rather than denying.
+- **The decision point ran as a host subprocess, before the command guard, from
+  a path inside the agent's workspace.** Replacing that file replaced every
+  subsequent verdict. It is evaluated in process now.
+  `tool_broker_reference.py` remains as the contract an external broker mirrors,
+  and `test_policy_decision.py` pins that the two agree on every representative
+  request.
+
+#### Added
+
+- `governance/command_actions.py` — derives the action a command exercises from
+  the command. The action was previously whatever the caller passed, and a
+  constant grades `pytest` and `rm -rf /` identically, so
+  `human_approval_required_for` was never reached. Classification is an
+  allowlist; anything unmodelled resolves to an action **no role holds**, pinned
+  by `test_unclassified_action_is_held_by_no_role`. Chained and substituted
+  commands are unclassified rather than graded by their first word, and reading
+  a credential-bearing file is `secret_access` rather than `read`.
+- `governance/policy_decision.py` — the verdict, in process, mirroring the
+  reference implementation's three denials in order.
+- A process backend that pins the working directory, bounds runtime and caps
+  captured output. `execute_command` gains `cwd` and `timeout`: the
+  orchestrator's contract is a pinned directory and a policy-declared
+  `tool_timeout_sec`, and a broker that dropped them would discard a governed
+  budget silently.
+
+#### Scope, stated plainly
+
+The backend **contains**; it does not **isolate**. It confines neither the
+filesystem nor the network, so INV-13's sandbox digest is not yet satisfiable
+and no result produced here claims otherwise. Isolation is deferred to a
+capability profile because the primitive cannot be exercised on this
+repository's CI runners — `ubuntu-latest` restricts unprivileged user
+namespaces — and a gate that cannot run is the defect this programme exists to
+close.
+
+**INV-8 is not yet true on the live path.** The broker still has no production
+caller; the orchestrator's `run_command` continues to execute directly. Routing
+is the next change, and it is separated deliberately: a self-destructing
+dormancy waiver that lands in the same commit as its own fix never fires.
+
+#### Changed
+
+- `test_governance_broker.py` rewritten. The previous tests patched
+  `broker.subprocess.run` module-wide to stand in for the PDP child process;
+  with a real engine behind the same attribute those patches would have
+  intercepted the engine instead and passed while testing nothing. Three of them
+  pinned behaviour since identified as a fail-open —
+  `test_pdp_skipped_when_files_absent` asserted that a missing policy file
+  skipped the verdict.
+
+### Agent containment — the write tool cannot reach the control surface
+
+The second change in the containment sequence. `protected_paths` was enforced
+only by `validate_invariants.py` at CI time, against the set of files a commit
+changed. In the deployed path the agent's workspace *is* the repository root
+(`api_server/main.py` passes `workspace_dir=PROJECT_ROOT`), so `write_file` --
+correctly confined to the workspace -- had write access to the guard, the policy
+decision point, the orchestrator's own hooks, both policies, the agent personas
+and `.git/`.
+
+Enforcement was not absent, it was at the wrong granularity: `pre-nemotron-run`
+runs `validate_invariants.py` at the top of every `execute_agent` call, so a
+protected-path write is caught at the *next* agent boundary — with a whole
+tool-call budget in between, and the last agent's own writes never re-checked
+before its post-run hook fires.
+
+#### Fixed
+
+- **`_execute_write_file` consults the write policy at tool-call time**
+  (`write_policy.py`), reusing `validate_invariants.is_protected` rather than a
+  second matcher. `.git/**` is denied explicitly: `validate_invariants`
+  enumerates staged, modified and untracked files, and git never reports
+  anything under `.git`, so `protected_paths` structurally cannot cover a hook
+  or a `core.fsmonitor` entry written there.
+- **The verifier no longer receives `write_file`.** `execute_agent` passed no
+  `tools=` for the reasoner or the verifier, so both fell through to the
+  implementer schema — the role that judges the work could edit it, and could
+  write the hook `_run_hook` executes on the host at the end of its own turn.
+  Exposure is now derived from `agent-policy.json`: the union of a role's
+  canonical contracts minus each contract's `human_approval_required_for`, so
+  `release-auditor`'s approval-gated `external_write` and `production_change` do
+  not leak into the verifier either.
+- **Credentials no longer leave over HTTP.** `debug_dump` scrubbed
+  `NVIDIA_API_KEY` alone while `/api/orchestrate` returned the conversation
+  history, so `API_SERVER_KEY` and `AGENT_EVIDENCE_KEY` passed in clear text.
+  The second is the HMAC key `EvidenceBuilder` signs with: disclosing it permits
+  forged evidence manifests, so this was an escalation rather than a leak. The
+  single redactor now covers the reviewed list, sweeps any variable whose *name*
+  marks it as a credential (with a length floor, since replacement is by
+  substring), and matches seven more provider shapes.
+- **Hook environments are filtered.** `_run_hook` handed every hook
+  `os.environ.copy()`. `agent-policy.json` has always declared
+  `secrets_may_not_be_propagated_to_subagents: true` and nothing enforced it.
+- **An escape attempt now leaves a trace.** A write outside the workspace was
+  refused and logged nothing at all.
+
+#### Added
+
+- `harness/shared/write_policy.py` and `harness/shared/agent_authority.py`, both
+  at 100% line coverage.
+- `test_write_containment_regression.py`, parametrised over ten steps of a
+  published escalation path and asserting on the filesystem rather than only on
+  the returned string. Confirmed failing against the pre-fix commit: the pre-fix
+  run reports `Success: Wrote 7 characters to .../pre-nemotron-run.sh`.
+- `tool_broker_reference.py`, `write_policy.py` and `mango_mas_orchestrator.py`
+  join `protected_paths` and `CRITICAL_PATTERNS`. The PDP is executed by the
+  broker as a host subprocess *before* the command guard runs, and was
+  unprotected; so were the two enforcement points themselves.
+
+#### Note on a defect found in this change's own first draft
+
+Path normalisation used `lstrip("./")`, which strips a character *set* rather
+than a prefix: `.mango/hooks/x.sh` became `mango/hooks/x.sh` and `.git/config`
+became `git/config`, so the entire control surface read as unprotected while the
+gate reported success. Caught by running the check against real files, and
+pinned by `test_dot_prefixed_paths_are_not_mangled`.
+
+### Agent containment — the policy guard is reached, and fails closed
+
+Spec: `docs/specs/agent-containment.md`. Peer-reviewed before implementation by
+the Architecture, QA, Security and SDLC/Product personas plus a sandbox-viability
+design review; all five rejected two earlier drafts of this work, and the
+findings reshaped its sequencing and scope.
+
+#### Fixed — the orchestrator's guard call could not block anything
+
+- **The guard evaluated the empty string for every command.** The orchestrator
+  sent `{"tool": ..., "args": {"command": ...}}` while `main()` read
+  `tool_input.command`, so `check_command` received `""` and returned 0. A
+  `git push` to an arbitrary remote exited 0 through the orchestrator's payload
+  shape. The guard now canonicalises both envelopes, so the historical payload is
+  evaluated rather than silently allowed, and a JSON object carrying neither
+  envelope is denied with the PreToolUse block code (DEC-006).
+- **The guard was optional and loaded from agent-writable ground.** It was
+  resolved at `workspace_dir / "harness/shared/pretooluse_guard.py"` and skipped
+  entirely when absent — the comment on the following line recorded the fail-open
+  as intended. It is now imported from the installed harness and consulted
+  in-process; absence, import failure and evaluation errors all deny (DEC-005).
+- **Non-object JSON exited 1** through an uncaught `AttributeError`, which a
+  PreToolUse consumer reads as a broken hook rather than a denial. It now exits 2.
+- **A denial's reason never reached the caller.** The remote-destination check
+  runs in a child process, so its stderr went to fd 2 rather than into the tool
+  result explaining the refusal. It is captured and routed through the guard's
+  own block path.
+
+#### Added
+
+- `harness/shared/tests/regression/test_guard_reachability_regression.py` — each
+  test confirmed failing against the pre-fix commit on **behaviour**, not on a
+  missing symbol: the pre-fix run executes the command (`fatal: not a git
+  repository`) where the fixed run refuses it, and the historical payload asserts
+  `0 == 2`.
+- Structured gate logging in the guard, which previously had no logger at all —
+  only a bare `print` to stderr. Blocks now carry a stable reason code, and DEBUG
+  records the resolved root, its source, and the allowlist path, so a denial
+  caused by a missing allowlist is distinguishable from a policy verdict.
+- `TestEnvelopeCanonicalisation`, `TestExtractCommand`, and a test pinning the
+  guard's *unmodelled* surface (`rm -rf /`, `curl | sh`, `cat .env`,
+  `pip install`) so its advertised scope cannot drift from its real scope.
+
+#### Changed
+
+- `test_block_dangerous_rm` renamed to `test_danger_matches_git_push_forms`: it
+  asserted on `git push`, in a guard whose `DANGER` pattern has never modelled
+  `rm`. The name advertised a control that does not exist.
+- The two orchestrator guard tests materialised a fake `pretooluse_guard.py` in
+  the workspace and asserted the orchestrator honoured its exit code — pinning
+  the wiring while leaving the payload contract, the thing that was broken,
+  unexercised. They now drive real commands through the real matcher.
+
+#### Known scope limit
+
+This change does **not** make `run_command` safe. `DANGER` models `git push` and
+`gh repo create --public` and nothing else, so `rm -rf /`, `curl | sh`,
+`cat .env` and `pip install` remain unblocked — now pinned by a test rather than
+left implicit. Command-level containment arrives with the execution broker.
+
 ### Security — three policy readers could not tell an absent policy from an unusable one
 
 `policy_loader.load_policy`, `check_projections.decision_id_regex` and
@@ -323,9 +776,19 @@ were recorded rather than patched in 2.1.8.
   plus `secrets-install` pinning the same gitleaks version, and a dedicated
   `secret-scan` CI job that runs it once with `fetch-depth: 0`. It is a separate
   job rather than a `make ci` stage because the scan is interpreter-independent;
-  inside the matrix it would repeat identical work on all four Python legs.
+  inside the matrix it would repeat identical work on all three Python matrix legs.
 - Verified by running the pinned scanner: clean on the working tree (98.7 MB) and
   across all 73 commits of history. No allowlist changes were needed.
+
+  **Superseded — this verification was vacuous.** The config passed to
+  `--config` declared no `[[rules]]` and no `[extend] useDefault = true`, and
+  `--config` *replaces* gitleaks' built-in ruleset rather than extending it. The
+  scan therefore ran with zero rules: "clean across all 73 commits" was a
+  statement about a scanner that was not looking for anything, and a planted
+  `AKIA...` key scanned clean under this exact config. "No allowlist changes
+  were needed" was true for the same reason, and is falsified now that the scan
+  runs — one entry (`test_debug_dump.py`) was required. Corrected under
+  [Unreleased]; pinned by `test_lint_config_liveness.TestGitleaksActuallyScans`.
 
 ### Changed — CI gate coverage (INV-5)
 

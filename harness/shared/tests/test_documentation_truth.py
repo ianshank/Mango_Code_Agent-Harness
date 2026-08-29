@@ -128,3 +128,64 @@ class TestGitignoreHasNoDeadRules:
             f".gitignore rules whose parent directory does not exist: {offenders}. "
             "Remove them, or they quietly ignore whatever is created there later."
         )
+
+
+class TestDockerignoreHasNoDeadRules:
+    """The same defect, in the file the class above does not read.
+
+    `.dockerignore` carried `.agents/` long after that directory was
+    consolidated into `.mango/skills/` (R-HYG-4). It survived two things: the
+    gate above reads `.gitignore` only, and its predicate is *the parent
+    exists* -- which `.agents/` satisfies, because its parent is the repository
+    root. Pointing that gate at this file would not have caught it.
+
+    This one checks the rule's own path. That is affordable here and not in
+    `.gitignore`, where most rules name build outputs absent from a clean tree
+    by design; a `.dockerignore` is a much shorter list of things that really
+    are in the tree, so the transient set below stays small enough to read.
+
+    A stale exclusion is not inert. It pre-exempts whatever is created at that
+    path later, and here the consequence is that the path never reaches the
+    image -- discovered at runtime, in a container, by an import that fails.
+    """
+
+    DOCKERIGNORE = REPO / ".dockerignore"
+
+    #: Paths absent from a clean checkout by design: build output, caches,
+    #: local-only artifacts, and secrets that must never be committed at all.
+    #: Excluding them is the point, so their absence proves nothing.
+    TRANSIENT = re.compile(
+        r"(dist|build|coverage|node_modules|__pycache__|\.pytest_cache|\.mypy_cache|"
+        r"\.ruff_cache|htmlcov|\.benchmarks|egg-info|\.gradle|\.venv|\.hypothesis|"
+        r"\.env|\.coverage|scratch|test-|\.state|vitest-results|\.governance|"
+        r"\.git/|\.DS_Store|Thumbs\.db)"
+    )
+
+    def _concrete_rules(self) -> list[str]:
+        rules = []
+        for line in self.DOCKERIGNORE.read_text(encoding="utf-8").splitlines():
+            rule = line.strip()
+            if not rule or rule.startswith(("#", "!", "*")) or "*" in rule:
+                continue
+            if self.TRANSIENT.search(rule):
+                continue
+            rules.append(rule)
+        return rules
+
+    def test_the_scan_finds_rules(self) -> None:
+        """Positive control: with an empty parse every assertion below passes
+        while checking no rule at all."""
+        assert self._concrete_rules(), (
+            "parsed no concrete rules out of .dockerignore; this parser needs "
+            "updating before its verdict means anything"
+        )
+
+    def test_every_concrete_rule_excludes_something_that_exists(self) -> None:
+        offenders = [
+            rule for rule in self._concrete_rules() if not (REPO / rule.rstrip("/")).exists()
+        ]
+        assert not offenders, (
+            f".dockerignore excludes paths that do not exist: {offenders}. Remove them. "
+            "A rule for a path nobody has created yet is not harmless: it exempts whatever "
+            "is put there later, and the first symptom is a container that cannot import it."
+        )

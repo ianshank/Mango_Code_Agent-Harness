@@ -27,8 +27,27 @@ Thumbs.db
 *.log
 
 # Mango & Agent Subsystem
-.agents/
+# `.agents/` was here until this edit and matched nothing: the directory was
+# consolidated into `.mango/skills/` by docs/specs/remove-pong-demo.md (R-HYG-4).
+# A context-exclusion rule for a path that does not exist is the same shape as a
+# gitleaks allowlist entry that outlives its file -- it silently pre-exempts
+# whatever is created there later.
 .mango/
+
+# Test suites whose fixtures carry credential-shaped literals. The runtime image
+# runs the Nemotron CLI and needs none of them, but `COPY harness/ /app/harness/`
+# put `harness/shared/tests/` -- which holds a `ghp_...`, an `AKIA...` and
+# `nvapi-...` strings -- into the context and therefore into the published image.
+# Those literals are allowlisted for the *scan*; the allowlist says nothing about
+# what ships.
+#
+# `harness/node/tests/` is deliberately NOT excluded here: `tsconfig.json`
+# includes `tests/**/*.ts` and the build stage runs `tsc --noEmit`, so dropping
+# it from the context would not fail the build -- it would quietly typecheck
+# less. It is removed in the runtime stage instead, where nothing reads it.
+harness/shared/tests/
+harness/api_server/tests/
+harness/jvm/src/test/
 
 # Build & Scratch Artifacts
 .gradle/

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import typing
 import unittest
 from pathlib import Path
 
@@ -96,11 +97,27 @@ class ActiveAgentTests(unittest.TestCase):
             self.assertIn(tool, text, f"reasoner role does not document meta-tool {tool}")
 
     def test_meta_tools_are_actually_wired_into_the_orchestrator(self):
-        """Documentation must match code: the schema is appended to the tool list."""
-        src = (REPO / "harness" / "shared" / "mango_mas_orchestrator.py").read_text(encoding="utf-8")
-        self.assertIn("META_TOOLS_SCHEMA", src, "orchestrator does not wire META_TOOLS_SCHEMA")
+        """Documentation must match code: the schema is offered and dispatched.
+
+        Asserted against the composed list and the live dispatch registry, not
+        against the orchestrator's source text. The previous version searched the
+        file for the strings `META_TOOLS_SCHEMA`, `knowledge_gap_log` and
+        `hypothesis_register` -- which this very docstring would satisfy, and
+        which a comment saying "meta tools are not wired here" would satisfy
+        equally. It also broke the moment the schema moved to `tool_schemas.py`,
+        for a reason unrelated to whether the tools are wired.
+        """
+        import tempfile
+
+        from harness.shared import mango_mas_orchestrator as orch
+
+        tools: list[dict[str, typing.Any]] = orch.NEMOTRON_TOOLS
+        offered = {t["function"]["name"] for t in tools}
+        with tempfile.TemporaryDirectory() as tmp:
+            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp))._tool_handlers)
         for tool in ("knowledge_gap_log", "hypothesis_register"):
-            self.assertIn(tool, src, f"orchestrator does not dispatch meta-tool {tool}")
+            self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
+            self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")
 
 
 class SkillTests(unittest.TestCase):
