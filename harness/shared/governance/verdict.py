@@ -24,7 +24,10 @@ stops ``api_server.main`` pulling the whole governance package in to name a fiel
 """
 from __future__ import annotations
 
+import logging
 import typing
+
+logger = logging.getLogger(__name__)
 
 #: The check ran and exited zero.
 VERIFIED = "VERIFIED"
@@ -114,6 +117,22 @@ class LoopOutcome(typing.NamedTuple):
     code_output: str
 
 
+def _emit(verdict: Verdict) -> Verdict:
+    """Log every verdict at the one point all three constructors share.
+
+    Message-string fields, not ``extra=``: ``JSONFormatter.format()``
+    (``json_logging.py``) reads four fixed record attributes and drops ``extra``
+    kwargs today, so anything meant to survive into the emitted JSON line has to
+    be in the message itself. ``Verdict.reason`` never carries captured
+    stdout/stderr (see ``derive_verdict``), so nothing here needs redaction.
+    """
+    logger.info(
+        "verdict status=%s termination_reason=%s command=%r exit_code=%s",
+        verdict.status, verdict.termination_reason or "-", verdict.command, verdict.exit_code,
+    )
+    return verdict
+
+
 def derive_verdict(check: typing.Any) -> Verdict:
     """Grade a harness-run check.
 
@@ -134,7 +153,7 @@ def derive_verdict(check: typing.Any) -> Verdict:
         )
 
     def _v(status: str, reason: str, termination: str) -> Verdict:
-        return Verdict(status, reason, termination, check.command, check.exit_code)
+        return _emit(Verdict(status, reason, termination, check.command, check.exit_code))
 
     if not check.probe_ok:
         return _v(BLOCKED, f"{check.target} could not be established as runnable", UNAVAILABLE)
@@ -162,9 +181,9 @@ def not_configured(target: str = "") -> Verdict:
     check that was never attempted. ``validate_adoption`` does not require a
     Makefile, so this is a real deployment, not a hypothetical one.
     """
-    return Verdict(BLOCKED, "no verification command is configured", NOT_CONFIGURED, target, -1)
+    return _emit(Verdict(BLOCKED, "no verification command is configured", NOT_CONFIGURED, target, -1))
 
 
 def reentrant(target: str) -> Verdict:
     """The verdict for a check that would run inside its own execution."""
-    return Verdict(BLOCKED, f"{target} is already running", REENTRANT, target, -1)
+    return _emit(Verdict(BLOCKED, f"{target} is already running", REENTRANT, target, -1))

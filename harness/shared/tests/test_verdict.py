@@ -155,6 +155,53 @@ class TestUnrunnableStates:
         assert (verdict.status, verdict.termination_reason) == (BLOCKED, REENTRANT)
 
 
+class TestEveryVerdictIsLogged:
+    """The outcome distribution must be observable, not just derivable.
+
+    `_emit` is the one choke point all three constructors share -- these tests
+    exercise all three, not just `derive_verdict`, since a gap in
+    `not_configured`/`reentrant` alone would still leave the tally blind to
+    every `BLOCKED` run that never reaches a check at all.
+    """
+
+    def test_a_pass_is_logged_with_its_status(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            derive_verdict(_check())
+        assert "status=VERIFIED" in caplog.text
+
+    def test_a_failure_logs_its_termination_reason(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            derive_verdict(_check(status="FAILED", exit_code=1, reason=""))
+        assert "status=FAILED" in caplog.text
+        assert "termination_reason=verification_failed" in caplog.text
+
+    def test_not_configured_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            not_configured("test-python")
+        assert "termination_reason=verification_not_configured" in caplog.text
+
+    def test_reentrant_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            reentrant("test-python")
+        assert "termination_reason=verification_reentrant" in caplog.text
+
+    def test_the_logger_is_named_after_this_module(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The plan's own documented operator query (``grep '"logger":
+        "harness.shared.governance.verdict"'``) only works if every record is
+        emitted under this module's own name, not the root logger."""
+        with caplog.at_level("INFO"):
+            derive_verdict(_check())
+        assert caplog.records[-1].name == "harness.shared.governance.verdict"
+
+    def test_command_and_exit_code_both_reach_the_log(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An operator tallying `FAILED` without `command` cannot tell which
+        configured target failed if more than one target is ever added."""
+        with caplog.at_level("INFO"):
+            derive_verdict(_check(status="FAILED", exit_code=3, reason=""))
+        assert "command='make -f Makefile test-python'" in caplog.text
+        assert "exit_code=3" in caplog.text
+
+
 class RecordingBroker:
     """Records every command it is asked to run, and answers from a script.
 

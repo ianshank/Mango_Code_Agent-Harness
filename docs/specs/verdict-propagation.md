@@ -197,7 +197,12 @@ this work.
   coverage, or the governance validators, and R-VP-13 exists so that this is legible.
 - **Resolved.** Whether the record of a run is persisted here. It is not; persistence,
   critique normalisation and the repair loop are deferred until the distribution of
-  outcomes this change measures says whether a repair loop can succeed.
+  outcomes this change measures says whether a repair loop can succeed. The measuring
+  now exists: every `Verdict` is logged at construction (`verdict.py`'s `_emit()`,
+  the one choke point all three constructors share) and reaches disk today through
+  the existing root JSON logger, with nothing else built — an operator can already
+  tally `status`/`termination_reason` from production stdout. The repair loop itself
+  remains deferred pending that data and a recorded decision.
 - **Still open.** Whether the verification command belongs in `governance-policy.json`.
   It does under the no-hard-coded-values rule, and does not while the module default is
   the only consumer and a policy change would require rebuilding the committed policy

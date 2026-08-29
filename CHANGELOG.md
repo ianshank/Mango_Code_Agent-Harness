@@ -7,6 +7,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — every verdict is now logged, not just derived
+
+`termination_reason`/`verdict` were computable but never observed: nothing in
+`harness/` logged or aggregated them, so the question the merged verdict-propagation
+spec deferred — whether the observed `FAILED` rate justifies a repair loop — had no
+data to answer it with. `_emit()` is the one choke point all three `Verdict`
+constructors share (`derive_verdict`'s internal `_v()`, `not_configured()`,
+`reentrant()`); wrapping their returns logs `status`/`termination_reason`/
+`command`/`exit_code` as message-string fields, since `JSONFormatter.format()`
+reads four fixed record attributes and drops `extra=` kwargs. Nothing in `Verdict`
+needs redaction: `.reason` never carries captured stdout/stderr, traced through
+every branch of `derive_verdict`. Reaches disk today with nothing else built —
+`main.py` already configures a root JSON logger and `execute_loop` runs in the same
+request thread. **2/2 mutants killed** (dropped logging call; broken pass-through).
+
+### Changed — the prompt templates moved to `prompt_templates.py`
+
+Same split, same reason, as the already-shipped `_format_execution_result` →
+`tool_result_format.py` move: `mango_mas_orchestrator.py` was pinned at exactly
+500/500 lines against its size budget, and the four prompt-template constants are
+inert string data referenced only within the orchestrator itself. Unprotected, same
+tier as `tool_schemas`/`tool_result_format` — `governance/**`'s protection is for
+modules that decide, and this one holds no decision content. A pure move, not a
+rewrite: content fidelity confirmed by hand (a dropped guardrail is caught by
+`test_prompt_templates.py`) and by the full existing orchestrator test suite passing
+unchanged. Orchestrator now 478/500 — headroom for whatever the logging above ends
+up justifying.
+
 ### Added — the verifier's verdict is now a value the harness earned, not prose nobody read
 
 `execute_sequential_thinking_loop` ran planner → reasoner → verifier once each and
