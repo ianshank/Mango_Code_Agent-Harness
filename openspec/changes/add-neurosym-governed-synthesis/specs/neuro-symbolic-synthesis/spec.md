@@ -9,7 +9,7 @@
 
 ## Problem Statement
 
-The repository contains reusable governance primitives (`EvidenceBuilder`, `ExecutionBroker`, `pretooluse_guard`), a resilient model client (`nemotron_bridge.py`), and deterministic verifiers, but they are not wired into a coherent synthesis loop. There is no bounded search strategy, no structured critique normalization, and no evidence-backed failure mode. **Evidence:** `mango_mas_orchestrator.py` runs unbounded multi-agent loops without policy verdicts, without repair-budget limits, and without critique versioning — violating INV-9, INV-11, and INV-12.
+The repository contains reusable governance primitives (`EvidenceBuilder`, `ExecutionBroker`, `pretooluse_guard`), a resilient model client (`nemotron_bridge.py`), and deterministic verifiers, but they are not wired into a coherent synthesis loop. There is no bounded search strategy, no structured critique normalization, and no evidence-backed failure mode. **Evidence:** `mango_mas_orchestrator.py` has no critique normalization and no repair loop — there is no occurrence of `repair` or `critique` in it — so INV-11 and INV-12 govern nothing that exists, and both are declared dormant in `test_invariant_liveness.py`. (Corrected 2026-08-29: this line previously also claimed the orchestrator "runs unbounded multi-agent loops without policy verdicts" and violated INV-9. Both were true when drafted and are false on `main` since DEC-011: `ExecutionBroker` is imported and used, and the loop is bounded by `max_iterations` plus `ToolBudget`. Nothing caught the drift because `openspec/` is outside every CI gate — `SPEC_DIR` defaults to `docs/specs` and no target points at `openspec/`.)
 
 ---
 
