@@ -70,8 +70,7 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
         "--target-version", ruff_cfg["target-version"],
         "--select", ",".join(codes),
     ])
-    prefix = str(REPO) + "/"
-    return [(row["filename"].replace(prefix, ""), row["code"]) for row in rows]
+    return [(Path(row["filename"]).resolve().relative_to(REPO.resolve()).as_posix(), row["code"]) for row in rows]
 
 
 @pytest.fixture(scope="module")

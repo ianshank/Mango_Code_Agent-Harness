@@ -8,21 +8,35 @@ features from entering the codebase.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+REQ_PATTERN = re.compile(r"\b([CR]-[A-Za-z0-9_-]+)\b")
+UNFALSIFIABLE_TERMS = ("works correctly", "as expected", "appropriately")
+
 
 def validate_spec(content: str, name: str) -> bool:
-    """Validate that a spec file contains mandatory requirements and citations sections."""
+    """Validate that a spec file conforms to the structural rules."""
     failed = False
-    if "## Requirements (R-*)" not in content:
-        logger.error("[FAIL] %s is missing '## Requirements (R-*)' header.", name)
-        failed = True
-    if "## Citations (C-*)" not in content:
-        logger.error("[FAIL] %s is missing '## Citations (C-*)' header.", name)
-        failed = True
+    for section in ("## Requirements", "## Acceptance criteria"):
+        if section not in content:
+            logger.error("[FAIL] %s is missing '%s' header.", name, section)
+            failed = True
+
+    for ln in content.splitlines():
+        if ln.lstrip().startswith(("- ", "* ")) and "MUST" in ln and not REQ_PATTERN.search(ln):
+            logger.error("[FAIL] %s: normative MUST has no requirement ID: %s", name, ln[:80])
+            failed = True
+
+    lower_content = content.lower()
+    for term in UNFALSIFIABLE_TERMS:
+        if term in lower_content:
+            logger.error("[FAIL] %s: unfalsifiable acceptance language '%s'", name, term)
+            failed = True
+
     return not failed
 
 
@@ -47,7 +61,7 @@ def main(specs_dir: Path | None = None) -> int:
         checked_count += 1
         try:
             content = spec.read_text(encoding="utf-8")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — fail-closed on unreadable spec
             logger.error("[FAIL] Could not read %s: %s", spec.name, e)
             print(f"[FAIL] Could not read {spec.name}: {e}", file=sys.stderr)
             failed = True

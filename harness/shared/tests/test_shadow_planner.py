@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -22,8 +23,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from harness.shared.tests.conftest import POSIX_ONLY
 
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared import shadow_planner as shadow_module
@@ -41,6 +40,7 @@ from harness.shared.shadow_planner import (
     shadow_planner_enabled,
 )
 from harness.shared.tests._helpers import REPO
+from harness.shared.tests.conftest import POSIX_ONLY
 
 DISABLED_VALUES = [None, "0", "true", "yes", "", " 1", "TRUE"]
 
@@ -290,8 +290,6 @@ class TestContainment:
     def test_shadow_bridge_failure_swallowed(
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        import logging
-
         baseline = _run_loop(_mk_workspace(tmp_path / "base"), mocker, monkeypatch, flag=None)
         with caplog.at_level(logging.WARNING, logger="harness.shared.shadow_planner"):
             broken = _run_loop(
@@ -326,8 +324,6 @@ class TestContainment:
     def test_sink_failure_swallowed(
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        import logging
-
         monkeypatch.setattr(
             shadow_module.CognitiveSignalSink,
             "for_workspace",
@@ -345,8 +341,6 @@ class TestContainment:
     ) -> None:
         """The orchestrator's own except is live armor: even if the channel's
         never-raise contract breaks, the loop result is unaffected."""
-        import logging
-
         monkeypatch.setattr(
             orch_module, "run_shadow_comparison", mocker.Mock(side_effect=RuntimeError("contract bug"))
         )
@@ -562,8 +556,6 @@ def test_shadow_error_signal_write_failure_is_itself_contained(
     itself is now unwritable). Must still propagate to run_shadow_comparison's
     own containment rather than raising a second, different exception out of
     the inner except block."""
-    import logging
-
     mocker.patch.object(shadow_module, "complete_chat", side_effect=RuntimeError("bridge down"))
     append_calls = {"n": 0}
 

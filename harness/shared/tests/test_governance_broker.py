@@ -21,8 +21,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from harness.shared.tests.conftest import POSIX_ONLY
-
 from harness.shared.governance.broker import (
     DEFAULT_MAX_OUTPUT_BYTES,
     ExecutionBroker,
@@ -30,6 +28,7 @@ from harness.shared.governance.broker import (
     ProcessBackend,
     _cap,
 )
+from harness.shared.tests.conftest import POSIX_ONLY
 
 pytestmark = pytest.mark.governance
 

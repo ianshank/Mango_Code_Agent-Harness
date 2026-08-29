@@ -1,12 +1,12 @@
-import os
 from pathlib import Path
 
 import pytest
 
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+from harness.shared.nemotron_bridge import resolve_api_key
 
 # Check if LIVE test execution is enabled
-IS_LIVE = os.environ.get("NVIDIA_API_KEY") is not None
+IS_LIVE = bool(resolve_api_key())
 
 
 @pytest.mark.live
@@ -31,7 +31,10 @@ class TestMangoMASLive:
         # We ask the MAS to write a simple dynamic python utility to the temp path
         # and test it via sequential thinking
         temp_file = tmp_path / "dynamic_util.py"
-        task = f"Write a Python function called calculate_fibonacci in {temp_file}. Ensure it has type hints and a docstring."
+        task = (
+            f"Write a Python function called calculate_fibonacci in {temp_file}."
+            " Ensure it has type hints and a docstring."
+        )
 
         # Execute the loop
         verification_result = orchestrator.execute_sequential_thinking_loop(task)

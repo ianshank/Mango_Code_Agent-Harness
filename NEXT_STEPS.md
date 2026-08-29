@@ -1,11 +1,19 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.9  
+**Version:** 2.2.0  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
+
+- [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`, `ast_visitors.py`).
+- [x] **PEP 585 / UP035 Type Modernization**: Replaced legacy typing aliases with modern standard library constructs across all modules and tests.
+- [x] **Cross-Platform Hardening**: Resolved Windows/NTFS path resolution and quoting edge cases, verified across 20 new regression tests.
+- [x] **C4 Architecture & Specifications**: Completed traceable specification [`docs/specs/god-file-decomposition.md`](file:///e:/Coding_Projects/Harness_TEST/docs/specs/god-file-decomposition.md) and full C4 architecture model in [`docs/architecture/c4_architecture.md`](file:///e:/Coding_Projects/Harness_TEST/docs/architecture/c4_architecture.md).
+- [x] **Strict Quality Gates**: 0 Ruff lint errors, 146/146 Python 3.9+ compatible files, and 1,687 passed tests.
 
 ### 🚧 v2.1.10 — Remediation programme v3 (in review)
 
@@ -44,7 +52,6 @@ enforcement, and the policy-loaded decision-ID grammar.
   work needs re-doing before per-file enforcement can be switched on.
 - Annotating the test suite is a separate project: `--disallow-untyped-defs`
   reports 533 findings, essentially all `no-untyped-def` on test functions.
-
 
 > **Document scope:** this file is the single roadmap for the repository.
 > The former `NEXT_STEPS_PLAN_v2.md` phased implementation plan was retired in
@@ -277,4 +284,3 @@ no UC-4 experiment evidence is claimed by this milestone.
 - [ ] **Dynamic Model Fallback:** Implement multi-tier routing (e.g. fast reasoning → deep synthesis).
 - [ ] **Prompt Cache & Cost Tracking:** Add local disk/memory prompt-cache adapter to minimize repeated token costs on invariant verification prompts.
 - [ ] **Model Context Protocol (MCP) Server:** Package `NemotronClient` as an independent standard STDIO/SSE MCP server for seamless integration with external AI IDEs and clients.
-

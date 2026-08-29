@@ -82,7 +82,11 @@ def resolve_environment() -> dict[str, str]:
                         k, v = line.split("=", 1)
                         key_name = _ENV_VAR_KEYS.get(k.strip())
                         if key_name and not env_vars[key_name]:
-                            env_vars[key_name] = v.strip()
+                            stripped = v.strip()
+                            # Strip matching surrounding quotes (KEY="val" or KEY='val')
+                            if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
+                                stripped = stripped[1:-1]
+                            env_vars[key_name] = stripped
             except (OSError, UnicodeDecodeError):
                 # A malformed or unreadable .env must not crash the bridge, but
                 # it must not fail invisibly either.
@@ -193,7 +197,7 @@ def complete_chat(
             latency_ms = int((time.time() - start_time) * 1000)
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")
-            sanitized = err_msg.replace(key, mask_secret(key))
+            sanitized = err_msg.replace(key, mask_secret(key)) if key else err_msg
             if e.code in RETRYABLE_HTTP_STATUSES and retry.should_retry(attempt):
                 # A server-supplied Retry-After is an instruction, not a hint:
                 # honor it (capped) instead of guessing with exponential backoff.
@@ -207,7 +211,7 @@ def complete_chat(
                 continue
             raise RuntimeError(f"Nemotron API HTTP {e.code} Error: {sanitized}") from e
         except Exception as e:
-            sanitized = str(e).replace(key, mask_secret(key))
+            sanitized = str(e).replace(key, mask_secret(key)) if key else str(e)
             if is_retryable_connection_error(e) and retry.should_retry(attempt):
                 backoff = retry.backoff(attempt)
                 logger.warning(

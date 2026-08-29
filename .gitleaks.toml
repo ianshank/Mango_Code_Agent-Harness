@@ -20,5 +20,10 @@ paths = [
   '''harness/shared/tests/test_evidence_manifest\.py''',
   '''harness/shared/tests/test_governance_broker\.py''',
   '''harness/shared/tests/test_validation_scripts_extra\.py''',
-  '''harness/shared/tests/test_debug_dump\.py'''
+  '''harness/shared/tests/test_debug_dump\.py''',
+  '''harness/shared/tests/test_orchestrator_hooks\.py''',
+  '''harness/shared/tests/regression/test_orchestrator_dispatch_regression\.py''',
+  '''harness/shared/tests/regression/test_cross_platform_regression\.py''',
+  '''harness/shared/tests/regression/test_bridge_retry_regression\.py''',
+  '''harness/shared/tests/regression/test_api_server_regression\.py'''
 ]

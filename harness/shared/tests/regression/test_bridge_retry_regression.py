@@ -10,6 +10,11 @@ Defects reproduced here (all present on ``main`` before this change):
 5. A non-JSON body on an HTTP 200 was reported as a connection error.
 6. ``.env`` was consulted only when credentials were missing, making the
    retry/timeout knobs unreachable in the normal case.
+7. ``test_complete_chat_no_retry_by_default`` leaked: it only set
+   ``NEMOTRON_DEFAULT_MODEL`` and ``NEMOTRON_MAX_RETRIES=0``, leaving
+   the other env vars absent, so ``resolve_environment()`` fell through to
+   ``.env`` which contained ``NEMOTRON_MAX_RETRIES=3``. The test observed
+   3 retry attempts instead of the expected 0. (**DEF-014**)
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from __future__ import annotations
 import email.message
 import io
 import json
+import os
 import socket
 import urllib.error
 from typing import Any
@@ -242,3 +248,66 @@ class TestUrlSchemeGuard:
         assert body["model"] == "dummy-model"
         assert body["messages"] == [{"role": "user", "content": "hi"}]
         assert body["stream"] is False
+
+
+class TestEnvFileDoesNotOverrideRetryKnob:
+    """Defect 7.  A ``.env`` file in the workspace with ``NEMOTRON_MAX_RETRIES=3``
+    overwrote the test's explicit ``0``, making a no-retry test observe 3 retries.
+
+    Root cause: ``resolve_environment()`` short-circuits only when *every*
+    mapped env var is present.  A test that sets only ``NEMOTRON_DEFAULT_MODEL``
+    and ``NEMOTRON_MAX_RETRIES=0`` leaves ``NVIDIA_API_KEY``, ``NVIDIA_BASE_URL``,
+    and ``NEMOTRON_TIMEOUT_MS`` absent — so it falls through to the ``.env``
+    parse path, and ``.env`` wins because the "process env takes precedence"
+    guard (``if not env_vars[key_name]``) only fires for keys already set.
+
+    After the fix, the test now supplies every env var so the short-circuit fires.
+    """
+
+    @patch("harness.shared.nemotron_bridge.time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_no_retry_with_all_env_vars_populated(
+        self, mock_urlopen: MagicMock, mock_sleep: MagicMock,
+    ) -> None:
+        """With ``NEMOTRON_MAX_RETRIES=0`` AND all other env vars populated,
+        a 503 must surface immediately — zero retries, zero sleeps."""
+        err = urllib.error.HTTPError(
+            "url", 503, "Service Unavailable", _headers(), io.BytesIO(b"busy"),
+        )
+        mock_urlopen.side_effect = err
+
+        # Supply *every* env key so resolve_environment() short-circuits
+        # before consulting any .env file.
+        full_env = {
+            "NEMOTRON_DEFAULT_MODEL": "dummy-model",
+            "NEMOTRON_MAX_RETRIES": "0",
+            "NVIDIA_API_KEY": "test-key",
+            "NVIDIA_BASE_URL": "https://example.com/v1",
+            "NEMOTRON_TIMEOUT_MS": "30000",
+        }
+        with patch.dict(os.environ, full_env, clear=False):
+            with pytest.raises(RuntimeError, match="HTTP 503"):
+                complete_chat([], api_key="secret-key")
+
+        assert mock_urlopen.call_count == 1, (
+            f"Expected 1 call (no retries) but got {mock_urlopen.call_count}; "
+            "the .env file likely leaked NEMOTRON_MAX_RETRIES"
+        )
+        mock_sleep.assert_not_called()
+
+    def test_resolve_environment_returns_zero_retries_when_fully_populated(self) -> None:
+        """Directly verify the short-circuit: all 5 keys present → returned
+        verbatim, no filesystem I/O."""
+        full_env = {
+            "NVIDIA_API_KEY": "test-key",
+            "NVIDIA_BASE_URL": "https://example.com/v1",
+            "NEMOTRON_DEFAULT_MODEL": "dummy-model",
+            "NEMOTRON_TIMEOUT_MS": "30000",
+            "NEMOTRON_MAX_RETRIES": "0",
+        }
+        with patch.dict(os.environ, full_env, clear=False):
+            result = nemotron_bridge.resolve_environment()
+
+        assert result["max_retries"] == "0", (
+            f"Expected max_retries='0' but got {result['max_retries']!r}"
+        )

@@ -74,7 +74,10 @@ def test_complete_chat_missing_key(mock_urlopen, mock_resolve):
 
 @patch("urllib.request.urlopen")
 def test_complete_chat_http_error(mock_urlopen):
-    err = urllib.error.HTTPError("url", 401, "Unauthorized", email.message.Message(), io.BytesIO(b"Bad Key my_secret_key"))
+    err = urllib.error.HTTPError(
+        "url", 401, "Unauthorized", email.message.Message(),
+        io.BytesIO(b"Bad Key my_secret_key"),
+    )
     mock_urlopen.side_effect = err
 
     with pytest.raises(RuntimeError) as exc:

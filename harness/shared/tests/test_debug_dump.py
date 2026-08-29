@@ -13,8 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.tests.conftest import POSIX_ONLY
-
 from harness.shared.debug_dump import (
     CREDENTIAL_PATTERN,
     DUMP_DIR_MODE,
@@ -25,6 +23,7 @@ from harness.shared.debug_dump import (
     resolve_credentials,
     write_dump,
 )
+from harness.shared.tests.conftest import POSIX_ONLY
 
 
 class TestResolveCredentials:

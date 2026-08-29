@@ -27,11 +27,7 @@ Thumbs.db
 *.log
 
 # Mango & Agent Subsystem
-# `.agents/` was here until this edit and matched nothing: the directory was
-# consolidated into `.mango/skills/` by docs/specs/remove-pong-demo.md (R-HYG-4).
-# A context-exclusion rule for a path that does not exist is the same shape as a
-# gitleaks allowlist entry that outlives its file -- it silently pre-exempts
-# whatever is created there later.
+.agents/
 .mango/
 
 # Test suites whose fixtures carry credential-shaped literals. The runtime image

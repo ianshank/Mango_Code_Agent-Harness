@@ -29,11 +29,10 @@ from unittest.mock import patch
 
 import pytest
 
-from harness.shared.tests.conftest import POSIX_ONLY
-
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.tests._helpers import chat_response, tool_call
+from harness.shared.tests.conftest import POSIX_ONLY
 
 
 def _tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

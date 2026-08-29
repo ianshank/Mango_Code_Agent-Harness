@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None, policy_path: Path | None = None) -> int:
     target_policy = resolve_policy_path(policy_path)
     try:
         lines_cov = load_coverage_threshold(target_policy)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — CLI fail-closed boundary
         logger.error(str(e))
         print(str(e), file=sys.stderr)
         return 1
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None, policy_path: Path | None = None) -> int:
         return subprocess.call(cmd)
     except KeyboardInterrupt:
         return 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — CLI fail-closed boundary
         logger.error("Failed to execute command %s: %s", cmd, e)
         print(f"[FAIL] Failed to execute coverage command: {e}", file=sys.stderr)
         return 1

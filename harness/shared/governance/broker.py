@@ -29,167 +29,39 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-11, R-AC-12).
 
 from __future__ import annotations
 
+import json
 import logging
-import os
-import subprocess
-import typing
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, Final
+
+from harness.shared.debug_dump import redact_text
+from harness.shared.write_policy import write_denial_reason
 
 from .command_actions import classify, write_targets
 from .policy_decision import decide
 from .pretooluse_guard import check_command
+from .process_backend import (
+    DEFAULT_MAX_OUTPUT_BYTES as DEFAULT_MAX_OUTPUT_BYTES,
+)
+from .process_backend import (
+    DEFAULT_TIMEOUT_SEC as DEFAULT_TIMEOUT_SEC,
+)
+from .process_backend import (
+    ExecutionResult as ExecutionResult,
+)
+from .process_backend import (
+    ProcessBackend as ProcessBackend,
+)
+from .process_backend import (
+    _cap as _cap,
+)
 
 logger = logging.getLogger(__name__)
 
-# Imported from the shared layer rather than re-implemented: two matchers would be
-# two behaviours, and the write tool's gate is the one with the liveness suite
-# behind it.
-from harness.shared.debug_dump import credential_env_names, redact_text  # noqa: E402
-from harness.shared.write_policy import write_denial_reason  # noqa: E402
-
 #: The authority model, resolved next to this package so it travels with the
 #: installed harness rather than being read out of the agent's workspace.
-_AGENT_POLICY_PATH = Path(__file__).resolve().parent.parent / "agent-policy.json"
-
-#: Captured output ceiling. An unbounded capture becomes a prompt, a signal sink
-#: entry and an HTTP response body, so the cap is a containment control rather
-#: than an ergonomic one.
-DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
-
-#: Wall-clock ceiling used when a caller supplies none.
-DEFAULT_TIMEOUT_SEC = 30
-
-
-@dataclass
-class ExecutionResult:
-    """The outcome of an execution attempt."""
-
-    status: str  # "SUCCESS", "FAILED", "BLOCKED"
-    stdout: str
-    stderr: str
-    exit_code: int
-    #: Why the broker reached this status. Empty for a plain command failure,
-    #: where the command's own stderr is the explanation.
-    reason: str = ""
-    #: The action the command was classified as, recorded so an evidence entry
-    #: can state what was decided rather than only what was run.
-    action: str = ""
-
-
-class ProcessBackend:
-    """Runs a command as a child process with a pinned cwd, a timeout and an
-    output cap. Available wherever the interpreter is.
-
-    The single ``_spawn`` indirection is the seam every test uses: everything
-    else in this class is argument assembly and result normalisation, which is
-    what keeps the module coverable without spawning anything.
-    """
-
-    name = "process"
-    version = "1.0.0"
-
-    #: The interpreter commands are handed to. Named once so the availability
-    #: probe and the spawn cannot disagree about what "available" refers to.
-    shell = "bash"
-
-    #: Seconds the probe may take. It runs `exit 0`, so anything approaching this
-    #: means the shell is wedged rather than slow, which is itself unavailable.
-    probe_timeout_sec = 5
-
-    def __init__(self) -> None:
-        self._probed: bool | None = None
-
-    def available(self) -> bool:
-        """Whether this backend can actually start a process.
-
-        This was `return True`. That is not a probe -- it is the
-        `sandbox_available: bool = True` fail-open moved one method down: the
-        same unconditional yes, the same unreachable INV-9 branch, and
-        `test_default_probes_the_backend_rather_than_assuming` passed
-        identically against both, so its name was the only thing distinguishing
-        the defect from the fix.
-
-        The probe runs the shell. `shutil.which` would answer "a file with that
-        name is on PATH", which a shell that is present but not executable, or
-        installed for a different architecture, also satisfies -- and those fail
-        at the first real command instead, with the caller already past the
-        INV-9 branch.
-
-        Cached: `verify_sandbox` is consulted on every `execute_command`, and a
-        subprocess per tool call to ask a question whose answer does not change
-        within a run is a cost with no verdict attached.
-        """
-        if self._probed is None:
-            self._probed = self._probe()
-        return self._probed
-
-    def _probe(self) -> bool:
-        try:
-            completed = subprocess.run(
-                [self.shell, "-c", "exit 0"],
-                capture_output=True,
-                timeout=self.probe_timeout_sec,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            logger.warning("Backend probe failed to run %s: %s", self.shell, exc)
-            return False
-        return completed.returncode == 0
-
-    def _spawn(
-        self, command: str, cwd: Path | None, timeout: int
-    ) -> subprocess.CompletedProcess[str]:
-        # The environment is filtered for the same reason `_run_hook` filters it:
-        # `agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`.
-        # It was filtered only there -- the *less* attacker-controlled path. Every
-        # agent-authored command ran with the orchestrator's full environment, so
-        # `cat /proc/self/environ` classified `read` (an action every role holds)
-        # and returned NVIDIA_API_KEY, API_SERVER_KEY and AGENT_EVIDENCE_KEY into
-        # the model's context. The last is the HMAC key evidence manifests are
-        # signed with, so that was evidence forgery, not just a leak.
-        #
-        # `env` and `printenv` are already graded `secret_access`; this closes the
-        # spellings the action model does not enumerate, of which there are many.
-        denied = set(credential_env_names())
-        env = {k: v for k, v in os.environ.items() if k not in denied}
-        return subprocess.run(
-            [self.shell, "-c", command],
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
-
-    def run(self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int) -> ExecutionResult:
-        try:
-            completed = self._spawn(command, cwd, timeout)
-        except subprocess.TimeoutExpired:
-            return ExecutionResult("FAILED", "", "", 1, reason=f"command timed out after {timeout}s")
-        except Exception as exc:  # noqa: BLE001 - the backend must answer every call
-            # with a result. An escaping exception would leave the caller with no
-            # verdict at all, which is the ambiguity INV-9 exists to remove.
-            return ExecutionResult("FAILED", "", "", 1, reason=f"command could not be started: {exc}")
-
-        stdout = _cap(completed.stdout or "", max_output_bytes)
-        stderr = _cap(completed.stderr or "", max_output_bytes)
-        status = "SUCCESS" if completed.returncode == 0 else "FAILED"
-        return ExecutionResult(status, stdout, stderr, completed.returncode)
-
-
-def _cap(text: str, limit: int) -> str:
-    """Truncate ``text`` to ``limit`` **bytes**, not characters.
-
-    ``len(text)`` counts code points, so a character cap named in bytes lets
-    multibyte output exceed its own limit several times over -- and this cap is a
-    containment control, because captured output becomes a prompt, a signal-sink
-    entry and an HTTP response body. Slicing encoded bytes can split a character,
-    so the tail is decoded with ``errors="ignore"`` to drop a partial one.
-    """
-    encoded = text.encode("utf-8")
-    if len(encoded) <= limit:
-        return text
-    return encoded[:limit].decode("utf-8", errors="ignore") + f"\n[truncated at {limit} bytes]"
+_AGENT_POLICY_PATH: Final[Path] = Path(__file__).resolve().parent.parent / "agent-policy.json"
 
 
 class ExecutionBroker:
@@ -201,7 +73,7 @@ class ExecutionBroker:
         backend: ProcessBackend | None = None,
         agent_policy_path: Path | None = None,
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
-    ):
+    ) -> None:
         """``sandbox_available`` defaults to ``None``, meaning *probe the backend*.
 
         It used to default to ``True``: a caller that never probed was told the
@@ -225,7 +97,7 @@ class ExecutionBroker:
             logger.warning("Backend availability probe failed; treating the backend as unavailable")
             return False
 
-    def _policy_decision(self, command: str, context: typing.Mapping[str, typing.Any]) -> ExecutionResult | None:
+    def _policy_decision(self, command: str, context: Mapping[str, Any]) -> ExecutionResult | None:
         """Return a BLOCKED result when policy denies, else ``None``."""
         agent_id = context.get("agent_id", "unknown")
         # Identity, not truthiness. `bool("false")` is True, so a caller passing a
@@ -278,7 +150,7 @@ class ExecutionBroker:
     def execute_command(
         self,
         command: str,
-        context: dict[str, typing.Any] | None = None,
+        context: Mapping[str, Any] | None = None,
         cwd: Path | None = None,
         timeout: int = DEFAULT_TIMEOUT_SEC,
     ) -> ExecutionResult:
@@ -347,10 +219,18 @@ class ExecutionBroker:
         return result
 
 
-def _load_json(path: Path) -> dict[str, typing.Any]:
-    import json
-
+def _load_json(path: Path) -> dict[str, Any]:
     parsed = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(parsed, dict):
         raise ValueError(f"{path} is not a JSON object")
     return parsed
+
+
+__all__ = [
+    "DEFAULT_MAX_OUTPUT_BYTES",
+    "DEFAULT_TIMEOUT_SEC",
+    "ExecutionBroker",
+    "ExecutionResult",
+    "ProcessBackend",
+    "_cap",
+]

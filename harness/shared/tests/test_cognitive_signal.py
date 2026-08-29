@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import typing
 from pathlib import Path
 
@@ -163,8 +164,6 @@ class TestValidation:
             validate_signal_dict(data)
 
     def test_rejections_are_logged(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
         data = pinned_signal().to_dict()
         data["schema_version"] = "9.9.9"
         with caplog.at_level(logging.WARNING, logger="harness.shared.cognitive_signal"):
