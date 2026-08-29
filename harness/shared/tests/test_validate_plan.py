@@ -51,7 +51,17 @@ DEFECTIVE = CONFORMING.replace(
 
 
 @pytest.fixture
-def repo(tmp_git_repo: Path) -> Path:
+def repo(tmp_git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An isolated repository, with the CI base-ref scrubbed.
+
+    ``git_modified_files`` adds a ``git diff origin/$GITHUB_BASE_REF...HEAD``
+    pass when that variable is set. GitHub Actions sets it on every pull request,
+    so without this the fixture repo -- which has no ``origin`` at all -- makes
+    git exit 128 and every scoping test below dies in CI while passing locally.
+    These tests are about which paths the gate selects in a repository; the
+    base-ref pass has its own test.
+    """
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
     (tmp_git_repo / "docs" / "specs").mkdir(parents=True)
     return tmp_git_repo
 
@@ -117,6 +127,22 @@ class TestModifiedScoping:
         _commit_all(repo)
         (repo / "notes.md").write_text(DEFECTIVE, encoding="utf-8")
         assert changed_plans(repo, Path("docs/specs")) == []
+
+
+class TestTheBaseRefPassIsFailClosed:
+    """The behaviour the fixture above scrubs, asserted rather than assumed."""
+
+    def test_an_unresolvable_base_ref_raises_rather_than_reporting_nothing(
+        self, tmp_git_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Inherited from `validate_invariants`, and load-bearing: a gate that
+        treated an unusable git state as "nothing changed" would pass every PR it
+        could not inspect. This test is why the fixture scrubs the variable rather
+        than the module tolerating a missing ref."""
+        (tmp_git_repo / "docs" / "specs").mkdir(parents=True)
+        monkeypatch.setenv("GITHUB_BASE_REF", "a-ref-that-does-not-exist")
+        with pytest.raises(subprocess.CalledProcessError):
+            changed_plans(tmp_git_repo, Path("docs/specs"))
 
 
 class TestSweepMode:
