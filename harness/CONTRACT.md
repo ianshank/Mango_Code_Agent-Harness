@@ -36,6 +36,7 @@
 - **INV-14:** Exportable traces MUST be redacted and marked as approved training candidates before dataset export.
 - **INV-15:** LATS MUST remain disabled by default until its cost-adjusted evaluation threshold is met.
 - **INV-16:** the cognitive/execution boundary is one-directional — the cognitive plane proposes, the harness disposes. No field of a `CognitiveSignal` (`confidence` and producer identity included) may reach a control path, select a tool or model, or alter tool exposure. Observation-mode producers run with an empty tool schema and receive value objects, never live orchestrator state, and their failures are contained so the incumbent path is unaffected. Enforced by the boundary suite (`pytest -m governance`) and the static boundary scan in `test_shadow_planner.py`.
+- **INV-17:** a plan reaching implementation has been checked for the defect classes the plan gate decides. Acceptance criteria that name no observable, that name a check but assign it to a human, that describe only success, or that leave a declared requirement uncited are findings, not style notes. Enforced by `plan_rules.py` via `validate_plan.py` in `make specs`, scoped to plans git reports as modified — landed plans predate the sections these rules read, and back-filling them would mean inventing retrospective plans for shipped work. The rules were calibrated against all fifteen plans in this repository before shipping: three were wrong on first contact with that corpus, and the blocklist they replace fired zero times across 104 acceptance criteria.
 
 ## Supply chain
 
