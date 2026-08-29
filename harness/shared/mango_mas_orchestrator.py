@@ -15,12 +15,15 @@ from harness.shared.agent_authority import (
     tools_for_role,
 )
 from harness.shared.debug_dump import credential_env_names, write_dump
-from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
+from harness.shared.governance.broker import ExecutionBroker
+from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
+from harness.shared.governance.verification import VerificationRunner
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 from harness.shared.tool_budget import ToolBudget
+from harness.shared.tool_result_format import format_execution_result
 from harness.shared.tool_schemas import NEMOTRON_TOOLS as _NEMOTRON_TOOLS
 from harness.shared.write_policy import write_denial_reason
 
@@ -79,24 +82,6 @@ def _normalize_tool_arguments(raw: typing.Any, func_name: typing.Any) -> dict[st
     return parsed
 
 
-def _format_execution_result(result: ExecutionResult) -> str:
-    """Render a broker result as the tool message the model receives.
-
-    Kept pure and separate from execution so the three output shapes stay
-    testable without spawning a process.
-    """
-    if result.status == "BLOCKED":
-        return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
-    if result.reason:
-        return f"Error: {result.reason}"
-    output = result.stdout
-    if result.stderr:
-        output += "\n[STDERR]\n" + result.stderr
-    if not output.strip():
-        return f"Command executed with return code {result.exit_code}, but generated no output."
-    return output
-
-
 AUTONOMOUS_AGENT_GUARDRAIL = (
     "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
     "and fail closed when approval is required."
@@ -146,6 +131,7 @@ class MangoMASOrchestrator:
         tool_timeout: int | None = None,
         broker: ExecutionBroker | None = None,
         active_role: str = "nemotron-reasoner",
+        verification: VerificationRunner | None = None,
     ) -> None:
         # Operational limits come from governance-policy.json (the
         # `orchestrator` block); explicit constructor arguments still override
@@ -165,6 +151,10 @@ class MangoMASOrchestrator:
         # broker outside the governed repository -- and so tests can drive the
         # unavailable path without spawning anything.
         self._broker = broker or ExecutionBroker()
+        # The check that earns a verdict; injected so a caller can retarget it.
+        self._verification = verification or VerificationRunner(
+            self._broker, execution_identity("verifier"), timeout=self.api_timeout
+        )
         # `execute_agent` overrides this per turn. The default is the implementer
         # contract, which is what a directly-driven orchestrator is doing; it is
         # not the widest role -- it holds neither external_write, destructive nor
@@ -291,7 +281,7 @@ class MangoMASOrchestrator:
         )
         if result.status == "BLOCKED":
             logger.warning("Broker denied command for role %s: %s", self._active_role, result.reason)
-        return _format_execution_result(result)
+        return format_execution_result(result)
 
     def _dispatch_tool_calls(
         self, messages: list[dict[str, typing.Any]], tool_calls: list[dict[str, typing.Any]]
@@ -444,8 +434,12 @@ class MangoMASOrchestrator:
         self._run_hook(f"post-{agent_name}-run", status="timeout")
         raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
 
-    def execute_sequential_thinking_loop(self, initial_task: str) -> str:
-        """Executes the full MAS loop: Planner -> Nemotron-Reasoner -> Verifier."""
+    def execute_loop(self, initial_task: str) -> LoopOutcome:
+        """Run the MAS loop and return what it produced, verdict included.
+
+        The verdict is earned by a check this method runs itself, never from the
+        agent's own commands: the model selects those (spec R-VP-1).
+        """
         # 1. Planner
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
         plan_started = time.monotonic()
@@ -485,4 +479,22 @@ class MangoMASOrchestrator:
         verification = self.execute_agent("verifier", verifier_prompt)
         logger.info("Verification result: %d bytes", len(verification))
 
-        return verification
+        # 4. The harness earns the verdict itself.
+        return LoopOutcome(self._harness_verdict(), verification, plan, code_output)
+
+    def _harness_verdict(self) -> Verdict:
+        """Run the configured check and grade it, or say why it could not run."""
+        runner = self._verification
+        if runner.target is None:
+            return not_configured()
+        if runner.is_reentrant():
+            return reentrant(runner.target)
+        return derive_verdict(runner.run(self.workspace_dir))
+
+    def execute_sequential_thinking_loop(self, initial_task: str) -> str:
+        """The verifier agent's own message, as this method has always returned.
+
+        Byte-compatible for callers on `main` (R-ORCH-4); the verdict is on
+        `execute_loop`.
+        """
+        return self.execute_loop(initial_task).verifier_message

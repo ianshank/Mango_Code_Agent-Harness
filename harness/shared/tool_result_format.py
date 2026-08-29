@@ -1,0 +1,45 @@
+"""Render a broker result as the tool message the model receives.
+
+Separated from ``mango_mas_orchestrator`` so the rendering has one home and the
+orchestrator stays inside the 500-line budget -- the same split, for the same two
+reasons, as ``tool_schemas``. Nothing outside the orchestrator referenced the
+private original, so this is a move rather than a new surface.
+
+Kept pure and separate from execution so the four output shapes stay testable
+without spawning a process. Note what it drops: on the success path the exit code
+does not reach the model, which is why a verdict cannot be recovered from this
+string and is derived from the structured result instead (see
+``harness.shared.governance.verdict``).
+"""
+from __future__ import annotations
+
+import typing
+
+
+class _Renderable(typing.Protocol):
+    """The shape this needs off a broker result.
+
+    Declared structurally rather than imported, so the module stays at the bottom
+    of the import graph and mypy still checks the field types. ``ExecutionResult``
+    satisfies it; nothing has to say so.
+    """
+
+    status: str
+    stdout: str
+    stderr: str
+    exit_code: int
+    reason: str
+
+
+def format_execution_result(result: _Renderable) -> str:
+    """Render ``result`` for the model. Always returns a string."""
+    if result.status == "BLOCKED":
+        return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
+    if result.reason:
+        return f"Error: {result.reason}"
+    output = result.stdout
+    if result.stderr:
+        output += "\n[STDERR]\n" + result.stderr
+    if not output.strip():
+        return f"Command executed with return code {result.exit_code}, but generated no output."
+    return output
