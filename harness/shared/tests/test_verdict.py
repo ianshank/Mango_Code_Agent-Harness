@@ -185,6 +185,32 @@ class TestEveryVerdictIsLogged:
             reentrant("test-python")
         assert "termination_reason=verification_reentrant" in caplog.text
 
+    def test_a_verdict_with_no_real_command_does_not_log_a_fake_exit_code(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """`not_configured`/`reentrant` use exit_code=-1 as a sentinel for "no
+        command ever ran" -- logged verbatim, -1 reads exactly like a real
+        process that ran and exited -1. Both sentinel-using constructors must
+        log `exit_code=-`, never the raw -1, so an operator scanning the log
+        cannot mistake a BLOCKED-before-attempting-anything outcome for an
+        executed, failed command."""
+        with caplog.at_level("INFO"):
+            not_configured("test-python")
+            reentrant("test-python")
+        # endswith, not `in`: "exit_code=-1" itself contains the substring
+        # "exit_code=-", so a substring check alone can't tell fixed from buggy.
+        for record in caplog.records:
+            assert record.getMessage().endswith("exit_code=-")
+
+    def test_an_unrunnable_probe_also_does_not_log_a_fake_exit_code(self, caplog: pytest.LogCaptureFixture) -> None:
+        """`derive_verdict`'s own probe-failure branch (`verification.py`'s
+        `HarnessCheck.exit_code=-1` sentinel when the target could not be
+        established as runnable) hits the same normalisation as
+        `not_configured`/`reentrant`, via the same shared `_v()`/`_emit()` path."""
+        with caplog.at_level("INFO"):
+            derive_verdict(_check(probe_ok=False, status="BLOCKED", exit_code=-1))
+        assert caplog.records[-1].getMessage().endswith("exit_code=-")
+
     def test_the_logger_is_named_after_this_module(self, caplog: pytest.LogCaptureFixture) -> None:
         """The plan's own documented operator query (``grep '"logger":
         "harness.shared.governance.verdict"'``) only works if every record is

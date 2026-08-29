@@ -125,10 +125,18 @@ def _emit(verdict: Verdict) -> Verdict:
     kwargs today, so anything meant to survive into the emitted JSON line has to
     be in the message itself. ``Verdict.reason`` never carries captured
     stdout/stderr (see ``derive_verdict``), so nothing here needs redaction.
+
+    ``exit_code`` is normalised to ``"-"`` when negative: ``not_configured()``,
+    ``reentrant()``, and the unrunnable-probe branch of ``derive_verdict`` all use
+    ``-1`` as a sentinel for "no command ever ran", not a real process exit status.
+    Logged verbatim, ``-1`` reads exactly like a command that ran and exited -1 --
+    a real subprocess's own returncode is never negative on the paths that reach
+    this function, so there is no ambiguity to lose by normalising it away.
     """
+    exit_code: object = verdict.exit_code if verdict.exit_code >= 0 else "-"
     logger.info(
         "verdict status=%s termination_reason=%s command=%r exit_code=%s",
-        verdict.status, verdict.termination_reason or "-", verdict.command, verdict.exit_code,
+        verdict.status, verdict.termination_reason or "-", verdict.command, exit_code,
     )
     return verdict
 
