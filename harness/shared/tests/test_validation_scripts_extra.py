@@ -22,11 +22,13 @@ def temp_workspace(tmp_path: Path) -> Path:
     # Valid agent-policy
     valid_agent = {
         "agents": [
-            {"id": "orchestrator", "allowed_actions": ["a", "b"], "human_approval_required_for": ["a"], "delegation_depth": 0},
+            {"id": "orchestrator", "allowed_actions": ["a", "b"],
+             "human_approval_required_for": ["a"], "delegation_depth": 0},
             {"id": "spec-analyst", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "implementer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "test-eval", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
-            {"id": "security-reviewer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
+            {"id": "security-reviewer", "allowed_actions": [],
+             "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "peer-reviewer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "release-auditor", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
         ],
@@ -46,10 +48,16 @@ def temp_workspace(tmp_path: Path) -> Path:
     valid_policy_doc = {
         "target_contract": "yes",
         "pre_pr_order": "yes",
-        "ci_required_targets": ["cov", "lint", "types", "secrets", "specs", "audit", "remotes", "projections", "traceability", "governance"],
+        "ci_required_targets": [
+            "cov", "lint", "types", "secrets", "specs",
+            "audit", "remotes", "projections", "traceability", "governance",
+        ],
         "decision_id_pattern": ".*",
         "agent_defaults": {"deny_unclassified_side_effects": True},
-        "protected_paths": [".governance/**", ".github/workflows/**", "Makefile", "scripts/remotes.py", "scripts/verify_zero_skips.py"],
+        "protected_paths": [
+            ".governance/**", ".github/workflows/**", "Makefile",
+            "scripts/remotes.py", "scripts/verify_zero_skips.py",
+        ],
         "charter_version": "1",
         "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
         "skill_max_age_days": 90,
@@ -264,7 +272,9 @@ def test_docs_missing_reviewed(temp_workspace):
 
 def test_docs_future_reviewed(temp_workspace):
     future = (utc_today() + dt.timedelta(days=1)).isoformat()
-    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {future}\n## Decisions since 2026-01-01\nxyz")
+    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
+        f"Reviewed: {future}\n## Decisions since 2026-01-01\nxyz",
+    )
     with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
 
@@ -288,7 +298,9 @@ def test_docs_missing_log(temp_workspace):
 def test_docs_missing_decision_in_skill(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").write_text("2026-01-02 | missed-id | reason")
     today = utc_today().isoformat()
-    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nNot here")
+    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
+        f"Reviewed: {today}\n## Decisions since 2026-01-01\nNot here",
+    )
     with pytest.raises(SystemExit, match="governance skill is missing recent decisions: missed-id"):
         validate_governance_docs(temp_workspace)
 

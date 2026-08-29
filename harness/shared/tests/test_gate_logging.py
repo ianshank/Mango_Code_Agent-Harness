@@ -45,7 +45,7 @@ class TestResolveLogLevel:
         monkeypatch.delenv(LOG_LEVEL_ENV_VAR, raising=False)
         assert resolve_log_level(raw) == logging.getLevelName(DEFAULT_GATE_LOG_LEVEL)
 
-    @pytest.mark.parametrize("raw", ["NONSENSE", "verbose", "TRACE", "!!"])
+    @pytest.mark.parametrize("raw", ["NONSENSE", "GIBBERISH", "TRACE", "!!"])
     def test_unusable_value_degrades_instead_of_raising(self, raw):
         """Misconfigured verbosity must never be able to fail a governance gate."""
         assert resolve_log_level(raw) == logging.getLevelName(DEFAULT_GATE_LOG_LEVEL)

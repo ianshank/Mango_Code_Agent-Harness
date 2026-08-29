@@ -145,7 +145,12 @@ def _reject_unsafe_relpath(rel: str) -> None:
     ``POLICY_FILES`` is ever made config-driven.
     """
     parts = Path(rel).parts
-    if Path(rel).is_absolute() or ".." in parts:
+    # Path.is_absolute() misses POSIX absolute paths on Windows (no drive letter),
+    # so also check for a leading forward-slash explicitly. Windows UNC paths
+    # (\\server\share) and Windows drive letters (C:\...) bypass is_absolute() on
+    # Linux CI, so check backslash and drive letters too.
+    is_win_drive = len(rel) >= 2 and rel[0].isalpha() and rel[1] == ":"
+    if Path(rel).is_absolute() or rel.startswith(("/", "\\\\")) or is_win_drive or ".." in parts:
         _deny(f"unsafe file path in artifact manifest: {rel!r}")
 
 
@@ -186,7 +191,10 @@ def check_artifact(repo_root: Path, artifact: dict[str, typing.Any]) -> None:
     if set(files) != set(POLICY_FILES):
         missing = set(POLICY_FILES) - set(files)
         extra = set(files) - set(POLICY_FILES)
-        _deny(f"artifact file manifest does not match governed policy files (missing={sorted(missing)}, extra={sorted(extra)})")
+        _deny(
+            f"artifact file manifest does not match governed policy files"
+            f" (missing={sorted(missing)}, extra={sorted(extra)})"
+        )
 
     for rel, meta in files.items():
         _reject_unsafe_relpath(rel)

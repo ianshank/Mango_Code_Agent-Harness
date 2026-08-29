@@ -182,7 +182,9 @@ class TestVerifyRepository:
         stale = self._bundle(repo)
         stale["profiles"]["python"]["marker"] = "does-not-exist.toml"
         bundle = self._write_bundle(tmp_path, stale)
-        with pytest.raises(SystemExit, match=r"DENY: cannot identify exactly one protected stack profile \(matched 0\)"):
+        with pytest.raises(
+            SystemExit, match=r"DENY: cannot identify exactly one protected stack profile \(matched 0\)",
+        ):
             _run_main(monkeypatch, VERIFIER, ["--repo", repo, "--bundle", bundle])
 
     def test_two_matching_profiles_denies(self, monkeypatch, tmp_path: Path, repo: Path):

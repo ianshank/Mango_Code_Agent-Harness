@@ -28,7 +28,6 @@ LAYERS = {
     "harness.shared.governance.verdict": 0,
     "harness.shared.tool_budget": 0,
     "harness.shared.tool_result_format": 0,
-    "harness.shared.prompt_templates": 0,
     "harness.shared.governance.verification": 2,
     "harness.shared.mango_mas_orchestrator": 4,
     "harness.api_server.main": 5,

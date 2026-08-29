@@ -142,7 +142,7 @@ def load_allowlist(path: Path) -> list[str]:
 def current_push_urls(repo: Path) -> list[tuple[str, str]]:
     try:
         names = subprocess.run(
-            ["git", "-C", str(repo), "remote"], check=True, text=True, capture_output=True
+            ["git", "-C", str(repo), "remote"], check=True, encoding="utf-8", capture_output=True
         ).stdout.split()
     except Exception as e:
         raise RemoteParseError(f"cannot enumerate git remotes: {e}") from e
@@ -151,10 +151,10 @@ def current_push_urls(repo: Path) -> list[tuple[str, str]]:
     result = []
     for name in names:
         cmd = ["git", "-C", str(repo), "remote", "get-url", "--push", "--all", name]
-        p = subprocess.run(cmd, text=True, capture_output=True)
+        p = subprocess.run(cmd, encoding="utf-8", capture_output=True)
         if p.returncode != 0:
             p = subprocess.run(
-                ["git", "-C", str(repo), "remote", "get-url", "--all", name], text=True, capture_output=True
+                ["git", "-C", str(repo), "remote", "get-url", "--all", name], encoding="utf-8", capture_output=True
             )
         if p.returncode != 0 or not p.stdout.strip():
             raise RemoteParseError(f"cannot resolve push URL for remote {name}")

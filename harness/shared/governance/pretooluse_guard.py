@@ -127,7 +127,7 @@ def extract_command(payload: dict) -> object:
 
 
 def git_output(root: Path, args: list[str]) -> str:
-    p = subprocess.run(["git", "-C", str(root), *args], text=True, capture_output=True)
+    p = subprocess.run(["git", "-C", str(root), *args], encoding="utf-8", capture_output=True)
     return p.stdout.strip() if p.returncode == 0 else ""
 
 
@@ -295,7 +295,7 @@ def check_command(cmd: str, timeout: int | None = None) -> int:
                             str(root / ".governance/allowed-remotes.txt"),
                         ],
                         capture_output=True,
-                        text=True,
+                        encoding="utf-8",
                         timeout=timeout,
                     )
                 except subprocess.TimeoutExpired:

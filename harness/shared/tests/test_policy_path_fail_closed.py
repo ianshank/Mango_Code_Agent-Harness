@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -83,7 +84,13 @@ UNUSABLE_KINDS = [
         "fifo",
         marks=pytest.mark.skipif(not _supports("fifo"), reason="platform has no os.mkfifo"),
     ),
-    pytest.param("not_a_directory"),
+    pytest.param(
+        "not_a_directory",
+        marks=pytest.mark.skipif(
+            sys.platform == "win32",
+            reason="NTFS path resolution through a file raises FileNotFoundError, not NotADirectoryError"
+        ),
+    ),
 ]
 
 
@@ -96,7 +103,9 @@ def _make_unusable(path: Path, kind: str) -> Path:
         path.symlink_to(path.parent / "target-that-does-not-exist.json")
         return path
     if kind == "fifo":
-        os.mkfifo(path)
+        mkfifo = getattr(os, "mkfifo", None)
+        if mkfifo is not None:
+            mkfifo(path)
         return path
     if kind == "not_a_directory":
         # A parent component that is a regular file: stat() raises
@@ -211,7 +220,9 @@ class TestGuardsProbeErrnoNotPredicates:
         assert unreachable.is_file() is False
         assert unreachable.exists() is False
         assert unreachable.is_symlink() is False
-        with pytest.raises(NotADirectoryError):
+        # Windows raises FileNotFoundError (WinError 3); POSIX raises NotADirectoryError.
+        # Both correctly signal "unreachable", but the errno differs.
+        with pytest.raises((NotADirectoryError, FileNotFoundError)):
             unreachable.stat()
 
     def test_stat_distinguishes_the_cases_the_predicates_collapse(
@@ -292,3 +303,44 @@ class TestNoReaderReintroducesTheShape:
             "        return FALLBACK",
         ))
         assert _offending_lines(accepted) == []
+
+
+class TestPolicyFileIsAbsentErrorBranches:
+    def test_stat_oserror_raises_policy_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        p = Path("governance-policy.json")
+
+        def mock_stat(self):
+            raise PermissionError("Access denied")
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        with pytest.raises(policy_loader.PolicyError, match="is not readable"):
+            policy_loader.policy_file_is_absent(p)
+
+    def test_stat_filenotfound_lstat_oserror_raises_policy_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        p = Path("governance-policy.json")
+
+        def mock_stat(self):
+            raise FileNotFoundError("Target not found")
+
+        def mock_lstat(self):
+            raise PermissionError("Symlink access denied")
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        monkeypatch.setattr(Path, "lstat", mock_lstat)
+        with pytest.raises(policy_loader.PolicyError, match="is not readable"):
+            policy_loader.policy_file_is_absent(p)
+
+    def test_stat_filenotfound_lstat_success_raises_dangling_symlink(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        p = Path("governance-policy.json")
+
+        def mock_stat(self):
+            raise FileNotFoundError("Target not found")
+
+        def mock_lstat(self):
+            return os.stat_result((stat.S_IFLNK, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        monkeypatch.setattr(Path, "lstat", mock_lstat)
+        with pytest.raises(policy_loader.PolicyError, match="symlink whose target does not exist"):
+            policy_loader.policy_file_is_absent(p)
+

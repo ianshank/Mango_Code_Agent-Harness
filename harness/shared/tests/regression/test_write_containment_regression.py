@@ -141,7 +141,10 @@ class TestRunCommandCannotWriteWhereWriteFileCannot:
             ("echo PAYLOAD > .git/hooks/pre-commit", ".git/hooks/pre-commit"),
             ("echo PAYLOAD >> .mango/hooks/pre-nemotron-run.sh", ".mango/hooks/pre-nemotron-run.sh"),
             ("echo PAYLOAD > .mango/hooks/post-verifier-run.sh", ".mango/hooks/post-verifier-run.sh"),
-            ("echo PAYLOAD > harness/shared/governance/pretooluse_guard.py", "harness/shared/governance/pretooluse_guard.py"),
+            (
+                "echo PAYLOAD > harness/shared/governance/pretooluse_guard.py",
+                "harness/shared/governance/pretooluse_guard.py",
+            ),
             ("echo PAYLOAD > harness/shared/agent_authority.py", "harness/shared/agent_authority.py"),
             ("echo PAYLOAD >> harness/shared/agent-policy.json", "harness/shared/agent-policy.json"),
             ("echo PAYLOAD > .claude/settings.json", ".claude/settings.json"),

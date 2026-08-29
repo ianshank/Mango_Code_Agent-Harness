@@ -28,10 +28,12 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.tests.conftest import POSIX_ONLY
+
+pytestmark = [POSIX_ONLY, pytest.mark.governance]
+
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "harness" / "shared" / "validate_specs.sh"
-
-pytestmark = pytest.mark.governance
 
 # A spec that satisfies every structural rule. Each test mutates one aspect of this
 # baseline, so a failure localises to the rule under test rather than to the fixture.

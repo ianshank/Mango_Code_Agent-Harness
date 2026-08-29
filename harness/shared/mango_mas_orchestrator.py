@@ -1,18 +1,44 @@
+"""Multi-Agent System (MAS) orchestrator for autonomous agent execution.
+
+Orchestrates planner, reasoner, and verifier roles with governed tool execution,
+credential redaction, loop outcomes, and policy-sourced limits.
+"""
+
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess
 import time
-import typing
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from harness.shared.agent_authority import (
-    ACTIVE_TO_CANONICAL,
     execution_identity,
     tool_is_permitted,
     tools_for_role,
+)
+from harness.shared.agent_prompts import (
+    AUTONOMOUS_AGENT_GUARDRAIL as AUTONOMOUS_AGENT_GUARDRAIL,
+)
+from harness.shared.agent_prompts import (
+    PERMITTED_HOOK_NAMES as PERMITTED_HOOK_NAMES,
+)
+from harness.shared.agent_prompts import (
+    PLANNER_PROMPT_TEMPLATE as PLANNER_PROMPT_TEMPLATE,
+)
+from harness.shared.agent_prompts import (
+    PRE_RUN_HOOK as PRE_RUN_HOOK,
+)
+from harness.shared.agent_prompts import (
+    REASONER_PROMPT_TEMPLATE as REASONER_PROMPT_TEMPLATE,
+)
+from harness.shared.agent_prompts import (
+    TASK_LOG_PREVIEW_CHARS as TASK_LOG_PREVIEW_CHARS,
+)
+from harness.shared.agent_prompts import (
+    VERIFIER_PROMPT_TEMPLATE as VERIFIER_PROMPT_TEMPLATE,
 )
 from harness.shared.debug_dump import credential_env_names, write_dump
 from harness.shared.governance.broker import ExecutionBroker
@@ -21,75 +47,18 @@ from harness.shared.governance.verification import VerificationRunner
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
-from harness.shared.prompt_templates import (
-    PLANNER_PROMPT_TEMPLATE,
-    REASONER_PROMPT_TEMPLATE,
-    VERIFIER_PROMPT_TEMPLATE,
-)
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 from harness.shared.tool_budget import ToolBudget
-from harness.shared.tool_result_format import format_execution_result
-from harness.shared.tool_schemas import NEMOTRON_TOOLS as _NEMOTRON_TOOLS
-from harness.shared.write_policy import write_denial_reason
+from harness.shared.tool_dispatch import (
+    DEFAULT_HYPOTHESIS_CONFIDENCE as DEFAULT_HYPOTHESIS_CONFIDENCE,
+)
+from harness.shared.tool_dispatch import (
+    _normalize_tool_arguments as _normalize_tool_arguments,
+)
+from harness.shared.tool_executors import execute_run_command, execute_write_file
+from harness.shared.tool_schemas import NEMOTRON_TOOLS as NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
-
-# How much of a task string is echoed into log lines (avoids flooding logs
-# with full prompts while keeping enough to correlate runs).
-TASK_LOG_PREVIEW_CHARS = 100
-
-#: The hook fired once at the start of every agent turn. Named rather than
-#: repeated so the allowlist below and the call site cannot drift apart.
-PRE_RUN_HOOK = "pre-nemotron-run"
-
-#: Hook names `_run_hook` will execute. Derived from the active roles rather
-#: than listed: a role added to `ACTIVE_TO_CANONICAL` gets its post-hook without
-#: a second edit, and a list maintained by hand is exactly the thing that goes
-#: stale into a permission. Every name here is one this module constructs
-#: itself; nothing a caller passes can widen the set.
-PERMITTED_HOOK_NAMES = frozenset(
-    {PRE_RUN_HOOK} | {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL}
-)
-# Default confidence when the model omits it from a hypothesis_register call.
-DEFAULT_HYPOTHESIS_CONFIDENCE = 0.5
-
-def _normalize_tool_arguments(raw: typing.Any, func_name: typing.Any) -> dict[str, typing.Any]:
-    """Coerce a tool call's ``arguments`` field into a dict of keyword args.
-
-    The field is model-generated and only conventionally a JSON object string.
-    Two shapes crashed the previous implementation:
-
-    * ``null`` -> ``json.loads(None)`` raises TypeError, which the surrounding
-      ``except json.JSONDecodeError`` did not catch;
-    * ``"[]"`` -> parses cleanly to a list, then every registry lambda dies on
-      ``.get``.
-
-    Both now degrade to no arguments, so a malformed call produces a tool
-    result the model can react to rather than an unhandled exception.
-    """
-    if isinstance(raw, dict):
-        return raw
-    if not isinstance(raw, str) or not raw.strip():
-        if raw is not None:
-            logger.warning("Tool %s sent non-string arguments %r; treating as empty", func_name, type(raw).__name__)
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        logger.warning("Tool %s sent unparseable arguments; treating as empty", func_name)
-        return {}
-    if not isinstance(parsed, dict):
-        logger.warning(
-            "Tool %s sent JSON %s arguments, expected an object; treating as empty",
-            func_name, type(parsed).__name__,
-        )
-        return {}
-    return parsed
-
-
-# Declared in `tool_schemas`; re-exported here because this module's public
-# surface includes it and callers reach it as `orch_module.NEMOTRON_TOOLS`.
-NEMOTRON_TOOLS = _NEMOTRON_TOOLS
 
 
 class MangoMASOrchestrator:
@@ -140,11 +109,11 @@ class MangoMASOrchestrator:
         self._active_role = active_role
         self.agents_dir = self.workspace_dir / ".mango" / "agents"
         self.hooks_dir = self.workspace_dir / ".mango" / "hooks"
-        self.conversation_history: list[dict[str, str]] = []
+        self.conversation_history: list[dict[str, Any]] = []
         # Tool dispatch registry: every function name declared in
         # NEMOTRON_TOOLS must have an entry here (pinned by a unit test), so
         # declaration and dispatch cannot drift apart.
-        self._tool_handlers: dict[str, typing.Callable[[dict[str, typing.Any]], str]] = {
+        self._tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
             "write_file": lambda args: self._execute_write_file(args.get("filepath", ""), args.get("content", "")),
             "run_command": lambda args: self._execute_run_command(args.get("command", "")),
             "knowledge_gap_log": lambda args: knowledge_gap_log(
@@ -156,7 +125,7 @@ class MangoMASOrchestrator:
             ),
         }
 
-    def _run_hook(self, hook_name: str, **kwargs: typing.Any) -> None:
+    def _run_hook(self, hook_name: str, **kwargs: Any) -> None:
         """Executes a pre- or post- hook script if it exists.
 
         The name is checked against the set the orchestrator can legitimately
@@ -191,8 +160,12 @@ class MangoMASOrchestrator:
                 env = {k: v for k, v in os.environ.items() if k not in denied}
                 for k, v in kwargs.items():
                     env[f"MANGO_HOOK_{k.upper()}"] = str(v)
+                try:
+                    hook_arg = hook_path.relative_to(self.workspace_dir).as_posix()
+                except ValueError:
+                    hook_arg = hook_path.as_posix()
                 subprocess.run(
-                    ["bash", str(hook_path)], cwd=self.workspace_dir, env=env, check=True, timeout=self.tool_timeout
+                    ["bash", hook_arg], cwd=self.workspace_dir, env=env, check=True, timeout=self.tool_timeout
                 )
             except Exception:
                 logger.exception("Hook %s failed", hook_name)
@@ -206,70 +179,29 @@ class MangoMASOrchestrator:
         return agent_file.read_text(encoding="utf-8")
 
     def _execute_write_file(self, filepath: str, content: str) -> str:
-        """Local tool implementation to write a file.
-
-        Two checks, in order. Confinement keeps the write inside the workspace;
-        the write policy keeps it off the control surface *within* the workspace.
-        The second is not redundant: in the deployed path the workspace is the
-        repository root, so confinement alone permits writing the guard, the
-        policy decision point, the orchestrator's own hooks and the agent
-        personas (spec R-AC-6, R-AC-7).
-        """
-        workspace = self.workspace_dir.resolve()
-        target_path = (workspace / filepath).resolve()
-
-        if not target_path.is_relative_to(workspace):
-            # Previously returned silently. An escape attempt is the single most
-            # interesting thing this tool can do and it left no trace anywhere.
-            logger.warning("Denied write outside the workspace: %s", filepath)
-            return f"Error writing file {filepath}: path escapes workspace"
-
-        denial = write_denial_reason(str(target_path.relative_to(workspace)))
-        if denial is not None:
-            logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
-            return f"Error writing file {filepath}: {denial}"
-
-        try:
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(content, encoding="utf-8")
-            return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
-        except Exception as e:  # noqa: BLE001 - a tool must always answer its call
-            # with a string; an escaping exception would leave the model's
-            # tool_calls message unanswered and stall the conversation.
-            return f"Error writing file {filepath}: {str(e)}"
+        """Local tool implementation to write a file."""
+        return execute_write_file(self.workspace_dir, filepath, content)
 
     def _execute_run_command(self, command: str) -> str:
-        """Run a command through the approved execution broker (INV-8).
-
-        Previously this shelled out directly. The broker is what makes INV-8 true
-        on the live path: it derives the action from the command, asks the
-        authority model for a verdict, runs the command guard, and pins the
-        working directory, the timeout and the captured output size. It never
-        falls back to host execution when its backend is unavailable (INV-9), and
-        a denial is terminal -- nothing here retries or downgrades one (INV-10).
-
-        The guard is no longer called here as well: it is on the broker's path,
-        and calling it twice would mean two places to keep in step.
-        """
-        result = self._broker.execute_command(
+        """Run a command through the approved execution broker (INV-8)."""
+        return execute_run_command(
+            self._broker,
+            self._active_role,
+            self.workspace_dir,
             command,
-            {"agent_id": execution_identity(self._active_role)},
-            cwd=self.workspace_dir,
-            timeout=self.tool_timeout,
+            self.tool_timeout,
         )
-        if result.status == "BLOCKED":
-            logger.warning("Broker denied command for role %s: %s", self._active_role, result.reason)
-        return format_execution_result(result)
 
     def _dispatch_tool_calls(
-        self, messages: list[dict[str, typing.Any]], tool_calls: list[dict[str, typing.Any]]
+        self, messages: list[dict[str, Any]], tool_calls: list[dict[str, Any]]
     ) -> None:
         """Execute each requested tool via the registry and append the results
         to ``messages`` so they feed back to the model."""
         for tc in tool_calls:
             tc_id = tc.get("id")
-            func_name = tc.get("function", {}).get("name")
-            args = _normalize_tool_arguments(tc.get("function", {}).get("arguments"), func_name)
+            func_obj = tc.get("function") or {}
+            func_name = str(func_obj.get("name") or "")
+            args = _normalize_tool_arguments(func_obj.get("arguments"), func_name)
 
             handler = self._tool_handlers.get(func_name)
             if handler is not None and not tool_is_permitted(self._active_role, func_name):
@@ -307,7 +239,7 @@ class MangoMASOrchestrator:
             logger.info("Executed %s. Result length: %d", func_name, len(tool_result))
             messages.append({"role": "tool", "tool_call_id": tc_id, "name": func_name, "content": tool_result})
 
-    def _finalize_response(self, messages: list[dict[str, typing.Any]], content: typing.Any) -> str:
+    def _finalize_response(self, messages: list[dict[str, Any]], content: Any) -> str:
         """Derive the agent's final answer once the model stops requesting tools."""
         final_content = str(content or "")
 
@@ -335,7 +267,7 @@ class MangoMASOrchestrator:
         self,
         agent_name: str,
         task: str,
-        tools: list[dict[str, typing.Any]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
         budget: ToolBudget | None = None,
     ) -> str:
         """
@@ -350,7 +282,7 @@ class MangoMASOrchestrator:
         self._run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 
-        messages: list[dict[str, typing.Any]] = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.load_agent_prompt(agent_name)},
             {"role": "user", "content": task},
         ]
@@ -372,7 +304,7 @@ class MangoMASOrchestrator:
 
         for _iteration in range(self.max_iterations):
             try:
-                kwargs: dict[str, typing.Any] = {
+                kwargs: dict[str, Any] = {
                     "messages": messages,
                     "tools": active_tools,
                     "timeout_sec": self.api_timeout,
@@ -386,9 +318,11 @@ class MangoMASOrchestrator:
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
 
-            message_obj = response.get("choices", [{}])[0].get("message", {})
+            choices = response.get("choices") or [{}]
+            first_choice = choices[0] if choices else {}
+            message_obj = first_choice.get("message") or {}
             content = message_obj.get("content", "")
-            tool_calls = message_obj.get("tool_calls", [])
+            tool_calls = message_obj.get("tool_calls") or []
 
             # Append the model's message to context
             # Even if content is None (only tool_calls), we must append it.
@@ -476,3 +410,18 @@ class MangoMASOrchestrator:
         `execute_loop`.
         """
         return self.execute_loop(initial_task).verifier_message
+
+
+__all__ = [
+    "AUTONOMOUS_AGENT_GUARDRAIL",
+    "DEFAULT_HYPOTHESIS_CONFIDENCE",
+    "MangoMASOrchestrator",
+    "NEMOTRON_TOOLS",
+    "PERMITTED_HOOK_NAMES",
+    "PLANNER_PROMPT_TEMPLATE",
+    "PRE_RUN_HOOK",
+    "REASONER_PROMPT_TEMPLATE",
+    "TASK_LOG_PREVIEW_CHARS",
+    "VERIFIER_PROMPT_TEMPLATE",
+    "_normalize_tool_arguments",
+]

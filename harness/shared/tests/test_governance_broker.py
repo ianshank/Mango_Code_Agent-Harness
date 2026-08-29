@@ -28,6 +28,7 @@ from harness.shared.governance.broker import (
     ProcessBackend,
     _cap,
 )
+from harness.shared.tests.conftest import POSIX_ONLY
 
 pytestmark = pytest.mark.governance
 
@@ -323,6 +324,7 @@ class TestTheBackendReallyEnforcesItsBudgets:
         assert result.status == "FAILED"
         assert "timed out" in result.reason
 
+    @POSIX_ONLY
     def test_the_working_directory_is_pinned(self, tmp_path: Path) -> None:
         result = ProcessBackend().run("pwd", tmp_path, 10, DEFAULT_MAX_OUTPUT_BYTES)
         assert result.status == "SUCCESS"
@@ -429,6 +431,7 @@ class TestBrokeredCommandsDoNotInheritCredentials:
             "only disclosure."
         )
 
+    @POSIX_ONLY
     def test_the_command_still_runs_and_still_sees_ordinary_variables(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

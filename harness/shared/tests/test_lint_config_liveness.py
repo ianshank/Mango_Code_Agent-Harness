@@ -70,13 +70,14 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
         "--target-version", ruff_cfg["target-version"],
         "--select", ",".join(codes),
     ])
-    prefix = str(REPO) + "/"
-    return [(row["filename"].replace(prefix, ""), row["code"]) for row in rows]
+    return [(Path(row["filename"]).resolve().relative_to(REPO.resolve()).as_posix(), row["code"]) for row in rows]
 
 
 @pytest.fixture(scope="module")
 def findings() -> list[tuple[str, str]]:
     codes = sorted({code for codes in _per_file_ignores().values() for code in codes})
+    if not codes:
+        return []
     return _isolated_findings(codes)
 
 
@@ -84,6 +85,8 @@ class TestPerFileIgnoresAreLive:
     def test_the_probe_finds_something(self, findings: list[tuple[str, str]]) -> None:
         """Guards the measurement: if the isolated run reported nothing, every
         pattern below would look dead and the suite would fail confusingly."""
+        if not _per_file_ignores():
+            pytest.skip("no per-file-ignores configured; nothing to probe")
         assert findings, "the isolated ruff run produced no findings; the probe is broken"
 
     @pytest.mark.parametrize("pattern", sorted(_per_file_ignores()))
