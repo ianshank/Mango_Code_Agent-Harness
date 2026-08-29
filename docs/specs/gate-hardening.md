@@ -22,7 +22,7 @@ and `harness/CONTRACT.md` §Coverage gate on `main` before this change):
   false since `branch = true` landed — and described the retired `COV_MIN`
   mechanism.
 - The CI matrix ran the full `make ci` — pnpm install plus the entire Vitest
-  suite — on all four Python versions, four identical Node runs for one
+  suite — on all three matrix Python versions plus build-full, four identical Node runs for one
   Python-independent signal.
 
 Preconditions satisfied by earlier program PRs: every Python file is at or

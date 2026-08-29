@@ -33,6 +33,7 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-6, R-AC-7).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -170,3 +171,59 @@ class TestRunCommandCannotWriteWhereWriteFileCannot:
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
         assert not orch._execute_run_command("echo hi 2>&1").startswith("Error")
         assert not orch._execute_run_command("echo hi >&2").startswith("Error")
+
+
+class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
+    """R-AC-8 was enforced by omission from a prompt.
+
+    `tools_for_role` filters the schema the model is *told* about.
+    `_dispatch_tool_calls` looked handlers up by name in `_tool_handlers`, with
+    no reference to that filtered list -- so a model that named `write_file`
+    anyway got it, and the name is in `conversation_history` from the reasoner's
+    turn immediately before the verifier's.
+
+    The pre-existing test asserts on `chat.call_args.kwargs["tools"]`, which is
+    precisely the advisory half; it stayed green against this.
+    """
+
+    def test_the_verifier_is_refused_write_file_even_when_it_asks_by_name(
+        self, agent_workspace: Path
+    ) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
+        orch._active_role = "verifier"
+        messages: list[dict[str, object]] = []
+        orch._dispatch_tool_calls(
+            messages,
+            [{
+                "id": "call_1",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps(
+                        {"filepath": "implementation_i_am_judging.py", "content": "PWNED"}
+                    ),
+                },
+            }],
+        )
+        assert messages, "the dispatcher produced no tool message"
+        assert "not available to the verifier role" in str(messages[-1]["content"])
+        assert not (agent_workspace / "implementation_i_am_judging.py").exists(), (
+            "the verifier wrote a file it was never offered the tool for"
+        )
+
+    def test_the_reasoner_may_still_write(self, agent_workspace: Path) -> None:
+        """Control. A dispatcher that refused every tool would satisfy the
+        assertion above while breaking the harness."""
+        orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
+        orch._active_role = "nemotron-reasoner"
+        messages: list[dict[str, object]] = []
+        orch._dispatch_tool_calls(
+            messages,
+            [{
+                "id": "call_1",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"filepath": "feature.py", "content": "ok"}),
+                },
+            }],
+        )
+        assert (agent_workspace / "feature.py").read_text(encoding="utf-8") == "ok"

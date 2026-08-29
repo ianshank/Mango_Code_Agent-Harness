@@ -327,3 +327,175 @@ class TestTheBackendReallyEnforcesItsBudgets:
         result = ProcessBackend().run("pwd", tmp_path, 10, DEFAULT_MAX_OUTPUT_BYTES)
         assert result.status == "SUCCESS"
         assert str(tmp_path.resolve()) in result.stdout, "the command did not run in the pinned directory"
+
+
+class TestARedirectAlsoRequiresTheWriteAction:
+    """`classify` returns the strictest single action, which is what the PDP
+    takes -- but the strictest is not always the write. `pytest -q > x.txt`
+    grades `test_execute`, and a role holding `test_execute` without `write`
+    would then write a file through the redirect.
+
+    The verifier is exactly that role, and "the role that judges the work cannot
+    edit the work" (R-AC-8) is what this protects. A command exercises a *set* of
+    actions and every one must be granted.
+    """
+
+    def test_the_verifier_cannot_write_under_a_test_execute_grade(self, tmp_path: Path) -> None:
+        result = ExecutionBroker().execute_command(
+            "pytest -q > out.txt", {"agent_id": "test-eval"}, cwd=tmp_path, timeout=10
+        )
+        assert result.status == "BLOCKED"
+        assert "write" in (result.reason or "")
+        assert not (tmp_path / "out.txt").exists()
+
+    def test_the_verifier_may_still_run_tests_without_redirecting(self, tmp_path: Path) -> None:
+        """Control: the write requirement must attach to the redirect, not to
+        `test_execute`. A gate that denied the verifier every test run would
+        pass the assertion above and be useless."""
+        result = ExecutionBroker().execute_command(
+            "true", {"agent_id": "test-eval"}, cwd=tmp_path, timeout=10
+        )
+        assert result.status != "BLOCKED", result.reason
+
+    def test_the_implementer_may_still_redirect(self, tmp_path: Path) -> None:
+        """Control: the implementer holds `write`, so ordinary redirection is
+        unaffected."""
+        result = ExecutionBroker().execute_command(
+            "echo ok > allowed.txt", {"agent_id": "implementer"}, cwd=tmp_path, timeout=10
+        )
+        assert result.status == "SUCCESS", result.reason
+        assert (tmp_path / "allowed.txt").read_text(encoding="utf-8").strip() == "ok"
+
+
+class TestFdRedirectsCannotReachTheControlSurface:
+    """End-to-end for the reported bypass: the classifier missed `1>`/`2>`, so
+    the write policy was handed no target to check."""
+
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            pytest.param(".git/hooks/pre-commit", id="git-hook"),
+            pytest.param("Makefile", id="protected-file"),
+            pytest.param(".mango/hooks/post-verifier-run.sh", id="agent-hook"),
+        ],
+    )
+    @pytest.mark.parametrize("op", ["1>", "2>", ">", ">>"])
+    def test_the_write_is_refused_and_the_file_is_untouched(
+        self, tmp_path: Path, relpath: str, op: str
+    ) -> None:
+        target = tmp_path / relpath
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("ORIGINAL\n", encoding="utf-8")
+
+        result = ExecutionBroker().execute_command(
+            f"echo PWNED {op}{relpath}", {"agent_id": "implementer"}, cwd=tmp_path, timeout=10
+        )
+        assert result.status == "BLOCKED", f"{op}{relpath} was permitted"
+        assert target.read_text(encoding="utf-8") == "ORIGINAL\n", (
+            f"{op}{relpath} was refused but the file changed anyway"
+        )
+
+
+class TestBrokeredCommandsDoNotInheritCredentials:
+    """`_run_hook` filtered the environment; `_spawn` did not — and `_spawn` is
+    the path the model actually controls.
+
+    `agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`.
+    `env` and `printenv` are graded `secret_access` and denied, but the action
+    model cannot enumerate every spelling: `cat /proc/self/environ` is `cat`,
+    which grades `read`, an action every role holds.
+    """
+
+    CANARIES = {
+        "NVIDIA_API_KEY": "nvapi-CANARY-0123456789abcdef",
+        "AGENT_EVIDENCE_KEY": "EVIDENCE-CANARY-0123456789",
+        "API_SERVER_KEY": "SERVER-CANARY-0123456789",
+    }
+
+    @pytest.mark.parametrize("agent_id", ["implementer", "test-eval"])
+    def test_credentials_do_not_reach_a_brokered_command(
+        self, agent_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for name, value in self.CANARIES.items():
+            monkeypatch.setenv(name, value)
+        result = ExecutionBroker().execute_command(
+            "cat /proc/self/environ", {"agent_id": agent_id}, cwd=tmp_path, timeout=10
+        )
+        blob = (result.stdout or "") + (result.stderr or "")
+        leaked = [name for name, value in self.CANARIES.items() if value in blob]
+        assert not leaked, (
+            f"{leaked} reached an agent-authored command's environment. AGENT_EVIDENCE_KEY "
+            "is the HMAC key evidence manifests are signed with, so this is forgery, not "
+            "only disclosure."
+        )
+
+    def test_the_command_still_runs_and_still_sees_ordinary_variables(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Control: a filter that emptied the environment would satisfy the test
+        above and break every build command the agent runs."""
+        monkeypatch.setenv("MANGO_ORDINARY_VARIABLE", "kept")
+        result = ExecutionBroker().execute_command(
+            "printf '%s' \"$MANGO_ORDINARY_VARIABLE\"",
+            {"agent_id": "implementer"}, cwd=tmp_path, timeout=10,
+        )
+        assert result.status == "SUCCESS", result.reason
+        assert "kept" in (result.stdout or "")
+
+
+class TestTheAvailabilityProbeIsAProbe:
+    """`test_default_probes_the_backend_rather_than_assuming` asserts
+    `ExecutionBroker().verify_sandbox() is True`, and a backend hardcoding
+    `available() -> True` satisfies it exactly as well as one that checks. The
+    test's *name* was the only thing separating the defect from the fix, so
+    INV-9's no-fallback branch was unreachable in production either way.
+
+    These distinguish them: a backend whose shell does not exist must read as
+    unavailable, and execution must then be BLOCKED rather than fall back.
+    """
+
+    def test_a_backend_whose_shell_is_missing_is_unavailable(self) -> None:
+        class NoShell(ProcessBackend):
+            shell = "definitely-not-a-real-shell-b7f3a1"
+
+        assert NoShell().available() is False
+
+    def test_a_backend_whose_shell_fails_is_unavailable(self) -> None:
+        """Present and runnable is not enough: `exit 0` must actually succeed."""
+        class BrokenShell(ProcessBackend):
+            shell = "false"
+
+        assert BrokenShell().available() is False
+
+    def test_a_real_shell_is_available(self) -> None:
+        """Positive control. Both assertions above are satisfied by a probe that
+        returns False unconditionally, which would block every command."""
+        assert ProcessBackend().available() is True
+
+    def test_an_unavailable_backend_blocks_rather_than_falling_back(self, tmp_path: Path) -> None:
+        """INV-9 end to end, through the branch that was unreachable."""
+        class NoShell(ProcessBackend):
+            shell = "definitely-not-a-real-shell-b7f3a1"
+
+        result = ExecutionBroker(backend=NoShell()).execute_command(
+            "echo hi", {"agent_id": "implementer"}, cwd=tmp_path, timeout=10
+        )
+        assert result.status == "BLOCKED"
+        assert "unavailable" in (result.reason or "").lower()
+
+    def test_the_probe_runs_once_per_backend(self) -> None:
+        """Cached: `verify_sandbox` is consulted on every `execute_command`, and
+        an uncached probe would spawn a process per tool call to answer a
+        question whose answer cannot change within a run."""
+        backend = ProcessBackend()
+        calls = {"n": 0}
+        real = backend._probe
+
+        def counting() -> bool:
+            calls["n"] += 1
+            return real()
+
+        backend._probe = counting  # type: ignore[method-assign]
+        assert backend.available() is True
+        assert backend.available() is True
+        assert calls["n"] == 1

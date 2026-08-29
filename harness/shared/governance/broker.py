@@ -30,6 +30,7 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-11, R-AC-12).
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import typing
 from dataclasses import dataclass
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Imported from the shared layer rather than re-implemented: two matchers would be
 # two behaviours, and the write tool's gate is the one with the liveness suite
 # behind it.
-from harness.shared.debug_dump import redact_text  # noqa: E402
+from harness.shared.debug_dump import credential_env_names, redact_text  # noqa: E402
 from harness.shared.write_policy import write_denial_reason  # noqa: E402
 
 #: The authority model, resolved next to this package so it travels with the
@@ -88,18 +89,76 @@ class ProcessBackend:
     name = "process"
     version = "1.0.0"
 
+    #: The interpreter commands are handed to. Named once so the availability
+    #: probe and the spawn cannot disagree about what "available" refers to.
+    shell = "bash"
+
+    #: Seconds the probe may take. It runs `exit 0`, so anything approaching this
+    #: means the shell is wedged rather than slow, which is itself unavailable.
+    probe_timeout_sec = 5
+
+    def __init__(self) -> None:
+        self._probed: bool | None = None
+
     def available(self) -> bool:
-        return True
+        """Whether this backend can actually start a process.
+
+        This was `return True`. That is not a probe -- it is the
+        `sandbox_available: bool = True` fail-open moved one method down: the
+        same unconditional yes, the same unreachable INV-9 branch, and
+        `test_default_probes_the_backend_rather_than_assuming` passed
+        identically against both, so its name was the only thing distinguishing
+        the defect from the fix.
+
+        The probe runs the shell. `shutil.which` would answer "a file with that
+        name is on PATH", which a shell that is present but not executable, or
+        installed for a different architecture, also satisfies -- and those fail
+        at the first real command instead, with the caller already past the
+        INV-9 branch.
+
+        Cached: `verify_sandbox` is consulted on every `execute_command`, and a
+        subprocess per tool call to ask a question whose answer does not change
+        within a run is a cost with no verdict attached.
+        """
+        if self._probed is None:
+            self._probed = self._probe()
+        return self._probed
+
+    def _probe(self) -> bool:
+        try:
+            completed = subprocess.run(
+                [self.shell, "-c", "exit 0"],
+                capture_output=True,
+                timeout=self.probe_timeout_sec,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning("Backend probe failed to run %s: %s", self.shell, exc)
+            return False
+        return completed.returncode == 0
 
     def _spawn(
         self, command: str, cwd: Path | None, timeout: int
     ) -> subprocess.CompletedProcess[str]:
+        # The environment is filtered for the same reason `_run_hook` filters it:
+        # `agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`.
+        # It was filtered only there -- the *less* attacker-controlled path. Every
+        # agent-authored command ran with the orchestrator's full environment, so
+        # `cat /proc/self/environ` classified `read` (an action every role holds)
+        # and returned NVIDIA_API_KEY, API_SERVER_KEY and AGENT_EVIDENCE_KEY into
+        # the model's context. The last is the HMAC key evidence manifests are
+        # signed with, so that was evidence forgery, not just a leak.
+        #
+        # `env` and `printenv` are already graded `secret_access`; this closes the
+        # spellings the action model does not enumerate, of which there are many.
+        denied = set(credential_env_names())
+        env = {k: v for k, v in os.environ.items() if k not in denied}
         return subprocess.run(
-            ["bash", "-c", command],
+            [self.shell, "-c", command],
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
 
     def run(self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int) -> ExecutionResult:
@@ -181,6 +240,15 @@ class ExecutionBroker:
         classification = classify(command)
         action = classification.action
 
+        # A command exercises a *set* of actions, and every one must be granted.
+        # `classify` returns the strictest single action, which is what the PDP
+        # takes -- but the strictest is not always the write: `pytest -q > x.txt`
+        # grades `test_execute`, and a role holding `test_execute` without `write`
+        # would then write a file through the redirect. The verifier is exactly
+        # that role, and "the role that judges the work cannot edit the work" is
+        # the property R-AC-8 exists for.
+        extra_actions = ["write"] if write_targets(command) else []
+
         try:
             policy = _load_json(self._agent_policy_path)
         except Exception as exc:  # noqa: BLE001 - an unreadable authority model
@@ -192,14 +260,19 @@ class ExecutionBroker:
                 action=action,
             )
 
-        verdict = decide(agent_id, action, policy, human_approved=human_approved)
-        if not verdict.allowed:
-            logger.warning("Policy denied execution: agent=%s action=%s", agent_id, action)
-            return ExecutionResult(
-                "BLOCKED", "", "", 1,
-                reason=f"BLOCKED: {verdict.reason} (classified as {action}: {classification.reason})",
-                action=action,
-            )
+        for required in [action, *extra_actions]:
+            verdict = decide(agent_id, required, policy, human_approved=human_approved)
+            if not verdict.allowed:
+                logger.warning("Policy denied execution: agent=%s action=%s", agent_id, required)
+                why = (
+                    classification.reason if required == action
+                    else "the command writes to a file, which requires the write action"
+                )
+                return ExecutionResult(
+                    "BLOCKED", "", "", 1,
+                    reason=f"BLOCKED: {verdict.reason} (classified as {required}: {why})",
+                    action=action,
+                )
         return None
 
     def execute_command(

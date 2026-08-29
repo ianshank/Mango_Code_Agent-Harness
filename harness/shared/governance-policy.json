@@ -83,7 +83,8 @@
   "orchestrator": {
     "max_iterations": 10,
     "api_timeout_sec": 300,
-    "tool_timeout_sec": 30
+    "tool_timeout_sec": 30,
+    "max_command_bytes": 8192
   },
   "nemotron": {
     "temperature": 0.2,
@@ -175,6 +176,6 @@
       "importlib",
       "__import__"
     ],
-    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md §Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
+    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
   }
 }

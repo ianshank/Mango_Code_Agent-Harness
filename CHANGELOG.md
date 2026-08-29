@@ -7,6 +7,140 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security — the containment layer held against the shapes its own tests named, and little else
+
+An adversarial review of this branch, driven through the real broker in a
+temporary workspace, found four ways past the gates it added. Every one is
+reproduced by a test that fails against the code as shipped.
+
+#### `1>` and `2>` were not redirects
+
+`_REDIRECT` was `(?<![0-9<>&])(?:>>|>)(?!&)`. The `0-9` was added so `2>&1`
+would not read as a redirect — but `(?!&)` already did that, so the digit
+exclusion bought nothing and made **every fd-numbered redirect invisible**.
+`echo PWNED 1>.git/hooks/pre-commit` classified as `read`, produced no write
+targets, and installed a host-executed hook. Since the action never became
+`write`, it also let the **verifier** — which holds no `write` action at all —
+write files, and the full escalation the spec's problem statement describes was
+open end to end: write `post-verifier-run.sh` via `1>`, and the orchestrator
+runs it on the host at the end of that same turn.
+
+Now `(?<!>)>(?!&[0-9-])`: every `>` counts, including `1>`, `2>`, `&>`, `>|` and
+`<>`; only descriptor duplication and closing are excluded. The control that
+motivated the over-broad original — `2>&1` and `>&2` must not be graded writes,
+or ordinary commands are denied — is kept and pinned.
+
+#### A trailing redirect downgraded every dangerous command
+
+The redirect branch ran before the program and shape tables **and returned from
+it**, so the redirect *was* the classification. Appending ` > out.txt` regraded
+anything to `write`, the one action the implementer holds:
+
+| command | was | now |
+|---|---|---|
+| `rm -rf victim > log.txt` | `write` | `destructive` |
+| `curl --version > out.txt` | `write` | `external_write` |
+| `env > env.txt` | `write` | `secret_access` |
+| `sudo -n true > log.txt` | `write` | `permission_change` |
+
+Seven characters routed around `human_approval_required_for`,
+`external_network_default` and every entry in `high_risk_actions`. Classification
+now grades the command first and takes the **strictest** of that and the write,
+against an explicit severity order in which an action the table does not name
+sorts highest — so adding one can never make it downgradable.
+
+A command exercises a *set* of actions, and the strictest is not always the
+write: `pytest -q > x.txt` grades `test_execute`, and a role holding
+`test_execute` without `write` would still write through the redirect. The
+broker now requires `write` separately whenever a command has write targets.
+
+#### Tool authority was enforced by omission from a prompt
+
+`tools_for_role` filters the schema the model is *told* about.
+`_dispatch_tool_calls` looked handlers up by name with no reference to that
+filtered list — and `write_file` is in `conversation_history` from the reasoner's
+turn immediately before the verifier's. A verifier that named the tool anyway got
+it. The pre-existing test asserts on `chat.call_args.kwargs["tools"]`, which is
+exactly the advisory half, so it stayed green against this.
+
+`agent_authority.tool_is_permitted` now answers the same question at dispatch,
+where it decides what runs rather than what is advertised.
+
+#### Brokered commands inherited the full credential environment
+
+`_run_hook` filtered the environment; `ProcessBackend._spawn` did not — and
+`_spawn` is the path the model controls. `env` and `printenv` are graded
+`secret_access` and denied, but the action model cannot enumerate every
+spelling: `cat /proc/self/environ` is `cat`, which grades `read`, an action every
+role holds, and returned `NVIDIA_API_KEY`, `API_SERVER_KEY` and
+`AGENT_EVIDENCE_KEY` into the model's context. The last is the HMAC key evidence
+manifests are signed with, so that was forgery, not only disclosure.
+
+**14/14 mutants killed** across the four fixes, each with a control that a
+gate denying everything would fail.
+
+### Fixed — `classify` was quadratic in a model-supplied string
+
+Two `_BY_SHAPE` patterns bridged with `.*` after a repeatable literal, so the
+engine retried the tail from every match position. Measured: 0.28 s at 14 KB,
+1.07 s at 28 KB, 4.29 s at 56 KB, **17.1 s at 112 KB** — a clean 4× per
+doubling. The broker's timeout bounds the subprocess and `classify` runs before
+it, so nothing covered this: one oversized `run_command` stalled the
+orchestrator and, through `run_in_threadpool`, an API worker.
+
+Both patterns now bridge with a bounded flag run instead of `.*`, and the input
+is capped at `orchestrator.max_command_bytes` (new policy key, not a literal).
+Same input: 0.0003 s. The cap alone would have left the quadratic patterns live
+just beneath it, so both are fixed rather than one.
+
+`debug_dump`'s credential patterns were measured too and are **linear** — worst
+case 69 ms at 256 KB. No change needed there.
+
+### Fixed — `ProcessBackend.available()` returned True unconditionally
+
+That is not a probe. It is the `sandbox_available: bool = True` fail-open moved
+one method down: same unconditional yes, same unreachable INV-9 branch. And
+`test_default_probes_the_backend_rather_than_assuming` passed identically
+against both, so the test's *name* was the only thing separating the defect from
+the fix.
+
+`available()` now runs the shell. `shutil.which` would answer "a file with that
+name is on PATH", which a shell that is present but not executable also
+satisfies — and that fails at the first real command instead, with the caller
+already past the INV-9 branch. Cached, because `verify_sandbox` is consulted per
+tool call and the answer cannot change within a run. **4/4 mutants killed**,
+including the original `return True`.
+
+### Changed — the tool schema moved to `tool_schemas.py`
+
+`NEMOTRON_TOOLS` now lives in `harness/shared/tool_schemas.py` and is re-exported
+from the orchestrator unchanged; every caller reaches it as
+`orch_module.NEMOTRON_TOOLS` and none is affected. This keeps the orchestrator
+inside the 500-line budget, which the containment checks had pushed it past.
+
+`test_meta_tools_are_actually_wired_into_the_orchestrator` asserted by searching
+the orchestrator's *source text* for `META_TOOLS_SCHEMA`, `knowledge_gap_log` and
+`hypothesis_register` — which its own docstring would satisfy, and which a
+comment saying the tools are not wired would satisfy equally. It now asserts
+against the composed schema and the live dispatch registry.
+
+### Fixed — `.dockerignore` shipped a dead rule and the image shipped test fixtures
+
+`.agents/` was excluded long after the directory was consolidated into
+`.mango/skills/` (R-HYG-4). `TestGitignoreHasNoDeadRules` did not catch it: it
+reads `.gitignore` only, and its predicate is *the parent exists*, which
+`.agents/` satisfies because its parent is the repository root.
+`TestDockerignoreHasNoDeadRules` checks the rule's own path. **3/3 mutants
+killed.**
+
+`COPY harness/ /app/harness/` also put `harness/shared/tests/` — which holds a
+`ghp_...`, an `AKIA...` and `nvapi-...` literals — into the published image.
+Those are allowlisted for the *scan*; the allowlist says nothing about what
+ships. The Python and JVM suites are excluded from the build context;
+`harness/node/tests/` is removed in the runtime stage instead, because
+`tsconfig.json` includes `tests/**/*.ts` and dropping it from the context would
+not fail the build — it would quietly typecheck less.
+
 ### Hardened — `_run_hook` executed any script whose name it was handed
 
 `_run_hook(name)` spawned `<hooks_dir>/<name>.sh` on the host whenever the file
@@ -642,9 +776,19 @@ were recorded rather than patched in 2.1.8.
   plus `secrets-install` pinning the same gitleaks version, and a dedicated
   `secret-scan` CI job that runs it once with `fetch-depth: 0`. It is a separate
   job rather than a `make ci` stage because the scan is interpreter-independent;
-  inside the matrix it would repeat identical work on all four Python legs.
+  inside the matrix it would repeat identical work on all three Python matrix legs.
 - Verified by running the pinned scanner: clean on the working tree (98.7 MB) and
   across all 73 commits of history. No allowlist changes were needed.
+
+  **Superseded — this verification was vacuous.** The config passed to
+  `--config` declared no `[[rules]]` and no `[extend] useDefault = true`, and
+  `--config` *replaces* gitleaks' built-in ruleset rather than extending it. The
+  scan therefore ran with zero rules: "clean across all 73 commits" was a
+  statement about a scanner that was not looking for anything, and a planted
+  `AKIA...` key scanned clean under this exact config. "No allowlist changes
+  were needed" was true for the same reason, and is falsified now that the scan
+  runs — one entry (`test_debug_dump.py`) was required. Corrected under
+  [Unreleased]; pinned by `test_lint_config_liveness.TestGitleaksActuallyScans`.
 
 ### Changed — CI gate coverage (INV-5)
 

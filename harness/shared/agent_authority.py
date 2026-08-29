@@ -110,6 +110,27 @@ def allowed_actions(active_role: str, policy_path: Path | None = None) -> frozen
     return frozenset(granted)
 
 
+def tool_is_permitted(active_role: str, tool_name: str, policy_path: Path | None = None) -> bool:
+    """Whether ``active_role`` may exercise ``tool_name``.
+
+    Split out of :func:`tools_for_role` so the *dispatcher* can ask the same
+    question the schema filter asks. Filtering the advertised schema decides only
+    what the model is told about; it does not decide what runs. The verifier's
+    schema omitted `write_file`, but the dispatcher looked handlers up by name
+    with no reference to the filtered list -- and the name is in
+    `conversation_history` from the reasoner's turn, so a model that asked for it
+    anyway got it. R-AC-8 was enforced by omission from a prompt.
+
+    A tool with no declared action is withheld, not granted: an unmapped tool is
+    one nobody has decided about, and the safe reading of an undecided grant is
+    "no".
+    """
+    required = TOOL_REQUIRED_ACTION.get(tool_name)
+    if required is None:
+        return False
+    return required in allowed_actions(active_role, policy_path)
+
+
 def tools_for_role(
     active_role: str,
     tools: typing.Sequence[dict[str, typing.Any]],

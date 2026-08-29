@@ -123,7 +123,7 @@ python harness/shared/coverage_gate.py   # lines and branches floors from govern
 make specs      # bash validate_specs.sh — `bash` is required: the script is mode 644
 make remotes    # every configured push URL against the governance allowlist
 # `secrets` is intentionally NOT part of `make ci`: the scan is interpreter-independent,
-# so the root workflow runs it once in a dedicated job rather than on all four matrix
+# so the root workflow runs it once in a dedicated job rather than on all three matrix
 # legs. Run it locally when you have the pinned tool:
 make secrets-install && make secrets
 

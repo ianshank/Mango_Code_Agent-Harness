@@ -23,6 +23,8 @@ import re
 import shlex
 import typing
 
+from harness.shared.policy_loader import orchestrator_defaults
+
 #: The action assigned to a command this module does not model. `destructive` is
 #: declared in `agent-policy.json`'s `high_risk_actions` and appears in no role's
 #: `allowed_actions`, so it denies for every agent without needing a special case
@@ -40,10 +42,30 @@ UNCLASSIFIED_ACTION = "destructive"
 _COMPOUND = re.compile(r"[;|]|(?<!>)&|\$\(|`|\n")
 
 
-#: Redirection operators. A redirect makes any command a write, whatever its
-#: program: `echo x > .git/hooks/pre-commit` is `echo` by argv[0] and a hook
-#: installation by effect. The action model grades the effect.
-_REDIRECT = re.compile(r"(?<![0-9<>&])(?:>>|>)(?!&)")
+#: A redirection that can write to a file. Every `>` counts -- `>`, `>>`, `1>`,
+#: `2>`, `&>`, `>|` and `<>` alike -- except descriptor duplication and closing
+#: (`2>&1`, `>&2`, `2>&-`), which renames or closes a descriptor rather than
+#: naming a file.
+#:
+#: The previous form was `(?<![0-9<>&])(?:>>|>)(?!&)`. The `0-9` was added to
+#: keep `2>&1` from reading as a redirect, but `(?!&)` already did that -- so the
+#: digit exclusion bought nothing and cost everything: it made **every**
+#: fd-numbered redirect invisible. `echo PWNED 1>.git/hooks/pre-commit` classified
+#: as `read`, produced no write targets, and installed a host-executed hook. The
+#: same spelling let the verifier -- which holds no `write` action at all -- write
+#: files, because the action never became `write` in the first place.
+#:
+#: `(?<!>)` only prevents the second `>` of `>>` from matching again; the leading
+#: `<` of `<>` and `&` of `&>` must NOT be excluded, since both are real writes.
+_REDIRECT = re.compile(r"(?<!>)>(?!&[0-9-])")
+
+#: A token that is *entirely* a redirection operator, so the filename is the next
+#: token: `>`, `>>`, `1>`, `2>>`, `&>`, `<>`, `>|`.
+_REDIRECT_OP = re.compile(r"^(?:[0-9]*|&|<)>{1,2}\|?$")
+
+#: The same operator when the filename is glued to it (`2>f`, `>>f`): matches the
+#: operator so the remainder can be taken as the target.
+_REDIRECT_PREFIX = re.compile(r"^(?:[0-9]*|&|<)>{1,2}\|?")
 
 #: Programs whose non-flag arguments name files they create or overwrite. Their
 #: targets go through the same write policy as the write tool, so `cp evil
@@ -52,6 +74,43 @@ WRITE_TARGET_PROGRAMS: typing.Mapping[str, int] = {
     # program -> index of the first argument that is a write target
     "cp": 1, "mv": 1, "tee": 0, "touch": 0, "mkdir": 0, "install": 1,
 }
+
+
+#: Actions from least to most privileged. A command can exercise more than one --
+#: `rm -rf victim > log.txt` is both a delete and a write -- and the strictest is
+#: the one that must be granted.
+#:
+#: Without this order the branch that ran first decided, and the redirect branch
+#: ran before the program and shape tables. Appending ` > out.txt` therefore
+#: downgraded *any* command to `write`, the one action the implementer holds:
+#: `rm -rf victim`, `curl`, `env` and `sudo -n true` all became ordinary work for
+#: seven characters. `human_approval_required_for`, `external_network_default`
+#: and `high_risk_actions` were each reachable around by the same trick.
+#:
+#: Unknown actions sort to the top rather than the bottom: an action this table
+#: does not name must not be able to lose a comparison.
+_ACTION_SEVERITY: typing.Mapping[str, int] = {
+    "read": 0,
+    "plan": 0,
+    "delegate": 1,
+    "write": 2,
+    "spec_write": 2,
+    "review_write": 2,
+    "evidence_write": 2,
+    "test_execute": 3,
+    "security_scan": 3,
+    "external_write": 4,
+    "secret_access": 5,
+    "permission_change": 6,
+    "production_change": 7,
+    "destructive": 8,
+}
+
+
+def _severity(action: str) -> int:
+    """Unknown actions are maximally severe: failing closed means an unmodelled
+    action can never be graded below one this table knows about."""
+    return _ACTION_SEVERITY.get(action, max(_ACTION_SEVERITY.values()) + 1)
 
 
 class Classification(typing.NamedTuple):
@@ -111,8 +170,14 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"), "destructive",
      "find with an action flag deletes or executes per match"),
     (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
-    (re.compile(r"\bpython[0-9.]*\b.*\s-m\s+pytest\b"), "test_execute", "pytest through the interpreter"),
-    (re.compile(r"\bpython[0-9.]*\b.*\s-m\s+pip\b\s+install\b"), "external_write",
+    # `[^\s]` rather than `.` between the interpreter and `-m`: `.*` here bridges
+    # any distance, so the engine retries the whole tail from every `python` in
+    # the string and the match becomes quadratic in the command length. A command
+    # is a single command by this point (`_COMPOUND` rejected the rest), so the
+    # only thing legitimately between `python` and `-m` is flags.
+    (re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pytest\b"), "test_execute",
+     "pytest through the interpreter"),
+    (re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pip\b\s+install\b"), "external_write",
      "pip install through the interpreter"),
     (re.compile(r"\bpython[0-9.]*\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline program can do anything"),
     (re.compile(r"\b(?:ba|z|k)?sh\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline shell program can do anything"),
@@ -124,11 +189,31 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
 )
 
 
+#: Longest command this module will grade, from `orchestrator.max_command_bytes`.
+#: Read once at import: `classify` runs per tool call and the value is a bound,
+#: not a decision that can change mid-run.
+#:
+#: The patterns below are linear, but "every pattern here is linear" is a
+#: property of today's table, not an invariant anyone enforces -- and the input
+#: is a model-supplied string with no other bound on it. `classify` runs before
+#: the broker's timeout, which covers the subprocess and not this, so a single
+#: oversized `run_command` stalled the orchestrator (and, through
+#: `run_in_threadpool`, an API worker) with nothing to interrupt it.
+MAX_COMMAND_BYTES: int = orchestrator_defaults()["max_command_bytes"]
+
+
 def classify(command: str) -> Classification:
     """Return the action ``command`` exercises, failing closed when unsure."""
     text = command.strip()
     if not text:
         return Classification("read", "an empty command does nothing")
+
+    if len(text.encode("utf-8", "surrogateescape")) > MAX_COMMAND_BYTES:
+        return Classification(
+            UNCLASSIFIED_ACTION,
+            f"the command is longer than {MAX_COMMAND_BYTES} bytes "
+            "(orchestrator.max_command_bytes), so it is not graded",
+        )
 
     if _COMPOUND.search(text):
         # Each half could be a different action, and the strictest wins. Rather
@@ -138,12 +223,23 @@ def classify(command: str) -> Classification:
             "the command chains or substitutes, so no single action describes it",
         )
 
-    if _REDIRECT.search(text):
-        # Not UNCLASSIFIED: `pytest -q > out.txt` is ordinary work. The write is
-        # real, so it is graded `write` and its target is checked separately by
-        # `write_targets`, exactly as the write tool's target would be.
-        return Classification("write", "the command redirects output into a file")
+    base = _classify_program(text)
+    if not _REDIRECT.search(text):
+        return base
+    # A redirect adds a write; it never subtracts whatever the program already
+    # was. `pytest -q > out.txt` stays `test_execute` and `rm -rf x > log.txt`
+    # stays `destructive` -- returning `write` here graded the redirect instead
+    # of the command. The write itself is not lost: `write_targets` reports the
+    # path, the broker runs it through the same write policy as the write tool,
+    # and requires the `write` action for the role regardless of this verdict.
+    redirect = Classification("write", "the command redirects output into a file")
+    if _severity(base.action) >= _severity(redirect.action):
+        return base
+    return redirect
 
+
+def _classify_program(text: str) -> Classification:
+    """The action of the command itself, ignoring any redirection."""
     for pattern, action, why in _BY_SHAPE:
         if pattern.search(text):
             return Classification(action, why)
@@ -199,11 +295,16 @@ def write_targets(command: str) -> list[str]:
                 targets.append(token)
             pending_redirect = False
             continue
-        if _REDIRECT.fullmatch(token):
+        if _REDIRECT_OP.fullmatch(token):
             pending_redirect = True
             continue
-        match = _REDIRECT.search(token)
-        if match and match.end() < len(token):
+        match = _REDIRECT_PREFIX.match(token)
+        if match is None:
+            # A redirect can still sit mid-token when the shell would split it
+            # but shlex does not, e.g. `foo>bar`.
+            inner = _REDIRECT.search(token)
+            match = inner if inner and inner.end() < len(token) else None
+        if match is not None:
             # `>file` written without a space, or `2>file`.
             tail = token[match.end():]
             if tail and not tail.startswith("&"):

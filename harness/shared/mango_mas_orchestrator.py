@@ -8,13 +8,19 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.agent_authority import ACTIVE_TO_CANONICAL, execution_identity, tools_for_role
+from harness.shared.agent_authority import (
+    ACTIVE_TO_CANONICAL,
+    execution_identity,
+    tool_is_permitted,
+    tools_for_role,
+)
 from harness.shared.debug_dump import credential_env_names, write_dump
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
-from harness.shared.meta_tools import META_TOOLS_SCHEMA, hypothesis_register, knowledge_gap_log
+from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
+from harness.shared.tool_schemas import NEMOTRON_TOOLS as _NEMOTRON_TOOLS
 from harness.shared.write_policy import write_denial_reason
 
 logger = logging.getLogger(__name__)
@@ -117,38 +123,9 @@ VERIFIER_PROMPT_TEMPLATE = (
     "Reasoner Output:\n{code_output}"
 )
 
-# Combine orchestrator baseline tools with meta tools for continuous learning
-NEMOTRON_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Write or overwrite a file on the filesystem with the provided content.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filepath": {"type": "string", "description": "The path to the file to write."},
-                    "content": {"type": "string", "description": "The full content to write to the file."},
-                },
-                "required": ["filepath", "content"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_command",
-            "description": "Run a shell command and return its output.",
-            "parameters": {
-                "type": "object",
-                "properties": {"command": {"type": "string", "description": "The shell command to execute."}},
-                "required": ["command"],
-                "additionalProperties": False,
-            },
-        },
-    },
-] + META_TOOLS_SCHEMA
+# Declared in `tool_schemas`; re-exported here because this module's public
+# surface includes it and callers reach it as `orch_module.NEMOTRON_TOOLS`.
+NEMOTRON_TOOLS = _NEMOTRON_TOOLS
 
 
 class MangoMASOrchestrator:
@@ -326,7 +303,22 @@ class MangoMASOrchestrator:
             args = _normalize_tool_arguments(tc.get("function", {}).get("arguments"), func_name)
 
             handler = self._tool_handlers.get(func_name)
-            if handler is None:
+            if handler is not None and not tool_is_permitted(self._active_role, func_name):
+                # Filtering the advertised schema decides what the model is told
+                # about; it does not decide what runs. The verifier's schema omits
+                # `write_file`, but the name is in `conversation_history` from the
+                # reasoner's turn, and this dispatcher looked handlers up by name.
+                # R-AC-8 -- "the role that judges the work cannot edit the work" --
+                # was enforced by omission from a prompt until this check existed.
+                logger.warning(
+                    "Refused tool %s for role %s: not permitted by the authority model",
+                    func_name, self._active_role,
+                )
+                handler = None
+                tool_result = (
+                    f"Error: tool '{func_name}' is not available to the {self._active_role} role"
+                )
+            elif handler is None:
                 tool_result = f"Error: Unknown tool '{func_name}'"
             else:
                 try:
