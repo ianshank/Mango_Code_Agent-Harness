@@ -27,6 +27,27 @@ All notable changes to this project will be documented in this file.
   - Hoisted all function-scoped `import logging` calls to module-level imports, maintaining 100% clean Ruff checks and Mypy strict validation across all 125 source files.
   - Verified 97.92% total line coverage, 94.88% branch coverage, and 100% per-file compliance across all 50 monitored harness modules.
 
+### Added — every verdict is now logged, not just derived
+
+`status`/`termination_reason` were computable but never observed: nothing in
+`harness/` logged or aggregated them, so the question the merged verdict-propagation
+spec deferred — whether the observed `FAILED` rate justifies a repair loop — had no
+data to answer it with. `_emit()` is the one choke point all three `Verdict`
+constructors share (`derive_verdict`'s internal `_v()`, `not_configured()`,
+`reentrant()`); wrapping their returns logs `status`/`termination_reason`/
+`command`/`exit_code` as message-string fields, since `JSONFormatter.format()`
+reads four fixed record attributes and drops `extra=` kwargs. Nothing in `Verdict`
+needs redaction: `.reason` never carries captured stdout/stderr, traced through
+every branch of `derive_verdict`. Reaches disk today with nothing else built —
+`main.py` already configures a root JSON logger and `execute_loop` runs in the same
+request thread. **2/2 mutants killed** (dropped logging call; broken pass-through).
+
+A companion change in this same line of work — moving the four prompt-template
+constants out of `mango_mas_orchestrator.py` — was developed independently and in
+parallel with the God-File Decomposition above, which already extracted the same
+four constants (plus the hook-related ones) into `agent_prompts.py`. Superseded on
+merge rather than duplicated: no `prompt_templates.py` was added.
+
 ### Added — the verifier's verdict is now a value the harness earned, not prose nobody read
 
 `execute_sequential_thinking_loop` ran planner → reasoner → verifier once each and

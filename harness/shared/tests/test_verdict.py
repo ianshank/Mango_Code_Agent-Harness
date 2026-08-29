@@ -155,6 +155,82 @@ class TestUnrunnableStates:
         assert (verdict.status, verdict.termination_reason) == (BLOCKED, REENTRANT)
 
 
+class TestEveryVerdictIsLogged:
+    """The outcome distribution must be observable, not just derivable.
+
+    `_emit` is the one choke point all three constructors share -- these tests
+    exercise all three, not just `derive_verdict`, since a gap in
+    `not_configured`/`reentrant` alone would still leave the tally blind to
+    every `BLOCKED` run that never reaches a check at all.
+    """
+
+    def test_a_pass_is_logged_with_its_status(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            derive_verdict(_check())
+        assert "status=VERIFIED" in caplog.text
+
+    def test_a_failure_logs_its_termination_reason(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            derive_verdict(_check(status="FAILED", exit_code=1, reason=""))
+        assert "status=FAILED" in caplog.text
+        assert "termination_reason=verification_failed" in caplog.text
+
+    def test_not_configured_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            not_configured("test-python")
+        assert "termination_reason=verification_not_configured" in caplog.text
+
+    def test_reentrant_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level("INFO"):
+            reentrant("test-python")
+        assert "termination_reason=verification_reentrant" in caplog.text
+
+    def test_a_verdict_with_no_real_command_does_not_log_a_fake_exit_code(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """`not_configured`/`reentrant` use exit_code=-1 as a sentinel for "no
+        command ever ran" -- logged verbatim, -1 reads exactly like a real
+        process that ran and exited -1. Both sentinel-using constructors must
+        log `exit_code=-`, never the raw -1, so an operator scanning the log
+        cannot mistake a BLOCKED-before-attempting-anything outcome for an
+        executed, failed command."""
+        with caplog.at_level("INFO", logger="harness.shared.governance.verdict"):
+            not_configured("test-python")
+            reentrant("test-python")
+        # endswith, not `in`: "exit_code=-1" itself contains the substring
+        # "exit_code=-", so a substring check alone can't tell fixed from buggy.
+        # Scoped to this module's own logger (not the bare root level) so an
+        # unrelated INFO record from elsewhere can't make this loop brittle.
+        assert len(caplog.records) == 2
+        for record in caplog.records:
+            assert record.getMessage().endswith("exit_code=-")
+
+    def test_an_unrunnable_probe_also_does_not_log_a_fake_exit_code(self, caplog: pytest.LogCaptureFixture) -> None:
+        """`derive_verdict`'s own probe-failure branch (`verification.py`'s
+        `HarnessCheck.exit_code=-1` sentinel when the target could not be
+        established as runnable) hits the same normalisation as
+        `not_configured`/`reentrant`, via the same shared `_v()`/`_emit()` path."""
+        with caplog.at_level("INFO", logger="harness.shared.governance.verdict"):
+            derive_verdict(_check(probe_ok=False, status="BLOCKED", exit_code=-1))
+        assert caplog.records[-1].getMessage().endswith("exit_code=-")
+
+    def test_the_logger_is_named_after_this_module(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The plan's own documented operator query (``grep '"logger":
+        "harness.shared.governance.verdict"'``) only works if every record is
+        emitted under this module's own name, not the root logger."""
+        with caplog.at_level("INFO"):
+            derive_verdict(_check())
+        assert caplog.records[-1].name == "harness.shared.governance.verdict"
+
+    def test_command_and_exit_code_both_reach_the_log(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An operator tallying `FAILED` without `command` cannot tell which
+        configured target failed if more than one target is ever added."""
+        with caplog.at_level("INFO"):
+            derive_verdict(_check(status="FAILED", exit_code=3, reason=""))
+        assert "command='make -f Makefile test-python'" in caplog.text
+        assert "exit_code=3" in caplog.text
+
+
 class RecordingBroker:
     """Records every command it is asked to run, and answers from a script.
 
