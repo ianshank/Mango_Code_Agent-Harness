@@ -10,11 +10,19 @@ Provides:
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from harness.shared.nemotron_bridge import resolve_api_key
+
+# Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
+# These tests pass on CI (ubuntu-latest) but cannot pass on Windows.
+POSIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows"
+)
 
 
 # --- Fixtures ---

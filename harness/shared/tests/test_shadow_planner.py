@@ -23,6 +23,8 @@ from typing import Any
 
 import pytest
 
+from harness.shared.tests.conftest import POSIX_ONLY
+
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared import shadow_planner as shadow_module
 from harness.shared.cognitive_signal import validate_signal_dict
@@ -139,6 +141,7 @@ class TestFlag:
 # ---------------------------------------------------------------------------
 
 
+@POSIX_ONLY
 @pytest.mark.governance
 class TestDisabledByteIdentity:
     @pytest.mark.parametrize("flag", DISABLED_VALUES)
@@ -176,6 +179,7 @@ class TestDisabledByteIdentity:
 # ---------------------------------------------------------------------------
 
 
+@POSIX_ONLY
 class TestEnabled:
     def test_signals_recorded_with_lineage_and_telemetry(
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
@@ -241,6 +245,7 @@ class TestEnabled:
 # ---------------------------------------------------------------------------
 
 
+@POSIX_ONLY
 @pytest.mark.governance
 class TestEnvelopeInvariance:
     @pytest.mark.parametrize(
@@ -279,6 +284,7 @@ class TestEnvelopeInvariance:
 # ---------------------------------------------------------------------------
 
 
+@POSIX_ONLY
 @pytest.mark.governance
 class TestContainment:
     def test_shadow_bridge_failure_swallowed(
@@ -501,6 +507,7 @@ class TestHelpers:
         assert pid == "unknown"
 
 
+@POSIX_ONLY
 @pytest.mark.governance
 class TestExtractShadowPlanText:
     """`_extract_shadow_plan_text` defensively degrades any hostile/malformed

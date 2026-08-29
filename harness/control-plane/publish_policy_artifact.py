@@ -145,7 +145,9 @@ def _reject_unsafe_relpath(rel: str) -> None:
     ``POLICY_FILES`` is ever made config-driven.
     """
     parts = Path(rel).parts
-    if Path(rel).is_absolute() or ".." in parts:
+    # Path.is_absolute() misses POSIX absolute paths on Windows (no drive letter),
+    # so also check for a leading forward-slash explicitly.
+    if Path(rel).is_absolute() or rel.startswith("/") or ".." in parts:
         _deny(f"unsafe file path in artifact manifest: {rel!r}")
 
 

@@ -87,7 +87,7 @@ select = ["E", "F", "W", "I", "UP", "BLE", "RUF100", "ICN", "ISC", "RSE", "TID",
 # Ruff has no unused-ignore check, so without that test this block only ever
 # grows -- three patterns (scratch/*.py for a directory that does not exist,
 # and the check_*/validate_* globs) had already stopped suppressing anything.
-per-file-ignores = { "harness/control-plane/*.py" = ["E501", "E701", "E702"], "harness/node/scripts/*.py" = ["E402"], "harness/jvm/scripts/*.py" = ["E402"], "harness/api_server/tests/*.py" = ["E402", "I001"], "harness/shared/tests/*.py" = ["E501"] }
+per-file-ignores = {}
 
 [tool.ruff.lint.isort]
 known-first-party = ["harness"]

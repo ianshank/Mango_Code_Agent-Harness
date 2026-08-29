@@ -501,6 +501,7 @@ class TestPolicySourcedLimits:
         assert orch.execute_agent("nemotron-reasoner", "small task") == "done"
 
 
+@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows")
 class TestHookEnvironmentIsStrippedOfCredentials:
     """`agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`
     and nothing enforced it: `_run_hook` handed every hook `os.environ.copy()`.

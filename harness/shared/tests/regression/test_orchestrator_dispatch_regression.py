@@ -29,6 +29,8 @@ from unittest.mock import patch
 
 import pytest
 
+from harness.shared.tests.conftest import POSIX_ONLY
+
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.tests._helpers import chat_response, tool_call
@@ -159,6 +161,7 @@ class TestDebugDumpRedaction:
         written = next((tmp_path / "mango_debug").glob("*.json")).read_text(encoding="utf-8")
         assert stray not in written
 
+    @POSIX_ONLY
     def test_dump_directory_is_owner_only(
         self, agent_workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

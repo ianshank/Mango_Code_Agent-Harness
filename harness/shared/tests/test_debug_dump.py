@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.tests.conftest import POSIX_ONLY
+
 from harness.shared.debug_dump import (
     CREDENTIAL_PATTERN,
     DUMP_DIR_MODE,
@@ -136,12 +138,14 @@ class TestWriteDump:
         assert target is not None
         assert json.loads(target.read_text(encoding="utf-8"))[0]["content"] == f"hold my {REDACTED}"
 
+    @POSIX_ONLY
     def test_directory_is_owner_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")
         root = tmp_path / "d"
         write_dump([], "planner", dump_root=root)
         assert stat.S_IMODE(root.stat().st_mode) == DUMP_DIR_MODE
 
+    @POSIX_ONLY
     def test_a_pre_existing_lax_directory_is_tightened(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

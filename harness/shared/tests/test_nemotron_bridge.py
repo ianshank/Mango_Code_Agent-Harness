@@ -168,8 +168,15 @@ def test_complete_chat_no_retry_by_default(mock_urlopen, mock_sleep):
     err = urllib.error.HTTPError("url", 503, "Service Unavailable", email.message.Message(), io.BytesIO(b"busy"))
     mock_urlopen.side_effect = err
 
-    with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "dummy-model"}, clear=False):
-        os.environ.pop("NEMOTRON_MAX_RETRIES", None)
+    # Supply every env key so resolve_environment()'s short-circuit fires
+    # before it reads .env (which may set NEMOTRON_MAX_RETRIES=3).
+    with patch.dict(os.environ, {
+        "NEMOTRON_DEFAULT_MODEL": "dummy-model",
+        "NEMOTRON_MAX_RETRIES": "0",
+        "NVIDIA_API_KEY": "test-key",
+        "NVIDIA_BASE_URL": "https://example.com/v1",
+        "NEMOTRON_TIMEOUT_MS": "30000",
+    }, clear=False):
         with pytest.raises(RuntimeError, match="HTTP 503"):
             complete_chat([], api_key="secret-key")
 

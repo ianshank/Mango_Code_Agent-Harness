@@ -77,6 +77,8 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
 @pytest.fixture(scope="module")
 def findings() -> list[tuple[str, str]]:
     codes = sorted({code for codes in _per_file_ignores().values() for code in codes})
+    if not codes:
+        return []
     return _isolated_findings(codes)
 
 
@@ -84,6 +86,8 @@ class TestPerFileIgnoresAreLive:
     def test_the_probe_finds_something(self, findings: list[tuple[str, str]]) -> None:
         """Guards the measurement: if the isolated run reported nothing, every
         pattern below would look dead and the suite would fail confusingly."""
+        if not _per_file_ignores():
+            pytest.skip("no per-file-ignores configured; nothing to probe")
         assert findings, "the isolated ruff run produced no findings; the probe is broken"
 
     @pytest.mark.parametrize("pattern", sorted(_per_file_ignores()))

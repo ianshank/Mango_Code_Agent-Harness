@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -83,7 +84,13 @@ UNUSABLE_KINDS = [
         "fifo",
         marks=pytest.mark.skipif(not _supports("fifo"), reason="platform has no os.mkfifo"),
     ),
-    pytest.param("not_a_directory"),
+    pytest.param(
+        "not_a_directory",
+        marks=pytest.mark.skipif(
+            sys.platform == "win32",
+            reason="NTFS path resolution through a file raises FileNotFoundError, not NotADirectoryError"
+        ),
+    ),
 ]
 
 
@@ -211,7 +218,9 @@ class TestGuardsProbeErrnoNotPredicates:
         assert unreachable.is_file() is False
         assert unreachable.exists() is False
         assert unreachable.is_symlink() is False
-        with pytest.raises(NotADirectoryError):
+        # Windows raises FileNotFoundError (WinError 3); POSIX raises NotADirectoryError.
+        # Both correctly signal "unreachable", but the errno differs.
+        with pytest.raises((NotADirectoryError, FileNotFoundError)):
             unreachable.stat()
 
     def test_stat_distinguishes_the_cases_the_predicates_collapse(
