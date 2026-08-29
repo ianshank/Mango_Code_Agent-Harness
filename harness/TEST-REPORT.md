@@ -4,6 +4,23 @@
 **Version:** 2.1.0  
 **Overall Verdict:** **100% PASS** across all 7 testing tiers & governance invariant gates.
 
+> **Superseded snapshot — 2026-08-25, v2.1.0. Retained as a historical record;
+> do not read any number below as current.** The Pong demo it measures was
+> removed in full (`docs/specs/remove-pong-demo.md`), so the Pong tiers, the
+> canvas/audio E2E row and the `tests/pong/` suites describe code that no longer
+> exists. The Python suite is now 1633 tests, not 133; traceability discovers 6
+> requirements, not 15; the contract carries INV-1 through INV-16, not INV-1
+> through INV-7; and the suite today carries governed skips rather than zero.
+>
+> One row was not merely stale but **untrue when written**: "INV-1 (Secrets):
+> Gitleaks policy enforced in root and harness/node". At that date all three
+> `.gitleaks.toml` files declared an `[allowlist]` and no `[[rules]]`, and
+> `--config` replaces gitleaks' built-in ruleset rather than extending it — so
+> the scan ran with zero rules and detected nothing on any commit. Armed since,
+> and pinned by `test_lint_config_liveness.TestGitleaksActuallyScans`.
+>
+> For live numbers run `make ci`.
+
 ---
 
 ## 1. Executive Summary

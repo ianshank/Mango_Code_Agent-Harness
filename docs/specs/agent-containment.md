@@ -87,34 +87,63 @@ path that executes model-authored code. Each item is a reproduction, not a readi
 
 ## Acceptance criteria
 
-- [ ] AC-1: A payload captured from `_execute_run_command` carries a
-      `tool_input.command` key (R-AC-1). The assertion fails against the pre-fix
-      commit with `KeyError` — verified by `make test-regression`.
-- [ ] AC-2: The captured payload, fed to the real guard, is blocked for a reason
-      that is not allowlist unavailability (R-AC-1, R-AC-3) — verified by
-      `make test-regression`.
-- [ ] AC-3: An orchestrator whose workspace contains no guard file denies the
-      command instead of running it (R-AC-2, R-AC-3) — verified by `make test-python`.
-- [ ] AC-4: A guard payload of `{"unexpected": {}}` exits with the block code,
+- [x] AC-1: The historical orchestrator envelope (`{"tool": …, "args": {"command": …}}`),
+      fed to the guard, exits with the block code instead of exiting 0 (R-AC-1).
+      *Restated:* the orchestrator no longer constructs a payload at all —
+      `_execute_run_command` routes through `ExecutionBroker`, which calls
+      `check_command` as a Python function — so the envelope fix is pinned at the
+      guard boundary, where it holds for every caller rather than for one. Verified
+      by `make test-regression`
+      (`test_the_orchestrators_historical_payload_is_no_longer_a_silent_allow`).
+- [x] AC-2: A command the *policy* allows is still refused by the guard, so the
+      guard is proven to be on the path rather than shadowed by an earlier policy
+      denial (R-AC-1, R-AC-3). *Restated:* the original wording required a block
+      "for a reason that is not allowlist unavailability", and DEC-005 settled that
+      allowlist unavailability **is** the accepted reason an agent `git push`
+      blocks — creating a root `.governance/` was rejected because the pattern is
+      declared dormant. As written the criterion could only be met by undoing a
+      recorded decision. Verified by `make test-regression`
+      (`TestTheCommandGuardIsOnThePath`).
+- [x] AC-3: An orchestrator whose workspace contains no guard file denies the
+      command instead of running it (R-AC-2, R-AC-3) — verified by `make test-python`
+      (`test_dangerous_command_never_reaches_the_shell`; the fixture workspace is a
+      bare temp directory with no guard).
+- [x] AC-4: A guard payload of `{"unexpected": {}}` exits with the block code,
       while non-JSON input retains its prior exit status (R-AC-4, C-AC-1) —
       verified by `make test-python`.
-- [ ] AC-5: A `write_file` targeting `.mango/hooks/pre-nemotron-run.sh`, the
+- [x] AC-5: A `write_file` targeting `.mango/hooks/pre-nemotron-run.sh`, the
       policy decision point, `governance-policy.json` and `.git/config` is refused,
       and a hook created during a run is never executed (R-AC-6, R-AC-7, R-AC-9) —
-      verified by `make test-regression`.
-- [ ] AC-6: The tool schema offered to the verifier role excludes the file-write
+      verified by `make test-regression`. The second half is now enforced as well
+      as asserted: `_run_hook` refuses any name outside `PERMITTED_HOOK_NAMES`,
+      derived from `ACTIVE_TO_CANONICAL`.
+- [x] AC-6: The tool schema offered to the verifier role excludes the file-write
       tool, derived from policy rather than asserted (R-AC-8) — verified by
-      `make test-python`.
-- [ ] AC-7: A conversation history containing the evidence signing key and the API
+      `make test-python`. **The schema was not sufficient:** `_dispatch_tool_calls`
+      looked handlers up by name with no reference to the filtered list, so a model
+      naming `write_file` anyway got it. `agent_authority.tool_is_permitted` now
+      answers the same question at dispatch
+      (`TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema`).
+- [x] AC-7: A conversation history containing the evidence signing key and the API
       server key returns both redacted (R-AC-10) — verified by `make test-python`.
-- [ ] AC-8: Every declared invariant naming an enforcement mechanism resolves to a
+      Extended: brokered commands no longer inherit either variable, so
+      `cat /proc/self/environ` cannot return what `redact_history` would have
+      caught only at the HTTP boundary.
+- [x] AC-8: Every declared invariant naming an enforcement mechanism resolves to a
       caller on a live path, with no dormancy waiver present (C-AC-3) — verified by
-      `pytest -m governance`.
-- [ ] AC-9: Every gate introduced by this spec reports a mutation kill count in its
-      pull request description — verified by review against the counts recorded in
-      `NEXT_STEPS.md` for prior gates.
-- [ ] AC-10: `make ci` passes on every leg of the CI matrix (C-AC-2, C-AC-3) —
-      verified by `make ci`.
+      `pytest -m governance` (`test_invariant_liveness.py`, `DORMANT_INVARIANTS = {}`).
+- [x] AC-9: Every gate introduced by this spec reports a mutation kill count in its
+      pull request description — verified by review. Counts recorded: guard
+      envelope 3/3, invariant liveness 3/3, guard destination timeout 8/8, hook-name
+      allowlist 5/5, containment bypasses 14/14, availability probe 4/4,
+      `.dockerignore` liveness 3/3.
+- [x] AC-10: `make ci` passes on every leg of the CI matrix (C-AC-2, C-AC-3).
+      `ALLOW_GITHUB_CHANGES=1 make pre-pr` (which runs `make ci`) exits 0 locally:
+      1633 Python and 46 Node tests, lines 97.97%, branches 94.38%, per-file 40/40.
+      **On CI the three `build (3.x)` legs and `build-full` are red on the
+      protected-path gate**, which is the designed behaviour until a human applies
+      the `infra-reviewed` label; `secret-scan` is green. Not tickable by the author
+      of the change — that is the point of the gate.
 
 ## Invariants touched
 
@@ -165,18 +194,28 @@ restated here.
 
 ## Open questions
 
-1. Agent-initiated `git push` blocks once the envelope is corrected, because the
-   repository root carries no remote allowlist and the guard fails closed on the
-   missing file. The two candidate resolutions are to accept the block as policy
-   or to resolve the per-stack allowlist. Creating a root allowlist directory is
-   excluded: that pattern is declared dormant and waking it fails
+1. **Resolved — DEC-005.** Agent-initiated `git push` blocks once the envelope is
+   corrected, because the repository root carries no remote allowlist and the
+   guard fails closed on the missing file. The block is **accepted as policy**.
+   Creating a root allowlist directory was excluded: that pattern is declared
+   dormant and waking it fails
    `test_protected_path_liveness.py::test_dormant_patterns_are_still_dormant`.
-   Blocks R-AC-1; record the decision before merge.
-2. Adding the active roles to `agent-policy.json` gives the agent's own governing
-   policy an execution grant. It also trips the bidirectional role-to-contract
-   equality tests and the persona reconciliation. Blocks R-AC-8 and R-AC-11;
-   record the decision before the routing change.
-3. Requirement identifiers in the root spec directory are traced by nothing:
-   `check_traceability` runs from the Node stack and its globs reach two specs.
-   Either widen the configuration or declare the gap. Blocks AC-9's traceability
-   claim, not the implementation.
+   `TestTheCommandGuardIsOnThePath` pins that the guard, not only the policy
+   decision point, is what refuses it — so the block cannot silently become a
+   policy denial that would still hold if the guard were removed.
+2. **Resolved — DEC-011.** Adding the active roles to `agent-policy.json` would
+   give the agent's own governing policy an execution grant, and trips the
+   bidirectional role-to-contract equality tests. Resolved without touching the
+   policy: `agent_authority.EXECUTION_IDENTITY` maps each active role to the
+   *narrowest canonical contract that covers its work* — `planner` →
+   `orchestrator`, `nemotron-reasoner` → `implementer`, `verifier` → `test-eval`
+   — and `test_execution_identity_is_no_wider_than_the_role` pins that the
+   mapping never grants more than the role's own derived authority. An unmapped
+   role is denied as an unknown identity.
+3. **Still open.** Requirement identifiers in the root spec directory are traced
+   by nothing: `check_traceability` runs from the Node stack and its globs reach
+   two specs, discovering six requirement IDs — none of them this spec's. Either
+   widen the configuration or declare the gap. It is currently declared in prose
+   (`README.md`) with no gate behind the declaration, which is the same
+   "documented, therefore handled" shape this spec exists to argue against.
+   Blocks AC-9's traceability claim, not the implementation.
