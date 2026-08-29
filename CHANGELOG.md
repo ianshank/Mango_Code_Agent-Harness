@@ -7,6 +7,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
+
+`test_invariant_liveness.py` computed one set difference,
+`set(INVARIANT_MECHANISMS) - _declared_invariants()` — dict minus contract. **The
+reverse was never computed.** The dict held 4 entries (INV-8/9/16/17) against 17
+declared invariants, so the other 13 sat in no dict and were never examined; the only
+completeness guard was `assert len(_declared_invariants()) >= 16`, which an
+unclassified addition passes.
+
+That hole is why **INV-11, INV-12 and INV-14 were published as unqualified MUSTs over
+capability that does not exist** — no `critique.py`, no `repair_loop.py`, and no
+occurrence of `repair` or `critique` in the orchestrator — three lines from INV-13,
+which is scrupulously honest about exactly this and names *this module* as the gate
+that should have caught it.
+
+Every declared invariant is now classified in one of four dicts, each with a reason:
+`INVARIANT_MECHANISMS` (importable symbol with a live caller), `ENFORCED_ELSEWHERE` (a
+named gate covering every clause — INV-1/4/6/15), `PARTIALLY_ENFORCED` (what is covered
+*and* what is not — INV-2/3/5/7/10) and `DORMANT_INVARIANTS` (nothing enforces it —
+INV-11/12/13/14). `test_every_declared_invariant_is_classified` fails closed on an
+unclassified addition, mirroring `test_ci_gate_coverage.py`'s `KNOWN_GAPS` /
+`PARTIAL_COVERAGE` idiom.
+
+**Invariants are not atomic**, which the first draft of this change got wrong. Several
+have clauses with different enforcement status, so a single verdict per invariant is
+itself an overclaim: INV-7's delegation half is enforced by `validate_agent_policy.py`
+while its evidence half is not (the repo's own `DECLARED_NOT_YET_ENFORCED` already
+recorded that nothing cross-checks `evidence_required_for`); INV-2 and INV-3 name the
+JVM stack, which no root target runs because the root `Makefile` declares no `JVM_DIR`;
+INV-5's own gate declares `audit` a known gap and `specs` partial; INV-10's DENY
+*production* is tested but its *terminality* is not, for want of a repair loop able to
+violate it. `CONTRACT.md` now carries those qualifiers, so the published text and the
+classification cannot disagree — enforced by the existing marker test, whose accepted
+phrases are now a declared constant so INV-13's "Not currently satisfiable" keeps its
+DEC-010 explanation instead of being reworded to match a literal.
+
+Also: `synthesis.critique_schema_version` and `synthesis.max_repair_cycles` join
+`DECLARED_NOT_YET_ENFORCED` as *pinned but unconsumed* — a different state from their
+unpinned siblings. `DEC-NS-002`, which proposes `"1.0"`, is still BLOCKING in a DRAFT
+openspec document, so the pin records a proposal, not a decision. `decision_id_pattern`
+is documented as governing decision-log IDs only: both readers rewrite it into
+`\b(...)\b` and use it as a scanner over the log, never as a validator, so
+area-scoped `DEC-NS-002`-style identifiers in `openspec/changes/**` are proposal-local
+and read by no gate. The neurosym spec's Problem Statement claimed the orchestrator
+"runs unbounded multi-agent loops without policy verdicts… violating INV-9, INV-11, and
+INV-12"; two-thirds was false since DEC-011 wired `ExecutionBroker` and bounded the loop
+with `max_iterations` + `ToolBudget`, and nothing caught the drift because `openspec/`
+is outside every CI gate.
+
+**5/5 mutants killed** — one of which found a real defect in the new tests: the
+partial-reason check tested `"COVERED:" in reason`, which `"NOT COVERED:"` satisfies as
+a substring, so a reason stating only the uncovered half would have passed. The check is
+now anchored to the start of the string.
+
 ### Added — the plan gate: `make specs` now checks that a plan's criteria could fail
 
 `make review`'s checklist named `openspec-peer-review` as the plan-review step: four

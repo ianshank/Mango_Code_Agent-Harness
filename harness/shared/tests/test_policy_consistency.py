@@ -98,6 +98,24 @@ DECLARED_NOT_YET_ENFORCED = {
         "readers today. Wiring lands with the synthesis evaluation harness; "
         "until then this entry keeps the declaration from reading as enforced."
     ),
+    "synthesis.critique_schema_version": (
+        "Pinned but unconsumed -- a different state from its siblings below, which "
+        "are unpinned *and* unconsumed. test_neurosym_synthesis.py asserts the value "
+        "is exactly \"1.0\", so it cannot drift silently, but no production path "
+        "reads it: there is no critique.py and no repair loop (INV-11 is declared "
+        "dormant in test_invariant_liveness.py for that reason). DEC-NS-002, which "
+        "proposes this exact value, is still marked BLOCKING in a DRAFT openspec "
+        "document, so the pin records a proposal rather than a decision. Wiring "
+        "lands with openspec Milestone 5."
+    ),
+    "synthesis.max_repair_cycles": (
+        "Same state as critique_schema_version, and grouped with it by CONTRACT.md "
+        "as a schema-shape guard. test_neurosym_synthesis.py asserts it is a bounded "
+        "positive integer, which constrains the policy value's shape and not any "
+        "loop's behaviour -- there is no repair loop to bound, so INV-12 is declared "
+        "dormant. Any value in 1..10 passes today; the budget becomes meaningful "
+        "only when Milestone 5 builds something that spends it."
+    ),
     "agent_defaults.evidence_required_for": (
         "Names the action categories the evidence-manifest subsystem must cover. "
         "harness/shared/governance/evidence_manifest.py is live, but nothing "
