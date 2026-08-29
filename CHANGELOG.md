@@ -29,7 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added — every verdict is now logged, not just derived
 
-`termination_reason`/`verdict` were computable but never observed: nothing in
+`status`/`termination_reason` were computable but never observed: nothing in
 `harness/` logged or aggregated them, so the question the merged verdict-propagation
 spec deferred — whether the observed `FAILED` rate justifies a repair loop — had no
 data to answer it with. `_emit()` is the one choke point all three `Verdict`

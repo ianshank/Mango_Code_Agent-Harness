@@ -197,7 +197,7 @@ this work.
   coverage, or the governance validators, and R-VP-13 exists so that this is legible.
 - **Resolved.** Whether the record of a run is persisted here. It is not; persistence,
   critique normalisation and the repair loop are deferred until the distribution of
-  outcomes this change measures says whether a repair loop can succeed. The measuring
+  outcomes this change measures says whether a repair loop can succeed. The measurement
   now exists: every `Verdict` is logged at construction (`verdict.py`'s `_emit()`,
   the one choke point all three constructors share) and reaches disk today through
   the existing root JSON logger, with nothing else built — an operator can already

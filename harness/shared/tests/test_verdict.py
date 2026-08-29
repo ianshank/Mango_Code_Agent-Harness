@@ -194,11 +194,14 @@ class TestEveryVerdictIsLogged:
         log `exit_code=-`, never the raw -1, so an operator scanning the log
         cannot mistake a BLOCKED-before-attempting-anything outcome for an
         executed, failed command."""
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger="harness.shared.governance.verdict"):
             not_configured("test-python")
             reentrant("test-python")
         # endswith, not `in`: "exit_code=-1" itself contains the substring
         # "exit_code=-", so a substring check alone can't tell fixed from buggy.
+        # Scoped to this module's own logger (not the bare root level) so an
+        # unrelated INFO record from elsewhere can't make this loop brittle.
+        assert len(caplog.records) == 2
         for record in caplog.records:
             assert record.getMessage().endswith("exit_code=-")
 
@@ -207,7 +210,7 @@ class TestEveryVerdictIsLogged:
         `HarnessCheck.exit_code=-1` sentinel when the target could not be
         established as runnable) hits the same normalisation as
         `not_configured`/`reentrant`, via the same shared `_v()`/`_emit()` path."""
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger="harness.shared.governance.verdict"):
             derive_verdict(_check(probe_ok=False, status="BLOCKED", exit_code=-1))
         assert caplog.records[-1].getMessage().endswith("exit_code=-")
 
