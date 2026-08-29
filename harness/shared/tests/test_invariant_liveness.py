@@ -39,6 +39,7 @@ INVARIANT_MECHANISMS = {
     "INV-8": ("harness.shared.governance.broker", "ExecutionBroker"),
     "INV-9": ("harness.shared.governance.broker", "ExecutionBroker"),
     "INV-16": ("harness.shared.cognitive_signal", "CognitiveSignalSink"),
+    "INV-17": ("harness.shared.plan_rules", "check_plan"),
 }
 
 #: Invariants whose mechanism is knowingly unreached, each with a reason.

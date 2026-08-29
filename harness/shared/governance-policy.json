@@ -129,6 +129,8 @@
     "harness/shared/verify_zero_skips.py",
     "harness/shared/validate_specs.sh",
     "harness/shared/validate_specs.py",
+    "harness/shared/plan_rules.py",
+    "harness/shared/validate_plan.py",
     "harness/shared/validate_policy.py",
     "harness/shared/validate_agent_policy.py",
     "harness/shared/validate_governance_docs.py",

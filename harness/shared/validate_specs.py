@@ -3,41 +3,39 @@
 Validates that all specifications in docs/specs/ conform to the traceability
 contract (Requirements R-* and Citations C-*), preventing untested or ungrounded
 features from entering the codebase.
+
+The rules themselves live in ``harness.shared.plan_rules``. They used to be
+written out here *and* again as a heredoc inside ``validate_specs.sh`` -- two
+implementations of one contract, which had already drifted (the shell copy
+discovered specs recursively and skipped no template; this one did neither). One
+definition, two callers, per C-PLR-2 of ``docs/specs/plan-review-framework.md``.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 import sys
 from pathlib import Path
 
+try:
+    from harness.shared.plan_rules import REQ_PATTERN, structural_findings, structural_line
+except ImportError:  # pragma: no cover - direct `python harness/shared/validate_specs.py`
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from harness.shared.plan_rules import REQ_PATTERN, structural_findings, structural_line
+
 logger = logging.getLogger(__name__)
 
-REQ_PATTERN = re.compile(r"\b([CR]-[A-Za-z0-9_-]+)\b")
-UNFALSIFIABLE_TERMS = ("works correctly", "as expected", "appropriately")
+#: Re-exported: this module was the published home of the pattern before the rules
+#: moved, and `check_traceability` documents it by this name.
+__all__ = ["REQ_PATTERN", "validate_spec", "main"]
 
 
 def validate_spec(content: str, name: str) -> bool:
     """Validate that a spec file conforms to the structural rules."""
-    failed = False
-    for section in ("## Requirements", "## Acceptance criteria"):
-        if section not in content:
-            logger.error("[FAIL] %s is missing '%s' header.", name, section)
-            failed = True
-
-    for ln in content.splitlines():
-        if ln.lstrip().startswith(("- ", "* ")) and "MUST" in ln and not REQ_PATTERN.search(ln):
-            logger.error("[FAIL] %s: normative MUST has no requirement ID: %s", name, ln[:80])
-            failed = True
-
-    lower_content = content.lower()
-    for term in UNFALSIFIABLE_TERMS:
-        if term in lower_content:
-            logger.error("[FAIL] %s: unfalsifiable acceptance language '%s'", name, term)
-            failed = True
-
-    return not failed
+    findings = structural_findings(content, name)
+    for finding in findings:
+        logger.error("[FAIL] %s", structural_line(finding))
+    return not findings
 
 
 def main(specs_dir: Path | None = None) -> int:
@@ -54,7 +52,7 @@ def main(specs_dir: Path | None = None) -> int:
 
     failed = False
     checked_count = 0
-    for spec in sorted(specs_dir.glob("*.md")):
+    for spec in sorted(specs_dir.rglob("*.md")):
         if spec.name == "SPEC_TEMPLATE.md":
             continue
 

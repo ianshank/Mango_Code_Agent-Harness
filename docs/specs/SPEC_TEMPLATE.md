@@ -23,12 +23,34 @@ be traced to implementation and tests.
 Objective, testable, each tied to a specific validation stage. No criterion may
 be "looks right" or "reads well".
 
-- [ ] AC-1: <observable, executable check> — verified by `make <stage>`
+- [ ] AC-1: <observable, executable check> — verified by `pytest -k <selector>`
+      · stage: `make <stage>` (R-EXAMPLE-1)
 - [ ] AC-2: ...
+
+At least one criterion must name a non-success outcome — what this change
+rejects, denies, or fails closed on. A plan that only describes success has not
+said what going wrong looks like.
+
+## Steps
+
+The ordered work, each step declaring what it reads and what it leaves behind, so
+a step that consumes an artifact nothing produces is visible before implementation
+starts.
+
+1. <step> — produces `<path>`
+2. <step> — consumes `<path>`; produces `<path>`
+
+## Files touched
+
+Every path this change adds or modifies. A path matching `protected_paths` in
+`governance-policy.json` needs the `infra-reviewed` attestation; listing them here
+is how that is known before the PR is opened rather than when CI goes red.
+
+- `<path>`
 
 ## Invariants touched
 
-Which of `INV-1..INV-7` (see `harness/CONTRACT.md`) does this change affect, and
+Which of `INV-1..INV-17` (see `harness/CONTRACT.md`) does this change affect, and
 how does the invariants checker prove they still hold?
 
 - INV-?: <how it is preserved / verified>

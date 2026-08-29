@@ -75,7 +75,7 @@ REQUIRED_CI_STAGES = {
     "verify-zero-skips": "INV-2 (no unapproved skips)",
     "check-dedup": "named non-negotiable in CLAUDE.md; detects copied governance scripts",
     "digest-regen": "the control-plane drift baseline `git diff --exit-code` compares against",
-    "specs": "the spec structural gate",
+    "specs": "the spec structural, plan-defect, and strict tiers",
     "remotes": "INV-3 (push destination allowlist)",
     "validate": "the governance validator set, including the protected-path gate",
 }
@@ -96,9 +96,14 @@ KNOWN_GAPS = {
 # asserted away, so the weaker coverage stays visible to a reviewer.
 PARTIAL_COVERAGE: dict[str, str] = {
     "specs": (
-        "`make specs` runs validate_specs.sh, which is two-tier. The *structural* "
+        "`make specs` runs validate_specs.sh, which is three-tier. The *structural* "
         "tier always runs and does real work (required sections, a requirement ID "
-        "on every normative MUST, no unfalsifiable acceptance language). The "
+        "on every normative MUST, no unfalsifiable acceptance language, no unfilled "
+        "template scaffold). The *plan* tier always runs too (validate_plan.py: "
+        "unfalsifiable acceptance, stage reachability, missing failure path, orphan "
+        "requirement) but is scoped to plans git reports as modified, so a run that "
+        "touches no spec examines nothing -- it says so on stdout rather than "
+        "reporting a silent pass. The "
         "*strict* tier (`openspec validate`) does not: `openspec` is pinned "
         "nowhere, and REQUIRE_STRICT_SPEC_VALIDATOR=1 is set only in "
         "harness/{node,jvm}/.github/workflows/ci.yml -- adopter templates GitHub "

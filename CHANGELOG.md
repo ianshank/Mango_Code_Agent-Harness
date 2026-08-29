@@ -7,6 +7,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — the plan gate: `make specs` now checks that a plan's criteria could fail
+
+`make review`'s checklist named `openspec-peer-review` as the plan-review step: four
+job-title personas, no output schema, no severity vocabulary, and a termination rule
+that cannot fail ("Only proceed once all personas sign off"). The mechanical half was
+thinner — `validate_specs`' falsifiability check was a three-phrase blocklist
+(`works correctly`, `as expected`, `appropriately`) which, measured across all fifteen
+plans in the repository (104 acceptance criteria, 139 requirement IDs), **fires zero
+times.**
+
+`plan_rules.py` replaces it with four rules decided from the document alone, run by
+`validate_plan.py` as a third tier of `make specs` and scoped to plans git reports as
+modified: `UNFALSIFIABLE_ACCEPTANCE` (a criterion naming no observable),
+`STAGE_REACHABILITY` (one naming a check but assigning it to a human),
+`MISSING_FAILURE_PATH` (criteria describing only success) and `ORPHAN_REQUIREMENT` (a
+declared ID no criterion cites). On the same corpus they report 10 findings.
+
+**Every rule was calibrated against that corpus before shipping, and three were wrong
+on first contact with it.** The observable grammar recognised `make` targets and pytest
+selectors but not `ruff check .`, `git grep` or `python -m pytest` — 13 of its 20
+findings were that gap (65% false positives), fixed by treating a backticked span as the
+marker rather than a curated executable list, which would also have been a hard-coded
+value. The non-success vocabulary had `failure` but not `fails`, so
+"`test_lint_config_liveness.py` fails when a dead pattern is present" read as
+success-only — 4 of 7 findings (57%). And requiring every `R-*` to be cited by a
+criterion scored nine of eleven specs at 100% orphaned, because `SPEC_TEMPLATE.md` never
+asked for the citation; that rule is now scoped to plans carrying the sections this
+change adds. Uncalibrated, the gate's first run would have produced ~127 findings on a
+corpus holding perhaps 8 real defects.
+
+Three defects in the migrated structural rules are fixed in the move. Two were recorded
+in `NEXT_STEPS.md`: an unfilled `make spec` scaffold satisfied every rule (its
+placeholder IDs match the ID patterns), and an `AC-*` bullet containing MUST could never
+satisfy the `[CR]-` pattern — unsatisfiable for exactly the bullets the template tells
+authors to write. The third was found by running the gate against this change's own
+spec: the blocklist matched phrases inside code spans, so it failed any document that
+names the phrases it bans. Both phrase-matching rules now strip code spans first, since
+a backticked phrase is being named rather than used.
+
+The rules also stopped being defined twice. `validate_specs.sh` carried them as an
+inline heredoc and `validate_specs.py` carried them again, and the two had already
+drifted — the shell copy discovered specs recursively and skipped no template; the
+Python one did neither. One definition, two callers.
+
+INV-17 is added to `harness/CONTRACT.md` with its `test_invariant_liveness` mechanism
+entry in the same change, so it is never a published MUST with nothing behind it.
+**5/5 mutants killed**: dropping the human-deferral override, un-stripping code spans,
+removing the orphan rule's scoping, widening the modified-file scope to every plan, and
+turning an unparseable plan into a silent skip.
+
 ### Added — Multi-Agent Orchestrator & Governance Kernel God-File Decomposition
 
 - **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed large orchestration and governance modules into highly focused single-responsibility units:
