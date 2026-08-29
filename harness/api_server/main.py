@@ -44,6 +44,17 @@ class TaskResponse(BaseModel):
     status: str
     result: str
     history: list[dict[str, str]]
+    # Additive. `status` keeps its existing meaning -- "the orchestration did not
+    # raise" -- so a client reading only that field learns nothing about the
+    # outcome; these carry the verdict the harness earned for the same run.
+    # `verdict_detail` names the command and its exit code because the verdict
+    # word alone overstates what was checked: the configured target is one gate,
+    # not the repository's full matrix.
+    # Optional[...] rather than `str | None`: FastAPI resolves these at runtime
+    # and this module has no `from __future__ import annotations`.
+    verdict: Optional[str] = None
+    termination_reason: Optional[str] = None
+    verdict_detail: Optional[str] = None
 
 
 # NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
@@ -85,15 +96,19 @@ async def orchestrate_task(request: TaskRequest) -> TaskResponse:
         orchestrator = MangoMASOrchestrator(workspace_dir=PROJECT_ROOT, api_key=api_key)
 
         # Run the full sequence: Planner -> Reasoner -> Verifier (offloaded to thread)
-        final_result = await run_in_threadpool(orchestrator.execute_sequential_thinking_loop, request.task)
+        outcome = await run_in_threadpool(orchestrator.execute_loop, request.task)
 
         # The history carries prompts and tool output and is returned verbatim
         # to the client; run it through the same redactor the debug dumps use
         # so a credential resolved inside the bridge cannot leave over HTTP.
+        verdict = outcome.verdict
         return TaskResponse(
             status="success",
-            result=final_result,
+            result=outcome.verifier_message,
             history=redact_history(orchestrator.conversation_history, api_key=api_key),
+            verdict=verdict.status,
+            termination_reason=verdict.termination_reason or None,
+            verdict_detail=f"{verdict.command} exited {verdict.exit_code}: {verdict.reason}",
         )
     except HTTPException:
         # Re-raise explicit HTTP errors (e.g. auth) unchanged.

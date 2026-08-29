@@ -187,3 +187,19 @@ button:disabled {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Verdict banner. Three states, and BLOCKED is visually distinct from FAILED
+   because "we could not check" and "it failed" are different facts -- reporting
+   the first as the second is the ambiguity this feature exists to remove. */
+.verdict {
+    border-left: 4px solid #888;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background: #f4f4f4;
+}
+.verdict-status { font-weight: 700; letter-spacing: 0.04em; }
+.verdict-detail { font-size: 0.85em; opacity: 0.8; margin-top: 0.25rem; font-family: monospace; }
+.verdict-verified { border-left-color: #2e7d32; background: #eef7ef; }
+.verdict-failed   { border-left-color: #c62828; background: #fdeeee; }
+.verdict-blocked  { border-left-color: #ef6c00; background: #fdf4e7; }

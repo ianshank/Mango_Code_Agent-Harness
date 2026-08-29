@@ -7,6 +7,100 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — the verifier's verdict is now a value the harness earned, not prose nobody read
+
+`execute_sequential_thinking_loop` ran planner → reasoner → verifier once each and
+returned the verifier's raw string. Nothing parsed it. The API wrapped it in a
+hardcoded `status="success"`, so a FAIL and a PASS were byte-identical to every
+consumer, and every test mocked the loop to return `"PASS"` — so no test had ever
+driven a failure through the pipeline. This is the shape
+`test_invariant_liveness.py` exists to catch, sitting in the product path while
+four milestones removed it from the gates.
+
+**Deriving the verdict from the agent's own commands would not have fixed it.**
+The model chooses what to run: a verifier executing `true` produces a
+SUCCESS/exit-0 broker result and would have earned VERIFIED. That is model
+authorship at one remove, and worse than prose, because the result carries
+mechanical authority. So the harness runs a check of its own —
+`make -f Makefile test-python`, through the same `ExecutionBroker`, under the
+verifier's canonical identity — and `derive_verdict` accepts only a `HarnessCheck`,
+which `verification.run` alone constructs. Passing it an `ExecutionResult` raises.
+Provenance is a property of the type, not of the call site.
+
+`-f Makefile` is load-bearing, not tidiness. GNU Make searches `GNUmakefile`, then
+`makefile`, then `Makefile`. Only the last is a protected path, so an agent holding
+`write` defeats the check in one tool call by adding a `GNUmakefile` whose target is
+a no-op. Naming the file removes the search.
+
+The probe runs `make -n` plus a `command -v` census rather than testing that a
+Makefile exists: a workspace whose Makefile lacks the target exits 2 with **no**
+broker reason, which is indistinguishable from a failing suite, and would have been
+reported as a failure of the change. `-n` is also why the probe cannot invoke what
+it probes — the configured target runs the suite containing this module.
+
+Three reported states, and nothing is promoted between them. **BLOCKED** means no
+verdict was obtained (not configured, re-entrant, probe failed, harness fault,
+broker denial); **FAILED** means the check ran and failed; **VERIFIED** means it ran
+and passed. An earlier draft promoted the unobtainable cases to FAILED on a
+misreading of INV-12, whose scope is what a repair loop produces at budget
+exhaustion — reporting "we could not check" as "it failed" in a change about honest
+verdicts.
+
+`execute_loop` is a new public method returning the typed outcome;
+`execute_sequential_thinking_loop` is now a one-line adapter returning the same
+string it always did, so R-ORCH-4's five members stay byte-compatible. This
+supersedes `orchestrator-tool-registry.md:98-99` (new methods are
+underscore-private; public methods keep identical semantics) for this method only,
+per `docs/specs/verdict-propagation.md`. Four in-repository test stubs are updated
+because they patch the orchestrator class — a `MagicMock` in a `str` field raises
+under Pydantic v2 and the endpoint's blanket `except` turns it into a 500.
+
+**`status` is unchanged and still means only "the orchestration did not raise."**
+A client reading that field alone still learns nothing, which is why the verdict has
+its own fields, why they name the command and exit code, and why `app.js` renders
+them: the configured target is one gate, not the repository's full matrix, and a
+bare verdict word would read as "CI green".
+
+**19/19 mutants killed** — among them: `derive_verdict` accepting an
+`ExecutionResult`; `probe_ok` ignored; a harness fault graded as a failure; either
+half of the status/exit-code pair deleted; `-f Makefile` dropped; the probe
+succeeding unconditionally, ignoring its result, or probing the file instead of the
+target; the census skipped; the sentinel never set or never restored; and the loop
+deriving its verdict from the model's prose. Each was applied to the tree and
+confirmed to fail the suite. `verdict.py` 100%, `verification.py` 98%.
+
+**Stated rather than implied: this is tamper-evident, not tamper-proof.** A reasoner
+holding `write` in the same workspace can defeat any check run inside it —
+`conftest.py` is airtight (`pytest_sessionfinish` assigning `session.exitstatus = 0`
+forces exit 0), and `pytest.ini`, `tox.ini`, `setup.cfg`, `vitest.config.ts` and
+`package.json` are all writable, as is any file `mv` can be pointed at, since `mv`
+does not classify its source operand. `docs/specs/verdict-propagation.md` carries
+the full list. VERIFIED means "the configured check exited 0" and nothing more.
+
+### Fixed — the tool-call budget was per turn while its name and message said per task
+
+`agent_defaults.max_tool_calls_per_task` is 100, and the refusal it raises says "per
+task". It was enforced by a counter initialised inside `execute_agent`, so the three
+turns of one orchestration could spend 300. The policy value and the enforced value
+agreed on the number and disagreed on the unit — the drift `test_policy_consistency`
+exists to catch, one layer down.
+
+`ToolBudget` is a value the caller owns and threads through the turns it wants
+accounted together; `execute_agent(..., budget=None)` creates a fresh one per call,
+which is byte-for-byte what every existing caller had. Deliberately not an
+accumulator on `self`: that needs a reset, a reset needs a correct call site, and a
+missing reset is invisible to every test in this repository, all of which build a
+fresh orchestrator. **7/7 mutants killed.**
+
+### Changed — `_format_execution_result` moved to `tool_result_format.py`
+
+Extracted so the rendering has one home and the orchestrator stays inside the
+500-line budget — the same split, for the same two reasons, as `tool_schemas`.
+Nothing outside the orchestrator referenced the private original. It takes a
+`typing.Protocol` rather than importing `ExecutionResult`, so it stays at the bottom
+of the import graph; `test_import_direction.py` now measures that graph (41 modules,
+zero cycles) and pins that `verdict.py` imports nothing first-party.
+
 ### Security — the containment layer held against the shapes its own tests named, and little else
 
 An adversarial review of this branch, driven through the real broker in a

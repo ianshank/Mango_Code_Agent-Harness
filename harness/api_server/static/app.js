@@ -35,7 +35,33 @@ document.getElementById('taskForm').addEventListener('submit', async (e) => {
         }
         
         const data = await response.json();
-        
+
+        // The verdict banner. `status` is always "success" when the request did
+        // not raise, so it says nothing about the outcome; `verdict` is what the
+        // harness earned by running its own check. The command and exit code are
+        // shown because the verdict word alone overstates what was checked -- the
+        // configured target is one gate, not the full matrix -- and because the
+        // timeline below carries the agent's own output, which is not the
+        // authoritative signal.
+        if (data.verdict) {
+            const banner = document.createElement('div');
+            banner.className = `verdict verdict-${data.verdict.toLowerCase()}`;
+
+            const word = document.createElement('div');
+            word.className = 'verdict-status';
+            word.textContent = data.verdict;
+            banner.appendChild(word);
+
+            const detail = document.createElement('div');
+            detail.className = 'verdict-detail';
+            detail.textContent = data.termination_reason
+                ? `${data.verdict_detail} (${data.termination_reason})`
+                : data.verdict_detail;
+            banner.appendChild(detail);
+
+            timeline.appendChild(banner);
+        }
+
         if (data.history && data.history.length > 0) {
             data.history.forEach(item => {
                 const el = document.createElement('div');

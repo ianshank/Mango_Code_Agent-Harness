@@ -11,6 +11,19 @@ from harness.api_server.main import app
 client = TestClient(app)
 
 
+def _passing_outcome(message: str = "PASS: verified"):
+    """A LoopOutcome a stubbed orchestrator can return.
+
+    The orchestrator class is patched wholesale here, so `execute_loop` would
+    otherwise yield a MagicMock, which Pydantic rejects for a `str` field and the
+    endpoint's blanket `except` converts to a 500. Stubbing a real value keeps
+    these tests about what they were written for.
+    """
+    from harness.shared.governance.verdict import LoopOutcome, Verdict
+
+    verdict = Verdict("VERIFIED", "make -f Makefile test-python exited 0", "", "make -f Makefile test-python", 0)
+    return LoopOutcome(verdict, message, "plan", "code")
+
 @pytest.fixture(autouse=True)
 def _api_server_key(monkeypatch):
     """Provide a throwaway API_SERVER_KEY per test without committing a literal secret."""
@@ -30,7 +43,7 @@ def test_api_orchestrate_success(_api_server_key):
     """Test successful orchestration via the API."""
     with patch("harness.api_server.main.MangoMASOrchestrator") as mock_orchestrator_class:
         mock_instance = mock_orchestrator_class.return_value
-        mock_instance.execute_sequential_thinking_loop.return_value = "PASS: verified"
+        mock_instance.execute_loop.return_value = _passing_outcome()
         mock_instance.conversation_history = [
             {"role": "user", "content": "Write a python function"},
             {"role": "assistant", "content": "Here is the code"},
@@ -53,7 +66,7 @@ def test_api_orchestrate_success(_api_server_key):
 def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     """Test orchestration failure handling — internals must not leak to clients."""
     mock_instance = mock_orchestrator_class.return_value
-    mock_instance.execute_sequential_thinking_loop.side_effect = RuntimeError("Nemotron API failed")
+    mock_instance.execute_loop.side_effect = RuntimeError("Nemotron API failed")
 
     response = client.post(
         "/api/orchestrate",
@@ -116,3 +129,49 @@ def test_dev_runner_env_overrides(monkeypatch):
     calls = _run_dev_runner(monkeypatch)
     assert calls["port"] == 9001
     assert calls["reload"] is True
+
+
+def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
+    """AC-11 / R-VP-13: the verdict names the command and its exit code.
+
+    `status` is deliberately unchanged -- it still means "the orchestration did
+    not raise" -- so a client reading only that field learns nothing. That is why
+    the verdict has its own fields and why they say what was run: the configured
+    target is one gate, not the repository's full matrix.
+    """
+    monkeypatch.setenv("API_SERVER_KEY", "k" * 32)
+    with patch("harness.api_server.main.MangoMASOrchestrator") as cls:
+        cls.return_value.execute_loop.return_value = _passing_outcome()
+        cls.return_value.conversation_history = []
+        response = client.post("/api/orchestrate", json={"task": "t"}, headers={"X-API-Key": "k" * 32})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["verdict"] == "VERIFIED"
+    assert "make -f Makefile test-python" in body["verdict_detail"]
+    assert "exited 0" in body["verdict_detail"]
+    assert body["termination_reason"] is None
+
+
+def test_a_failing_verdict_is_reported_while_status_stays_success(monkeypatch):
+    """The defect, pinned: before this change these two runs were identical."""
+    from harness.shared.governance.verdict import LoopOutcome, Verdict
+
+    monkeypatch.setenv("API_SERVER_KEY", "k" * 32)
+    failing = LoopOutcome(
+        Verdict("FAILED", "exited 1", "verification_failed", "make -f Makefile test-python", 1),
+        "VERIFY: PASS",  # the model still claims a pass; it is not the authority
+        "plan",
+        "code",
+    )
+    with patch("harness.api_server.main.MangoMASOrchestrator") as cls:
+        cls.return_value.execute_loop.return_value = failing
+        cls.return_value.conversation_history = []
+        response = client.post("/api/orchestrate", json={"task": "t"}, headers={"X-API-Key": "k" * 32})
+
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["verdict"] == "FAILED"
+    assert body["termination_reason"] == "verification_failed"
+    assert body["result"] == "VERIFY: PASS"

@@ -42,6 +42,19 @@ from harness.api_server.main import app, verify_api_key  # noqa: E402
 MAIN_PY = REPO / "harness" / "api_server" / "main.py"
 
 
+def _passing_outcome(message: str = "PASS: verified"):
+    """A LoopOutcome a stubbed orchestrator can return.
+
+    The orchestrator class is patched wholesale here, so `execute_loop` would
+    otherwise yield a MagicMock, which Pydantic rejects for a `str` field and the
+    endpoint's blanket `except` converts to a 500. Stubbing a real value keeps
+    these tests about what they were written for.
+    """
+    from harness.shared.governance.verdict import LoopOutcome, Verdict
+
+    verdict = Verdict("VERIFIED", "make -f Makefile test-python exited 0", "", "make -f Makefile test-python", 0)
+    return LoopOutcome(verdict, message, "plan", "code")
+
 def _subprocess_env() -> dict[str, str]:
     """Child environment that can import ``harness`` from a clean interpreter.
 
@@ -142,7 +155,7 @@ class TestHistoryRedaction:
 
         with patch("harness.api_server.main.MangoMASOrchestrator") as orchestrator_cls:
             instance = orchestrator_cls.return_value
-            instance.execute_sequential_thinking_loop.return_value = "PASS"
+            instance.execute_loop.return_value = _passing_outcome("PASS")
             instance.conversation_history = [
                 {"role": "user", "content": "do a thing"},
                 {"role": "assistant", "content": f"used {secret} to call the API"},
@@ -167,7 +180,7 @@ class TestHistoryRedaction:
         ]
         with patch("harness.api_server.main.MangoMASOrchestrator") as orchestrator_cls:
             instance = orchestrator_cls.return_value
-            instance.execute_sequential_thinking_loop.return_value = "PASS"
+            instance.execute_loop.return_value = _passing_outcome("PASS")
             instance.conversation_history = history
             response = client.post(
                 "/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": server_key}
