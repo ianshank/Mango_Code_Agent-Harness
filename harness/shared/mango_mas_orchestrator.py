@@ -20,6 +20,7 @@ from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
+from harness.shared.tool_budget import ToolBudget
 from harness.shared.tool_schemas import NEMOTRON_TOOLS as _NEMOTRON_TOOLS
 from harness.shared.write_policy import write_denial_reason
 
@@ -362,7 +363,13 @@ class MangoMASOrchestrator:
         """
         write_dump(self.conversation_history, agent_name, api_key=self.api_key)
 
-    def execute_agent(self, agent_name: str, task: str, tools: list[dict[str, typing.Any]] | None = None) -> str:
+    def execute_agent(
+        self,
+        agent_name: str,
+        task: str,
+        tools: list[dict[str, typing.Any]] | None = None,
+        budget: ToolBudget | None = None,
+    ) -> str:
         """
         Executes a single agent's reasoning loop using ReAct (Reasoning and Acting).
         Returns the final string output from the agent.
@@ -389,9 +396,11 @@ class MangoMASOrchestrator:
         # implementation changes (spec R-AC-8). An explicit `tools=` argument still
         # wins, so a caller can narrow further but never widen by omission.
         active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
-        # Cumulative budget across the whole task, from
-        # agent_defaults.max_tool_calls_per_task in governance-policy.json.
-        executed_tool_calls = 0
+        # Cumulative across the task when the caller supplies one, from
+        # agent_defaults.max_tool_calls_per_task. `None` means a fresh budget for
+        # this turn alone, which is what every caller had before the budget became
+        # an argument (see tool_budget.ToolBudget).
+        turn_budget = budget if budget is not None else ToolBudget(self.max_tool_calls_per_task)
 
         for _iteration in range(self.max_iterations):
             try:
@@ -424,12 +433,11 @@ class MangoMASOrchestrator:
                 return final_content
 
             logger.info("[%s] requested %d tool calls.", agent_name, len(tool_calls))
-            executed_tool_calls += len(tool_calls)
-            if executed_tool_calls > self.max_tool_calls_per_task:
+            if not turn_budget.consume(len(tool_calls)):
                 self._run_hook(f"post-{agent_name}-run", status="budget_exceeded")
                 raise RuntimeError(
                     f"Agent {agent_name} exceeded the tool-call budget "
-                    f"({self.max_tool_calls_per_task} per task; policy agent_defaults.max_tool_calls_per_task)."
+                    f"({turn_budget.limit} per task; policy agent_defaults.max_tool_calls_per_task)."
                 )
             self._dispatch_tool_calls(messages, tool_calls)
 
