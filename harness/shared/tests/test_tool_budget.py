@@ -143,3 +143,26 @@ class TestBudgetReachesTheOrchestrator:
 
         with pytest.raises(RuntimeError, match=r"\(0 per task; policy agent_defaults"):
             orch.execute_agent("nemotron-reasoner", "t", budget=ToolBudget(limit=0))
+
+
+class TestConsumeRejectsMisuse:
+    """A negative count would decrease `used` and mint budget instead of
+    spending it. `len(tool_calls)` can never be negative at the one production
+    call site, but the class is meant to be reusable (CLAUDE.md: no ad hoc,
+    single-purpose types), and a defensive check here is cheaper than a second
+    caller rediscovering the gap.
+    """
+
+    def test_a_negative_count_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="negative"):
+            ToolBudget(limit=10).consume(-1)
+
+    def test_a_refused_negative_count_does_not_mutate_the_budget(self) -> None:
+        budget = ToolBudget(limit=10)
+        with pytest.raises(ValueError):
+            budget.consume(-3)
+        assert budget.used == 0
+
+    def test_zero_is_still_a_valid_count(self) -> None:
+        """Positive control: the boundary is `< 0`, not `<= 0`."""
+        assert ToolBudget(limit=10).consume(0) is True

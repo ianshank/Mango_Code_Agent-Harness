@@ -143,7 +143,7 @@ class VerificationRunner:
                 missing.add(program)
         return missing
 
-    def run(self, cwd: Path, environ: typing.Mapping[str, str] | None = None) -> HarnessCheck:
+    def run(self, cwd: Path) -> HarnessCheck:
         """Probe, then run, and report. The only constructor of ``HarnessCheck``."""
         target = str(self._target)
         started = time.monotonic()
@@ -153,6 +153,7 @@ class VerificationRunner:
             logger.warning("verification: %s is not runnable: %s", target, detail)
             return HarnessCheck(
                 target=target,
+                command=self.command,
                 status="BLOCKED",
                 exit_code=-1,
                 reason=detail,
@@ -178,6 +179,7 @@ class VerificationRunner:
         )
         return HarnessCheck(
             target=target,
+            command=self.command,
             status=result.status,
             exit_code=result.exit_code,
             reason=result.reason,

@@ -37,14 +37,20 @@ class ToolBudget:
     def consume(self, count: int) -> bool:
         """Spend ``count`` calls; return whether the budget still holds.
 
-        Returns a bool rather than raising so the caller keeps ownership of the
-        refusal: the orchestrator has a post-run hook to fire and a message that
-        names the policy key, and splitting those across two modules would put
-        the diagnostic somewhere the reader is not.
+        Returns a bool rather than raising when the limit is exceeded, so the
+        caller keeps ownership of the refusal: the orchestrator has a post-run
+        hook to fire and a message that names the policy key, and splitting
+        those across two modules would put the diagnostic somewhere the reader
+        is not. A negative ``count`` is a different kind of wrong -- it would
+        decrease the running total rather than spend from it, minting budget
+        instead of consuming it -- and is rejected outright rather than folded
+        into that return value.
 
         The spend is recorded even when it exceeds the limit, so a caller that
         chooses to continue cannot silently regain the overspend.
         """
+        if count < 0:
+            raise ValueError(f"cannot consume a negative count: {count}")
         self.used += count
         return self.used <= self.limit
 

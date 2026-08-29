@@ -41,6 +41,7 @@ def _check(**overrides: typing.Any) -> HarnessCheck:
     """A passing check, overridable one field at a time."""
     base = {
         "target": "test-python",
+        "command": "make -f Makefile test-python",
         "status": "SUCCESS",
         "exit_code": 0,
         "reason": "",
@@ -128,9 +129,18 @@ class TestDerivation:
 
     def test_the_verdict_carries_the_command_and_exit_code(self) -> None:
         """AC-11 / R-VP-13. The verdict word alone overstates what was checked."""
-        verdict = derive_verdict(_check(target="test-python", status="FAILED", exit_code=3, reason=""))
-        assert verdict.command == "test-python"
+        verdict = derive_verdict(_check(status="FAILED", exit_code=3, reason=""))
+        assert verdict.command == "make -f Makefile test-python"
         assert verdict.exit_code == 3
+
+    def test_the_verdict_command_carries_the_dash_f_makefile_pin_not_just_the_target(self) -> None:
+        """R-VP-3. `HarnessCheck.target` is the bare Make target; `Verdict.command`
+        must be the full invocation, or the `-f Makefile` provenance that defeats
+        the `GNUmakefile` shadow attack is lost between the runner and the reader.
+        """
+        verdict = derive_verdict(_check(target="test-python", command="make -f Makefile test-python"))
+        assert verdict.command != verdict.command.split()[-1]  # more than the bare target
+        assert verdict.command.startswith("make -f Makefile")
 
 
 class TestUnrunnableStates:
@@ -234,6 +244,24 @@ class TestTheRunner:
         check = VerificationRunner(broker, "test-eval").run(tmp_path)
         assert (check.status, check.exit_code, check.probe_ok) == ("FAILED", 1, True)
         assert derive_verdict(check).status == FAILED
+
+    def test_the_check_carries_the_full_invocation_not_just_the_target(self, tmp_path: Path) -> None:
+        """R-VP-3. `check.target` is the bare Make target; `check.command` (and
+        therefore `Verdict.command`) must be what was actually run, or the
+        `-f Makefile` pin that defeats the GNUmakefile shadow attack is present
+        in the runner and lost by the time a reader sees it.
+        """
+        broker = RecordingBroker({"-n": _ok()})
+        runner = VerificationRunner(broker, "test-eval")
+        check = runner.run(tmp_path)
+        assert check.command == runner.command == "make -f Makefile test-python"
+        assert derive_verdict(check).command == "make -f Makefile test-python"
+
+    def test_a_blocked_probe_also_carries_the_full_invocation(self, tmp_path: Path) -> None:
+        """The same field, on the short-circuit path a passing run never takes."""
+        broker = RecordingBroker({"-n": ExecutionResult("FAILED", "", "No rule to make target", 2)})
+        check = VerificationRunner(broker, "test-eval").run(tmp_path)
+        assert check.command == "make -f Makefile test-python"
 
     def test_a_failed_probe_short_circuits_the_run(self, tmp_path: Path) -> None:
         broker = RecordingBroker({"-n": ExecutionResult("FAILED", "", "", 2)})

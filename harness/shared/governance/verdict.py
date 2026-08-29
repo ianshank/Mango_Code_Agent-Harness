@@ -60,9 +60,16 @@ class HarnessCheck(typing.NamedTuple):
     broker reason and is indistinguishable from a failing test suite, so a
     toolchain condition would be reported as a failure of the change and, in a
     later milestone, would drive a repair loop against code that never ran.
+
+    ``target`` is the bare Make target (``test-python``); ``command`` is what was
+    actually invoked (``make -f Makefile test-python``). They are carried
+    separately because R-VP-3's ``-f Makefile`` pin is the whole point of the
+    fix it verifies -- a verdict naming the target and silently dropping how it
+    was run would lose the provenance the invocation exists to guarantee.
     """
 
     target: str
+    command: str
     status: str
     exit_code: int
     reason: str
@@ -127,7 +134,7 @@ def derive_verdict(check: typing.Any) -> Verdict:
         )
 
     def _v(status: str, reason: str, termination: str) -> Verdict:
-        return Verdict(status, reason, termination, check.target, check.exit_code)
+        return Verdict(status, reason, termination, check.command, check.exit_code)
 
     if not check.probe_ok:
         return _v(BLOCKED, f"{check.target} could not be established as runnable", UNAVAILABLE)
