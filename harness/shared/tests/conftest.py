@@ -10,11 +10,19 @@ Provides:
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from harness.shared.nemotron_bridge import resolve_api_key
+
+# Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
+# These tests pass on CI (ubuntu-latest) but cannot pass on Windows.
+POSIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows"
+)
 
 
 # --- Fixtures ---
@@ -56,3 +64,20 @@ def tmp_git_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "init"], capture_output=True, check=True)
     return tmp_path
+
+
+@pytest.fixture
+def mock_workspace(tmp_path: Path) -> Path:
+    """A temp workspace pre-populated with the agents the MAS loop expects."""
+    agents = tmp_path / ".mango" / "agents"
+    agents.mkdir(parents=True, exist_ok=True)
+    for name in ("planner", "nemotron-reasoner", "verifier"):
+        (agents / f"{name}.md").write_text(f"# {name}\nYou are the {name} agent.", encoding="utf-8")
+    return tmp_path
+
+
+@pytest.fixture
+def mock_complete_chat(mocker):
+    """Patch the Nemotron bridge inside the orchestrator; return the mock."""
+    from harness.shared import mango_mas_orchestrator as orch_module
+    return mocker.patch.object(orch_module, "complete_chat")

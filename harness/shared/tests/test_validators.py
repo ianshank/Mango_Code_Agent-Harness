@@ -94,7 +94,11 @@ def mock_repo(tmp_path: Path):
         "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
         "skill_max_age_days": 90,
         "agents": ["verifier"],
-        "target_contract": "install format lint types test cov secrets specs audit remotes projections traceability governance guard-probe pre-pr clean",
+        "target_contract": (
+            "install format lint types test cov secrets specs"
+            " audit remotes projections traceability governance"
+            " guard-probe pre-pr clean"
+        ),
         "pre_pr_order": "foo",
         "ci_required_targets": [
             "cov",
@@ -390,3 +394,40 @@ def test_missing_requirement_fails(project_root: Path, mock_repo: Path):
     )
     assert res.returncode != 0
     assert "missing implementation and/or test citation" in res.stderr
+
+
+def test_validate_specs_default_and_template(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.shared import validate_specs
+
+    # Test default args (specs_dir is None)
+    specs_dir = tmp_path / "docs" / "specs"
+    specs_dir.mkdir(parents=True)
+    (specs_dir / "SPEC_TEMPLATE.md").write_text("# Template", encoding="utf-8")
+    (specs_dir / "valid_spec.md").write_text(
+        "## Requirements\n- MUST R-01 foo\n## Acceptance criteria\nDone.\n", encoding="utf-8"
+    )
+
+    res = validate_specs.main(specs_dir)
+    assert res == 0
+
+
+def test_validate_specs_unreadable_file_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.shared import validate_specs
+
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    spec = specs_dir / "broken.md"
+    spec.write_text("dummy", encoding="utf-8")
+
+    def mock_read_text(self, *args, **kwargs):
+        raise OSError("Permission denied reading spec")
+
+    monkeypatch.setattr(Path, "read_text", mock_read_text)
+    res = validate_specs.main(specs_dir)
+    assert res == 1
+
+
+def test_validate_specs_run_script(project_root: Path, mock_repo: Path) -> None:
+    res = run_script(project_root, mock_repo, "validate_specs.py")
+    assert res.returncode == 0
+

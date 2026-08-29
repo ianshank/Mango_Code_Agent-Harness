@@ -3,6 +3,7 @@
 import json
 import logging
 import subprocess
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -276,7 +277,11 @@ def test_non_ascii_protected_path_is_not_hidden_by_git_quoting(temp_repo: Path):
     target.write_text("name: CI\n", encoding="utf-8")
 
     modified = vi.git_modified_files(temp_repo)
-    assert any(f.endswith("café-ci.yml") for f in modified), (
+    # Git on Windows may return NFD (decomposed) form of accented characters,
+    # while Python string literals use NFC (composed). Normalize both sides.
+    normalized = {unicodedata.normalize("NFC", f) for f in modified}
+    expected = unicodedata.normalize("NFC", "café-ci.yml")
+    assert any(f.endswith(expected) for f in normalized), (
         f"non-ASCII path came back quoted or escaped: {modified}"
     )
     assert not any(f.startswith('"') for f in modified), "git output is still C-quoted"

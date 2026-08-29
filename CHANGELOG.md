@@ -7,6 +7,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Multi-Agent Orchestrator & Governance Kernel God-File Decomposition
+
+- **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed large orchestration and governance modules into highly focused single-responsibility units:
+  - Extracted isolated executors into [`harness/shared/tool_executors.py`](harness/shared/tool_executors.py) (`execute_write_file`, `execute_run_command`).
+  - Extracted tool argument normalization into [`harness/shared/tool_dispatch.py`](harness/shared/tool_dispatch.py) (`_normalize_tool_arguments`).
+  - Extracted persona prompt templates and guardrails into [`harness/shared/agent_prompts.py`](harness/shared/agent_prompts.py).
+  - Decoupled process execution backend and byte-capping into [`harness/shared/governance/process_backend.py`](harness/shared/governance/process_backend.py) (`ProcessBackend`, `_cap`).
+  - Fortified `ExecutionResult` immutability via `@dataclass(frozen=True)` and non-mutating `dataclasses.replace` in [`harness/shared/governance/broker.py`](harness/shared/governance/broker.py).
+  - Split monolithic orchestrator tests into four modular test modules (`test_orchestrator_init.py`, `test_orchestrator_tools.py`, `test_orchestrator_hooks.py`, `test_orchestrator_agent_loop.py`).
+- **Comprehensive C4 Architecture**: Added full Level 1-4 architectural diagrams and threat boundary models in [`docs/architecture/c4_architecture.md`](docs/architecture/c4_architecture.md).
+- **PEP 585 / UP035 Type Modernization**: Standardized on modern typing across all modules (`collections.abc.Callable`, `collections.abc.Mapping`, `typing.Any`, `typing.Final`) and PEP 484 explicit re-export syntax.
+- **Cross-Platform Hook & Live E2E Hardening**:
+  - Implemented relative POSIX path resolution for `.mango/hooks/*.sh` invocations under Windows MSYS2/Git Bash to avoid backslash escaping issues.
+  - Enhanced live E2E test suites (`test_mango_mas_live.py`, `test_orchestrator_agent_loop.py`) to resolve credentials dynamically from `.env` and environment via `nemotron_bridge.resolve_api_key()`.
+  - Hardened `_reject_unsafe_relpath` in [`harness/control-plane/publish_policy_artifact.py`](harness/control-plane/publish_policy_artifact.py) to prevent Windows drive letter paths on POSIX hosts.
+  - Isolated regression fixtures from `GITHUB_BASE_REF` environment variables to ensure deterministic cross-platform runs.
+- **Strict Code Quality & Logging Normalization**:
+  - Hoisted all function-scoped `import logging` calls to module-level imports, maintaining 100% clean Ruff checks and Mypy strict validation across all 125 source files.
+  - Verified 97.92% total line coverage, 94.88% branch coverage, and 100% per-file compliance across all 50 monitored harness modules.
+
 ### Added — the verifier's verdict is now a value the harness earned, not prose nobody read
 
 `execute_sequential_thinking_loop` ran planner → reasoner → verifier once each and

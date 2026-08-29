@@ -133,7 +133,9 @@ class TestPolicyLoading:
     def test_malformed_agent_entries_are_skipped_not_crashed_on(self, tmp_path: Path) -> None:
         odd = tmp_path / "agent-policy.json"
         odd.write_text(
-            json.dumps({"agents": ["not-a-dict", {"no_id": True}, {"id": "implementer", "allowed_actions": ["write"]}]}),
+            json.dumps({
+                "agents": ["not-a-dict", {"no_id": True}, {"id": "implementer", "allowed_actions": ["write"]}],
+            }),
             encoding="utf-8",
         )
         assert allowed_actions("nemotron-reasoner", policy_path=odd) == frozenset({"write"})

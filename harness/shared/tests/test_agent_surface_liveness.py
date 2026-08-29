@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from harness.shared.tests._helpers import REPO
+from harness.shared.tests.conftest import POSIX_ONLY
 
 SKILLS_DIR = REPO / ".mango" / "skills"
 MANGO_SETTINGS = REPO / ".mango" / "settings.json"
@@ -272,6 +273,7 @@ class TestHookInvocationAndPaths:
 class TestSessionStartPreparesTheGates:
     HOOK = REPO / ".claude" / "hooks" / "session-start.sh"
 
+    @POSIX_ONLY
     def test_hook_is_syntactically_valid(self) -> None:
         result = subprocess.run(
             ["bash", "-n", str(self.HOOK)], capture_output=True, text=True, timeout=60

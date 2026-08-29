@@ -2,11 +2,12 @@ import secrets
 from unittest.mock import patch
 
 import pytest
+
 pytest.importorskip("fastapi")
 
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient  # noqa: E402
 
-from harness.api_server.main import app
+from harness.api_server.main import app  # noqa: E402
 
 client = TestClient(app)
 

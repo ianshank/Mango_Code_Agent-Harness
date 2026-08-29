@@ -527,6 +527,10 @@ class TestDestinationCheckTimeoutIsPolicySourced:
         with pytest.raises(ValueError):
             destination_check_timeout(policy)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows raises FileNotFoundError for path-through-file, not NotADirectoryError"
+    )
     def test_a_policy_behind_a_non_directory_is_not_the_adopter_path(self, tmp_path: Path) -> None:
         """`stat()` raises `NotADirectoryError` -- an `OSError` that is *not*
         `FileNotFoundError`. Only the errno separates "nothing is here" from "the
@@ -540,6 +544,7 @@ class TestDestinationCheckTimeoutIsPolicySourced:
         with pytest.raises(ValueError):
             destination_check_timeout(blocker / "governance-policy.json")
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="symlink creation requires elevated privileges on Windows")
     def test_a_symlink_loop_is_not_the_adopter_path(self, tmp_path: Path) -> None:
         """The other errno the `Path` predicates swallow: `ELOOP`."""
         looped = tmp_path / "governance-policy.json"

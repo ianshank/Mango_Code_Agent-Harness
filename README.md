@@ -1,6 +1,6 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.9 (2026 Standards)
+**Version:** 2.2.0 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -41,7 +41,18 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
 │
+├── docs/
+│   ├── architecture/
+│   │   ├── c4_architecture.md           # C4 Level 1-4 Architecture & Threat Boundaries
+│   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
+│   └── specs/                           # 11 Formal Traceable Specifications
+│
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
+│   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
+│   │   ├── main.py                      # REST endpoints (/api/orchestrate) & static file server
+│   │   ├── static/                      # Interactive Web UI dashboard & telemetry view
+│   │   └── tests/                       # API Server integration & authentication tests
+│   │
 │   ├── node/                            # Node/TypeScript Engine & AI Adapter
 │   │   ├── src/
 │   │   │   ├── ai/nemotron/             # NVIDIA Nemotron Ultra Client Adapter
@@ -51,36 +62,45 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   │   ├── secret-masker.ts     # Invariant INV-1 credential redactor
 │   │   │   │   └── types.ts             # Strict TypeScript contracts
 │   │   ├── tests/                       # Multi-tier Vitest matrix
-│   │   │   └── ai/                      # Nemotron AI tests across 7 tiers
 │   │   └── docs/specs/                  # Bidirectionally-traced formal specifications
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
-│   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator
+│   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
+│   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
+│   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
+│   │   ├── tool_schemas.py              # OpenAI/Nemotron-compatible tool definitions
 │   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
 │   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
 │   │   ├── meta_tools.py                # Meta-learning, context state, and file_lock
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
-│   │   ├── schemas/                     # JSON Schema docs (agent policy, evidence, signals)
 │   │   ├── write_policy.py              # Runtime write gate: protected_paths at tool-call time
 │   │   ├── agent_authority.py           # Per-role tool exposure derived from agent-policy.json
 │   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
 │   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
+│   │   ├── ast_visitors.py              # AST visitor rules for Python 3.9+ compatibility checks
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
 │   │   │   ├── broker.py                # ExecutionBroker — INV-8/9/10 on the live path
+│   │   │   ├── process_backend.py       # Decoupled subprocess execution & byte-capping
 │   │   │   ├── command_actions.py       # Command → declared policy action (fails closed)
 │   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
+│   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (1564 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (1,687 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
-│   │       ├── test_evidence_manifest.py # 17 tests: EvidenceBuilder signing & immutability
-│   │       ├── test_governance_broker.py # 40 tests: INV-8/9/10, in-process PDP, ProcessBackend
-│   │       ├── test_harness.py          # Adversarial governance self-tests
-│   │       ├── test_protected_path_liveness.py # Asserts protected_paths match real files, not just strings
-│   │       ├── test_ci_gate_coverage.py # INV-5: every ci_required_target is reachable from `make ci`
-│   │       ├── test_invariant_liveness.py # An invariant whose mechanism has no caller enforces nothing
-│   │       └── test_validation_scripts_extra.py # 31 tests covering the governance validation scripts
+│   │       ├── regression/              # Dedicated AQA Regression Tier
+│   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
+│   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
+│   │       │   └── test_orchestrator_dispatch_regression.py # Dispatch edge-cases & budget handling
+│   │       ├── test_orchestrator_init.py       # Orchestrator initialization & prompt loading
+│   │       ├── test_orchestrator_tools.py      # Write & command tool execution
+│   │       ├── test_orchestrator_hooks.py      # Pre/post lifecycle hooks
+│   │       ├── test_orchestrator_agent_loop.py # ReAct execution loop & budget limits
+│   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
+│   │       ├── test_governance_broker.py       # 61 tests: INV-8/9/10, in-process PDP, ProcessBackend
+│   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │       ├── publish_policy_artifact.py   # Versioned, digest-pinned, attestable policy artifact
@@ -127,8 +147,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 
 **Required environment variable:**
 
-| Variable             | Purpose                                                                         |
-|----------------------|---------------------------------------------------------------------------------|
+| Variable             | Purpose                                                                       |
+| -------------------- | ----------------------------------------------------------------------------- |
 | `AGENT_EVIDENCE_KEY` | HMAC signing key for `EvidenceBuilder`. Never hard-code. Set in secret store. |
 
 `debug_dump.CREDENTIAL_ENV_VARS` covers `NVIDIA_API_KEY`, `API_SERVER_KEY`,
@@ -154,7 +174,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **1620 automated tests** (56 Vitest + 1564 Pytest across 7 tiers)
+- **Total Automated Tests:** **1,744 automated tests** (56 Vitest + 1,688 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **≥90% total** across `harness/shared` and `harness/api_server`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
@@ -177,12 +197,12 @@ cp .env.example .env
 Optional environment variables for the shadow planner comparison channel
 (`docs/specs/mangomas-integration-core.md`; all off/unset by default):
 
-| Variable | Effect |
-|---|---|
-| `MANGO_SHADOW_PLANNER` | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
-| `MANGO_SHADOW_MODEL` | Alternate model for the shadow pass (defaults to the orchestrator model). |
-| `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout. |
-| `MANGO_SIGNAL_DIR` | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`). |
+| Variable                   | Effect                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `MANGO_SHADOW_PLANNER`     | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
+| `MANGO_SHADOW_MODEL`       | Alternate model for the shadow pass (defaults to the orchestrator model).                |
+| `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout.                             |
+| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).       |
 
 ### 4.2 Querying NVIDIA Nemotron Ultra
 

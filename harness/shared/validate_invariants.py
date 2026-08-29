@@ -119,7 +119,7 @@ def git_modified_files(workspace_dir: Path) -> set[str]:
         commands.append([*git, "diff", f"origin/{base_ref}...HEAD", "--name-only"])
     for cmd in commands:
         try:
-            out = subprocess.check_output(cmd, text=True, cwd=workspace_dir)
+            out = subprocess.check_output(cmd, encoding="utf-8", cwd=workspace_dir)
             found = [line for line in out.splitlines() if line.strip()]
             logger.debug("%s -> %d path(s)", " ".join(cmd), len(found))
             modified.update(found)

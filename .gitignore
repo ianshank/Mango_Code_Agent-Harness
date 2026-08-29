@@ -46,3 +46,6 @@ harness/node/test-*/
 
 # machine-readable coverage report consumed by coverage_gate.py (regenerated per run)
 coverage.json
+
+# IDE agent workspace customizations
+.agents/
