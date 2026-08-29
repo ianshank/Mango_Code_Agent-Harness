@@ -147,8 +147,10 @@ def _reject_unsafe_relpath(rel: str) -> None:
     parts = Path(rel).parts
     # Path.is_absolute() misses POSIX absolute paths on Windows (no drive letter),
     # so also check for a leading forward-slash explicitly. Windows UNC paths
-    # (\\server\share) bypass is_absolute() on Linux CI, so check backslash too.
-    if Path(rel).is_absolute() or rel.startswith(("/", "\\\\")) or ".." in parts:
+    # (\\server\share) and Windows drive letters (C:\...) bypass is_absolute() on
+    # Linux CI, so check backslash and drive letters too.
+    is_win_drive = len(rel) >= 2 and rel[0].isalpha() and rel[1] == ":"
+    if Path(rel).is_absolute() or rel.startswith(("/", "\\\\")) or is_win_drive or ".." in parts:
         _deny(f"unsafe file path in artifact manifest: {rel!r}")
 
 

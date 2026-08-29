@@ -9,11 +9,11 @@
 
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 
-- [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`, `ast_visitors.py`).
+- [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`).
 - [x] **PEP 585 / UP035 Type Modernization**: Replaced legacy typing aliases with modern standard library constructs across all modules and tests.
 - [x] **Cross-Platform Hardening**: Resolved Windows/NTFS path resolution and quoting edge cases, verified across 20 new regression tests.
-- [x] **C4 Architecture & Specifications**: Completed traceable specification [`docs/specs/god-file-decomposition.md`](file:///e:/Coding_Projects/Harness_TEST/docs/specs/god-file-decomposition.md) and full C4 architecture model in [`docs/architecture/c4_architecture.md`](file:///e:/Coding_Projects/Harness_TEST/docs/architecture/c4_architecture.md).
-- [x] **Strict Quality Gates**: 0 Ruff lint errors, 146/146 Python 3.9+ compatible files, and 1,687 passed tests.
+- [x] **C4 Architecture & Specifications**: Completed traceable specification [`docs/specs/god-file-decomposition.md`](docs/specs/god-file-decomposition.md) and full C4 architecture model in [`docs/architecture/c4_architecture.md`](docs/architecture/c4_architecture.md).
+- [x] **Strict Quality Gates**: 0 Ruff lint errors, 145/145 Python 3.9+ compatible files, and 1,696 passed tests.
 
 ### 🚧 v2.1.10 — Remediation programme v3 (in review)
 

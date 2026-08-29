@@ -115,7 +115,7 @@ class TestGitSubprocessEncodingPreservesUnicode:
     """
 
     @pytest.fixture
-    def unicode_repo(self, tmp_path: Path) -> Path:
+    def unicode_repo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Create a temp git repo with a non-ASCII filename."""
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -136,6 +136,8 @@ class TestGitSubprocessEncodingPreservesUnicode:
         target = repo / ".github" / "workflows"
         target.mkdir(parents=True)
         (target / "caf\u00e9-ci.yml").write_text("name: CI\n", encoding="utf-8")
+        monkeypatch.setenv("GITHUB_BASE_REF", "")
+        monkeypatch.delenv("ALLOW_GITHUB_CHANGES", raising=False)
         return repo
 
     def test_non_ascii_filename_survives_git_round_trip(self, unicode_repo: Path) -> None:

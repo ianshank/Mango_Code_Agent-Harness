@@ -29,6 +29,7 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-11, R-AC-12).
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from collections.abc import Mapping
@@ -126,9 +127,10 @@ class ExecutionBroker:
         except Exception as exc:  # noqa: BLE001 - an unreadable authority model
             # denies. Skipping the verdict, which the previous `exists()` guard
             # did, is the fail-open this change removes.
+            reason = f"BLOCKED: the authority model could not be read: {exc}"
             return ExecutionResult(
-                "BLOCKED", "", "", 1,
-                reason=f"BLOCKED: the authority model could not be read: {exc}",
+                "BLOCKED", "", reason, 1,
+                reason=reason,
                 action=action,
             )
 
@@ -140,9 +142,10 @@ class ExecutionBroker:
                     classification.reason if required == action
                     else "the command writes to a file, which requires the write action"
                 )
+                reason = f"BLOCKED: {verdict.reason} (classified as {required}: {why})"
                 return ExecutionResult(
-                    "BLOCKED", "", "", 1,
-                    reason=f"BLOCKED: {verdict.reason} (classified as {required}: {why})",
+                    "BLOCKED", "", reason, 1,
+                    reason=reason,
                     action=action,
                 )
         return None
@@ -183,7 +186,6 @@ class ExecutionBroker:
 
         denial = self._policy_decision(command, context)
         if denial is not None:
-            denial.stderr = denial.reason
             return denial
 
         # The write policy is a property of the broker, not of one tool handler.
@@ -215,7 +217,8 @@ class ExecutionBroker:
             )
 
         result = self._backend.run(command, cwd, timeout, self._max_output_bytes)
-        result.action = action
+        if result.action != action:
+            result = dataclasses.replace(result, action=action)
         return result
 
 

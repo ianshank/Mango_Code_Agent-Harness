@@ -21,7 +21,7 @@ DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
 DEFAULT_TIMEOUT_SEC = 30
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExecutionResult:
     """The outcome of an execution attempt."""
 

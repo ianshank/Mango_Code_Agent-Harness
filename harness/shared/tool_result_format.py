@@ -24,11 +24,20 @@ class _Renderable(typing.Protocol):
     satisfies it; nothing has to say so.
     """
 
-    status: str
-    stdout: str
-    stderr: str
-    exit_code: int
-    reason: str
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def stdout(self) -> str: ...
+
+    @property
+    def stderr(self) -> str: ...
+
+    @property
+    def exit_code(self) -> int: ...
+
+    @property
+    def reason(self) -> str: ...
 
 
 def format_execution_result(result: _Renderable) -> str:
