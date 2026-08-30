@@ -56,7 +56,7 @@ class TestReadFile:
         DEFAULT_MAX_OUTPUT_BYTES by the header's own length. The header must be
         inside the capped budget, not added on top of it."""
         big_line = "y" * (DEFAULT_MAX_OUTPUT_BYTES + 100)
-        (mock_workspace / "ranged.txt").write_bytes(f"{big_line}\nz\n".encode("utf-8"))
+        (mock_workspace / "ranged.txt").write_bytes(f"{big_line}\nz\n".encode())
         result = execute_read_file(mock_workspace, "ranged.txt", 1, 2)
         # `_cap` itself appends a `[truncated at N bytes]` marker on top of the
         # limit -- the same accepted overhead `run_command` output already

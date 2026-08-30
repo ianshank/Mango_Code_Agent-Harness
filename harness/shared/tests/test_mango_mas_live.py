@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
@@ -25,15 +23,12 @@ class TestMangoMASLive:
         monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
         # Find the root of the project to locate the .mango directory
         # Harness_TEST / harness / shared / tests / ...
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        orchestrator = MangoMASOrchestrator(workspace_dir=tmp_path)
 
-        orchestrator = MangoMASOrchestrator(workspace_dir=project_root)
-
-        # We ask the MAS to write a simple dynamic python utility to the temp path
+        # We ask the MAS to write a simple dynamic python utility to the workspace path
         # and test it via sequential thinking
-        temp_file = tmp_path / "dynamic_util.py"
         task = (
-            f"Write a Python function called calculate_fibonacci in {temp_file}."
+            "Write a Python function called calculate_fibonacci in dynamic_util.py."
             " Ensure it has type hints and a docstring."
         )
 
