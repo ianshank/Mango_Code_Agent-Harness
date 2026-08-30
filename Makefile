@@ -125,7 +125,7 @@ secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if g
 	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
 	@test -f .gitleaks.toml || { echo '.gitleaks.toml missing; failing closed'; exit 1; }
 	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
-	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner
+	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner --log-opts="HEAD"
 
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate

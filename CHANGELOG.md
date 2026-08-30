@@ -60,6 +60,18 @@ being restored once re-verified with the correct binary. Lesson recorded in
 `harness/node/package.json`, tracked as a follow-up in
 `docs/specs/ci-enforcement-gaps.md`'s Open questions.
 
+### Fixed — `make secrets` scanned every branch in the clone, not just the current one
+
+Discovered when this PR's own `secret-scan` job failed CI despite a clean
+local `make secrets`: all three `secrets` targets (root, `harness/node`,
+`harness/jvm`) ran `gitleaks git` with no `--log-opts`, scanning every ref
+in the local clone rather than the checked-out branch's own history. A
+real leaked key on an unrelated, concurrently pushed branch
+(`feature/governed-run-console`, untouched by this PR) was failing CI for
+a reason no PR author could act on. Fixed with `--log-opts="HEAD"` on all
+three targets, confirmed with a from-scratch clone (141 commits scanned,
+clean, vs. 144 and one leak without the fix). DEC-014.
+
 Spec: `docs/specs/dependency-hygiene.md`, `docs/specs/ci-enforcement-gaps.md`.
 
 ### Refactored — the last open god-file requirement (`R-GFD-4`)

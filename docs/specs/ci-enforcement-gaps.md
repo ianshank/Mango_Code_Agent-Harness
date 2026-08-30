@@ -61,6 +61,19 @@ anything else in this PR (no Node source or config file is touched here).
 Wiring a currently-broken gate into `ci` would turn CI red on the next PR
 for a reason this PR did not cause and does not fix. See Open questions.
 
+**Found and fixed mid-PR, a second CI-red surprise**: `secret-scan` failed
+on this PR's own CI despite a clean local `make secrets`. Root cause: all
+three `secrets` targets (root, `harness/node`, `harness/jvm`) ran
+`gitleaks git` with no `--log-opts`, which scans every ref present in the
+local clone rather than the checked-out branch's own history. CI's fresh
+`fetch-depth: 0` clone had a real leaked key on an unrelated, concurrently
+pushed branch (`feature/governed-run-console`) that this PR's diff and
+history never touch; a long-lived local development clone missing that
+branch masked the same bug. Confirmed with a from-scratch clone:
+`gitleaks git . --log-opts="HEAD"` scans 141 commits (the current ref's own
+ancestry, clean) vs. 144 without it (every local ref, the unrelated leak).
+Fixed by adding `--log-opts="HEAD"` to all three targets — see R-CEG-6.
+
 ## Requirements
 
 - R-CEG-1: The version string in `README.md`, `docs/architecture/c4_architecture.md`,
@@ -80,6 +93,9 @@ for a reason this PR did not cause and does not fix. See Open questions.
   its hyphenated name makes it non-importable by design (confirmed by
   `test_import_purity.py`/`test_build_policy_bundle.py`'s own docstrings),
   invoked by file path only.
+- R-CEG-6: `make secrets`'s `gitleaks git` invocation, in all three Makefiles
+  (root, `harness/node`, `harness/jvm`), MUST scope its history walk to the
+  checked-out ref (`--log-opts="HEAD"`), not every local ref.
 - C-CEG-1: `python -m ruff check .` (the pinned version) MUST exit 0 against
   the current tree, both before and after R-CEG-5's change.
 
@@ -118,6 +134,15 @@ for a reason this PR did not cause and does not fix. See Open questions.
       `make lint-node` exiting non-zero; this is the rejection case: it is
       the evidence that not wiring it into `ci` in this PR was the correct
       call, not an oversight
+- [ ] AC-9: all three `secrets` targets pass `--log-opts="HEAD"` to
+      `gitleaks git` — verified by
+      `grep -c 'log-opts="HEAD"' Makefile harness/node/Makefile harness/jvm/Makefile`
+      reporting 1 for each file (R-CEG-6); the rejection case is a from-scratch
+      clone that also fetches a branch carrying a real secret — `gitleaks git .
+      --log-opts="HEAD"` must report only the checked-out ref's own commit
+      count and find nothing, where the same command without `--log-opts`
+      finds the unrelated branch's leak (reproduced during this PR's own CI
+      failure, not re-testable in a single-branch CI checkout)
 
 ## Steps
 
@@ -129,14 +154,21 @@ for a reason this PR did not cause and does not fix. See Open questions.
    `harness/CONTRACT.md`
 5. Add `harness/__init__.py` and `harness/api_server/__init__.py`; verify
    with `python -m ruff check .` (not bare `ruff`) and the full test suite
+6. Add `--log-opts="HEAD"` to all three `secrets` targets — consumes the
+   from-scratch-clone reproduction, produces a ref-scoped secret scan
 
 ## Files touched
 
 - `README.md`
 - `docs/architecture/c4_architecture.md`
 - `NEXT_STEPS.md`
-- `Makefile` (protected: `Makefile`) — the root `install` target only; no
-  change to `ci`/`ci-python`'s prerequisite lists survives in this spec
+- `Makefile` (protected: `Makefile`) — the root `install` target, and
+  `secrets`'s `--log-opts` fix; no change to `ci`/`ci-python`'s prerequisite
+  lists survives in this spec
+- `harness/node/Makefile` (protected: `harness/*/Makefile`) — `secrets`'s
+  `--log-opts` fix only
+- `harness/jvm/Makefile` (protected: `harness/*/Makefile`) — `secrets`'s
+  `--log-opts` fix only
 - `harness/node/.github/workflows/ci.yml`
 - `harness/jvm/.github/workflows/ci.yml`
 - `harness/CONTRACT.md` (protected: `harness/CONTRACT.md`)
@@ -145,6 +177,12 @@ for a reason this PR did not cause and does not fix. See Open questions.
 
 ## Invariants touched
 
+- INV-1: strengthened — the secret scan now proves what its own gate can
+  act on (the checked-out ref's history) instead of failing a PR for a
+  secret on a branch neither that PR nor its author can fix from within it.
+  "Fails closed" is unchanged: a scan that finds nothing on the wrong ref
+  was never evidence of safety for the right one, since the ref-scoped
+  history is always a subset re-included.
 - INV-2: unaffected — the JVM-template clarification documents the existing
   "not yet enforced" status in prose; it does not change what is enforced.
 - INV-3: unaffected — the `.governance/` clarification documents the existing
@@ -158,6 +196,11 @@ for a reason this PR did not cause and does not fix. See Open questions.
 - `make install` — must exit 0 on a clean clone
 - `make coverage-python` — full suite, proving R-CEG-5 doesn't regress
   import/collection behavior
+- `make secrets` — must exit 0 against a from-scratch clone that also has
+  an unrelated branch carrying a real secret present locally (the actual
+  reproduction used during this PR); `pytest harness/shared/tests/test_ci_gate_coverage.py harness/shared/tests/test_lint_config_liveness.py`
+  — confirms the `secrets` gate mapping and config-liveness checks still
+  pass unchanged
 - coverage target: 90% lines / 80% branches from
   `governance-policy.json → coverage.{lines,branches}`
 
