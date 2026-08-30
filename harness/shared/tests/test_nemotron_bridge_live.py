@@ -15,6 +15,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import pytest
+
 # Add parent directory to path so we can import the bridge module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -53,6 +55,7 @@ class TestResolveApiKey(unittest.TestCase):
         self.assertTrue(key.startswith("nvapi-"))
 
 
+@pytest.mark.live
 @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured — skipping live tests")
 class TestCompleteChatLive(unittest.TestCase):
     """Live API integration tests for complete_chat."""

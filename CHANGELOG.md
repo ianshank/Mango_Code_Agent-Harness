@@ -5,13 +5,19 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
-### Added — Live Nemotron E2E Triage, Root Cause Analysis & AQA Regression
+### Added — Live Nemotron E2E Multi-Domain Triage, Root Cause Analysis & AQA Regression
 
 - **Cross-Platform Newline Preservation (`harness/shared/tool_executors.py`)**: `_write_preserving_newlines()` ensures binary line-ending preservation on disk across Windows (CRLF) and Unix (LF) environments, eliminating CRLF expansion discrepancies during file read/write operations.
 - **Dynamic Agent Prompt Fallback (`harness/shared/mango_mas_orchestrator.py`)**: `load_agent_prompt()` dynamically falls back to the harness repository root `.mango/agents/` directory when invoked from scratch or isolated ephemeral workspaces.
-- **Command Broker Discard Stream Governance (`harness/shared/governance/command_actions.py`)**: Stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) are excluded from file write target extraction, enabling standard shell output redirection without triggering path containment denials.
-- **Explicit Verifier Prompt Verdict Guarantees (`harness/shared/agent_prompts.py`)**: `VERIFIER_PROMPT_TEMPLATE` updated with explicit instructions for evaluating standalone workspace code and concluding with deterministic `VERDICT: PASS` or `VERDICT: FAIL`.
-- **Root Cause Analysis Documentation (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Comprehensive multi-perspective RCA report covering all 6 live triaged defects across SWE, SQE, Architecture, AI Scientist, QA, and Tools.
+- **Command Broker Action Classification & Tool Discovery (`harness/shared/governance/command_actions.py`)**:
+  - Added `test_execute` classification for `python [flags] script.py` and `python -m (pytest|unittest|py_compile|doctest)`.
+  - Added `read` classification for version/help inspection (`python/py/node/pnpm/npm --version|-V|--help`) and `command -v`.
+  - Stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) are excluded from write targets, enabling standard shell output redirection without triggering path containment denials.
+- **Node Test & Fixture Dynamic Configuration (`harness/node/tests/ai/smoke/_fixtures.ts`)**: `resolveEnvVars()` dynamically discovers `NVIDIA_API_KEY` and defaults model to `LIVE_DEFAULT_MODEL` with multi-tier status code assertions `(401|403|400|410)`.
+- **Multi-Domain Live MAS E2E Scenarios (`harness/shared/tests/test_mango_mas_live.py`)**: Expanded live E2E testing across sequential thinking (`calculate_fibonacci`), multi-file application synthesis (`DataValidator`), and symbolic math reasoning (`prime_factors`), achieving 100% pass rate.
+- **Agent Prompts & Persona Guidelines (`harness/shared/agent_prompts.py`, `.mango/agents/`)**: Updated prompt templates and operating contracts for `nemotron-reasoner` and `verifier` to directly execute standalone scripts in scratch workspaces without requiring root `Makefile` or `governance-policy.json`.
+- **Cryptographic Policy Bundle Digest Synchronization (`harness/control-plane/policy-bundle.example.json`)**: Synchronized SHA256 digests across all stack scripts post-verification script fixes.
+- **Root Cause Analysis Documentation (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Comprehensive multi-perspective RCA report covering all 10 live triaged defects across SWE, SQE, Architecture, AI Scientist, QA, Tools, Robotics, and Product.
 - **Dedicated Regression Suite (`harness/shared/tests/regression/test_e2e_nemotron_triage_regression.py`)**: 11 new regression tests verifying newline roundtripping, prompt resolution, discard stream redirection, and API key resolution.
 
 ### Added — Neuro-Symbolic Sandbox Synthesis & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)

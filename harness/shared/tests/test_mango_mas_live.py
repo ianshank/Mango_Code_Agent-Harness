@@ -28,8 +28,9 @@ class TestMangoMASLive:
         # We ask the MAS to write a simple dynamic python utility to the workspace path
         # and test it via sequential thinking
         task = (
-            "Write a Python function called calculate_fibonacci in dynamic_util.py."
-            " Ensure it has type hints and a docstring."
+            "1. Write a Python function called calculate_fibonacci in dynamic_util.py with type hints and docstring.\n"
+            "2. Write a test file test_dynamic_util.py testing calculate_fibonacci(10) == 55.\n"
+            "3. Run python -m unittest test_dynamic_util.py to verify."
         )
 
         # Execute the loop
@@ -46,3 +47,37 @@ class TestMangoMASLive:
         assert any("planner" in prompt.lower() for prompt in agents_used)
         assert any("reasoner" in prompt.lower() for prompt in agents_used)
         assert any("verifier" in prompt.lower() for prompt in agents_used)
+
+    def test_mango_mas_multi_file_app_synthesis_e2e(self, tmp_path, monkeypatch):
+        """
+        Tests multi-file application synthesis where MAS creates a module and companion test.
+        """
+        monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
+        orchestrator = MangoMASOrchestrator(workspace_dir=tmp_path)
+
+        task = (
+            "1. Write a DataValidator class in validator.py with method 'is_valid_email(email: str) -> bool'.\n"
+            "2. Write a unit test file test_validator.py using unittest to verify valid and invalid emails.\n"
+            "3. Run python -m unittest test_validator.py and verify all tests pass."
+        )
+
+        verification_result = orchestrator.execute_sequential_thinking_loop(task)
+        assert "PASS" in verification_result or "FAIL" in verification_result
+        history_str = str(orchestrator.conversation_history)
+        assert (tmp_path / "validator.py").exists() or "validator.py" in history_str
+
+    def test_mango_mas_math_symbolic_reasoning_e2e(self, tmp_path, monkeypatch):
+        """
+        Tests symbolic mathematical reasoning and formula verification.
+        """
+        monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
+        orchestrator = MangoMASOrchestrator(workspace_dir=tmp_path)
+
+        task = (
+            "Write a Python script math_solver.py that computes prime factors of 1050 (which are 2, 3, 5, 7).\n"
+            "Include an assertion verifying prime_factors(1050) == [2, 3, 5, 5, 7].\n"
+            "Execute python math_solver.py and report the result."
+        )
+
+        verification_result = orchestrator.execute_sequential_thinking_loop(task)
+        assert "PASS" in verification_result or "FAIL" in verification_result

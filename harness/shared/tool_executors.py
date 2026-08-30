@@ -227,7 +227,7 @@ def execute_run_command(
         kwargs["timeout"] = timeout
     result = broker.execute_command(command, **kwargs)
     if result.status == "BLOCKED":
-        logger.warning("Broker denied command for role %s: %s", active_role, result.reason)
+        logger.warning("Broker denied command %r for role %s: %s", command, active_role, result.reason)
     return format_execution_result(result)
 
 
