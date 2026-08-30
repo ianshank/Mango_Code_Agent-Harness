@@ -50,6 +50,7 @@ GATE_TO_ROOT_TARGET = {
     "traceability": "validate",  # validate runs governance/check_traceability.py
     "governance": "validate",  # validate runs the governance validator set
     "secrets": "secrets",  # dedicated workflow job; see INV-1 note above
+    "audit": "audit",  # dedicated workflow job; see the `audit` job in python-package.yml
 }
 
 # What each gate's recipe must still *do*. Reachability only proves the target
@@ -65,6 +66,7 @@ GATE_TO_EVIDENCE = {
     "traceability": r"check_traceability",
     "governance": r"validate_invariants\.py",
     "secrets": r"\$\(GITLEAKS\)|gitleaks",
+    "audit": r"pip-audit",
 }
 
 # Stages that must remain direct prerequisites of `ci`. Checked against `ci`'s own
@@ -82,15 +84,7 @@ REQUIRED_CI_STAGES = {
 
 # Gates with no root equivalent. Each needs a reason; adding an entry here is a
 # deliberate, reviewable statement that the root pipeline does not run this gate.
-KNOWN_GAPS = {
-    "audit": (
-        "Dependency vulnerability scanning (osv-scanner) runs only in the per-stack "
-        "CI workflows, which install it via `go install`. Wiring it into the root "
-        "pipeline adds an external toolchain dependency and can turn CI red on a "
-        "pre-existing advisory, so it is a deliberate follow-up rather than a "
-        "silent omission."
-    ),
-}
+KNOWN_GAPS: dict[str, str] = {}
 
 # Root mechanisms that satisfy a gate only partially. Documented rather than
 # asserted away, so the weaker coverage stays visible to a reviewer.

@@ -1,6 +1,6 @@
 # C4 Architecture: Agentic SSD & Mango MAS Platform
 
-**Version:** 2.3.0 (2026 Standards)  
+**Version:** 2.1.9 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 

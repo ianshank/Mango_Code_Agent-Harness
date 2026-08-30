@@ -1,6 +1,6 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.2.0 (2026 Standards)
+**Version:** 2.1.9 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -63,6 +63,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   │   └── types.ts             # Strict TypeScript contracts
 │   │   ├── tests/                       # Multi-tier Vitest matrix
 │   │   └── docs/specs/                  # Bidirectionally-traced formal specifications
+│   │
+│   ├── jvm/                             # Kotlin/Gradle governance-parity REFERENCE TEMPLATE —
+│   │                                     # not wired into root CI/Makefile (INV-2/INV-3 partial;
+│   │                                     # see harness/CONTRACT.md)
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)

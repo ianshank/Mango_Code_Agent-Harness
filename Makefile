@@ -40,6 +40,11 @@ NODE_DIR     := harness/node
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
+# --- Install ---
+.PHONY: install
+install: ## Install the pre-push remote-allowlist hook (a root-only workflow otherwise never gets it)
+	bash harness/shared/install_hooks.sh
+
 # --- Linting & Static Analysis ---
 # harness/control-plane is hyphenated (not an importable package) but mypy
 # checks it fine as a directory of top-level modules; it is in the coverage
@@ -126,6 +131,22 @@ secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if g
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
 
+# --- Dependency Vulnerability Scan ---
+# Kept out of `ci`/`ci-python` deliberately, mirroring `secrets`: interpreter-independent,
+# so running it on every Python matrix leg would repeat identical work. A dedicated
+# workflow job runs it once (see the `audit` job in .github/workflows/python-package.yml).
+.PHONY: audit
+audit: ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner
+	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
+	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
+	pip-audit --requirement requirements.txt
+	$(MAKE) -C $(NODE_DIR) audit
+
+.PHONY: audit-install
+audit-install: ## Install pip-audit and the Node stack's pinned osv-scanner
+	python -m pip install --upgrade pip-audit
+	$(MAKE) -C $(NODE_DIR) audit-install
+
 # --- Remote Allowlist Gate ---
 .PHONY: remotes
 remotes: ## Verify every configured Git push URL against the governance allowlist
@@ -196,7 +217,7 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "6. For protected-path changes, run the 'protected-path-attestation' skill and paste the block into the PR."
 
 .PHONY: pre-pr
-pre-pr: ci review lint-cold ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck)
+pre-pr: ci review lint-cold audit ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck + dependency audit)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts
