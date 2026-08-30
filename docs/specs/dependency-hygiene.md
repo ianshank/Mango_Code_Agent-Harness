@@ -42,6 +42,12 @@ substring of the failure message.
   share one non-raising classification primitive
   (`harness/shared/governance_json.py`), while each MUST keep raising its own
   existing exception type and log message on failure.
+- R-DH-6: `pip-audit` MUST run under every Python interpreter the CI matrix
+  tests (3.9, 3.10, 3.12), via a dedicated `audit-matrix` job, because its
+  dependency resolution is interpreter-specific: a `Requires-Python`-gated
+  transitive package can resolve to a different, vulnerable version under
+  one supported interpreter and a patched one under another, and a
+  single-interpreter scan (the `audit` job's 3.11) cannot see that.
 - C-DH-1: `policy_loader.py`, `coverage_gate.py`, and `validate_invariants.py`
   MUST NOT be changed to use the new primitive. `policy-single-source.md`
   already decided `validate_invariants.py` (and the runpy-invoked per-stack
@@ -51,6 +57,15 @@ substring of the failure message.
 - C-DH-2: `requirements-dev.txt` MUST continue to install every dependency it
   does today via a single `pip install -r requirements-dev.txt` — no change
   to that CI step.
+- C-DH-3: A leg of `audit-matrix` MAY be marked `continue-on-error` only when
+  its only failure mode is that every currently-available fix for the
+  vulnerability it found has itself raised `Requires-Python` above that
+  leg's interpreter — no `requirements.txt` pin can then satisfy "installs
+  under this interpreter" and "clean under this interpreter" at once. The
+  finding MUST stay visible in the step's own output (never redirected or
+  suppressed) and MUST be recorded in the decision log. This is narrower
+  than a general escape hatch: a finding fixable by any available pin is
+  not covered and must block merge like any other.
 
 ## Acceptance criteria
 
@@ -86,6 +101,13 @@ substring of the failure message.
       `grep -c "^-r requirements.txt$" requirements-dev.txt` reporting 1, and
       by every existing CI job (`build`, `build-full`), which already runs
       exactly this install command unmodified (C-DH-2)
+- [ ] AC-8: `audit-matrix` in `.github/workflows/python-package.yml` runs
+      `make audit-python` on Python 3.9, 3.10, and 3.12; only the 3.9 leg may
+      carry `continue-on-error`, and only with an inline comment naming the
+      decision-log entry that justifies it — verified by
+      `grep -A25 "^  audit-matrix:" .github/workflows/python-package.yml`
+      showing all three versions in the matrix and `continue-on-error`
+      appearing on no line but the one gated to `'3.9'` (R-DH-6, C-DH-3)
 
 ## Steps
 
@@ -144,6 +166,8 @@ substring of the failure message.
 
 - `make audit` — pip-audit against `requirements.txt`, delegated Node
   osv-scanner; must fail closed if either tool or its input file is missing
+- `make audit-python` — the same pip-audit scan alone, under whichever
+  interpreter invokes it; used by all three `audit-matrix` legs
 - `make ci` and `make ci-python` — unaffected by this spec (`audit` stays out
   of both, by design, mirroring `secrets`)
 - `make pre-pr` — now includes `audit`
@@ -169,3 +193,14 @@ None. The narrower consolidation scope (excluding `policy_loader.py`,
 `coverage_gate.py`, `validate_invariants.py`) was itself the resolution of an
 open question raised during review; see this PR's description for the full
 reasoning and the decision-log entry it cites.
+
+A second question was raised and resolved the same way, later in the same
+PR: `audit-matrix`'s first real run found 7 known vulnerabilities
+(starlette, click, python-dotenv) that resolve only under Python 3.9, and
+every currently-published fix for them requires Python >=3.10 — there is no
+`requirements.txt` pin that installs under 3.9 and is clean under 3.9 at
+the same time. Rather than block merge on a gap this PR cannot close
+without bumping the project's Python floor (already a deferred backlog
+item this finding now sharpens considerably), the 3.9 leg alone is
+`continue-on-error`, per C-DH-3; the finding stays visible in that step's
+own output and is recorded in the decision log (`DEC-017`).

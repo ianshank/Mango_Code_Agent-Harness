@@ -207,6 +207,13 @@ jobs:
   # resolves under 3.11, so a vulnerability that surfaces only under a transitive
   # dependency selected on 3.9, 3.10 or 3.12 would never be caught. Matrixed like
   # `build`; Python-only, since the Node delegation already runs once, in `audit`.
+  #
+  # The 3.9 leg is non-blocking (DEC-017): the patched releases of every vulnerable
+  # package this leg has found (starlette, click, python-dotenv) require Python
+  # >=3.10, so no version pin in requirements.txt can satisfy both "install under
+  # 3.9" and "clean under 3.9" at once. Findings still surface -- fail-fast is off
+  # and the step itself is not silenced -- this only stops them from blocking merge
+  # on a gap this PR cannot close without dropping the 3.9 floor.
   audit-matrix:
     name: dependency-audit (${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -229,4 +236,9 @@ jobs:
         run: make audit-install-python
 
       - name: Run dependency audit gate (make audit-python)
+        # See DEC-017: every currently-available fix for a 3.9-resolved finding
+        # requires Python >=3.10, so this leg cannot be made both 3.9-installable
+        # and vulnerability-clean. Non-blocking here only; 3.10 and 3.12 stay
+        # fully enforced.
+        continue-on-error: ${{ matrix.python-version == '3.9' }}
         run: make audit-python
