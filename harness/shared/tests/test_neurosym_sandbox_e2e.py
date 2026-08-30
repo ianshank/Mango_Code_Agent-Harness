@@ -8,10 +8,6 @@ import pytest
 import harness.shared.mango_mas_orchestrator as mmo
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult, ProcessBackend
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
-from harness.shared.nemotron_bridge import resolve_api_key
-
-# Check if LIVE test execution is enabled
-IS_LIVE = bool(resolve_api_key())
 
 
 class MockSandboxProcessBackend(ProcessBackend):
@@ -67,9 +63,7 @@ class MockSandboxProcessBackend(ProcessBackend):
         return super().run(command, cwd, timeout, max_output_bytes)
 
 
-@pytest.mark.live
 @pytest.mark.neurosym
-@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
 class TestNeurosymSandboxE2E:
     """
     E2E integration tests for the code generation workflow executing inside a sandbox.

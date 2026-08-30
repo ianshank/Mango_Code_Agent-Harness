@@ -51,6 +51,12 @@ describe.skipIf(!hasApiKey)('Nemotron CLI Live E2E (R-AI-NEMO-3, C-AI-SEC-2)', (
       // Execute the CLI natively. By not providing --model, it relies on NEMOTRON_DEFAULT_MODEL
       // which we are testing to ensure it is not deprecated (410 Gone) or otherwise broken.
       await runNemotronCli(['--prompt', 'Reply with exactly the word: LIVE_OK']);
+
+      const apiKey = process.env['NVIDIA_API_KEY'] ?? '';
+      if (apiKey) {
+        expect(capturedOut).not.toContain(apiKey);
+        expect(capturedErr).not.toContain(apiKey);
+      }
       
       // If it failed with 410, capturedErr would contain the error and process.exitCode would be 1.
       expect(capturedErr).toBe('');

@@ -52,7 +52,7 @@ function resolveEnvVars(): { apiKey: string; defaultModel: string } {
 
   return {
     apiKey,
-    defaultModel: defaultModel || 'nvidia/nemotron-3-nano-30b-a3b',
+    defaultModel: defaultModel || '',
   };
 }
 

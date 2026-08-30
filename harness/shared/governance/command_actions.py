@@ -129,7 +129,7 @@ _BY_PROGRAM: typing.Mapping[str, str] = {
     "grep": "read", "rg": "read", "pwd": "read", "echo": "read", "true": "read",
     "false": "read", "diff": "read", "stat": "read", "basename": "read", "dirname": "read",
     "sort": "read", "uniq": "read", "cut": "read", "tr": "read", "printf": "read",
-    "date": "read", "which": "read", "command": "read", "seq": "read", "sleep": "read", "test": "read",
+    "date": "read", "which": "read", "seq": "read", "sleep": "read", "test": "read",
     # Running the repository's own gates.
     "pytest": "test_execute", "make": "test_execute", "ruff": "test_execute",
     "mypy": "test_execute", "tsc": "test_execute", "vitest": "test_execute",
@@ -168,6 +168,14 @@ _BY_SUBCOMMAND: typing.Mapping[tuple[str, str], str] = {
 #: Whole-command shapes that override the program table. `find` is a read tool
 #: until it is given an action, and then it is the most destructive tool present.
 _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    # Reading a credential-bearing file is `secret_access`, not `read`. The
+    # program is innocent; the target is not, and the action model grades the
+    # effect rather than the tool.
+    # The alternation is owned by `read_policy`, which is the other door onto
+    # the same files. Composing it here rather than restating it is what keeps
+    # `cat .env` and `read_file(".env")` refusing for the same reason.
+    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
+     "secret_access", "the command names a credential-bearing file"),
     (re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"), "destructive",
      "find with an action flag deletes or executes per match"),
     (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
@@ -191,14 +199,6 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\b(?:ba|z|k)?sh\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline shell program can do anything"),
     (re.compile(r"\b(?:python[0-9.]*|py)\b(?:\s+-[^\s]+)*\s+[^\s\-][^\s]*\.py\b"), "test_execute",
      "executing a python script in workspace"),
-    # Reading a credential-bearing file is `secret_access`, not `read`. The
-    # program is innocent; the target is not, and the action model grades the
-    # effect rather than the tool.
-    # The alternation is owned by `read_policy`, which is the other door onto
-    # the same files. Composing it here rather than restating it is what keeps
-    # `cat .env` and `read_file(".env")` refusing for the same reason.
-    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
-     "secret_access", "the command names a credential-bearing file"),
 )
 
 

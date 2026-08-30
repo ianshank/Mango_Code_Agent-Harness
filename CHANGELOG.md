@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [Unreleased]
+
 ### Added — Live Nemotron E2E Multi-Domain Triage, Root Cause Analysis & AQA Regression
 
 - **Cross-Platform Newline Preservation (`harness/shared/tool_executors.py`)**: `_write_preserving_newlines()` ensures binary line-ending preservation on disk across Windows (CRLF) and Unix (LF) environments, eliminating CRLF expansion discrepancies during file read/write operations.
