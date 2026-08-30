@@ -127,7 +127,8 @@ without one.
 - `harness/shared/agent_prompts.py` (R-RPT-1, R-RPT-5)
 - `harness/shared/tests/test_read_policy.py` — new (R-RPT-2, R-RPT-3)
 - `harness/shared/tests/test_tool_executors.py` — new (R-RPT-1, R-RPT-4, R-RPT-5, R-RPT-7)
-- `harness/shared/tests/regression/test_read_containment_regression.py` — new (R-RPT-2)
+- `harness/shared/tests/test_read_file_credential_parity.py` — new; a property test over a
+  corpus, not a regression-tier reproduction (R-RPT-2)
 - `harness/shared/tests/test_agent_authority.py` (C-RPT-1)
 - `harness/shared/tests/test_documentation_truth.py`
 - `.env.example`

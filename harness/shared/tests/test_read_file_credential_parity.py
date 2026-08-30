@@ -1,4 +1,4 @@
-"""Regression: `read_file` must not be a second, ungoverned door onto credentials.
+"""`read_file` must not become a second, ungoverned door onto credentials.
 
 `command_actions.classify` grades `cat .env` as `secret_access` -- an action no
 role in `agent-policy.json` holds -- so reading a credential through
@@ -13,7 +13,17 @@ API on the next turn, written to the debug dump, and held in memory for the rest
 of the task. The tool would have been *permitted*, because `read` is exactly the
 action the implementer holds.
 
-The reproduction below is the parity property rather than a list of filenames.
+This is a property test, not a regression-tier reproduction, and it lives here
+rather than in `harness/shared/tests/regression/` because it does not meet that
+tier's own bar: `harness/CONTRACT.md` defines the regression/AQA tier as one
+reproduction per defect that has *already reached* `main`, each "confirmed
+failing against the pre-fix commit." `read_file` does not exist on `main` --
+the hazard below was caught during this feature's own design, before any commit
+that would have shipped it, so there is no pre-fix commit to be confirmed
+failing against. Filing it under `regression/` anyway would be the same kind of
+quiet definition-drift this codebase's gates exist to catch elsewhere.
+
+The property below is asserted over a corpus rather than a list of filenames.
 A list drifts the moment someone adds a credential family to one door and not
 the other; the property fails when they do.
 

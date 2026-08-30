@@ -88,7 +88,8 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(content, encoding="utf-8")
         return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
-    except Exception as e:  # noqa: BLE001 - a tool must always answer its call with a string
+    except Exception as e:
+        logger.exception("Failed writing %s", filepath)
         return f"Error writing file {filepath}: {str(e)}"
 
 
@@ -123,11 +124,13 @@ def execute_read_file(
 
     denial = _slice_bounds_denial(start_line, end_line)
     if denial is not None:
+        logger.warning("Denied read with bad bounds: %s (%s)", filepath, denial)
         return f"Error reading file {filepath}: {denial}"
 
     try:
         content = _read_preserving_newlines(target_path)
-    except Exception as e:  # noqa: BLE001 - a tool must always answer its call with a string
+    except Exception as e:
+        logger.exception("Failed reading %s", filepath)
         return f"Error reading file {filepath}: {str(e)}"
 
     header = ""
@@ -171,13 +174,15 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
 
     try:
         content = _read_preserving_newlines(target_path)
-    except Exception as e:  # noqa: BLE001 - a tool must always answer its call with a string
+    except Exception as e:
+        logger.exception("Failed reading %s before patch", filepath)
         return f"Error patching file {filepath}: {str(e)}"
 
     # An empty `old_text` counts once per position, so it is refused here by the
     # same rule rather than needing a special case.
     count = content.count(old_text)
     if count != 1:
+        logger.warning("Denied patch with a non-unique match: %s (matched %d times)", filepath, count)
         return (
             f"Error patching file {filepath}: old_text matched {count} times, expected exactly 1. "
             "Widen old_text with surrounding lines until it identifies one place in the file."
@@ -186,7 +191,8 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
     try:
         with open(target_path, "w", encoding="utf-8", newline="") as handle:
             handle.write(content.replace(old_text, new_text, 1))
-    except Exception as e:  # noqa: BLE001 - a tool must always answer its call with a string
+    except Exception as e:
+        logger.exception("Failed writing patched %s", filepath)
         return f"Error patching file {filepath}: {str(e)}"
     return f"Success: patched {filepath}"
 
