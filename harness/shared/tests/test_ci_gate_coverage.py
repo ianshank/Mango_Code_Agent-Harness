@@ -280,7 +280,11 @@ def _job_check_names(job_id: str, body: str) -> list[str]:
     `- name:` entries under `steps:`, so the search is scoped to the slice
     before `steps:` -- an unscoped regex would occasionally match a step.
     """
-    pre_steps = re.split(r"^\s*steps:\s*$", body, maxsplit=1, flags=re.M)[0]
+    # YAML allows a trailing comment on the `steps:` line itself; matching
+    # only the bare key would leave the split silently not happening, and
+    # the search below would then be free to match a step's own `name:`
+    # instead of falling back to the job id.
+    pre_steps = re.split(r"^\s*steps:\s*(?:#.*)?$", body, maxsplit=1, flags=re.M)[0]
     declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
     base = _unquote(declared.group(1).strip()) if declared else job_id
 
@@ -353,6 +357,32 @@ def _recipe_body(makefile_text: str, target: str) -> str:
     return "\n".join(
         line for line in match.group(1).splitlines() if not re.match(r"^\t\s*[@-]*\s*#", line)
     )
+
+
+def _numeric_fallback_shape(source: str) -> re.Match[str] | None:
+    """The first fallback-shaped numeric literal found in `source`, if any.
+
+    Matches ANY numeric default in these shapes (argparse/kwarg `default=`,
+    a `dict.get` fallback, the `or` idiom, or a threshold-named constant) --
+    not only values equal to some particular policy's current thresholds, so
+    a fallback to an arbitrary unrelated number is caught exactly like one
+    that happens to collide with today's real threshold. Scoped to these
+    shapes rather than any bare `= N` so an unrelated literal that isn't
+    actually being used as a fallback -- a line length, a byte cap -- does
+    not read as one.
+    """
+    number = r"\d+(?:\.\d+)?"
+    shapes = (
+        rf"default\s*=\s*{number}\b",
+        rf"\.get\([^)]*,\s*{number}\s*\)",
+        rf"\bor\s+{number}\b",
+        rf"\b\w*(?:COV|COVERAGE|THRESHOLD|MIN|FLOOR)\w*\s*=\s*{number}\b",
+    )
+    for shape in shapes:
+        match = re.search(shape, source)
+        if match:
+            return match
+    return None
 
 
 def _reachable_from(makefile_text: str, root: str) -> set[str]:
@@ -663,40 +693,38 @@ class TestRootPipelineShape:
         (CHANGELOG: "COV_MIN fell back to the literal 80 whenever the policy
         was unreadable or its coverage block absent").
 
-        Forbidden values come from governance-policy.json's own current
-        thresholds, not a hardcoded (80, 90) pair: a policy change that moved
-        a floor to some other number would otherwise leave this checking for
-        a value that no longer means anything, while missing a fallback at
-        the new one. Patterns are scoped to fallback-shaped syntax (argparse/
-        kwarg `default=`, a `dict.get` fallback, the `or` idiom, or a
-        threshold-named constant) rather than any bare `= N`, so an unrelated
-        literal that happens to equal a threshold -- a line length, a byte
-        cap -- does not fail this test with no real defect present.
+        Matches ANY numeric fallback in these shapes, not only values equal
+        to governance-policy.json's current thresholds: a fallback to an
+        arbitrary number unrelated to any real threshold (`.get("lines", 85)`
+        while policy says 90) is exactly as forbidden as one that happens to
+        collide with today's 80/90, and checking only the current values
+        would evade it entirely. Patterns are scoped to fallback-shaped
+        syntax (argparse/kwarg `default=`, a `dict.get` fallback, the `or`
+        idiom, or a threshold-named constant) rather than any bare `= N`, so
+        an unrelated literal that happens to look like one of these shapes
+        for a non-threshold reason does not fail this test with no real
+        defect present.
         """
         source = (REPO / "harness" / "shared" / "coverage_gate.py").read_text(encoding="utf-8")
         assert "governance-policy.json" in source
-        policy = json.loads(POLICY.read_text(encoding="utf-8"))
-        thresholds = sorted(
-            {
-                str(v)
-                for v in policy.get("coverage", {}).values()
-                if isinstance(v, (int, float)) and not isinstance(v, bool)
-            }
+        match = _numeric_fallback_shape(source)
+        assert not match, (
+            f"coverage_gate.py has a fallback shape ({match.group(0)!r}); "
+            "thresholds have exactly one source, governance-policy.json"
         )
-        assert thresholds, "governance-policy.json declares no numeric coverage thresholds to guard"
-        for value in thresholds:
-            v = re.escape(value)
-            shapes = (
-                rf"default\s*=\s*{v}\b",  # argparse / keyword-arg default
-                rf"\.get\([^)]*,\s*{v}\s*\)",  # dict.get(..., <threshold>) fallback
-                rf"\bor\s+{v}\b",  # `resolved_value or <threshold>` idiom
-                rf"\b\w*(?:COV|COVERAGE|THRESHOLD|MIN|FLOOR)\w*\s*=\s*{v}\b",  # named constant
-            )
-            for shape in shapes:
-                assert not re.search(shape, source), (
-                    f"coverage_gate.py has a fallback shape defaulting to {value!r}; "
-                    "thresholds have exactly one source, governance-policy.json"
-                )
+
+    def test_numeric_fallback_shape_catches_values_unrelated_to_current_policy(self) -> None:
+        """A fallback to an arbitrary number that doesn't equal any of
+        governance-policy.json's current thresholds is exactly as forbidden
+        as one that does. A Copilot review of this file correctly flagged
+        that an earlier version only checked the current (80, 90) pair and
+        would have missed a fallback to, say, 85."""
+        arbitrary = 'lines_min = policy.get("coverage", {}).get("lines", 85)\n'
+        match = _numeric_fallback_shape(arbitrary)
+        assert match is not None and match.group(0) == '.get("lines", 85)'
+
+        unrelated = "MAX_LINE_LENGTH = 80\nBYTE_CAP = 90\n"
+        assert _numeric_fallback_shape(unrelated) is None
 
     def test_coverage_run_does_not_exclude_tests(self, makefile):
         """Deselecting governance tests would silently drop these very gates."""
@@ -849,5 +877,20 @@ class TestRequiredStatusChecksListIsAccurate:
             '      - name: Some future step\n'
             '        with:\n'
             '          python-version: ["3.9", "3.10"]\n'
+        )
+        assert _job_check_names("build", body) == ["build"]
+
+    def test_steps_split_tolerates_a_trailing_comment(self) -> None:
+        """YAML allows `steps:  # comment`; a split that only recognizes the
+        bare key would leave the whole body -- steps included -- searched for
+        a job-level `name:`, and a step written in the rarer `-` / `name:`
+        two-line list-item style would then be mistaken for it. A Copilot
+        review of this file flagged exactly this gap."""
+        body = (
+            "  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:  # comment\n"
+            "      -\n"
+            "        name: Checkout\n"
+            "        uses: actions/checkout@v4\n"
         )
         assert _job_check_names("build", body) == ["build"]
