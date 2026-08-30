@@ -166,9 +166,14 @@ round-trip.
       `build (3.x)` runs `make ci-python`; `build-full` (Python 3.11) is the
       only leg that runs `make ci`, the Node stack and the regression tier;
       `secret-scan` and `dependency-audit` are dedicated jobs, interpreter-
-      independent by design. `dependency-audit (3.9)` runs `continue-on-error`
-      per DEC-017 (unpatchable CVEs on that interpreter) — requiring it as a
-      status check pins that the leg *ran*, not that it passed.
+      independent by design. `dependency-audit (3.9)` sets `continue-on-error`
+      at the step level, per DEC-017 (unpatchable CVEs on that interpreter), so
+      the job's reported conclusion is success regardless of what `pip-audit`
+      finds. Requiring it as a status check only ensures the leg keeps running
+      and reporting — a rename or silent removal would surface as this repo's
+      own liveness test failing — not that a new vulnerability on that leg
+      could ever block a merge; that finding stays visible solely in the job's
+      own log.
 
       This item previously listed only 5 checks — the three `build (3.x)` legs,
       `build-full` and `secret-scan` — and omitted `dependency-audit` and its
