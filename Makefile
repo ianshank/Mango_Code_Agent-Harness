@@ -24,7 +24,11 @@ GITLEAKS_VERSION ?= v8.28.0
 # Pinned so the audit gate cannot change or break on an unreviewed upstream
 # release; CI installs this exact version via `audit-install`, never `--upgrade`
 # with no pin. Mirrors GITLEAKS_VERSION/OSV_VERSION (harness/node/Makefile).
-PIP_AUDIT_VERSION ?= 2.10.1
+# Capped at 2.9.0, not the newer 2.10.x: pip-audit 2.10.0 raised its own floor to
+# Requires-Python >=3.10, which cannot install at all on the 3.9 leg of the
+# `audit-matrix` job below -- confirmed by that job's first real CI run. 2.9.0 is
+# the newest release still declaring >=3.9, matching this project's own floor.
+PIP_AUDIT_VERSION ?= 2.9.0
 # Coverage thresholds are sourced from the governance policy (single source of
 # truth) and applied by coverage_gate.py as TWO separate numbers: coverage.lines
 # against line coverage and coverage.branches against branch coverage. With
