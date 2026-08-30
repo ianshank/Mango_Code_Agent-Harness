@@ -503,9 +503,12 @@ class TestRootPipelineShape:
 
     def test_specs_target_invokes_the_validator_through_bash(self, makefile):
         """validate_specs.sh is mode 644: a bare ./ invocation is a guaranteed red CI."""
-        recipe = re.search(r"^specs:.*?\n((?:\t.*\n)+)", makefile, re.M)
-        assert recipe, "root Makefile has no specs recipe"
-        body = recipe.group(1)
+        # _recipe_body (not a hand-rolled regex here) strips comment lines and
+        # accepts both `:` and `::` rule syntax, exactly like every other
+        # target-body test in this file -- a bespoke regex would silently pass
+        # a commented-out invocation as if it were live.
+        body = _recipe_body(makefile, "specs")
+        assert body, "root Makefile has no specs recipe"
         assert "validate_specs.sh" in body, "specs target does not invoke validate_specs.sh"
         assert re.search(r"\bbash\b\s+\S*validate_specs\.sh", body), (
             "validate_specs.sh must be invoked via `bash`; it is not executable, so a "
@@ -630,14 +633,44 @@ class TestRootPipelineShape:
 
     def test_coverage_gate_script_has_no_numeric_fallback(self):
         """The gate script must carry no default threshold a broken policy could
-        silently fall back to -- the COV_MIN=80 inversion, one layer down."""
+        silently fall back to -- the COV_MIN=80 inversion, one layer down
+        (CHANGELOG: "COV_MIN fell back to the literal 80 whenever the policy
+        was unreadable or its coverage block absent").
+
+        Forbidden values come from governance-policy.json's own current
+        thresholds, not a hardcoded (80, 90) pair: a policy change that moved
+        a floor to some other number would otherwise leave this checking for
+        a value that no longer means anything, while missing a fallback at
+        the new one. Patterns are scoped to fallback-shaped syntax (argparse/
+        kwarg `default=`, a `dict.get` fallback, the `or` idiom, or a
+        threshold-named constant) rather than any bare `= N`, so an unrelated
+        literal that happens to equal a threshold -- a line length, a byte
+        cap -- does not fail this test with no real defect present.
+        """
         source = (REPO / "harness" / "shared" / "coverage_gate.py").read_text(encoding="utf-8")
         assert "governance-policy.json" in source
-        for pattern in (r"=\s*(80|90)\b", r"default=\s*(80|90)\b"):
-            assert not re.search(pattern, source), (
-                "coverage_gate.py carries a numeric threshold literal; thresholds "
-                "have exactly one source, governance-policy.json"
+        policy = json.loads(POLICY.read_text(encoding="utf-8"))
+        thresholds = sorted(
+            {
+                str(v)
+                for v in policy.get("coverage", {}).values()
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+            }
+        )
+        assert thresholds, "governance-policy.json declares no numeric coverage thresholds to guard"
+        for value in thresholds:
+            v = re.escape(value)
+            shapes = (
+                rf"default\s*=\s*{v}\b",  # argparse / keyword-arg default
+                rf"\.get\([^)]*,\s*{v}\s*\)",  # dict.get(..., <threshold>) fallback
+                rf"\bor\s+{v}\b",  # `resolved_value or <threshold>` idiom
+                rf"\b\w*(?:COV|COVERAGE|THRESHOLD|MIN|FLOOR)\w*\s*=\s*{v}\b",  # named constant
             )
+            for shape in shapes:
+                assert not re.search(shape, source), (
+                    f"coverage_gate.py has a fallback shape defaulting to {value!r}; "
+                    "thresholds have exactly one source, governance-policy.json"
+                )
 
     def test_coverage_run_does_not_exclude_tests(self, makefile):
         """Deselecting governance tests would silently drop these very gates."""
