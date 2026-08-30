@@ -196,3 +196,10 @@ classDiagram
 - Direct file I/O is governed instead by two symmetric, in-process policy modules consulted at tool-call granularity: `write_policy.write_denial_reason` (denies `protected_paths` matches and any `.git` path segment) and its read-side counterpart `read_policy.read_denial_reason` (denies credential-bearing filenames and any `.git` segment).
 - Both modules compose the same credential-filename alternation (`read_policy.CREDENTIAL_FILENAME_ALTERNATION`) that `command_actions.classify` uses to grade `cat <credential-file>` as `secret_access` — a single source, so the shell-command door and the direct-read door cannot independently drift apart.
 - `apply_patch` reuses `write_denial_reason` unchanged, so it reaches no path `write_file` cannot reach; `agent-policy.json` grants it no new action.
+
+### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+
+- **Capability Profiles**: The `ExecutionBroker` and `ProcessBackend` enforce fine-grained capability profiles (e.g., `network-isolated`, `read-only-fs`).
+- **Violation Trapping**: When a command violates capability constraints (e.g. attempting outbound socket I/O under `network-isolated`), the backend emits a structured `SandboxViolation` payload.
+- **Critique Normalization (`tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` payloads from `stderr` and translates them into a standardized Critique schema (`failure_type`, `evidence_id`, `normalized_message`, `location: execution_broker`). This prevents orchestrator crashes and enables deterministic agent repair loops.
+- **Fail-Closed Sandbox Availability (`INV-9`)**: If the sandbox backend is unavailable (`sandbox_available=False`), commands are blocked immediately rather than falling back to host execution.

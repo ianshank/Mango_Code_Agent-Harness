@@ -170,7 +170,6 @@ tool handlers in `_tool_handlers`, not only the two new ones — found by testin
 and `apply_patch`, but the vulnerable `.get(key, "")` idiom was shared by every handler in
 the dict.
 
-
 ### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
 
 `test_invariant_liveness.py` computed one set difference,

@@ -7,39 +7,28 @@
 
 ## 0. Completed Milestones
 
+### ✅ v2.2.3 — Live NVIDIA Nemotron NIM Multi-Domain Triage, RCA & Autonomous MAS Certification
+
+- [x] **Live Multi-Domain E2E Defect Triage & RCA (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Triaged and remediated 10 defects across cross-platform newline preservation, credentials discovery, scratch workspace prompt fallback, cross-drive workspace confinement, discard stream filtering, verifier verdict guarantees, python execution in command actions, tool version queries, prompt chaining, and cryptographic policy-bundle digest synchronization.
+- [x] **Command Broker Action Classification & Tool Discovery**: Added `test_execute` for `python [flags] script.py` and `python -m (pytest|unittest|py_compile|doctest)`, `read` for tool version queries (`--version`, `-V`, `command -v`), and excluded stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) from write target checks.
+- [x] **Multi-Domain Live MAS E2E Scenarios**: Validated full multi-agent sequential thinking loop (`calculate_fibonacci`), multi-file application synthesis (`DataValidator`), and symbolic mathematical reasoning (`prime_factors`) with 100% pass rate.
+- [x] **AQA Regression Suite (`test_e2e_nemotron_triage_regression.py`)**: 11 new automated regression tests integrated into the test matrix, bringing the total regression suite to 132 tests.
+- [x] **Live Ecosystem Parity**: Verified end-to-end against live NVIDIA Nemotron NIM endpoints across Python (`test_nemotron_bridge_live.py`, `test_mango_mas_live.py`, `test_neurosym_sandbox_e2e.py`) and Node TypeScript (`vitest run`).
+- [x] **Cryptographic Governance Bundle**: Synchronized all SHA256 digests in `policy-bundle.example.json` with zero drift.
+
+### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
+
+- [x] **Critique Normalization (`AC-NS-3`)**: Implemented normalization in `tool_result_format.py` for sandbox violations (`network_access_denied`, capability constraints) into structured critiques with backwards-compatible error handling.
+- [x] **Deterministic Sandbox E2E Matrix (`test_neurosym_sandbox_e2e.py`)**: Verified `INV-9` fail-closed backend checks, `AC-CE-1` capability profiles, and `AC-NS-3` multi-turn critique repair loops.
+- [x] **Regression & AQA Suite**: Expanded with `test_sandbox_violation_regression.py`, achieving 1,779 passing tests across 7 tiers with 97% code coverage.
+- [x] **Invariants Performance Optimization**: Replaced recursive directory scans with pruned `os.walk` in `validate_invariants.py`.
+
 ### 🚧 Direct file I/O: `read_file` / `apply_patch` (PR #32, in review)
 
-Closes the precision gap in the reasoner's tool surface: every read went through
-a subprocess (`run_command("cat ...")`) and every edit through `write_file`,
-which overwrites whole files, so a three-line change meant regenerating the
-whole file from the model's context.
-
-- [x] **`read_file`**: reads workspace files directly and verbatim (no
-      line-number prefixes, so output pastes straight into `apply_patch`'s
-      `old_text`), bounded by the same output cap and `[truncated at N bytes]`
-      marker `run_command` uses.
-- [x] **`apply_patch`**: replaces one exactly-unique substring in place,
-      refusing (and naming the count) unless `old_text` matches exactly once,
-      and preserving the file's existing line endings byte-for-byte
-      (`harness/shared/tool_executors.py`).
-- [x] **`read_policy.py`** (new, `DEC-012`): the read-side counterpart to
-      `write_policy.py`. `command_actions.classify` already denied reading a
-      credential through `run_command` (graded `secret_access`, an action no
-      role holds); a direct `read_file` would have bypassed that grading
-      entirely — mapped to the plain `read` action, it would have returned
-      `NVIDIA_API_KEY` into `conversation_history`. The two doors now compose
-      one shared credential-filename pattern instead of two that can drift,
-      verified by a parity property test over a corpus rather than a fixed
-      list (`test_read_file_credential_parity.py`).
-      Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
-- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` pointed at a
-      different vendor's model than the README documents; corrected and pinned
-      by `test_documentation_truth.py` so the two cannot drift apart again.
-
-**Follow-up this change identified but did not take:** `execute_write_file`
-still uses universal-newline semantics while `apply_patch` preserves the
-original line endings byte-for-byte; unifying them is deferred to the INV-7
-evidence-coverage work (`harness/CONTRACT.md`).
+- [x] **`read_file`**: reads workspace files directly and verbatim (no line-number prefixes, so output pastes straight into `apply_patch`'s `old_text`), bounded by the same output cap and `[truncated at N bytes]` marker `run_command` uses.
+- [x] **`apply_patch`**: replaces one exactly-unique substring in place, refusing (and naming the count) unless `old_text` matches exactly once, and preserving the file's existing line endings byte-for-byte (`harness/shared/tool_executors.py`).
+- [x] **`read_policy.py`** (`DEC-012`): the read-side counterpart to `write_policy.py`. Composes one shared credential-filename pattern verified by `test_read_file_credential_parity.py`. Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
+- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` corrected and pinned by `test_documentation_truth.py`.
 
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 

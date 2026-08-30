@@ -202,6 +202,15 @@ test-governance: ## Run every governance-marked gate in isolation (selected by m
 test-neurosym: ## Run neurosym synthesis tests (strategies, critique, evaluation, execution profiles)
 	$(PYTEST) $(SHARED_TESTS)/ -m "neurosym and not live" -v --tb=short
 
+# --- Live Model & MAS integration test targets ---
+.PHONY: test-live
+test-live: ## Run live API integration tests against NVIDIA Nemotron NIM
+	$(PYTEST) $(SHARED_TESTS)/ -m "live" -v
+
+.PHONY: test-live-mas
+test-live-mas: ## Run live multi-agent sequential thinking and synthesis loops against Nemotron
+	$(PYTEST) $(SHARED_TESTS)/test_mango_mas_live.py -m "live" -v
+
 # --- Composite Targets ---
 .PHONY: test
 test: test-python test-node verify-zero-skips ## Run all Python and Node tests + zero-skips
