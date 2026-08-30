@@ -231,6 +231,19 @@ def _workflow_jobs(workflow_text: str) -> dict[str, str]:
     return jobs
 
 
+def _unquote(value: str) -> str:
+    """Strip one matching layer of YAML quoting, if present.
+
+    YAML quoting is syntax, not content: `name: "x"` and `name: x` both parse
+    to the string `x`, and GitHub reports the same check name either way. An
+    unstripped quote would read as drift the moment a job's `name:` or a
+    matrix entry picked up quotes for reasons unrelated to any real change.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
 def _job_check_names(job_id: str, body: str) -> list[str]:
     """The GitHub-reported check name(s) for one job, matrix legs included.
 
@@ -240,14 +253,20 @@ def _job_check_names(job_id: str, body: str) -> list[str]:
     """
     pre_steps = re.split(r"^\s*steps:\s*$", body, maxsplit=1, flags=re.M)[0]
     declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
-    base = declared.group(1).strip() if declared else job_id
+    base = _unquote(declared.group(1).strip()) if declared else job_id
 
     # A `with: {python-version: "3.11"}` step input is a quoted scalar, not a
     # bracketed list, so this only matches an actual `strategy: matrix:` axis.
     matrix = re.search(r"python-version:\s*\[(.*?)\]", body)
     if not matrix:
         return [base]
-    values = re.findall(r'"([^"]+)"', matrix.group(1))
+    # Single- and double-quoted entries both parse to the same YAML string.
+    # A bare numeric entry (`[3.9, 3.10]`) is deliberately not supported:
+    # unquoted, `3.10` is the YAML float 3.1 -- the exact footgun this
+    # workflow's own quoting exists to avoid -- so this file should never
+    # contain one, and treating it as absent fails the drift test loudly
+    # rather than guessing at what GitHub would actually resolve it to.
+    values = [_unquote(v) for v in re.findall(r'"[^"]*"|\'[^\']*\'', matrix.group(1))]
     placeholder = "${{ matrix.python-version }}"
     if placeholder in base:
         return [base.replace(placeholder, v) for v in values]
@@ -713,3 +732,25 @@ class TestRequiredStatusChecksListIsAccurate:
         assert jobs, "no jobs found in python-package.yml; the parser or the file is broken"
         for job_id, body in jobs.items():
             assert _job_check_names(job_id, body), f"job '{job_id}' derived no check name"
+
+    def test_quoted_name_and_matrix_values_parse_the_same_as_unquoted(self) -> None:
+        """YAML quoting is syntax, not content -- this repo's workflow never
+        quotes a job `name:`, but a future edit that adds quotes for style
+        reasons alone must not read as a check-name change. Covers exactly
+        the two cases a Copilot review of this file flagged as unverified."""
+        unquoted = '  audit:\n    name: dependency-audit\n    steps:\n'
+        double_quoted = '  audit:\n    name: "dependency-audit"\n    steps:\n'
+        single_quoted = "  audit:\n    name: 'dependency-audit'\n    steps:\n"
+        for body in (unquoted, double_quoted, single_quoted):
+            assert _job_check_names("audit", body) == ["dependency-audit"]
+
+        double_quoted_matrix = (
+            '  build:\n    strategy:\n      matrix:\n'
+            '        python-version: ["3.9", "3.10"]\n    steps:\n'
+        )
+        single_quoted_matrix = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version: ['3.9', '3.10']\n    steps:\n"
+        )
+        for body in (double_quoted_matrix, single_quoted_matrix):
+            assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
