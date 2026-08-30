@@ -170,6 +170,7 @@ _BY_SUBCOMMAND: typing.Mapping[tuple[str, str], str] = {
 _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"), "destructive",
      "find with an action flag deletes or executes per match"),
+    (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
     (re.compile(r"\b(?:python[0-9.]*|py)\b\s+(?:--version|-V|--help|-h)\b"), "read",
      "querying python tool version or help"),
     (re.compile(r"\b(?:node|pnpm|npm)\b\s+(?:--version|-V|-v|--help|-h)\b"), "read",
