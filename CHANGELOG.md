@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+### Added — Live Nemotron E2E Triage, Root Cause Analysis & AQA Regression
+
+- **Cross-Platform Newline Preservation (`harness/shared/tool_executors.py`)**: `_write_preserving_newlines()` ensures binary line-ending preservation on disk across Windows (CRLF) and Unix (LF) environments, eliminating CRLF expansion discrepancies during file read/write operations.
+- **Dynamic Agent Prompt Fallback (`harness/shared/mango_mas_orchestrator.py`)**: `load_agent_prompt()` dynamically falls back to the harness repository root `.mango/agents/` directory when invoked from scratch or isolated ephemeral workspaces.
+- **Command Broker Discard Stream Governance (`harness/shared/governance/command_actions.py`)**: Stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) are excluded from file write target extraction, enabling standard shell output redirection without triggering path containment denials.
+- **Explicit Verifier Prompt Verdict Guarantees (`harness/shared/agent_prompts.py`)**: `VERIFIER_PROMPT_TEMPLATE` updated with explicit instructions for evaluating standalone workspace code and concluding with deterministic `VERDICT: PASS` or `VERDICT: FAIL`.
+- **Root Cause Analysis Documentation (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Comprehensive multi-perspective RCA report covering all 6 live triaged defects across SWE, SQE, Architecture, AI Scientist, QA, and Tools.
+- **Dedicated Regression Suite (`harness/shared/tests/regression/test_e2e_nemotron_triage_regression.py`)**: 11 new regression tests verifying newline roundtripping, prompt resolution, discard stream redirection, and API key resolution.
+
 ### Added — Neuro-Symbolic Sandbox Synthesis & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
 
 - **Critique Normalization (`harness/shared/tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` JSON payloads emitted by `ProcessBackend` / `ExecutionBroker` on capability violations (e.g. `network_access_denied` under `network-isolated`) and transforms them into standardized structured critiques. Preserves strict backward compatibility for policy guard denials.

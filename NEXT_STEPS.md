@@ -7,6 +7,13 @@
 
 ## 0. Completed Milestones
 
+### ✅ v2.2.2 — Live NVIDIA Nemotron NIM Triage, RCA & Execution Broker Parity
+
+- [x] **Live E2E Defect Triage & RCA (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Triaged and remediated 6 defects across cross-platform newline preservation, credentials discovery, scratch workspace prompt fallback, cross-drive workspace confinement, discard stream filtering, and verifier verdict guarantees.
+- [x] **Command Broker Discard Streams**: Added `/dev/null`, `nul`, `NUL`, and descriptor suppressions to `discard_targets` in `command_actions.py` to support standard CLI suppressions (`2>/dev/null`, `> nul`).
+- [x] **AQA Regression Suite (`test_e2e_nemotron_triage_regression.py`)**: 11 new automated regression tests integrated into the test matrix, bringing the total regression suite to 132 tests.
+- [x] **Live Ecosystem Parity**: Verified end-to-end against live NVIDIA Nemotron NIM endpoints across Python (`test_nemotron_bridge_live.py`, `test_mango_mas_live.py`) and Node TypeScript (`vitest run tests/ai/e2e/nemotron-live.test.ts`).
+
 ### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
 
 - [x] **Critique Normalization (`AC-NS-3`)**: Implemented normalization in `tool_result_format.py` for sandbox violations (`network_access_denied`, capability constraints) into structured critiques with backwards-compatible error handling.
