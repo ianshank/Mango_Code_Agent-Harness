@@ -13,7 +13,7 @@
     "prepare": "bash scripts/install_hooks.sh"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "26.4.0",
     "@vitest/coverage-v8": "4.1.11",
     "eslint": "10.9.0",
     "knip": "6.32.2",
