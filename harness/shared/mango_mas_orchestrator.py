@@ -203,6 +203,11 @@ class MangoMASOrchestrator:
         """Dynamically loads the agent instructions from the .mango directory."""
         agent_file = self.agents_dir / f"{agent_name}.md"
         if not agent_file.exists():
+            # Fallback to repo root .mango/agents when running in temporary or scratch workspaces
+            repo_agents_dir = Path(__file__).resolve().parent.parent.parent / ".mango" / "agents"
+            fallback_file = repo_agents_dir / f"{agent_name}.md"
+            if fallback_file.exists():
+                return fallback_file.read_text(encoding="utf-8")
             raise FileNotFoundError(f"Agent definition not found: {agent_file}")
         return agent_file.read_text(encoding="utf-8")
 

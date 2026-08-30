@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from nemotron_bridge import complete_chat, mask_secret, resolve_api_key
 
-API_KEY = os.environ.get("NVIDIA_API_KEY", "")
-IS_LIVE = len(API_KEY) > 0
+API_KEY = resolve_api_key()
+IS_LIVE = bool(API_KEY)
 SMOKE_MAX_TOKENS = 50
 
 

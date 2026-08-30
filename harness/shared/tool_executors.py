@@ -67,6 +67,12 @@ def _slice_bounds_denial(start_line: int | None, end_line: int | None) -> str | 
     return None
 
 
+def _write_preserving_newlines(target_path: Path, content: str) -> None:
+    """Write text without translating line endings."""
+    with open(target_path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(content)
+
+
 def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
     """Local tool implementation to write a file with workspace confinement & write policy.
 
@@ -86,7 +92,7 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
 
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(content, encoding="utf-8")
+        _write_preserving_newlines(target_path, content)
         return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
     except Exception as e:
         logger.exception("Failed writing %s", filepath)

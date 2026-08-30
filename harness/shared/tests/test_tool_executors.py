@@ -22,17 +22,17 @@ class TestReadFile:
     def test_reads_the_whole_file_verbatim(self, mock_workspace: Path) -> None:
         """No header on a full read: the result has to be pasteable into
         apply_patch's old_text without editing (R-RPT-1)."""
-        (mock_workspace / "sample.py").write_text("alpha\nbeta\n", encoding="utf-8")
+        (mock_workspace / "sample.py").write_bytes(b"alpha\nbeta\n")
         assert execute_read_file(mock_workspace, "sample.py") == "alpha\nbeta\n"
 
     def test_reads_a_line_range(self, mock_workspace: Path) -> None:
-        (mock_workspace / "sample.py").write_text("a\nb\nc\nd\n", encoding="utf-8")
+        (mock_workspace / "sample.py").write_bytes(b"a\nb\nc\nd\n")
         result = execute_read_file(mock_workspace, "sample.py", 2, 3)
         assert result.splitlines()[0] == "# sample.py lines 2-3 of 4"
         assert result.endswith("b\nc\n")
 
     def test_an_open_ended_range_runs_to_the_end(self, mock_workspace: Path) -> None:
-        (mock_workspace / "sample.py").write_text("a\nb\nc\n", encoding="utf-8")
+        (mock_workspace / "sample.py").write_bytes(b"a\nb\nc\n")
         assert execute_read_file(mock_workspace, "sample.py", 2).endswith("b\nc\n")
 
     def test_a_sliced_read_keeps_crlf(self, mock_workspace: Path) -> None:
@@ -44,7 +44,7 @@ class TestReadFile:
         length, but the header used to echo the raw, un-clamped request --
         `# f lines 100-200 of 3` for a 3-line file, describing a range that was
         never returned. The header must report what the slice actually did."""
-        (mock_workspace / "small.txt").write_text("a\nb\nc\n", encoding="utf-8")
+        (mock_workspace / "small.txt").write_bytes(b"a\nb\nc\n")
         result = execute_read_file(mock_workspace, "small.txt", 100, 200)
         assert result.splitlines()[0] == "# small.txt lines 100-3 of 3"
 
@@ -56,7 +56,7 @@ class TestReadFile:
         DEFAULT_MAX_OUTPUT_BYTES by the header's own length. The header must be
         inside the capped budget, not added on top of it."""
         big_line = "y" * (DEFAULT_MAX_OUTPUT_BYTES + 100)
-        (mock_workspace / "ranged.txt").write_text(f"{big_line}\nz\n", encoding="utf-8")
+        (mock_workspace / "ranged.txt").write_bytes(f"{big_line}\nz\n".encode("utf-8"))
         result = execute_read_file(mock_workspace, "ranged.txt", 1, 2)
         # `_cap` itself appends a `[truncated at N bytes]` marker on top of the
         # limit -- the same accepted overhead `run_command` output already

@@ -17,11 +17,12 @@ class TestMangoMASLive:
     Requires NVIDIA_API_KEY to hit the Nemotron API.
     """
 
-    def test_mango_mas_sequential_thinking_e2e(self, tmp_path):
+    def test_mango_mas_sequential_thinking_e2e(self, tmp_path, monkeypatch):
         """
         Tests the full loop of planner -> reasoner -> verifier
         by generating a simple Python function and ensuring it is created dynamically without hallucination.
         """
+        monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
         # Find the root of the project to locate the .mango directory
         # Harness_TEST / harness / shared / tests / ...
         project_root = Path(__file__).resolve().parent.parent.parent.parent
