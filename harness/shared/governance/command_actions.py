@@ -291,11 +291,12 @@ def write_targets(command: str) -> list[str]:
         return []
 
     targets: list[str] = []
+    discard_targets = {"/dev/null", "nul", "NUL", "/dev/zero", "/dev/stdout", "/dev/stderr"}
     pending_redirect = False
     for token in argv:
         if pending_redirect:
             # `2>&1` and `>&2` duplicate a descriptor rather than naming a file.
-            if not token.startswith("&"):
+            if not token.startswith("&") and token not in discard_targets:
                 targets.append(token)
             pending_redirect = False
             continue
@@ -311,7 +312,7 @@ def write_targets(command: str) -> list[str]:
         if match is not None:
             # `>file` written without a space, or `2>file`.
             tail = token[match.end():]
-            if tail and not tail.startswith("&"):
+            if tail and not tail.startswith("&") and tail not in discard_targets:
                 targets.append(tail)
 
     program = argv[0].rsplit("/", 1)[-1] if argv else ""

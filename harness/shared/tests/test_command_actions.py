@@ -172,6 +172,9 @@ class TestEveryRedirectSpellingIsAWrite:
             pytest.param("echo hi >&2", id="stdout-to-stderr"),
             pytest.param("ls -la 2>&1", id="with-flags"),
             pytest.param("echo hi 2>&-", id="close-descriptor"),
+            pytest.param("python -c 'print(1)' > /dev/null", id="stdout-to-devnull"),
+            pytest.param("python -c 'print(1)' 2>/dev/null", id="stderr-to-devnull"),
+            pytest.param("python -c 'print(1)' > nul", id="stdout-to-nul"),
         ],
     )
     def test_descriptor_duplication_is_not_a_file_write(self, command: str) -> None:
