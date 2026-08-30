@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
-## [Unreleased]
+### Added — Neuro-Symbolic Sandbox Synthesis & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+
+- **Critique Normalization (`harness/shared/tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` JSON payloads emitted by `ProcessBackend` / `ExecutionBroker` on capability violations (e.g. `network_access_denied` under `network-isolated`) and transforms them into standardized structured critiques. Preserves strict backward compatibility for policy guard denials.
+- **E2E Sandbox Synthesis Tests (`harness/shared/tests/test_neurosym_sandbox_e2e.py`)**: Multi-turn synthesis and repair tests verifying invariant `INV-9` (fail-closed sandbox fallback), `AC-CE-1` (capability profile violation trapping), and `AC-NS-3` (critique-guided multi-file app synthesis and repair).
+- **Regression Suite Expansion (`harness/shared/tests/regression/test_sandbox_violation_regression.py`)**: Dedicated AQA regression tests verifying critique serialization and schema conformance.
+- **Performance & Invariant Scanning Optimization (`harness/shared/validate_invariants.py`)**: Migrated `_first_party_py_files` traversal to pruned `os.walk` to eliminate performance bottlenecks over large directory trees.
 
 ### Refactored — the last open god-file requirement (`R-GFD-4`)
 
@@ -102,7 +107,6 @@ deliberately excluded; `0.0` and `None` are both meaningful values there. Fixed 
 tool handlers in `_tool_handlers`, not only the two new ones — found by testing `read_file`
 and `apply_patch`, but the vulnerable `.get(key, "")` idiom was shared by every handler in
 the dict.
-
 
 ### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
 

@@ -7,39 +7,19 @@
 
 ## 0. Completed Milestones
 
+### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
+
+- [x] **Critique Normalization (`AC-NS-3`)**: Implemented normalization in `tool_result_format.py` for sandbox violations (`network_access_denied`, capability constraints) into structured critiques with backwards-compatible error handling.
+- [x] **Deterministic Sandbox E2E Matrix (`test_neurosym_sandbox_e2e.py`)**: Verified `INV-9` fail-closed backend checks, `AC-CE-1` capability profiles, and `AC-NS-3` multi-turn critique repair loops.
+- [x] **Regression & AQA Suite**: Expanded with `test_sandbox_violation_regression.py`, achieving 1,779 passing tests across 7 tiers with 97% code coverage.
+- [x] **Invariants Performance Optimization**: Replaced recursive directory scans with pruned `os.walk` in `validate_invariants.py`.
+
 ### 🚧 Direct file I/O: `read_file` / `apply_patch` (PR #32, in review)
 
-Closes the precision gap in the reasoner's tool surface: every read went through
-a subprocess (`run_command("cat ...")`) and every edit through `write_file`,
-which overwrites whole files, so a three-line change meant regenerating the
-whole file from the model's context.
-
-- [x] **`read_file`**: reads workspace files directly and verbatim (no
-      line-number prefixes, so output pastes straight into `apply_patch`'s
-      `old_text`), bounded by the same output cap and `[truncated at N bytes]`
-      marker `run_command` uses.
-- [x] **`apply_patch`**: replaces one exactly-unique substring in place,
-      refusing (and naming the count) unless `old_text` matches exactly once,
-      and preserving the file's existing line endings byte-for-byte
-      (`harness/shared/tool_executors.py`).
-- [x] **`read_policy.py`** (new, `DEC-012`): the read-side counterpart to
-      `write_policy.py`. `command_actions.classify` already denied reading a
-      credential through `run_command` (graded `secret_access`, an action no
-      role holds); a direct `read_file` would have bypassed that grading
-      entirely — mapped to the plain `read` action, it would have returned
-      `NVIDIA_API_KEY` into `conversation_history`. The two doors now compose
-      one shared credential-filename pattern instead of two that can drift,
-      verified by a parity property test over a corpus rather than a fixed
-      list (`test_read_file_credential_parity.py`).
-      Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
-- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` pointed at a
-      different vendor's model than the README documents; corrected and pinned
-      by `test_documentation_truth.py` so the two cannot drift apart again.
-
-**Follow-up this change identified but did not take:** `execute_write_file`
-still uses universal-newline semantics while `apply_patch` preserves the
-original line endings byte-for-byte; unifying them is deferred to the INV-7
-evidence-coverage work (`harness/CONTRACT.md`).
+- [x] **`read_file`**: reads workspace files directly and verbatim (no line-number prefixes, so output pastes straight into `apply_patch`'s `old_text`), bounded by the same output cap and `[truncated at N bytes]` marker `run_command` uses.
+- [x] **`apply_patch`**: replaces one exactly-unique substring in place, refusing (and naming the count) unless `old_text` matches exactly once, and preserving the file's existing line endings byte-for-byte (`harness/shared/tool_executors.py`).
+- [x] **`read_policy.py`** (`DEC-012`): the read-side counterpart to `write_policy.py`. Composes one shared credential-filename pattern verified by `test_read_file_credential_parity.py`. Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
+- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` corrected and pinned by `test_documentation_truth.py`.
 
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 

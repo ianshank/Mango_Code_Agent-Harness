@@ -158,10 +158,13 @@ def check_protected_paths(workspace_dir: Path, protected_patterns: list[str]) ->
 
 def _first_party_py_files(workspace_dir: Path):
     """Yield first-party Python files, skipping vendored and cache directories."""
-    for py_file in workspace_dir.rglob("*.py"):
-        if SKIP_DIR_PARTS & set(py_file.parts):
-            continue
-        yield py_file
+    for root, dirs, files in os.walk(workspace_dir):
+        # Prune skipped directories in-place so os.walk doesn't traverse them
+        dirs[:] = [d for d in dirs if d not in SKIP_DIR_PARTS]
+
+        for file in files:
+            if file.endswith(".py"):
+                yield Path(root) / file
 
 
 def check_hardcoded_secrets(workspace_dir: Path) -> bool:
