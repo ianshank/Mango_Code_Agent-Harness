@@ -37,6 +37,12 @@ def read_json_object(path: Path) -> JsonObjectResult:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return JsonObjectResult(error="not_found", detail=str(path))
+    except UnicodeDecodeError as e:
+        # Not an OSError -- decoding happens after the read succeeds -- and it is a
+        # ValueError subclass, same family as the json.loads() failures below, so it
+        # is classified the same way: a present, readable file that is not valid
+        # policy content.
+        return JsonObjectResult(error="malformed", detail=str(e))
     except OSError as e:
         return JsonObjectResult(error="unreadable", detail=str(e))
     try:

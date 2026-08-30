@@ -223,9 +223,21 @@ class ExecutionBroker:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load `path` as a JSON object, preserving the exception types this module
+    raised before it adopted the shared classifier (R-DH-5): FileNotFoundError for
+    a missing file, OSError for one that exists but cannot be read, ValueError for
+    one that is present and readable but not valid JSON or not an object. The
+    caller catches `Exception` broadly regardless, but the type is still part of
+    this function's contract -- collapsing everything to one ValueError is exactly
+    the kind of drift `governance_json` is supposed to prevent, not introduce.
+    """
     result = read_json_object(path)
-    if result.error is not None:
-        raise ValueError(f"{path}: {result.detail}")
+    if result.error == "not_found":
+        raise FileNotFoundError(result.detail)
+    if result.error == "unreadable":
+        raise OSError(result.detail)
+    if result.error == "malformed":
+        raise ValueError(result.detail)
     assert result.value is not None
     return result.value
 

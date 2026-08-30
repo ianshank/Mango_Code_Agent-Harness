@@ -169,6 +169,11 @@ jobs:
   # which GitHub never executes (see the `secrets` job's comment, above). Separate
   # from `build`/`build-full` because, like `secrets`, it is interpreter-independent
   # -- running it on every Python matrix leg would repeat identical work.
+  #
+  # This leg also carries the Node delegation (osv-scanner), so it stays single-run
+  # rather than joining the `audit-matrix` job below. `pip-audit` itself is pinned
+  # via `make audit-install-python` (PIP_AUDIT_VERSION in the root Makefile) so this
+  # gate cannot change or break on an unreviewed upstream release.
   audit:
     name: dependency-audit
     runs-on: ubuntu-latest
@@ -184,7 +189,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
 
       - name: Install pip-audit
-        run: python -m pip install --upgrade pip pip-audit
+        run: make audit-install-python
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -196,3 +201,32 @@ jobs:
 
       - name: Run dependency audit gate (make audit)
         run: PATH="$(go env GOPATH)/bin:$PATH" make audit
+
+  # `pip-audit` resolves dependency markers, `Requires-Python` and transitive
+  # constraints under the interpreter that runs it. The `audit` job above only ever
+  # resolves under 3.11, so a vulnerability that surfaces only under a transitive
+  # dependency selected on 3.9, 3.10 or 3.12 would never be caught. Matrixed like
+  # `build`; Python-only, since the Node delegation already runs once, in `audit`.
+  audit-matrix:
+    name: dependency-audit (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install pip-audit
+        run: make audit-install-python
+
+      - name: Run dependency audit gate (make audit-python)
+        run: make audit-python

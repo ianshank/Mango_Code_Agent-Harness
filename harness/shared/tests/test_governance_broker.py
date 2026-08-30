@@ -27,6 +27,7 @@ from harness.shared.governance.broker import (
     ExecutionResult,
     ProcessBackend,
     _cap,
+    _load_json,
 )
 from harness.shared.tests.conftest import POSIX_ONLY
 
@@ -173,6 +174,45 @@ def test_a_policy_declaring_no_agents_denies(tmp_path: Path) -> None:
     result = ExecutionBroker(backend=RecordingBackend(), agent_policy_path=thin).execute_command("echo hi", IMPLEMENTER)
     assert result.status == "BLOCKED"
     assert "declares no agents" in result.reason
+
+
+class TestLoadJsonPreservesItsPreRefactorExceptionTypes:
+    """R-DH-5: `_load_json` adopted the shared, non-raising `governance_json`
+    classifier, but each caller must keep raising its own existing exception
+    type. `execute_command` catches `Exception` broadly either way, so this is
+    invisible at the `ExecutionBroker` level -- exactly why it needs its own
+    direct coverage rather than relying on the BLOCKED-result tests above.
+    """
+
+    def test_a_missing_file_raises_file_not_found_error(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            _load_json(tmp_path / "absent.json")
+
+    def test_an_unreadable_path_raises_os_error(self, tmp_path: Path) -> None:
+        """A directory is a portable non-FileNotFoundError OSError: unlike a
+        chmod'd file, IsADirectoryError fires the same way whether or not the
+        caller happens to be running as root."""
+        target = tmp_path / "a_directory"
+        target.mkdir()
+        with pytest.raises(OSError):
+            _load_json(target)
+
+    def test_malformed_json_raises_value_error(self, tmp_path: Path) -> None:
+        target = tmp_path / "broken.json"
+        target.write_text("{not json", encoding="utf-8")
+        with pytest.raises(ValueError):
+            _load_json(target)
+
+    def test_a_non_object_json_document_raises_value_error(self, tmp_path: Path) -> None:
+        target = tmp_path / "array.json"
+        target.write_text("[1, 2, 3]", encoding="utf-8")
+        with pytest.raises(ValueError):
+            _load_json(target)
+
+    def test_a_valid_object_loads(self, tmp_path: Path) -> None:
+        target = tmp_path / "policy.json"
+        target.write_text('{"a": 1}', encoding="utf-8")
+        assert _load_json(target) == {"a": 1}
 
 
 # ---------------------------------------------------------------------------

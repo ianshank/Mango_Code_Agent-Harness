@@ -49,6 +49,24 @@ def test_unreadable_path_is_classified_unreadable_not_not_found(tmp_path: Path) 
     assert result.detail
 
 
+def test_invalid_utf8_bytes_are_classified_malformed_not_raised(tmp_path: Path) -> None:
+    """UnicodeDecodeError surfaces from `read_text()`, before `json.loads()` ever
+    runs, and it is not an OSError -- a naive `except OSError` around the read
+    would let it escape uncaught, breaking this function's own "never raises"
+    contract. It is a ValueError subclass, the same family as a JSON syntax
+    error, so it is classified the same way check_dedup treated it before this
+    module existed: a present, readable file that is not valid policy content.
+    """
+    target = tmp_path / "bad_encoding.json"
+    target.write_bytes(b"\xff\xfe{not valid utf-8")
+
+    result = gj.read_json_object(target)
+
+    assert result.error == "malformed"
+    assert result.value is None
+    assert result.detail
+
+
 def test_invalid_json_syntax_is_classified_malformed(tmp_path: Path) -> None:
     target = tmp_path / "broken.json"
     target.write_text("{not json", encoding="utf-8")

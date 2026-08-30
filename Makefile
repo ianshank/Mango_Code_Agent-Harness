@@ -21,6 +21,10 @@ PM       ?= pnpm
 GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
 GITLEAKS_VERSION ?= v8.28.0
+# Pinned so the audit gate cannot change or break on an unreviewed upstream
+# release; CI installs this exact version via `audit-install`, never `--upgrade`
+# with no pin. Mirrors GITLEAKS_VERSION/OSV_VERSION (harness/node/Makefile).
+PIP_AUDIT_VERSION ?= 2.10.1
 # Coverage thresholds are sourced from the governance policy (single source of
 # truth) and applied by coverage_gate.py as TWO separate numbers: coverage.lines
 # against line coverage and coverage.branches against branch coverage. With
@@ -133,18 +137,31 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 
 # --- Dependency Vulnerability Scan ---
 # Kept out of `ci`/`ci-python` deliberately, mirroring `secrets`: interpreter-independent,
-# so running it on every Python matrix leg would repeat identical work. A dedicated
-# workflow job runs it once (see the `audit` job in .github/workflows/python-package.yml).
-.PHONY: audit
-audit: ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner
+# so running it on every Python matrix leg would repeat identical work. Dedicated
+# workflow jobs run it instead (see the `audit`/`audit-matrix` jobs in
+# .github/workflows/python-package.yml).
+#
+# Split from `audit` so CI can resolve dependency markers and transitive constraints
+# under each supported interpreter (3.9/3.10/3.12), not only the one `audit`
+# happens to run on: `pip-audit`'s resolution is interpreter-specific, so a
+# single-version scan can miss a vulnerability that only a differently-pinned
+# transitive dependency under another supported version would pull in.
+.PHONY: audit-python
+audit-python: ## Dependency vulnerability scan for the Python interpreter running this invocation
 	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
 	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
 	pip-audit --requirement requirements.txt
+
+.PHONY: audit
+audit: audit-python ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner
 	$(MAKE) -C $(NODE_DIR) audit
 
+.PHONY: audit-install-python
+audit-install-python: ## Install the pinned pip-audit used by the audit gate
+	python -m pip install --upgrade "pip-audit==$(PIP_AUDIT_VERSION)"
+
 .PHONY: audit-install
-audit-install: ## Install pip-audit and the Node stack's pinned osv-scanner
-	python -m pip install --upgrade pip-audit
+audit-install: audit-install-python ## Install pip-audit and the Node stack's pinned osv-scanner
 	$(MAKE) -C $(NODE_DIR) audit-install
 
 # --- Remote Allowlist Gate ---
@@ -217,7 +234,7 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "6. For protected-path changes, run the 'protected-path-attestation' skill and paste the block into the PR."
 
 .PHONY: pre-pr
-pre-pr: ci review lint-cold audit ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck + dependency audit)
+pre-pr: ci review lint-cold audit secrets ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck + dependency audit + secret scan)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts
