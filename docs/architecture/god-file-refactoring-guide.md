@@ -58,12 +58,19 @@ The orchestrator previously mixed prompt templates, tool argument coercion, file
 | Subprocess Execution & Stream Capping | `harness/shared/governance/process_backend.py` | `ProcessBackend`, `ExecutionResult`, `_cap` |
 | Policy Decision & Sandboxed Broker | `harness/shared/governance/broker.py` | `ExecutionBroker`, `verify_sandbox`, `execute_command` |
 
-### 2.3 `harness/shared/check_py_compat.py` (338 Lines -> ~200 Lines)
+### 2.3 `harness/shared/check_py_compat.py` (338 Lines -> 283 Lines) — Done
 
 | Responsibility | Extracted Target Module | Key Symbols |
 | :--- | :--- | :--- |
-| Pure AST Syntax Inspection | `harness/shared/ast_visitors.py` | `has_future_annotations`, `find_pep604`, `find_datetime_utc`, `find_pep604_assignments` |
-| CLI Runner & Report Generation | `harness/shared/check_py_compat.py` | `run`, `build_parser`, `main`, `CompatReport` |
+| Pure AST Syntax Inspection | `harness/shared/ast_visitors.py` (120 lines) | `has_future_annotations`, `find_pep604`, `find_datetime_utc`, `find_pep604_assignments`, `COMMON_TYPE_NAMES` |
+| CLI Runner & Report Generation | `harness/shared/check_py_compat.py` (283 lines) | `run`, `build_parser`, `main`, `CompatReport`, `resolve_min_version`, `load_skip_dirs` |
+
+`ast_visitors.py` has zero internal imports (stdlib `ast` only), matching the
+zero-circular-dependency requirement in §4.2 below. Every extracted symbol is
+re-exported from `check_py_compat.py` via `from harness.shared.ast_visitors
+import X as X`, so `test_check_py_compat.py` (which imports these through the
+`cc` alias) required no changes; `test_ast_visitors.py` adds direct unit
+coverage of the extracted module.
 
 ---
 

@@ -88,7 +88,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (1,687 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (1,986 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
