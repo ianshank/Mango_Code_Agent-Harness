@@ -1,6 +1,6 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.2.0  
+**Version:** 2.1.9  
 **Status:** In Progress / Strategic Roadmap
 
 ---
@@ -147,8 +147,9 @@ round-trip.
       target but no root wiring.
 - [x] **INV-5 is now enforced by `test_ci_gate_coverage.py`**: every
       `ci_required_targets` entry must map to a root target CI actually invokes, or
-      be a declared gap with a reason. `audit` (osv-scanner) is the single declared
-      gap. 12/12 mutants killed.
+      be a declared gap with a reason. `specs` (the strict/openspec tier) is the
+      single remaining declared gap; `audit` closed via a dedicated CI job
+      (DEC-013). 12/12 mutants killed.
 - [x] Documentation corrected where it contradicted the contract: the pre-PR
       reference misnumbered INV-5 and INV-7, and two hard-coded 80% coverage
       thresholds contradicted the policy value of 90.
@@ -165,9 +166,16 @@ round-trip.
       which names a `build (3.11)` that does not exist: a ruleset configured
       from that sentence would require a check GitHub never reports — blocking
       every merge — while omitting the one leg that runs the Node gates.
-- [ ] **`audit` (dependency vulnerability scanning) is still unenforced at root.**
-      Declared in `KNOWN_GAPS`; wiring osv-scanner adds a toolchain dependency and
-      can turn CI red on a pre-existing advisory, so it needs its own change.
+- [x] **`audit` (dependency vulnerability scanning) is now enforced at root**
+      (DEC-013): `make audit` runs `pip-audit` against `requirements.txt` and
+      delegates to the Node stack's existing `osv-scanner` target, enforced by
+      a dedicated `audit` CI job (mirroring `secrets`, kept out of the
+      per-matrix-leg `ci`/`ci-python` run since it's interpreter-independent).
+- [ ] **Wire `lint-node` into `ci`** once the `typescript` 7.0.2 /
+      `typescript-eslint` 8.67.0 incompatibility breaking `make lint-node` is
+      resolved (bump `typescript-eslint` or pin `typescript` back to a
+      supported 6.x release, then re-verify the whole Node suite). Tracked in
+      `docs/specs/ci-enforcement-gaps.md`'s Open questions (DEC-013).
 - [x] **Three more gates failed open, and one gate module was left unprotected.**
       `size_budget_lines`, `check_dedup.load_config` and
       `check_py_compat.load_skip_dirs` all degraded to their built-in defaults on

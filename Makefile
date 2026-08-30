@@ -21,6 +21,14 @@ PM       ?= pnpm
 GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
 GITLEAKS_VERSION ?= v8.28.0
+# Pinned so the audit gate cannot change or break on an unreviewed upstream
+# release; CI installs this exact version via `audit-install`, never `--upgrade`
+# with no pin. Mirrors GITLEAKS_VERSION/OSV_VERSION (harness/node/Makefile).
+# Capped at 2.9.0, not the newer 2.10.x: pip-audit 2.10.0 raised its own floor to
+# Requires-Python >=3.10, which cannot install at all on the 3.9 leg of the
+# `audit-matrix` job below -- confirmed by that job's first real CI run. 2.9.0 is
+# the newest release still declaring >=3.9, matching this project's own floor.
+PIP_AUDIT_VERSION ?= 2.9.0
 # Coverage thresholds are sourced from the governance policy (single source of
 # truth) and applied by coverage_gate.py as TWO separate numbers: coverage.lines
 # against line coverage and coverage.branches against branch coverage. With
@@ -39,6 +47,11 @@ NODE_DIR     := harness/node
 .PHONY: help
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+# --- Install ---
+.PHONY: install
+install: ## Install the pre-push remote-allowlist hook (a root-only workflow otherwise never gets it)
+	bash harness/shared/install_hooks.sh
 
 # --- Linting & Static Analysis ---
 # harness/control-plane is hyphenated (not an importable package) but mypy
@@ -120,11 +133,40 @@ secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if g
 	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
 	@test -f .gitleaks.toml || { echo '.gitleaks.toml missing; failing closed'; exit 1; }
 	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
-	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner
+	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner --log-opts="HEAD"
 
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
+
+# --- Dependency Vulnerability Scan ---
+# Kept out of `ci`/`ci-python` deliberately, mirroring `secrets`: interpreter-independent,
+# so running it on every Python matrix leg would repeat identical work. Dedicated
+# workflow jobs run it instead (see the `audit`/`audit-matrix` jobs in
+# .github/workflows/python-package.yml).
+#
+# Split from `audit` so CI can resolve dependency markers and transitive constraints
+# under each supported interpreter (3.9/3.10/3.12), not only the one `audit`
+# happens to run on: `pip-audit`'s resolution is interpreter-specific, so a
+# single-version scan can miss a vulnerability that only a differently-pinned
+# transitive dependency under another supported version would pull in.
+.PHONY: audit-python
+audit-python: ## Dependency vulnerability scan for the Python interpreter running this invocation
+	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
+	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
+	pip-audit --requirement requirements.txt
+
+.PHONY: audit
+audit: audit-python ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner
+	$(MAKE) -C $(NODE_DIR) audit
+
+.PHONY: audit-install-python
+audit-install-python: ## Install the pinned pip-audit used by the audit gate
+	python -m pip install --upgrade "pip-audit==$(PIP_AUDIT_VERSION)"
+
+.PHONY: audit-install
+audit-install: audit-install-python ## Install pip-audit and the Node stack's pinned osv-scanner
+	$(MAKE) -C $(NODE_DIR) audit-install
 
 # --- Remote Allowlist Gate ---
 .PHONY: remotes
@@ -196,7 +238,7 @@ review: validate ## Mechanical pre-PR review gate (invariants + governance valid
 	@echo "6. For protected-path changes, run the 'protected-path-attestation' skill and paste the block into the PR."
 
 .PHONY: pre-pr
-pre-pr: ci review lint-cold ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck)
+pre-pr: ci review lint-cold audit secrets ## Pre-PR validation gate (full CI + mechanical review checklist + cold typecheck + dependency audit + secret scan)
 
 .PHONY: clean
 clean: ## Remove build/test artifacts

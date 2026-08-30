@@ -50,6 +50,7 @@ GATE_TO_ROOT_TARGET = {
     "traceability": "validate",  # validate runs governance/check_traceability.py
     "governance": "validate",  # validate runs the governance validator set
     "secrets": "secrets",  # dedicated workflow job; see INV-1 note above
+    "audit": "audit",  # dedicated workflow job; see the `audit` job in python-package.yml
 }
 
 # What each gate's recipe must still *do*. Reachability only proves the target
@@ -65,6 +66,7 @@ GATE_TO_EVIDENCE = {
     "traceability": r"check_traceability",
     "governance": r"validate_invariants\.py",
     "secrets": r"\$\(GITLEAKS\)|gitleaks",
+    "audit": r"pip-audit",
 }
 
 # Stages that must remain direct prerequisites of `ci`. Checked against `ci`'s own
@@ -82,15 +84,7 @@ REQUIRED_CI_STAGES = {
 
 # Gates with no root equivalent. Each needs a reason; adding an entry here is a
 # deliberate, reviewable statement that the root pipeline does not run this gate.
-KNOWN_GAPS = {
-    "audit": (
-        "Dependency vulnerability scanning (osv-scanner) runs only in the per-stack "
-        "CI workflows, which install it via `go install`. Wiring it into the root "
-        "pipeline adds an external toolchain dependency and can turn CI red on a "
-        "pre-existing advisory, so it is a deliberate follow-up rather than a "
-        "silent omission."
-    ),
-}
+KNOWN_GAPS: dict[str, str] = {}
 
 # Root mechanisms that satisfy a gate only partially. Documented rather than
 # asserted away, so the weaker coverage stays visible to a reviewer.
@@ -501,6 +495,30 @@ class TestRootPipelineShape:
             assert not guards, (
                 f"job '{job}' gates the secret scan behind conditional(s) {guards}; "
                 "INV-1 must run unconditionally on every triggering event"
+            )
+
+    def test_audit_gate_is_invoked_unconditionally(self) -> None:
+        """Mirrors the secret-scan check above: GATE_TO_ROOT_TARGET only proves some
+        workflow contains a `make audit` command, not that it always runs. A job- or
+        step-level `if:` guard (e.g. `if: github.event_name == 'push'`) would leave
+        this gate green while skipping every pull request's dependency audit."""
+        auditing = [
+            (job, block)
+            for text in _root_workflow_texts()
+            for job, block in _workflow_jobs(text).items()
+            if re.search(r"\bmake\s+audit\b(?!-)", _workflow_run_commands(block))
+        ]
+        assert auditing, (
+            "no root workflow job invokes `make audit`; the dependency-audit gate "
+            "would have no live enforcement"
+        )
+        for job, block in auditing:
+            # Same conditional-guard check as the secret scan: the invocation
+            # remaining in the file proves nothing if a guard can skip the job.
+            guards = re.findall(r"^\s*(?:-\s+)?if:\s*(.+)$", block, re.M)
+            assert not guards, (
+                f"job '{job}' gates the dependency audit behind conditional(s) "
+                f"{guards}; it must run unconditionally on every triggering event"
             )
 
     @pytest.mark.parametrize("stage", sorted(REQUIRED_CI_STAGES))

@@ -7,6 +7,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup
+
+Paired specs: `docs/specs/dependency-hygiene.md` and `docs/specs/ci-enforcement-gaps.md` (DEC-013).
+
+Dependency vulnerability scanning now runs at root, closing the
+`KNOWN_GAPS["audit"]` exception `test_ci_gate_coverage.py` had carried: a new
+`make audit` (`pip-audit` against a new `requirements.txt`, delegated to the
+Node stack's existing `osv-scanner` via `make -C harness/node audit`) and
+`make audit-install`, enforced by a dedicated `audit` job in
+`.github/workflows/python-package.yml` (mirroring how `secrets` runs outside
+`ci` rather than duplicated across matrix legs) and now a `pre-pr`
+prerequisite. `requirements.txt` splits the API server's runtime
+dependencies (fastapi, uvicorn, pydantic, httpx) out of
+`requirements-dev.txt`, which keeps installing both via a
+`-r requirements.txt` include; `pyproject.toml` gains a mirrored
+`[project.dependencies]`; `.github/dependabot.yml` covers the `pip` and
+`npm` ecosystems. `governance/broker.py`'s and `check_dedup.py`'s
+JSON-parsing consolidates into `harness/shared/governance_json.py`, a
+non-raising classifier — each caller still raises its own existing
+exception type and message.
+
+Also: `harness/__init__.py` and `harness/api_server/__init__.py`, for the
+two packages genuinely imported as `harness.x.y` (matching
+`harness/shared/__init__.py`'s existing convention); a root `install`
+target (`harness/shared/install_hooks.sh`) so a clone using only the root
+Makefile still gets the pre-push hook; header comments on
+`harness/node/.github/workflows/ci.yml` and
+`harness/jvm/.github/workflows/ci.yml` identifying them as reference
+templates GitHub never executes; the version string unified to `2.1.9`
+across `README.md`, `docs/architecture/c4_architecture.md`, and
+`NEXT_STEPS.md`. `harness/jvm/` is now explicitly labeled in `README.md`
+and `harness/CONTRACT.md` as an unadopted reference template.
+
+**Self-corrected mid-review:** an initial research pass reported 3 live
+`ruff` findings and this batch briefly "fixed" them, which turned CI red
+with the opposite verdict on the same two files. Root cause: this
+development environment has a bare `ruff` on `PATH` resolving to a newer,
+unpinned version, while `python -m ruff` — what `make lint` and CI's
+`pip install -r requirements-dev.txt` both actually resolve to — is the
+pinned `0.6.9`, and the two versions disagree on `E402` and `RUF100`/`BLE001`
+for this exact code shape. `main` was already clean under the pinned
+version; neither file is touched here. The same false signal briefly caused
+`harness/__init__.py`/`harness/api_server/__init__.py` to be reverted before
+being restored once re-verified with the correct binary. Lesson recorded in
+`docs/specs/ci-enforcement-gaps.md`: always verify with `make <target>` or
+`python -m ruff`/`python -m mypy`, never a bare invocation.
+
+**Tried and reverted, unrelated to the above:** wiring `lint-node` into
+`ci` — `make lint-node` currently crashes on a pre-existing
+`typescript`/`typescript-eslint` version incompatibility in
+`harness/node/package.json`, tracked as a follow-up in
+`docs/specs/ci-enforcement-gaps.md`'s Open questions.
+
+### Fixed — `make secrets` scanned every branch in the clone, not just the current one
+
+Discovered when this PR's own `secret-scan` job failed CI despite a clean
+local `make secrets`: all three `secrets` targets (root, `harness/node`,
+`harness/jvm`) ran `gitleaks git` with no `--log-opts`, scanning every ref
+in the local clone rather than the checked-out branch's own history. A
+real leaked key on an unrelated, concurrently pushed branch
+(`feature/governed-run-console`, untouched by this PR) was failing CI for
+a reason no PR author could act on. Fixed with `--log-opts="HEAD"` on all
+three targets, confirmed with a from-scratch clone (141 commits scanned,
+clean, vs. 144 and one leak without the fix). DEC-014.
+
+Spec: `docs/specs/dependency-hygiene.md`, `docs/specs/ci-enforcement-gaps.md`.
+
 ### Refactored — the last open god-file requirement (`R-GFD-4`)
 
 `docs/specs/god-file-decomposition.md` shipped across PRs #28-#32 with seven of
