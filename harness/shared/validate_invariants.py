@@ -161,7 +161,7 @@ def _first_party_py_files(workspace_dir: Path):
     for root, dirs, files in os.walk(workspace_dir):
         # Prune skipped directories in-place so os.walk doesn't traverse them
         dirs[:] = [d for d in dirs if d not in SKIP_DIR_PARTS]
-        
+
         for file in files:
             if file.endswith(".py"):
                 yield Path(root) / file

@@ -7,6 +7,13 @@
 
 ## 0. Completed Milestones
 
+### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
+
+- [x] **Critique Normalization (`AC-NS-3`)**: Implemented normalization in `tool_result_format.py` for sandbox violations (`network_access_denied`, capability constraints) into structured critiques with backwards-compatible error handling.
+- [x] **Deterministic Sandbox E2E Matrix (`test_neurosym_sandbox_e2e.py`)**: Verified `INV-9` fail-closed backend checks, `AC-CE-1` capability profiles, and `AC-NS-3` multi-turn critique repair loops.
+- [x] **Regression & AQA Suite**: Expanded with `test_sandbox_violation_regression.py`, achieving 1,779 passing tests across 7 tiers with 97% code coverage.
+- [x] **Invariants Performance Optimization**: Replaced recursive directory scans with pruned `os.walk` in `validate_invariants.py`.
+
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 
 - [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`).

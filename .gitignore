@@ -47,5 +47,11 @@ harness/node/test-*/
 # machine-readable coverage report consumed by coverage_gate.py (regenerated per run)
 coverage.json
 
+# Test execution memory and history dumps
+*_history.json
+*_history_pretty.json
+*_loop_dump.json
+weather_cli/
+
 # IDE agent workspace customizations
 .agents/

@@ -181,3 +181,10 @@ classDiagram
 
 - All environment variables matching credential patterns (`NVIDIA_API_KEY`, `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`) are stripped before passing to brokered child processes.
 - Memory dumps generated for debugging (`write_dump`) redact sensitive tokens with high-entropy regex sanitizers.
+
+### 4.5 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+
+- **Capability Profiles**: The `ExecutionBroker` and `ProcessBackend` enforce fine-grained capability profiles (e.g., `network-isolated`, `read-only-fs`).
+- **Violation Trapping**: When a command violates capability constraints (e.g. attempting outbound socket I/O under `network-isolated`), the backend emits a structured `SandboxViolation` payload.
+- **Critique Normalization (`tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` payloads from `stderr` and translates them into a standardized Critique schema (`failure_type`, `evidence_id`, `normalized_message`, `location: execution_broker`). This prevents orchestrator crashes and enables deterministic agent repair loops.
+- **Fail-Closed Sandbox Availability (`INV-9`)**: If the sandbox backend is unavailable (`sandbox_available=False`), commands are blocked immediately rather than falling back to host execution.
