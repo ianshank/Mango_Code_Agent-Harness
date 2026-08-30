@@ -34,6 +34,7 @@ ROOT_MAKEFILE = REPO / "Makefile"
 # harness/{node,jvm}/.github/workflows/ci.yml are adopter templates that never run,
 # so they must never be read as evidence that a gate is enforced here.
 ROOT_WORKFLOW_DIR = REPO / ".github" / "workflows"
+NEXT_STEPS = REPO / "NEXT_STEPS.md"
 
 pytestmark = pytest.mark.governance
 
@@ -228,6 +229,39 @@ def _workflow_jobs(workflow_text: str) -> dict[str, str]:
     if current:
         jobs[current] = "\n".join(body)
     return jobs
+
+
+def _job_check_names(job_id: str, body: str) -> list[str]:
+    """The GitHub-reported check name(s) for one job, matrix legs included.
+
+    A job-level `name:` (e.g. `secret-scan`) is distinct from step-level
+    `- name:` entries under `steps:`, so the search is scoped to the slice
+    before `steps:` -- an unscoped regex would occasionally match a step.
+    """
+    pre_steps = re.split(r"^\s*steps:\s*$", body, maxsplit=1, flags=re.M)[0]
+    declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
+    base = declared.group(1).strip() if declared else job_id
+
+    # A `with: {python-version: "3.11"}` step input is a quoted scalar, not a
+    # bracketed list, so this only matches an actual `strategy: matrix:` axis.
+    matrix = re.search(r"python-version:\s*\[(.*?)\]", body)
+    if not matrix:
+        return [base]
+    values = re.findall(r'"([^"]+)"', matrix.group(1))
+    placeholder = "${{ matrix.python-version }}"
+    if placeholder in base:
+        return [base.replace(placeholder, v) for v in values]
+    # No placeholder in the job's own name: GitHub appends "(value)" itself,
+    # exactly as it does for `build`, which declares no `name:` at all.
+    return [f"{base} ({v})" for v in values]
+
+
+def _reported_check_names(workflow_text: str) -> set[str]:
+    """Every check name a PR against this workflow will actually show."""
+    names: set[str] = set()
+    for job_id, body in _workflow_jobs(workflow_text).items():
+        names.update(_job_check_names(job_id, body))
+    return names
 
 
 def _splice_continuations(makefile_text: str) -> str:
@@ -622,3 +656,60 @@ class TestRootPipelineShape:
             f"gate: {unmeasured}. The Makefile's explicit --cov flags take precedence "
             "over the static config, so these read as covered while being ignored."
         )
+
+
+class TestRequiredStatusChecksListIsAccurate:
+    """`NEXT_STEPS.md` hands a human the literal check names for the branch
+    ruleset GitHub has no API this repo's CI can configure on its own behalf --
+    someone pastes this list into Settings -> Rules by hand, once. A list that
+    silently drifts from what CI actually reports is exactly how the ruleset
+    would end up requiring a `build (3.11)` that never runs, or omitting a real
+    gate like `dependency-audit`: the ruleset would enforce a check GitHub
+    never sends, or leave a check GitHub does send permanently unrequired,
+    with nothing here to say so.
+    """
+
+    @pytest.fixture()
+    def workflow_text(self) -> str:
+        path = ROOT_WORKFLOW_DIR / "python-package.yml"
+        assert path.is_file(), f"{path} does not exist"
+        return path.read_text(encoding="utf-8")
+
+    @pytest.fixture()
+    def next_steps_text(self) -> str:
+        assert NEXT_STEPS.is_file(), f"{NEXT_STEPS} does not exist"
+        return NEXT_STEPS.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _documented_required_checks(next_steps_text: str) -> set[str]:
+        # Scoped to the sentence between "Required status checks" and its
+        # terminating period: the paragraph after it repeats one of these
+        # names in different prose, which would corrupt an unscoped search.
+        sentence = re.search(
+            r"Required status checks[^:]*:\s*(.+?)\.\s*\n", next_steps_text, re.S
+        )
+        assert sentence, "NEXT_STEPS.md has no 'Required status checks' sentence to parse"
+        return set(re.findall(r"`([^`]+)`", sentence.group(1)))
+
+    def test_documented_checks_match_what_ci_reports(
+        self, workflow_text: str, next_steps_text: str
+    ) -> None:
+        reported = _reported_check_names(workflow_text)
+        documented = self._documented_required_checks(next_steps_text)
+        missing = sorted(reported - documented)
+        extra = sorted(documented - reported)
+        assert not missing and not extra, (
+            "NEXT_STEPS.md's required-status-check list has drifted from what "
+            f"python-package.yml reports. CI reports but the doc omits: {missing}. "
+            f"The doc lists but CI no longer reports: {extra}. A branch ruleset "
+            "built from the doc as it stands would misconfigure at least one check."
+        )
+
+    def test_every_job_contributes_at_least_one_check_name(self, workflow_text: str) -> None:
+        """A job that silently derives zero names would make the comparison
+        above vacuously agree with an incomplete `reported` set -- this pins
+        that every job in the workflow contributes something to compare."""
+        jobs = _workflow_jobs(workflow_text)
+        assert jobs, "no jobs found in python-package.yml; the parser or the file is broken"
+        for job_id, body in jobs.items():
+            assert _job_check_names(job_id, body), f"job '{job_id}' derived no check name"

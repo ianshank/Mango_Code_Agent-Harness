@@ -158,14 +158,24 @@ round-trip.
       before merge. Every gate above is advisory until one exists. A
       repository-settings change, not code.
 
-      The check names, taken from a real run rather than from memory: the matrix
-      is **three** legs — `build (3.9)`, `build (3.10)`, `build (3.12)`, each
-      running `make ci-python` — plus `build-full` (Python 3.11, the only leg
-      that runs `make ci`, the Node stack and the regression tier) and
-      `secret-scan`. This item previously read "the four `build (3.x)` legs",
-      which names a `build (3.11)` that does not exist: a ruleset configured
-      from that sentence would require a check GitHub never reports — blocking
-      every merge — while omitting the one leg that runs the Node gates.
+      Required status checks (derived from `.github/workflows/python-package.yml`,
+      not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
+      `build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
+      `dependency-audit (3.10)`, `dependency-audit (3.12)`.
+
+      `build (3.x)` runs `make ci-python`; `build-full` (Python 3.11) is the
+      only leg that runs `make ci`, the Node stack and the regression tier;
+      `secret-scan` and `dependency-audit` are dedicated jobs, interpreter-
+      independent by design. `dependency-audit (3.9)` runs `continue-on-error`
+      per DEC-017 (unpatchable CVEs on that interpreter) — requiring it as a
+      status check pins that the leg *ran*, not that it passed.
+
+      This item previously listed only 5 checks — the three `build (3.x)` legs,
+      `build-full` and `secret-scan` — and omitted `dependency-audit` and its
+      three matrix legs entirely, added by DEC-013/DEC-016/DEC-017 after that
+      list was last written. `test_ci_gate_coverage.py` now asserts this list
+      against the workflow file mechanically, so it cannot drift silently
+      again the way it did between the two paragraphs above.
 - [x] **`audit` (dependency vulnerability scanning) is now enforced at root**
       (DEC-013): `make audit` runs `pip-audit` against `requirements.txt` and
       delegates to the Node stack's existing `osv-scanner` target, enforced by
