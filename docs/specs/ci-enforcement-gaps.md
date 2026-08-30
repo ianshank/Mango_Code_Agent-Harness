@@ -10,10 +10,6 @@
 Several things look enforced or documented but are not, found by a direct
 tech-debt audit rather than a failing test:
 
-- `ruff check .` currently reports 3 findings (2 unused `# noqa: E402` in
-  `harness/api_server/tests/test_main.py`, 1 missing `# noqa: BLE001` in
-  `harness/shared/write_policy.py`) — `make lint` is not actually clean today,
-  contradicting a several-days-stale hygiene report that claimed 0 findings.
 - `harness/node/.github/workflows/ci.yml` and `harness/jvm/.github/workflows/ci.yml`
   look like live secret-scan/lint coverage but GitHub only discovers workflows
   under the repository-root `.github/workflows/`, so neither ever runs.
@@ -27,6 +23,31 @@ tech-debt audit rather than a failing test:
   nothing in root CI ever invokes it, and neither `README.md` nor
   `harness/CONTRACT.md` says so plainly — a reader can mistake it for a live
   guarantee.
+- `harness/__init__.py` and `harness/api_server/__init__.py` don't exist,
+  even though both packages are genuinely imported as `harness.x.y`
+  (`from harness.api_server.main import app`, etc.), unlike
+  `harness/shared/__init__.py` which does. Both currently rely on PEP 420
+  implicit namespace packages — inconsistent with the rest of the tree.
+
+**Retracted mid-PR, self-correcting a false finding**: an initial research
+pass reported 3 live `ruff` findings (2 unused `# noqa: E402` in
+`harness/api_server/tests/test_main.py`, 1 missing `# noqa: BLE001` in
+`harness/shared/write_policy.py`) and this spec originally "fixed" them.
+Pushing that fix turned CI red with the *opposite* verdict on the same two
+files. Root cause: this environment has a bare `ruff` on `PATH` resolving to
+`0.15.8`, while `python -m ruff` — what `make lint`, every other `make`
+target, and CI's `pip install -r requirements-dev.txt` all actually resolve
+to — is the pinned `0.6.9`, and the two versions disagree on both rules for
+this exact code shape. `main` was already clean under the pinned version;
+neither file is touched by this spec. The same false signal briefly caused
+`harness/__init__.py`/`harness/api_server/__init__.py` to be added, then
+reverted (a "ruff reports an unrelated finding once these exist" symptom
+that only reproduced under the wrong binary); re-tested under
+`python -m ruff`, the two files produce zero findings and are restored — see
+Requirements below. **Lesson for future verification in this repository**:
+never trust a bare `ruff`/`mypy` invocation; always use `make <target>` or
+`python -m ruff`/`python -m mypy` explicitly, since a shadowing binary on
+`PATH` will silently diverge from the pinned, CI-matching version.
 
 **Deliberately not fixed here**: `make lint-node` (ESLint/Prettier/Knip)
 exists but neither `lint` nor `ci`/`ci-python` ever calls it, so Node lint
@@ -34,63 +55,83 @@ enforces nothing in CI — the original intent was to close that gap in this
 spec. Pre-implementation verification found `make lint-node` currently
 **crashes** (`typescript-eslint does not support TS 7.0`, a `typescript`
 7.0.2 / `typescript-eslint` 8.67.0 incompatibility pinned in
-`harness/node/package.json`), unrelated to anything else in this PR — no
-Node source or config file is touched here. Wiring a currently-broken gate
-into `ci` would turn CI red on the next PR for a reason this PR did not
-cause and does not fix. See Open questions.
+`harness/node/package.json`) — a genuine, Node-toolchain-side finding,
+independent of the Python tool-version issue above and unrelated to
+anything else in this PR (no Node source or config file is touched here).
+Wiring a currently-broken gate into `ci` would turn CI red on the next PR
+for a reason this PR did not cause and does not fix. See Open questions.
 
 ## Requirements
 
-- R-CEG-1: `make lint` MUST exit 0 against the current tree.
-- R-CEG-2: The version string in `README.md`, `docs/architecture/c4_architecture.md`,
+- R-CEG-1: The version string in `README.md`, `docs/architecture/c4_architecture.md`,
   and `NEXT_STEPS.md` MUST match `pyproject.toml`'s `version`.
-- R-CEG-3: `harness/node/.github/workflows/ci.yml` and `harness/jvm/.github/workflows/ci.yml`
+- R-CEG-2: `harness/node/.github/workflows/ci.yml` and `harness/jvm/.github/workflows/ci.yml`
   MUST each carry a header comment identifying them as a reference adoption
   template that GitHub never executes, pointing to the real root workflow.
-- R-CEG-4: A root `install` target MUST install the pre-push remote-allowlist
+- R-CEG-3: A root `install` target MUST install the pre-push remote-allowlist
   hook (`harness/shared/install_hooks.sh`).
-- R-CEG-5: `harness/CONTRACT.md` MUST state that `harness/jvm/` is an unadopted
+- R-CEG-4: `harness/CONTRACT.md` MUST state that `harness/jvm/` is an unadopted
   reference template with no live CI enforcement, and MUST state that
   `harness/node/.governance/` is intentionally the repository's only live
   governance root of trust (per DEC-005), not a layout defect to fix.
+- R-CEG-5: `harness/__init__.py` and `harness/api_server/__init__.py` MUST
+  exist, mirroring `harness/shared/__init__.py`'s existing convention for a
+  genuinely-imported package. `harness/control-plane/` MUST NOT gain one —
+  its hyphenated name makes it non-importable by design (confirmed by
+  `test_import_purity.py`/`test_build_policy_bundle.py`'s own docstrings),
+  invoked by file path only.
+- C-CEG-1: `python -m ruff check .` (the pinned version) MUST exit 0 against
+  the current tree, both before and after R-CEG-5's change.
 
 ## Acceptance criteria
 
-- [ ] AC-1: `ruff check .` exits 0 — verified by `make lint` (R-CEG-1)
-- [ ] AC-2: `README.md`, `docs/architecture/c4_architecture.md`, and
+- [ ] AC-1: `README.md`, `docs/architecture/c4_architecture.md`, and
       `NEXT_STEPS.md` each contain `2.1.9` and none contains `2.2.0` or
       `2.3.0` as a version string — verified by
       `grep -c 2.1.9 README.md docs/architecture/c4_architecture.md NEXT_STEPS.md`
-      (R-CEG-2)
-- [ ] AC-3: both per-stack `ci.yml` files contain the phrase "reference
+      (R-CEG-1)
+- [ ] AC-2: both per-stack `ci.yml` files contain the phrase "reference
       adoption template" in their header comment — verified by
       `grep -l "reference adoption template" harness/node/.github/workflows/ci.yml harness/jvm/.github/workflows/ci.yml`
-      reporting both paths (R-CEG-3)
-- [ ] AC-4: `make install` runs `install_hooks.sh` and exits 0 — verified by
-      `make install` (R-CEG-4)
-- [ ] AC-5: `harness/CONTRACT.md` contains "reference adoption template" and
+      reporting both paths (R-CEG-2)
+- [ ] AC-3: `make install` runs `install_hooks.sh` and exits 0 — verified by
+      `make install` (R-CEG-3)
+- [ ] AC-4: `harness/CONTRACT.md` contains "reference adoption template" and
       "DEC-005" — verified by
       `grep -c "reference adoption template" harness/CONTRACT.md` and
-      `grep -c "DEC-005" harness/CONTRACT.md` (R-CEG-5)
-- [ ] AC-6: `make lint-node`, run standalone, still fails today — verified by
+      `grep -c "DEC-005" harness/CONTRACT.md` (R-CEG-4)
+- [ ] AC-5: `harness/__init__.py` and `harness/api_server/__init__.py` exist;
+      `harness/control-plane/__init__.py` does not — verified by
+      `test -f harness/__init__.py && test -f harness/api_server/__init__.py && test ! -f harness/control-plane/__init__.py`
+      (R-CEG-5)
+- [ ] AC-6: `python -m ruff check .` exits 0 with R-CEG-5's files present —
+      verified directly, not via a bare `ruff` invocation (C-CEG-1); this is
+      the rejection case this spec exists to re-establish: a bare `ruff`
+      reporting a finding here is the wrong-binary failure mode this PR
+      already hit once, not evidence the code is wrong
+- [ ] AC-7: `pytest harness/shared/tests/test_import_purity.py harness/shared/tests/ -k "import_direction or check_dedup"`
+      passes with R-CEG-5's files present — verified by
+      `make coverage-python` (full suite; R-CEG-5's import-mode risk was
+      already checked against the full 1990-test suite, not just these two
+      files)
+- [ ] AC-8: `make lint-node`, run standalone, still fails today — verified by
       `make lint-node` exiting non-zero; this is the rejection case: it is
       the evidence that not wiring it into `ci` in this PR was the correct
       call, not an oversight
 
 ## Steps
 
-1. Fix the 3 live ruff findings — produces a clean `ruff check .`
-2. Unify the version string across the 3 drifted files — consumes
+1. Unify the version string across the 3 drifted files — consumes
    `pyproject.toml`'s `version`
-3. Header-comment the two dead per-stack workflow templates
-4. Add the root `install` target
-5. Document the JVM-template and `.governance/`-layout clarifications in
+2. Header-comment the two dead per-stack workflow templates
+3. Add the root `install` target
+4. Document the JVM-template and `.governance/`-layout clarifications in
    `harness/CONTRACT.md`
+5. Add `harness/__init__.py` and `harness/api_server/__init__.py`; verify
+   with `python -m ruff check .` (not bare `ruff`) and the full test suite
 
 ## Files touched
 
-- `harness/api_server/tests/test_main.py`
-- `harness/shared/write_policy.py`
 - `README.md`
 - `docs/architecture/c4_architecture.md`
 - `NEXT_STEPS.md`
@@ -99,6 +140,8 @@ cause and does not fix. See Open questions.
 - `harness/node/.github/workflows/ci.yml`
 - `harness/jvm/.github/workflows/ci.yml`
 - `harness/CONTRACT.md` (protected: `harness/CONTRACT.md`)
+- `harness/__init__.py` (new)
+- `harness/api_server/__init__.py` (new)
 
 ## Invariants touched
 
@@ -111,17 +154,22 @@ cause and does not fix. See Open questions.
 
 ## Validation matrix
 
-- `make lint` — ruff, must exit 0
+- `python -m ruff check .` — must exit 0 (never verified via bare `ruff`)
 - `make install` — must exit 0 on a clean clone
+- `make coverage-python` — full suite, proving R-CEG-5 doesn't regress
+  import/collection behavior
 - coverage target: 90% lines / 80% branches from
-  `governance-policy.json → coverage.{lines,branches}` (unaffected by this
-  spec's changes, which are Makefile/docs/workflow-comment only)
+  `governance-policy.json → coverage.{lines,branches}`
 
 ## Backward compatibility
 
 Purely additive or corrective: no public API, tool schema, or CLI surface
 changes. `ci` and `ci-python`'s prerequisite lists are byte-for-byte
-unchanged by this spec.
+unchanged by this spec. `harness/__init__.py`/`harness/api_server/__init__.py`
+convert two PEP 420 implicit namespace packages into regular packages;
+`[tool.coverage.run] source=[...]` matches by file path and is unaffected
+either way, and the full test suite (1990 tests) passes unchanged with them
+present.
 
 ## Open questions
 

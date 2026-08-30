@@ -95,7 +95,7 @@ def write_denial_reason(relpath: str, policy_path: Path | None = None) -> str | 
 
     try:
         patterns = load_protected_patterns(policy_path or DEFAULT_POLICY_PATH)
-    except (Exception, SystemExit) as exc:  # noqa: BLE001
+    except (Exception, SystemExit) as exc:
         # An unreadable policy must deny. Falling back to a built-in list would let
         # a malformed policy widen what an agent may write, which is the failure
         # mode this module exists to prevent.

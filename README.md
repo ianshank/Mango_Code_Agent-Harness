@@ -45,7 +45,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── architecture/
 │   │   ├── c4_architecture.md           # C4 Level 1-4 Architecture & Threat Boundaries
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
-│   └── specs/                           # 11 Formal Traceable Specifications
+│   └── specs/                           # 15 Formal Traceable Specifications
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
@@ -92,7 +92,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (1,986 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (2,007 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
@@ -116,8 +116,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ├── .dockerignore                        # Docker build context policy (excludes .mango)
 ├── Dockerfile                           # Multi-stage production container image
 ├── Makefile                             # Unified root Makefile for CI/CD targets
-├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest)
-└── requirements-dev.txt                 # Python development dependencies
+├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest) + [project.dependencies]
+├── requirements.txt                     # Python runtime dependencies (fastapi/uvicorn/pydantic/httpx)
+└── requirements-dev.txt                 # Dev/tooling deps (-r requirements.txt, plus pytest/ruff/mypy)
 ```
 
 ---
@@ -228,6 +229,8 @@ cd harness/node
 pnpm install
 cd ../..
 pip install -r requirements-dev.txt
+make install         # One-time: install the pre-push remote-allowlist hook
+make audit-install    # One-time: install pip-audit + the Node stack's pinned osv-scanner
 
 # 2. Run Node/Vitest test matrix
 cd harness/node
@@ -244,6 +247,7 @@ make test-governance # Governance-specific tests in isolation (broker, evidence,
 make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
 make validate        # Governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
+make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
 make digest-regen    # Regenerate protected-file digests after policy changes
 
 # 4. Run root adversarial harness self-tests
@@ -283,11 +287,12 @@ make test-node       # Execute TypeScript/Node engine tests
 make test-governance # Governance broker, evidence, invariant tests
 make validate        # All governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Shim drift detection
-make pre-pr          # Full pre-submission validation pipeline
+make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
+make pre-pr          # Full pre-submission validation pipeline (now includes audit)
 ```
 
 ### 5.4 Secret Sanitization & Security Scanning
 
 - **Invariant `INV-1` Enforcement:** Never output raw API tokens or credentials in logs or test assertions. Use `SecretMasker` and the native Python regex masks.
 - **Pre-Push Allowlist (`remotes.py`):** Push targets are strictly validated against `.governance/allowed-remotes.txt` to prevent code leakage to unauthorized repositories.
-- **Automated Gitleaks & OSV Scanners:** Run `gitleaks` and `osv-scanner` locally and in CI to catch hardcoded secrets or compromised third-party dependencies before code review.
+- **Automated Gitleaks, pip-audit & OSV Scanners:** `make secrets` (gitleaks; INV-1) and `make audit` (`pip-audit` against `requirements.txt` + delegated Node `osv-scanner`) run locally and in dedicated CI jobs (`secret-scan`, `dependency-audit`) to catch hardcoded secrets and compromised third-party dependencies before code review; `make pre-pr` runs both. `.github/dependabot.yml` opens weekly update PRs for the `pip` and `npm` ecosystems.

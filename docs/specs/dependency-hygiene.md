@@ -110,6 +110,9 @@ substring of the failure message.
 
 - `harness/shared/governance_json.py` (new; protected:
   `harness/shared/governance_json.py`)
+- `harness/shared/tests/test_governance_json.py` (new) — direct unit tests
+  for every branch, including "unreadable", which neither caller's own
+  suite exercises; brings the module to 100% line coverage
 - `harness/shared/governance/broker.py` (protected:
   `harness/shared/governance/**`)
 - `harness/shared/check_dedup.py` (protected)
@@ -122,6 +125,10 @@ substring of the failure message.
   `.github/workflows/**`)
 - `.github/dependabot.yml` (new)
 - `harness/shared/tests/test_ci_gate_coverage.py` (protected)
+- `harness/CONTRACT.md` (protected: `harness/CONTRACT.md`) — INV-5's
+  description updated from "two declared exceptions" to one, now that
+  `audit` closes its `KNOWN_GAPS` entry
+- `NEXT_STEPS.md` — flips the `audit`-unenforced checklist item to done
 - `harness/shared/tests/test_makefile_contracts.py`
 
 ## Invariants touched
