@@ -43,27 +43,24 @@ class _Renderable(typing.Protocol):
 
 def format_execution_result(result: _Renderable) -> str:
     """Render ``result`` for the model. Always returns a string."""
-    # Try to parse stderr as SandboxViolation to normalize it into a Critique
-    if result.stderr:
-        parsed_violation = None
-        try:
-            parsed_violation = json.loads(result.stderr)
-        except ValueError:
-            pass
-
-        if isinstance(parsed_violation, dict) and "violation_type" in parsed_violation:
-            critique = {
-                "schema_version": parsed_violation.get("schema_version", "1.0"),
-                "failure_type": parsed_violation.get("violation_type", "sandbox_violation"),
-                "evidence_id": parsed_violation.get("evidence_id", "unknown"),
-                "location": "execution_broker",
-                "normalized_message": parsed_violation.get("message", result.reason or result.stderr),
-                "redacted": False,
-            }
-            return "Error: Critique received.\n" + json.dumps(critique, indent=2)
-
     if result.status == "BLOCKED":
+        if result.stderr:
+            try:
+                parsed_violation = json.loads(result.stderr)
+                if isinstance(parsed_violation, dict) and "violation_type" in parsed_violation:
+                    critique = {
+                        "schema_version": parsed_violation.get("schema_version", "1.0"),
+                        "failure_type": parsed_violation.get("violation_type", "sandbox_violation"),
+                        "evidence_id": parsed_violation.get("evidence_id", "unknown"),
+                        "location": "execution_broker",
+                        "normalized_message": parsed_violation.get("message", result.reason or result.stderr),
+                        "redacted": False,
+                    }
+                    return "Error: Critique received.\n" + json.dumps(critique, indent=2)
+            except ValueError:
+                pass
         return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
+
     if result.reason:
         return f"Error: {result.reason}"
     output = result.stdout

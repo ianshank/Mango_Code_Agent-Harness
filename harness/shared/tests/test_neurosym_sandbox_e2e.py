@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,6 @@ from harness.shared.nemotron_bridge import resolve_api_key
 
 # Check if LIVE test execution is enabled
 IS_LIVE = bool(resolve_api_key())
-os.environ["ALLOW_GITHUB_CHANGES"] = "1"
 
 
 class MockSandboxProcessBackend(ProcessBackend):
@@ -80,6 +78,7 @@ class TestNeurosymSandboxE2E:
 
     @pytest.fixture(autouse=True)
     def _mock_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
         monkeypatch.setattr(MangoMASOrchestrator, "_run_hook", lambda *args, **kwargs: None)
 
     def test_sandbox_unavailable_inv9_fallback(self, tmp_path):

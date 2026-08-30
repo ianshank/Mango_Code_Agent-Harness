@@ -180,7 +180,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
 - **Python AQA Coverage:** **97% total** (98.02% Lines | 95.01% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
-- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 (151 files verified)
+- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
 
 ---
 
