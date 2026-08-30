@@ -244,6 +244,35 @@ def _unquote(value: str) -> str:
     return value
 
 
+_QUOTED = r'"[^"]*"|\'[^\']*\''
+
+
+def _matrix_python_versions(pre_steps: str) -> list[str] | None:
+    """The job's `strategy.matrix.python-version` values, or None if it has none.
+
+    GitHub Actions accepts this matrix axis in two equally valid YAML forms --
+    an inline flow list (`python-version: ["3.9", "3.10"]`) or a block list
+    (`python-version:` followed by indented `- "3.9"` lines) -- and treats
+    them identically. Recognizing only one would read a purely stylistic
+    reformat as the matrix disappearing, which fails the drift test loudly
+    but for a reason that isn't real drift.
+
+    Scoped to `pre_steps`, not the full job body, for the same reason the
+    `name:` search below is: a step's `with:` input is a different context,
+    and matching it there would be inspecting the wrong thing entirely, not
+    just a false drift signal.
+    """
+    inline = re.search(r"python-version:\s*\[(.*?)\]", pre_steps)
+    if inline:
+        return [_unquote(v) for v in re.findall(_QUOTED, inline.group(1))]
+    block = re.search(
+        rf"python-version:[ \t]*\n((?:[ \t]*-[ \t]*(?:{_QUOTED})[ \t]*\n)+)", pre_steps
+    )
+    if block:
+        return [_unquote(v) for v in re.findall(_QUOTED, block.group(1))]
+    return None
+
+
 def _job_check_names(job_id: str, body: str) -> list[str]:
     """The GitHub-reported check name(s) for one job, matrix legs included.
 
@@ -255,18 +284,15 @@ def _job_check_names(job_id: str, body: str) -> list[str]:
     declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
     base = _unquote(declared.group(1).strip()) if declared else job_id
 
-    # A `with: {python-version: "3.11"}` step input is a quoted scalar, not a
-    # bracketed list, so this only matches an actual `strategy: matrix:` axis.
-    matrix = re.search(r"python-version:\s*\[(.*?)\]", body)
-    if not matrix:
+    # A bare numeric entry (`[3.9, 3.10]` or a block list of bare `3.10`) is
+    # deliberately not supported: unquoted, `3.10` is the YAML float 3.1 --
+    # the exact footgun this workflow's own quoting exists to avoid -- so
+    # this file should never contain one, and treating it as absent fails
+    # the drift test loudly rather than guessing at what GitHub would
+    # actually resolve it to.
+    values = _matrix_python_versions(pre_steps)
+    if values is None:
         return [base]
-    # Single- and double-quoted entries both parse to the same YAML string.
-    # A bare numeric entry (`[3.9, 3.10]`) is deliberately not supported:
-    # unquoted, `3.10` is the YAML float 3.1 -- the exact footgun this
-    # workflow's own quoting exists to avoid -- so this file should never
-    # contain one, and treating it as absent fails the drift test loudly
-    # rather than guessing at what GitHub would actually resolve it to.
-    values = [_unquote(v) for v in re.findall(r'"[^"]*"|\'[^\']*\'', matrix.group(1))]
     placeholder = "${{ matrix.python-version }}"
     if placeholder in base:
         return [base.replace(placeholder, v) for v in values]
@@ -787,3 +813,41 @@ class TestRequiredStatusChecksListIsAccurate:
         )
         for body in (double_quoted_matrix, single_quoted_matrix):
             assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
+
+    def test_block_list_matrix_syntax_parses_the_same_as_inline(self) -> None:
+        """GitHub Actions treats an inline flow list and a block list as the
+        identical matrix axis; a Copilot review of this file correctly
+        flagged that only the inline form was recognized, which would have
+        read a purely stylistic reformat as the matrix disappearing."""
+        inline = (
+            '  build:\n    strategy:\n      matrix:\n'
+            '        python-version: ["3.9", "3.10"]\n    steps:\n'
+        )
+        block = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version:\n"
+            '          - "3.9"\n'
+            '          - "3.10"\n'
+            "    steps:\n"
+        )
+        block_single_quoted = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version:\n"
+            "          - '3.9'\n"
+            "          - '3.10'\n"
+            "    steps:\n"
+        )
+        for body in (inline, block, block_single_quoted):
+            assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
+
+    def test_matrix_search_is_scoped_to_pre_steps(self) -> None:
+        """A step's `with:` input is a different context than the job's own
+        `strategy.matrix`; matching a bracket-list-shaped step input there
+        would be inspecting the wrong thing, not just a false drift signal."""
+        body = (
+            "  build:\n    runs-on: ubuntu-latest\n    steps:\n"
+            '      - name: Some future step\n'
+            '        with:\n'
+            '          python-version: ["3.9", "3.10"]\n'
+        )
+        assert _job_check_names("build", body) == ["build"]
