@@ -49,10 +49,11 @@ REASONER_PROMPT_TEMPLATE = (
 )
 
 VERIFIER_PROMPT_TEMPLATE = (
-    "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
-    "Use your 'run_command' tool to execute them and 'read_file' to inspect sources. "
+    "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest) or inspect the generated files. "
+    "Use your 'run_command' tool to execute tests/lints and 'read_file' to inspect sources. "
     "You hold no file-editing tool by design: the role that judges the work cannot edit it. "
-    "Report PASS or FAIL.\n"
+    "If running in a standalone or scratch workspace without a Makefile, verify the generated Python files directly. "
+    "Conclude your evaluation with an explicit VERDICT: PASS or VERDICT: FAIL.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL}\n\n"
     "Reasoner Output:\n{code_output}"
 )
