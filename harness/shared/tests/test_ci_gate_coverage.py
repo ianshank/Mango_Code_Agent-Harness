@@ -231,6 +231,20 @@ def _workflow_jobs(workflow_text: str) -> dict[str, str]:
     return jobs
 
 
+def _strip_yaml_comment(value: str) -> str:
+    """Drop a trailing ` # comment` from a name-style scalar value.
+
+    A `#` starts a YAML comment only when preceded by whitespace; a quoted
+    scalar's closing quote ends it outright, so anything after that point
+    -- comment or otherwise -- is not content either way.
+    """
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        return value if end == -1 else value[: end + 1]
+    return re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+
+
 def _unquote(value: str) -> str:
     """Strip one matching layer of YAML quoting, if present.
 
@@ -286,7 +300,7 @@ def _job_check_names(job_id: str, body: str) -> list[str]:
     # instead of falling back to the job id.
     pre_steps = re.split(r"^\s*steps:\s*(?:#.*)?$", body, maxsplit=1, flags=re.M)[0]
     declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
-    base = _unquote(declared.group(1).strip()) if declared else job_id
+    base = _unquote(_strip_yaml_comment(declared.group(1).strip())) if declared else job_id
 
     # A bare numeric entry (`[3.9, 3.10]` or a block list of bare `3.10`) is
     # deliberately not supported: unquoted, `3.10` is the YAML float 3.1 --
@@ -894,3 +908,13 @@ class TestRequiredStatusChecksListIsAccurate:
             "        uses: actions/checkout@v4\n"
         )
         assert _job_check_names("build", body) == ["build"]
+
+    def test_a_trailing_comment_on_the_job_name_is_stripped(self) -> None:
+        """The other half of the same Copilot suggestion: a comment on the
+        job-level `name:` line itself must not become part of the derived
+        check name, quoted or not."""
+        unquoted = "  secrets:\n    name: secret-scan  # the security gate\n    steps:\n"
+        double_quoted = '  secrets:\n    name: "secret-scan"  # the security gate\n    steps:\n'
+        single_quoted = "  secrets:\n    name: 'secret-scan'  # the security gate\n    steps:\n"
+        for body in (unquoted, double_quoted, single_quoted):
+            assert _job_check_names("secrets", body) == ["secret-scan"]
