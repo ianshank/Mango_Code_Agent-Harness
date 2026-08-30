@@ -36,6 +36,47 @@ NEMOTRON_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "read_file",
+            "description": (
+                "Read a file from the workspace. Returns the content verbatim, with no line-number "
+                "prefixes, so the result can be pasted straight into apply_patch's old_text."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string", "description": "Workspace-relative path to read."},
+                    "start_line": {"type": "integer", "description": "First line to return, 1-based. Optional."},
+                    "end_line": {"type": "integer", "description": "Last line to return, inclusive. Optional."},
+                },
+                "required": ["filepath"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "apply_patch",
+            "description": (
+                "Replace one exact substring in a workspace file, leaving the rest untouched. "
+                "old_text MUST appear exactly once in the file; include surrounding lines until it "
+                "does. Prefer this over write_file for editing an existing file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string", "description": "Workspace-relative path to patch."},
+                    "old_text": {"type": "string", "description": "The exact, uniquely-matching text to replace."},
+                    "new_text": {"type": "string", "description": "The text to put in its place."},
+                },
+                "required": ["filepath", "old_text", "new_text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_command",
             "description": "Run a shell command and return its output.",
             "parameters": {

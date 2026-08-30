@@ -55,7 +55,12 @@ from harness.shared.tool_dispatch import (
 from harness.shared.tool_dispatch import (
     _normalize_tool_arguments as _normalize_tool_arguments,
 )
-from harness.shared.tool_executors import execute_run_command, execute_write_file
+from harness.shared.tool_executors import (
+    execute_apply_patch,
+    execute_read_file,
+    execute_run_command,
+    execute_write_file,
+)
 from harness.shared.tool_schemas import NEMOTRON_TOOLS as NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -115,6 +120,12 @@ class MangoMASOrchestrator:
         # declaration and dispatch cannot drift apart.
         self._tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
             "write_file": lambda args: self._execute_write_file(args.get("filepath", ""), args.get("content", "")),
+            "read_file": lambda args: self._execute_read_file(
+                args.get("filepath", ""), args.get("start_line"), args.get("end_line")
+            ),
+            "apply_patch": lambda args: self._execute_apply_patch(
+                args.get("filepath", ""), args.get("old_text", ""), args.get("new_text", "")
+            ),
             "run_command": lambda args: self._execute_run_command(args.get("command", "")),
             "knowledge_gap_log": lambda args: knowledge_gap_log(
                 args.get("question", ""), args.get("what_needed", ""), args.get("proposed_approach", "")
@@ -181,6 +192,16 @@ class MangoMASOrchestrator:
     def _execute_write_file(self, filepath: str, content: str) -> str:
         """Local tool implementation to write a file."""
         return execute_write_file(self.workspace_dir, filepath, content)
+
+    def _execute_read_file(
+        self, filepath: str, start_line: int | None = None, end_line: int | None = None
+    ) -> str:
+        """Local tool implementation to read a file."""
+        return execute_read_file(self.workspace_dir, filepath, start_line, end_line)
+
+    def _execute_apply_patch(self, filepath: str, old_text: str, new_text: str) -> str:
+        """Local tool implementation to replace one unique substring in a file."""
+        return execute_apply_patch(self.workspace_dir, filepath, old_text, new_text)
 
     def _execute_run_command(self, command: str) -> str:
         """Run a command through the approved execution broker (INV-8)."""

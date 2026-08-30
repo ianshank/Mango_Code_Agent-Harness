@@ -7,6 +7,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — `read_file` and `apply_patch`, and the read policy that had to come first
+
+The reasoner could already read and write code, but only bluntly: every read spawned a
+subprocess to `cat` a file, and every edit went through `write_file`, which overwrites
+whole files — so changing three lines meant regenerating the file from the model's
+context. `read_file` and `apply_patch` close both gaps.
+
+The interesting part is what nearly shipped with them. `command_actions.classify` grades
+`cat .env` as `secret_access`, an action **no role in `agent-policy.json` holds**, so
+reading a credential through `run_command` is denied for every agent. That grading is a
+property of the *command*. `read_file` resolves a path and reads it directly, so nothing
+in `command_actions` sees it — and mapped to the `read` action the implementer already
+holds, `read_file(".env")` would have been *permitted*, returning `NVIDIA_API_KEY` into
+`conversation_history`, which is sent to the model API on the next turn and written to
+the debug dump.
+
+There was a `write_policy.py` and no read-side counterpart, because until now there was
+only one file-reading door and `command_actions` was standing in it. `read_policy.py` is
+the second door's policy and owns the credential pattern both doors now match —
+`command_actions` composes its command-scanning form from the same alternation rather
+than restating it, so the two cannot drift. The regression test asserts that as a
+*property* over a corpus, not a list of filenames: anything `cat <path>` is denied for,
+`read_file` is denied for. It additionally refuses anything under `.git/`, which `cat`
+does not, because a remote URL there carries a push token.
+
+Two smaller defects were found and fixed while building it:
+
+- **`apply_patch` would have rewritten every line ending in a CRLF file.**
+  `Path.read_text` translates newlines on the way in and `write_text` does not restore
+  them, so `b'alpha\r\nbeta\r\ngamma\r\n'` came back as `b'alpha\nBETA\ngamma\n'` — a
+  one-word patch becoming a whole-file diff. Both sides now use explicit
+  `open(..., newline="")`; the `newline=` keyword on `Path.read_text` is 3.13+ and this
+  repository's floor is 3.9.
+- **`.env.example` pointed "Nemotron" traffic at a different vendor's model.** It shipped
+  `NEMOTRON_DEFAULT_MODEL=google/diffusiongemma-26b-a4b-it` while the README documented
+  `nvidia/llama-3.3-nemotron-super-49b-v1`, and `nemotron_bridge` has no fallback. The
+  value appeared nowhere else in the repository — an unreviewed placeholder in the
+  scaffold every adopter copies. `test_documentation_truth.py` now pins the two together.
+
+`agent-policy.json` is unchanged: `apply_patch` grades as the same `write` action as
+`write_file`, so the verifier — which holds no `write` — receives `read_file` and not
+`apply_patch`. The role that judges the work still cannot edit it (R-AC-8), under the new
+tool's name as well as the old one.
+
+Spec: `docs/specs/agent-read-patch-tools.md`.
+
+
 ### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
 
 `test_invariant_liveness.py` computed one set difference,
