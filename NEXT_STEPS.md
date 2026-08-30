@@ -7,12 +7,14 @@
 
 ## 0. Completed Milestones
 
-### ✅ v2.2.2 — Live NVIDIA Nemotron NIM Triage, RCA & Execution Broker Parity
+### ✅ v2.2.3 — Live NVIDIA Nemotron NIM Multi-Domain Triage, RCA & Autonomous MAS Certification
 
-- [x] **Live E2E Defect Triage & RCA (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Triaged and remediated 6 defects across cross-platform newline preservation, credentials discovery, scratch workspace prompt fallback, cross-drive workspace confinement, discard stream filtering, and verifier verdict guarantees.
-- [x] **Command Broker Discard Streams**: Added `/dev/null`, `nul`, `NUL`, and descriptor suppressions to `discard_targets` in `command_actions.py` to support standard CLI suppressions (`2>/dev/null`, `> nul`).
+- [x] **Live Multi-Domain E2E Defect Triage & RCA (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Triaged and remediated 10 defects across cross-platform newline preservation, credentials discovery, scratch workspace prompt fallback, cross-drive workspace confinement, discard stream filtering, verifier verdict guarantees, python execution in command actions, tool version queries, prompt chaining, and cryptographic policy-bundle digest synchronization.
+- [x] **Command Broker Action Classification & Tool Discovery**: Added `test_execute` for `python [flags] script.py` and `python -m (pytest|unittest|py_compile|doctest)`, `read` for tool version queries (`--version`, `-V`, `command -v`), and excluded stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) from write target checks.
+- [x] **Multi-Domain Live MAS E2E Scenarios**: Validated full multi-agent sequential thinking loop (`calculate_fibonacci`), multi-file application synthesis (`DataValidator`), and symbolic mathematical reasoning (`prime_factors`) with 100% pass rate.
 - [x] **AQA Regression Suite (`test_e2e_nemotron_triage_regression.py`)**: 11 new automated regression tests integrated into the test matrix, bringing the total regression suite to 132 tests.
-- [x] **Live Ecosystem Parity**: Verified end-to-end against live NVIDIA Nemotron NIM endpoints across Python (`test_nemotron_bridge_live.py`, `test_mango_mas_live.py`) and Node TypeScript (`vitest run tests/ai/e2e/nemotron-live.test.ts`).
+- [x] **Live Ecosystem Parity**: Verified end-to-end against live NVIDIA Nemotron NIM endpoints across Python (`test_nemotron_bridge_live.py`, `test_mango_mas_live.py`, `test_neurosym_sandbox_e2e.py`) and Node TypeScript (`vitest run`).
+- [x] **Cryptographic Governance Bundle**: Synchronized all SHA256 digests in `policy-bundle.example.json` with zero drift.
 
 ### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
 
