@@ -1,6 +1,6 @@
 # C4 Architecture: Agentic SSD & Mango MAS Platform
 
-**Version:** 2.2.0 (2026 Standards)  
+**Version:** 2.3.0 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -113,8 +113,15 @@ classDiagram
     }
 
     class ToolExecutors {
-        +execute_write_file(path, content, workspace_dir) dict
-        +execute_run_command(command, workspace_dir, agent_name, human_approved, timeout) dict
+        +execute_write_file(workspace_dir, filepath, content) str
+        +execute_read_file(workspace_dir, filepath, start_line, end_line) str
+        +execute_apply_patch(workspace_dir, filepath, old_text, new_text) str
+        +execute_run_command(broker, active_role, workspace_dir, command, timeout) str
+    }
+
+    class FilePolicies {
+        +write_denial_reason(relpath) str?
+        +read_denial_reason(relpath) str?
     }
 
     class ToolDispatch {
@@ -149,7 +156,8 @@ classDiagram
     MangoMASOrchestrator --> ToolExecutors : invokes operations
     MangoMASOrchestrator --> NemotronBridge : requests chat completions
     MangoMASOrchestrator --> VerificationRunner : derives terminal verdict
-    ToolExecutors --> ExecutionBroker : brokers command execution
+    ToolExecutors --> ExecutionBroker : brokers run_command only
+    ToolExecutors --> FilePolicies : governs direct file I/O (read_file, write_file,\napply_patch) in-process, outside the broker
     ExecutionBroker --> ProcessBackend : executes with budget & containment
 ```
 
@@ -181,3 +189,10 @@ classDiagram
 
 - All environment variables matching credential patterns (`NVIDIA_API_KEY`, `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`) are stripped before passing to brokered child processes.
 - Memory dumps generated for debugging (`write_dump`) redact sensitive tokens with high-entropy regex sanitizers.
+
+### 4.5 Direct File I/O Governance: Read/Patch Parity (`DEC-012`)
+
+- `read_file` and `apply_patch` read and write the filesystem directly from `ToolExecutors` — they do **not** pass through `ExecutionBroker`, the PDP, or the PreToolUse guard, because they are not shell commands. That path is `run_command`'s alone.
+- Direct file I/O is governed instead by two symmetric, in-process policy modules consulted at tool-call granularity: `write_policy.write_denial_reason` (denies `protected_paths` matches and any `.git` path segment) and its read-side counterpart `read_policy.read_denial_reason` (denies credential-bearing filenames and any `.git` segment).
+- Both modules compose the same credential-filename alternation (`read_policy.CREDENTIAL_FILENAME_ALTERNATION`) that `command_actions.classify` uses to grade `cat <credential-file>` as `secret_access` — a single source, so the shell-command door and the direct-read door cannot independently drift apart.
+- `apply_patch` reuses `write_denial_reason` unchanged, so it reaches no path `write_file` cannot reach; `agent-policy.json` grants it no new action.

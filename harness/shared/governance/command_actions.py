@@ -24,6 +24,7 @@ import shlex
 import typing
 
 from harness.shared.policy_loader import orchestrator_defaults
+from harness.shared.read_policy import CREDENTIAL_FILENAME_ALTERNATION
 
 #: The action assigned to a command this module does not model. `destructive` is
 #: declared in `agent-policy.json`'s `high_risk_actions` and appears in no role's
@@ -184,7 +185,10 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     # Reading a credential-bearing file is `secret_access`, not `read`. The
     # program is innocent; the target is not, and the action model grades the
     # effect rather than the tool.
-    (re.compile(r"(?:^|[\s/])(?:\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|id_[rd]sa|[\w.-]+\.pem)(?:\s|$)"),
+    # The alternation is owned by `read_policy`, which is the other door onto
+    # the same files. Composing it here rather than restating it is what keeps
+    # `cat .env` and `read_file(".env")` refusing for the same reason.
+    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
      "secret_access", "the command names a credential-bearing file"),
 )
 

@@ -21,6 +21,7 @@ from harness.shared.tests._helpers import REPO
 
 README = REPO / "README.md"
 GITIGNORE = REPO / ".gitignore"
+ENV_EXAMPLE = REPO / ".env.example"
 
 pytestmark = pytest.mark.governance
 
@@ -188,4 +189,44 @@ class TestDockerignoreHasNoDeadRules:
             f".dockerignore excludes paths that do not exist: {offenders}. Remove them. "
             "A rule for a path nobody has created yet is not harmless: it exempts whatever "
             "is put there later, and the first symptom is a container that cannot import it."
+        )
+
+
+def _documented_models() -> set[str]:
+    """Every backticked provider/model identifier the README names.
+
+    Scoped to the ``<vendor>/<model>`` shape inside a code span, which is how
+    this README writes a model and nothing else in it looks like.
+    """
+    return set(re.findall(r"`((?:nvidia|google|meta|mistralai)/[\w.\-]+)`", README.read_text(encoding="utf-8")))
+
+
+def _configured_model() -> str:
+    """The default model ``.env.example`` hands to the bridge."""
+    for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
+        if line.startswith("NEMOTRON_DEFAULT_MODEL="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+class TestTheConfiguredModelIsTheDocumentedOne:
+    """`.env.example` shipped `google/diffusiongemma-26b-a4b-it` while the README
+    documented `nvidia/llama-3.3-nemotron-super-49b-v1`, and
+    `nemotron_bridge.resolve` has no fallback -- so the scaffold every adopter
+    copies pointed "Nemotron" traffic at a different vendor's model. Nothing
+    noticed, because a value in a scaffold has no gate.
+    """
+
+    def test_the_scan_finds_both_sides(self) -> None:
+        """A comparison between two empty sets passes and proves nothing."""
+        assert _documented_models(), "no model identifier found in README"
+        assert _configured_model(), "no NEMOTRON_DEFAULT_MODEL found in .env.example"
+
+    def test_the_readme_names_exactly_one_model(self) -> None:
+        assert len(_documented_models()) == 1, f"README names several models: {sorted(_documented_models())}"
+
+    def test_the_scaffold_matches_the_documentation(self) -> None:
+        assert _configured_model() in _documented_models(), (
+            f".env.example sets NEMOTRON_DEFAULT_MODEL={_configured_model()!r} "
+            f"but the README documents {sorted(_documented_models())}"
         )

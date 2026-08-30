@@ -33,7 +33,12 @@ PLANNER_PROMPT_TEMPLATE = (
 
 REASONER_PROMPT_TEMPLATE = (
     "Execute the following plan using backward-compatible, modular code. "
-    "You MUST use your 'write_file' and 'run_command' tools to actually implement and test it on the filesystem.\n"
+    "You MUST use your 'read_file', 'apply_patch', 'write_file' and 'run_command' tools to actually "
+    "implement and test it on the filesystem.\n"
+    "Read with read_file rather than 'cat': it returns the file verbatim and does not spawn a shell. "
+    "Edit an existing file with apply_patch, whose old_text must match exactly once -- include "
+    "surrounding lines until it does. Reserve write_file for new files; rewriting a whole file to "
+    "change a few lines is how large files get truncated.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL} "
     "Use run_command to run the repository's own gates -- pytest, make, ruff, mypy. Commands that "
     "install packages or reach the network are classified as external actions and will be denied; "
@@ -43,7 +48,9 @@ REASONER_PROMPT_TEMPLATE = (
 
 VERIFIER_PROMPT_TEMPLATE = (
     "Verify the generated codebase against our CI gates (ruff, mypy, pytest, vitest). "
-    "Use your 'run_command' tool to execute them. Report PASS or FAIL.\n"
+    "Use your 'run_command' tool to execute them and 'read_file' to inspect sources. "
+    "You hold no file-editing tool by design: the role that judges the work cannot edit it. "
+    "Report PASS or FAIL.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL}\n\n"
     "Reasoner Output:\n{code_output}"
 )

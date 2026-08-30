@@ -48,7 +48,7 @@ The orchestrator previously mixed prompt templates, tool argument coercion, file
 | :--- | :--- | :--- |
 | Prompt Templates | `harness/shared/agent_prompts.py` | `PLANNER_PROMPT_TEMPLATE`, `REASONER_PROMPT_TEMPLATE`, `VERIFIER_PROMPT_TEMPLATE`, `AUTONOMOUS_AGENT_GUARDRAIL`, `TASK_LOG_PREVIEW_CHARS` |
 | Tool Argument Normalization & Routing | `harness/shared/tool_dispatch.py` | `_normalize_tool_arguments`, `DEFAULT_HYPOTHESIS_CONFIDENCE`, `ToolDispatchRegistry` |
-| Local Tool Execution (Filesystem / Process) | `harness/shared/tool_executors.py` | `execute_write_file`, `execute_run_command` |
+| Local Tool Execution (Filesystem / Process) | `harness/shared/tool_executors.py` | `execute_write_file`, `execute_read_file`, `execute_apply_patch`, `execute_run_command` |
 | Core ReAct Loop & Lifecycle Hooks | `harness/shared/mango_mas_orchestrator.py` | `MangoMASOrchestrator`, `execute_agent`, `execute_loop`, `_run_hook` |
 
 ### 2.2 `harness/shared/governance/broker.py` (356 Lines -> ~180 Lines)

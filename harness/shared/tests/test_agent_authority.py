@@ -48,6 +48,24 @@ class TestDerivedExposure:
     def test_the_planner_holds_no_execution_authority(self) -> None:
         assert not ({"write_file", "run_command"} & _names("planner"))
 
+    def test_the_verifier_cannot_patch_files(self) -> None:
+        """``apply_patch`` reaches the same paths as ``write_file`` and runs the
+        same ``write_denial_reason`` check, so it is the same authority. A
+        write-shaped tool that graded as ``read`` would reopen R-AC-8 under a
+        new name."""
+        assert "apply_patch" not in _names("verifier")
+
+    def test_the_verifier_can_read_the_work_it_judges(self) -> None:
+        """Reading is the verifier's whole job; only editing is denied."""
+        assert "read_file" in _names("verifier")
+
+    def test_the_reasoner_holds_both_new_tools(self) -> None:
+        assert {"read_file", "apply_patch"} <= _names("nemotron-reasoner")
+
+    def test_the_planner_may_read_but_not_patch(self) -> None:
+        assert "read_file" in _names("planner")
+        assert "apply_patch" not in _names("planner")
+
     def test_an_unknown_role_receives_nothing(self) -> None:
         """Defaulting to the full schema on an unrecognised name is how the
         verifier came to hold ``write_file``."""

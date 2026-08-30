@@ -20,6 +20,7 @@ Apply the Agentic SSD gate contract, preserve the external root of trust, refuse
 - DEC-009 — The policy decision point runs in process; the reference PDP is retained as the external contract and pinned by an agreement test. The `exists()` fail-open is removed.
 - DEC-010 — A command's action is derived from the command and fails closed to an action no role holds; the broker's process backend contains cwd, runtime and output size, and explicitly does not isolate.
 - DEC-011 — `run_command` routes through `ExecutionBroker`, so INV-8 is enforced on the live path. Active roles execute as the narrowest canonical contract; `pip install` and other external actions are denied for the reasoner. `test_invariant_liveness.py` ships with no waivers.
+- DEC-012 — `read_file` and `apply_patch` join the tool surface behind a new `read_policy.py`, the read-side counterpart to `write_policy.py`; both compose one shared credential-filename pattern with `command_actions.classify` so the shell-command door and the direct-file door cannot drift apart. `apply_patch` reuses `write_denial_reason` unchanged and grades as the same `write` action as `write_file`, so the verifier still holds no write-shaped tool.
 
 ## Required behavior
 

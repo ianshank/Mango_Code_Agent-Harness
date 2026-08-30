@@ -143,6 +143,7 @@
     "harness/control-plane/regenerate_bundle_digests.py",
     "harness/control-plane/tool_broker_reference.py",
     "harness/shared/write_policy.py",
+    "harness/shared/read_policy.py",
     "harness/shared/mango_mas_orchestrator.py",
     "harness/shared/agent_authority.py",
     "harness/shared/debug_dump.py",
