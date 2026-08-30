@@ -39,6 +39,33 @@ class TestReadFile:
         (mock_workspace / "crlf.txt").write_bytes(b"a\r\nb\r\nc\r\n")
         assert "b\r\n" in execute_read_file(mock_workspace, "crlf.txt", 2, 2)
 
+    def test_a_range_past_eof_reports_the_line_actually_returned(self, mock_workspace: Path) -> None:
+        """Flagged in review: the slice already clamps `end_line` to the file's
+        length, but the header used to echo the raw, un-clamped request --
+        `# f lines 100-200 of 3` for a 3-line file, describing a range that was
+        never returned. The header must report what the slice actually did."""
+        (mock_workspace / "small.txt").write_text("a\nb\nc\n", encoding="utf-8")
+        result = execute_read_file(mock_workspace, "small.txt", 100, 200)
+        assert result.splitlines()[0] == "# small.txt lines 100-3 of 3"
+
+    def test_a_ranged_read_that_overflows_the_cap_is_still_bounded(
+        self, mock_workspace: Path
+    ) -> None:
+        """Flagged in review: the cap applied to `content` alone, then prepended
+        the header, so `header + capped_content` could exceed
+        DEFAULT_MAX_OUTPUT_BYTES by the header's own length. The header must be
+        inside the capped budget, not added on top of it."""
+        big_line = "y" * (DEFAULT_MAX_OUTPUT_BYTES + 100)
+        (mock_workspace / "ranged.txt").write_text(f"{big_line}\nz\n", encoding="utf-8")
+        result = execute_read_file(mock_workspace, "ranged.txt", 1, 2)
+        # `_cap` itself appends a `[truncated at N bytes]` marker on top of the
+        # limit -- the same accepted overhead `run_command` output already
+        # carries everywhere else in this codebase -- so the bound is that
+        # overhead, not a hard zero-overhead ceiling.
+        marker_overhead = len(f"\n[truncated at {DEFAULT_MAX_OUTPUT_BYTES} bytes]".encode())
+        assert len(result.encode("utf-8")) <= DEFAULT_MAX_OUTPUT_BYTES + marker_overhead
+        assert result.startswith("# ranged.txt lines 1-2 of 2")
+
     @pytest.mark.parametrize(
         ("start", "end", "expected"),
         [

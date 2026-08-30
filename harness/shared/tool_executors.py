@@ -139,15 +139,23 @@ def execute_read_file(
         # line endings, the same property `apply_patch` preserves.
         lines = content.splitlines(keepends=True)
         first = start_line or 1
-        content = "".join(lines[first - 1:end_line])
-        header = f"# {filepath} lines {first}-{end_line or len(lines)} of {len(lines)}\n"
+        # `end_line` is reported after clamping to the file's actual length, not
+        # echoed back raw: `lines[first - 1:end_line]` already clamps a too-large
+        # `end_line` to `len(lines)` (Python slice semantics), but the header used
+        # to print the *requested* value regardless -- "lines 1-200 of 3" for a
+        # 3-line file, describing a range that was never returned.
+        last = min(end_line, len(lines)) if end_line is not None else len(lines)
+        content = "".join(lines[first - 1:last])
+        header = f"# {filepath} lines {first}-{last} of {len(lines)}\n"
 
-    # The same bound and the same `[truncated at N bytes]` marker brokered command
-    # output carries, so neither door can return more than the other (R-RPT-4).
-    capped = _cap(content, DEFAULT_MAX_OUTPUT_BYTES)
-    if capped != content and not header:
+    # `header + content` is capped as one unit, not `content` alone: capping only
+    # the body and prepending the header afterward let the combined result exceed
+    # `DEFAULT_MAX_OUTPUT_BYTES` by `len(header)` bytes, silently breaking the
+    # parity `run_command` output R-RPT-4 exists to guarantee. `_cap` is applied
+    # exactly once, to the same string that is returned.
+    if not header and len(content.encode("utf-8")) > DEFAULT_MAX_OUTPUT_BYTES:
         header = f"# {filepath} truncated\n"
-    return header + capped
+    return _cap(header + content, DEFAULT_MAX_OUTPUT_BYTES)
 
 
 def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_text: str) -> str:
