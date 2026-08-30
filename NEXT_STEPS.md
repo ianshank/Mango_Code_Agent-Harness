@@ -43,7 +43,7 @@ evidence-coverage work (`harness/CONTRACT.md`).
 
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 
-- [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`).
+- [x] **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed monolithic orchestrator and governance files into modular components (`tool_executors.py`, `tool_dispatch.py`, `agent_prompts.py`, `process_backend.py`, `ast_visitors.py`). `R-GFD-4` (the AST-inspection helpers out of `check_py_compat.py`) was the one requirement left open behind this checkbox until the follow-up change recorded at the top of `## [Unreleased]` in `CHANGELOG.md` closed it — all eight requirements are now verified against the actual tree, not carried over from the original PR description.
 - [x] **PEP 585 / UP035 Type Modernization**: Replaced legacy typing aliases with modern standard library constructs across all modules and tests.
 - [x] **Cross-Platform Hardening**: Resolved Windows/NTFS path resolution and quoting edge cases, verified across 20 new regression tests.
 - [x] **C4 Architecture & Specifications**: Completed traceable specification [`docs/specs/god-file-decomposition.md`](docs/specs/god-file-decomposition.md) and full C4 architecture model in [`docs/architecture/c4_architecture.md`](docs/architecture/c4_architecture.md).

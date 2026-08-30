@@ -31,8 +31,38 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
+    from harness.shared.ast_visitors import (
+        COMMON_TYPE_NAMES as COMMON_TYPE_NAMES,
+    )
+    from harness.shared.ast_visitors import (
+        find_datetime_utc as find_datetime_utc,
+    )
+    from harness.shared.ast_visitors import (
+        find_pep604 as find_pep604,
+    )
+    from harness.shared.ast_visitors import (
+        find_pep604_assignments as find_pep604_assignments,
+    )
+    from harness.shared.ast_visitors import (
+        has_future_annotations as has_future_annotations,
+    )
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
+    from ast_visitors import (  # type: ignore[no-redef]
+        COMMON_TYPE_NAMES as COMMON_TYPE_NAMES,
+    )
+    from ast_visitors import (  # type: ignore[no-redef]
+        find_datetime_utc as find_datetime_utc,
+    )
+    from ast_visitors import (  # type: ignore[no-redef]
+        find_pep604 as find_pep604,
+    )
+    from ast_visitors import (  # type: ignore[no-redef]
+        find_pep604_assignments as find_pep604_assignments,
+    )
+    from ast_visitors import (  # type: ignore[no-redef]
+        has_future_annotations as has_future_annotations,
+    )
     from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
@@ -155,91 +185,6 @@ def load_skip_dirs(repo_root: Path) -> frozenset[str]:
         logger.error("[FAIL] Malformed governance policy: %s", e)
         raise SystemExit(1) from e
     return frozenset(skip)
-
-
-def has_future_annotations(tree: ast.Module) -> bool:
-    return any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "__future__"
-        and any(alias.name == "annotations" for alias in node.names)
-        for node in tree.body
-    )
-
-
-def _runtime_annotations(tree: ast.Module):
-    """Yield (lineno, annotation) pairs that Python evaluates at import time."""
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            args = node.args
-            for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg):
-                if arg is not None and arg.annotation is not None:
-                    yield node.lineno, arg.annotation
-            if node.returns is not None:
-                yield node.lineno, node.returns
-        # Module/class-level variable annotations (PEP 526) are also evaluated at
-        # import time, so `x: str | None = ...` fails on 3.9 just like function args.
-        elif isinstance(node, ast.AnnAssign) and node.annotation is not None:
-            yield node.lineno, node.annotation
-
-
-def find_pep604(tree: ast.Module) -> list[int]:
-    """Return line numbers where a PEP 604 union is evaluated at runtime."""
-    lines: set[int] = set()
-    for lineno, annotation in _runtime_annotations(tree):
-        for sub in ast.walk(annotation):
-            if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr):
-                lines.add(lineno)
-    return sorted(lines)
-
-
-def find_datetime_utc(tree: ast.Module) -> list[int]:
-    """Return line numbers importing `UTC` from datetime (3.11+ only)."""
-    return sorted(
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module == "datetime"
-        and any(alias.name == "UTC" for alias in node.names)
-    )
-
-
-COMMON_TYPE_NAMES = frozenset(
-    {"str", "int", "float", "bool", "bytes", "dict", "list", "set", "tuple", "Any", "Optional", "Union", "Path"}
-)
-
-
-def _is_type_name_identifier(name: str) -> bool:
-    if name in COMMON_TYPE_NAMES:
-        return True
-    # PascalCase type names like MyClass, Path, TreeNode: starts with uppercase, but not ALL-CAPS constant
-    if len(name) > 1 and name[0].isupper() and not name.isupper():
-        return True
-    return False
-
-
-def _is_type_union_binop(binop: ast.BinOp) -> bool:
-    """Check if a BinOp(BitOr) represents a PEP 604 type union in an assignment."""
-    for side in (binop.left, binop.right):
-        if isinstance(side, ast.Constant) and side.value is None:
-            return True
-        if isinstance(side, ast.Name) and _is_type_name_identifier(side.id):
-            return True
-        if isinstance(side, ast.Attribute) and _is_type_name_identifier(side.attr):
-            return True
-        if isinstance(side, ast.BinOp) and isinstance(side.op, ast.BitOr) and _is_type_union_binop(side):
-            return True
-    return False
-
-
-def find_pep604_assignments(tree: ast.Module) -> list[int]:
-    """Return line numbers where a runtime assignment creates a PEP 604 union (e.g. Alias = str | None)."""
-    lines: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.AST):
-            for sub in ast.walk(node.value):
-                if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr) and _is_type_union_binop(sub):
-                    lines.add(node.lineno)
-    return sorted(lines)
 
 
 def iter_python_files(repo_root: Path, skip_dirs: frozenset[str]):

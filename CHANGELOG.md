@@ -7,6 +7,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Refactored — the last open god-file requirement (`R-GFD-4`)
+
+`docs/specs/god-file-decomposition.md` shipped across PRs #28-#32 with seven of
+its eight requirements closed; `R-GFD-4` — extracting the pure AST-inspection
+helpers out of `check_py_compat.py` — was the one left open. `find_pep604`,
+`find_datetime_utc`, `has_future_annotations`, `find_pep604_assignments`, and
+their private helpers now live in `harness/shared/ast_visitors.py` (120 lines,
+zero internal imports beyond stdlib `ast`), and `check_py_compat.py` drops
+from 338 to 283 lines, keeping only workflow-matrix resolution, policy-driven
+skip-dir loading, the file-scanning loop, and the CLI.
+
+Every extracted symbol is re-exported from `check_py_compat.py`
+(`from harness.shared.ast_visitors import X as X`), so the existing 37 tests
+in `test_check_py_compat.py` — which reach these functions through the `cc`
+module alias — needed no changes. `test_ast_visitors.py` (16 tests) adds
+direct unit coverage of the extracted module, independent of the gate that
+consumes it. `test_import_purity.py`, `test_import_direction.py`, and
+`check_dedup.py` all pass unchanged against the new module. All eight
+`R-GFD-*` requirements are now closed; see `docs/specs/god-file-decomposition.md`
+and `docs/architecture/god-file-refactoring-guide.md` §2.3 for the updated
+acceptance criteria and decomposition map.
+
 ### Added — `read_file` and `apply_patch`, and the read policy that had to come first
 
 The reasoner could already read and write code, but only bluntly: every read spawned a
