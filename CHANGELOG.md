@@ -7,27 +7,72 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added — Live Nemotron E2E Multi-Domain Triage, Root Cause Analysis & AQA Regression
+### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup
 
-- **Cross-Platform Newline Preservation (`harness/shared/tool_executors.py`)**: `_write_preserving_newlines()` ensures binary line-ending preservation on disk across Windows (CRLF) and Unix (LF) environments, eliminating CRLF expansion discrepancies during file read/write operations.
-- **Dynamic Agent Prompt Fallback (`harness/shared/mango_mas_orchestrator.py`)**: `load_agent_prompt()` dynamically falls back to the harness repository root `.mango/agents/` directory when invoked from scratch or isolated ephemeral workspaces.
-- **Command Broker Action Classification & Tool Discovery (`harness/shared/governance/command_actions.py`)**:
-  - Added `test_execute` classification for `python [flags] script.py` and `python -m (pytest|unittest|py_compile|doctest)`.
-  - Added `read` classification for version/help inspection (`python/py/node/pnpm/npm --version|-V|--help`) and `command -v`.
-  - Stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) are excluded from write targets, enabling standard shell output redirection without triggering path containment denials.
-- **Node Test & Fixture Dynamic Configuration (`harness/node/tests/ai/smoke/_fixtures.ts`)**: `resolveEnvVars()` dynamically discovers `NVIDIA_API_KEY` and defaults model to `LIVE_DEFAULT_MODEL` with multi-tier status code assertions `(401|403|400|410)`.
-- **Multi-Domain Live MAS E2E Scenarios (`harness/shared/tests/test_mango_mas_live.py`)**: Expanded live E2E testing across sequential thinking (`calculate_fibonacci`), multi-file application synthesis (`DataValidator`), and symbolic math reasoning (`prime_factors`), achieving 100% pass rate.
-- **Agent Prompts & Persona Guidelines (`harness/shared/agent_prompts.py`, `.mango/agents/`)**: Updated prompt templates and operating contracts for `nemotron-reasoner` and `verifier` to directly execute standalone scripts in scratch workspaces without requiring root `Makefile` or `governance-policy.json`.
-- **Cryptographic Policy Bundle Digest Synchronization (`harness/control-plane/policy-bundle.example.json`)**: Synchronized SHA256 digests across all stack scripts post-verification script fixes.
-- **Root Cause Analysis Documentation (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Comprehensive multi-perspective RCA report covering all 10 live triaged defects across SWE, SQE, Architecture, AI Scientist, QA, Tools, Robotics, and Product.
-- **Dedicated Regression Suite (`harness/shared/tests/regression/test_e2e_nemotron_triage_regression.py`)**: 11 new regression tests verifying newline roundtripping, prompt resolution, discard stream redirection, and API key resolution.
+Paired specs: `docs/specs/dependency-hygiene.md` and `docs/specs/ci-enforcement-gaps.md` (DEC-013).
 
-### Added — Neuro-Symbolic Sandbox Synthesis & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+Dependency vulnerability scanning now runs at root, closing the
+`KNOWN_GAPS["audit"]` exception `test_ci_gate_coverage.py` had carried: a new
+`make audit` (`pip-audit` against a new `requirements.txt`, delegated to the
+Node stack's existing `osv-scanner` via `make -C harness/node audit`) and
+`make audit-install`, enforced by a dedicated `audit` job in
+`.github/workflows/python-package.yml` (mirroring how `secrets` runs outside
+`ci` rather than duplicated across matrix legs) and now a `pre-pr`
+prerequisite. `requirements.txt` splits the API server's runtime
+dependencies (fastapi, uvicorn, pydantic, httpx) out of
+`requirements-dev.txt`, which keeps installing both via a
+`-r requirements.txt` include; `pyproject.toml` gains a mirrored
+`[project.dependencies]`; `.github/dependabot.yml` covers the `pip` and
+`npm` ecosystems. `governance/broker.py`'s and `check_dedup.py`'s
+JSON-parsing consolidates into `harness/shared/governance_json.py`, a
+non-raising classifier — each caller still raises its own existing
+exception type and message.
 
-- **Critique Normalization (`harness/shared/tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` JSON payloads emitted by `ProcessBackend` / `ExecutionBroker` on capability violations (e.g. `network_access_denied` under `network-isolated`) and transforms them into standardized structured critiques. Preserves strict backward compatibility for policy guard denials.
-- **E2E Sandbox Synthesis Tests (`harness/shared/tests/test_neurosym_sandbox_e2e.py`)**: Multi-turn synthesis and repair tests verifying invariant `INV-9` (fail-closed sandbox fallback), `AC-CE-1` (capability profile violation trapping), and `AC-NS-3` (critique-guided multi-file app synthesis and repair).
-- **Regression Suite Expansion (`harness/shared/tests/regression/test_sandbox_violation_regression.py`)**: Dedicated AQA regression tests verifying critique serialization and schema conformance.
-- **Performance & Invariant Scanning Optimization (`harness/shared/validate_invariants.py`)**: Migrated `_first_party_py_files` traversal to pruned `os.walk` to eliminate performance bottlenecks over large directory trees.
+Also: `harness/__init__.py` and `harness/api_server/__init__.py`, for the
+two packages genuinely imported as `harness.x.y` (matching
+`harness/shared/__init__.py`'s existing convention); a root `install`
+target (`harness/shared/install_hooks.sh`) so a clone using only the root
+Makefile still gets the pre-push hook; header comments on
+`harness/node/.github/workflows/ci.yml` and
+`harness/jvm/.github/workflows/ci.yml` identifying them as reference
+templates GitHub never executes; the version string unified to `2.1.9`
+across `README.md`, `docs/architecture/c4_architecture.md`, and
+`NEXT_STEPS.md`. `harness/jvm/` is now explicitly labeled in `README.md`
+and `harness/CONTRACT.md` as an unadopted reference template.
+
+**Self-corrected mid-review:** an initial research pass reported 3 live
+`ruff` findings and this batch briefly "fixed" them, which turned CI red
+with the opposite verdict on the same two files. Root cause: this
+development environment has a bare `ruff` on `PATH` resolving to a newer,
+unpinned version, while `python -m ruff` — what `make lint` and CI's
+`pip install -r requirements-dev.txt` both actually resolve to — is the
+pinned `0.6.9`, and the two versions disagree on `E402` and `RUF100`/`BLE001`
+for this exact code shape. `main` was already clean under the pinned
+version; neither file is touched here. The same false signal briefly caused
+`harness/__init__.py`/`harness/api_server/__init__.py` to be reverted before
+being restored once re-verified with the correct binary. Lesson recorded in
+`docs/specs/ci-enforcement-gaps.md`: always verify with `make <target>` or
+`python -m ruff`/`python -m mypy`, never a bare invocation.
+
+**Tried and reverted, unrelated to the above:** wiring `lint-node` into
+`ci` — `make lint-node` currently crashes on a pre-existing
+`typescript`/`typescript-eslint` version incompatibility in
+`harness/node/package.json`, tracked as a follow-up in
+`docs/specs/ci-enforcement-gaps.md`'s Open questions.
+
+### Fixed — `make secrets` scanned every branch in the clone, not just the current one
+
+Discovered when this PR's own `secret-scan` job failed CI despite a clean
+local `make secrets`: all three `secrets` targets (root, `harness/node`,
+`harness/jvm`) ran `gitleaks git` with no `--log-opts`, scanning every ref
+in the local clone rather than the checked-out branch's own history. A
+real leaked key on an unrelated, concurrently pushed branch
+(`feature/governed-run-console`, untouched by this PR) was failing CI for
+a reason no PR author could act on. Fixed with `--log-opts="HEAD"` on all
+three targets, confirmed with a from-scratch clone (141 commits scanned,
+clean, vs. 144 and one leak without the fix). DEC-014.
+
+Spec: `docs/specs/dependency-hygiene.md`, `docs/specs/ci-enforcement-gaps.md`.
 
 ### Refactored — the last open god-file requirement (`R-GFD-4`)
 
