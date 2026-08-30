@@ -165,8 +165,12 @@ round-trip.
 
       `build (3.x)` runs `make ci-python`; `build-full` (Python 3.11) is the
       only leg that runs `make ci`, the Node stack and the regression tier;
-      `secret-scan` and `dependency-audit` are dedicated jobs, interpreter-
-      independent by design. `dependency-audit (3.9)` sets `continue-on-error`
+      `secret-scan` is a dedicated job because it is genuinely interpreter-
+      independent (gitleaks doesn't care which Python runs it). `dependency-audit`
+      is dedicated for the opposite reason: its outcome *is* interpreter-specific
+      (DEC-015/DEC-017), which is exactly why it further splits into a single-
+      interpreter `audit` job and the matrixed `audit-matrix` legs rather than
+      folding into `build`. `dependency-audit (3.9)` sets `continue-on-error`
       at the step level, per DEC-017 (unpatchable CVEs on that interpreter), so
       the job's reported conclusion is success regardless of what `pip-audit`
       finds. Requiring it as a status check only ensures the leg keeps running
