@@ -3,14 +3,16 @@ import os
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from harness.shared.debug_dump import redact_history
+from harness.shared.debug_dump import redact_history, redact_text, resolve_credentials
 from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
@@ -40,10 +42,21 @@ class TaskRequest(BaseModel):
     task: str
 
 
+class TraceEvent(BaseModel):
+    """A content-free lifecycle record for one governed orchestration run."""
+
+    sequence: int = Field(ge=0)
+    phase: Literal["planner", "reasoner", "verifier", "harness_verification"]
+    state: Literal["started", "completed", "failed"]
+    elapsed_ms: int = Field(ge=0)
+
+
 class TaskResponse(BaseModel):
     status: str
     result: str
-    history: list[dict[str, str]]
+    # Chat protocol messages hold nested tool-call objects and nullable content,
+    # not just string values. Keep this truthful to the redacted wire shape.
+    history: list[dict[str, Any]]
     # Additive. `status` keeps its existing meaning -- "the orchestration did not
     # raise" -- so a client reading only that field learns nothing about the
     # outcome; these carry the verdict the harness earned for the same run.
@@ -55,6 +68,11 @@ class TaskResponse(BaseModel):
     verdict: Optional[str] = None
     termination_reason: Optional[str] = None
     verdict_detail: Optional[str] = None
+    # Structured equivalents of the legacy human-readable verdict_detail.
+    verdict_command: Optional[str] = None
+    verdict_exit_code: Optional[int] = None
+    # Constructed per response; never use a module-level trace accumulator.
+    trace: list[TraceEvent] = Field(default_factory=list)
 
 
 # NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
@@ -86,37 +104,64 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)) -> None:
 
 
 @app.post("/api/orchestrate", response_model=TaskResponse, dependencies=[Depends(verify_api_key)])
-async def orchestrate_task(request: TaskRequest) -> TaskResponse:
+async def orchestrate_task(request: TaskRequest) -> Any:
     """
     Executes the sequential thinking MAS loop for the given task.
     """
+    trace_events: list[TraceEvent] = []
     try:
         from fastapi.concurrency import run_in_threadpool
         api_key = os.environ.get("NVIDIA_API_KEY")
         orchestrator = MangoMASOrchestrator(workspace_dir=PROJECT_ROOT, api_key=api_key)
 
+        def capture_trace(event: dict[str, Any]) -> None:
+            # Validation keeps the public event schema closed even if an
+            # orchestrator implementation changes independently.
+            trace_events.append(TraceEvent(**event))
+
         # Run the full sequence: Planner -> Reasoner -> Verifier (offloaded to thread)
-        outcome = await run_in_threadpool(orchestrator.execute_loop, request.task)
+        # Starlette currently forwards keyword arguments, but binding them here
+        # keeps this invocation compatible with threadpool adapters that accept
+        # only a callable and positional arguments.
+        outcome = await run_in_threadpool(
+            partial(orchestrator.execute_loop, request.task, trace_sink=capture_trace)
+        )
 
         # The history carries prompts and tool output and is returned verbatim
         # to the client; run it through the same redactor the debug dumps use
         # so a credential resolved inside the bridge cannot leave over HTTP.
         verdict = outcome.verdict
+        resolved_credentials = resolve_credentials(api_key)
+        redacted_verifier_message = redact_text(outcome.verifier_message, resolved_credentials)
+        redacted_command = redact_text(verdict.command, resolved_credentials)
+        redacted_reason = redact_text(verdict.reason, resolved_credentials)
         return TaskResponse(
             status="success",
-            result=outcome.verifier_message,
+            result=redacted_verifier_message,
             history=redact_history(orchestrator.conversation_history, api_key=api_key),
             verdict=verdict.status,
             termination_reason=verdict.termination_reason or None,
-            verdict_detail=f"{verdict.command} exited {verdict.exit_code}: {verdict.reason}",
+            verdict_detail=f"{redacted_command} exited {verdict.exit_code}: {redacted_reason}",
+            verdict_command=redacted_command,
+            verdict_exit_code=verdict.exit_code,
+            trace=trace_events,
         )
     except HTTPException:
         # Re-raise explicit HTTP errors (e.g. auth) unchanged.
         raise
-    except Exception:
-        # Avoid leaking internals to clients; log the real cause server-side.
-        logger.exception("Orchestration failed")
-        raise HTTPException(status_code=500, detail="Internal orchestration error") from None
+    except Exception:  # noqa: BLE001
+        # Avoid leaking internals, task text, or provider request context to
+        # clients or logs.
+        # Do not attach the exception or traceback: provider exceptions may
+        # include request context or credentials in their messages.
+        logger.error("Orchestration failed")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal orchestration error",
+                "trace": [event.model_dump() for event in trace_events],
+            },
+        )
 
 
 # Mount the static files for the frontend UI

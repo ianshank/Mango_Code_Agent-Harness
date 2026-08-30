@@ -47,6 +47,7 @@ from harness.shared.governance.verification import VerificationRunner
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.policy_loader import max_tool_calls_per_task, orchestrator_defaults
+from harness.shared.run_trace import TRACE_PHASES, TRACE_STATES, RunTrace, TraceSink
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 from harness.shared.tool_budget import ToolBudget
 from harness.shared.tool_dispatch import (
@@ -64,7 +65,6 @@ from harness.shared.tool_executors import (
 from harness.shared.tool_schemas import NEMOTRON_TOOLS as NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
-
 
 class MangoMASOrchestrator:
     """
@@ -318,7 +318,9 @@ class MangoMASOrchestrator:
         # ran last.
         self._active_role = agent_name
         self._run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
-        logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
+        # Do not log task text. It can contain credentials and is not needed to
+        # identify the lifecycle boundary in operational logs.
+        logger.info("Executing agent [%s]", agent_name)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.load_agent_prompt(agent_name)},
@@ -353,8 +355,10 @@ class MangoMASOrchestrator:
 
                 response = complete_chat(**kwargs)
             except Exception as e:
-                logger.error("[%s] API failed: %s", agent_name, e)
-                raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
+                # Provider exceptions can include request context, so retain the
+                # causal exception without serialising it to logs or responses.
+                logger.error("[%s] API failed", agent_name)
+                raise RuntimeError(f"Agent {agent_name} API failed") from e
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
@@ -384,16 +388,20 @@ class MangoMASOrchestrator:
         self._run_hook(f"post-{agent_name}-run", status="timeout")
         raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
 
-    def execute_loop(self, initial_task: str) -> LoopOutcome:
+    def execute_loop(self, initial_task: str, *, trace_sink: TraceSink | None = None) -> LoopOutcome:
         """Run the MAS loop and return what it produced, verdict included.
 
         The verdict is earned by a check this method runs itself, never from the
-        agent's own commands: the model selects those (spec R-VP-1).
+        agent's own commands: the model selects those (spec R-VP-1).  ``trace_sink``
+        receives only allowlisted phase lifecycle data; it never receives agent
+        text, prompts, tool arguments, or tool output.
         """
+        trace = RunTrace(trace_sink, clock=time.monotonic)
+
         # 1. Planner
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
         plan_started = time.monotonic()
-        plan = self.execute_agent("planner", planner_prompt, tools=[])
+        plan = trace.run("planner", lambda: self.execute_agent("planner", planner_prompt, tools=[]))
         logger.info("Plan generated: %d bytes", len(plan))
 
         # Observation-only shadow comparison (docs/specs/mangomas-integration-core.md).
@@ -421,16 +429,19 @@ class MangoMASOrchestrator:
 
         # 2. Reasoner (Code Generation / Fixes using Tools)
         reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
-        code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt)
+        code_output = trace.run(
+            "reasoner", lambda: self.execute_agent("nemotron-reasoner", reasoner_prompt)
+        )
         logger.info("Code generation completed via tools: %d bytes", len(code_output))
 
         # 3. Verifier (Testing & Hygiene using Tools)
         verifier_prompt = VERIFIER_PROMPT_TEMPLATE.format(code_output=code_output)
-        verification = self.execute_agent("verifier", verifier_prompt)
+        verification = trace.run("verifier", lambda: self.execute_agent("verifier", verifier_prompt))
         logger.info("Verification result: %d bytes", len(verification))
 
         # 4. The harness earns the verdict itself.
-        return LoopOutcome(self._harness_verdict(), verification, plan, code_output)
+        verdict = trace.run("harness_verification", self._harness_verdict)
+        return LoopOutcome(verdict, verification, plan, code_output)
 
     def _harness_verdict(self) -> Verdict:
         """Run the configured check and grade it, or say why it could not run."""
@@ -460,6 +471,9 @@ __all__ = [
     "PRE_RUN_HOOK",
     "REASONER_PROMPT_TEMPLATE",
     "TASK_LOG_PREVIEW_CHARS",
+    "TRACE_PHASES",
+    "TRACE_STATES",
+    "TraceSink",
     "VERIFIER_PROMPT_TEMPLATE",
     "_normalize_tool_arguments",
 ]
