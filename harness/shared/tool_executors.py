@@ -227,7 +227,8 @@ def execute_run_command(
         kwargs["timeout"] = timeout
     result = broker.execute_command(command, **kwargs)
     if result.status == "BLOCKED":
-        logger.warning("Broker denied command %r for role %s: %s", command, active_role, result.reason)
+        from harness.shared.debug_dump import redact_text
+        logger.warning("Broker denied command %r for role %s: %s", redact_text(command), active_role, result.reason)
     return format_execution_result(result)
 
 

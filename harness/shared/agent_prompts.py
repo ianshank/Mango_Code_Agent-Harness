@@ -58,11 +58,10 @@ REASONER_PROMPT_TEMPLATE = (
 VERIFIER_PROMPT_TEMPLATE = (
     "You are the verifier. Inspect the reasoner's output and verify the workspace files.\n"
     "Run the test suite using 'run_command' "
-    "(e.g. 'pytest <test_file>', 'python -m unittest <test_file>', 'python <file.py>') "
-    "or 'read_file' to inspect sources.\n"
+    "(e.g. 'pytest <test_file>', 'python -m unittest <test_file>', 'python <file.py>').\n"
     "If running in a standalone or scratch workspace without a Makefile, DO NOT search for or attempt to read "
     "missing config files (Makefile, pyproject.toml, .ruff.toml, tox.ini). "
-    "Directly execute the target test script or inspect the code.\n"
+    "Directly execute the target test script.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL}\n\n"
     "Reasoner Output:\n{code_output}\n\n"
     "Provide a brief evaluation summary and MUST conclude your final response with either "

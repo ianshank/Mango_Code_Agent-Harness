@@ -181,8 +181,10 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
     (re.compile(r"\b(?:python[0-9.]*|py)\b\s+(?:--version|-V|--help|-h)\b"), "read",
      "querying python tool version or help"),
-    (re.compile(r"\b(?:node|pnpm|npm)\b\s+(?:--version|-V|-v|--help|-h)\b"), "read",
+    (re.compile(r"\b(?:node|pnpm|npm|npx)\b\s+(?:--version|-V|-v|--help|-h)\b"), "read",
      "querying node tool version or help"),
+    (re.compile(r"\bcommand\s+-v\s+(?:python[0-9.]*|py|node|pnpm|npm|npx)\b"), "read",
+     "resolving executable path"),
     # `[^\s]` rather than `.` between the interpreter and `-m`: `.*` here bridges
     # any distance, so the engine retries the whole tail from every `python` in
     # the string and the match becomes quadratic in the command length. A command
@@ -253,9 +255,14 @@ def classify(command: str) -> Classification:
 
 def _classify_program(text: str) -> Classification:
     """The action of the command itself, ignoring any redirection."""
+    best_shape: Classification | None = None
     for pattern, action, why in _BY_SHAPE:
         if pattern.search(text):
-            return Classification(action, why)
+            cand = Classification(action, why)
+            if best_shape is None or _severity(cand.action) > _severity(best_shape.action):
+                best_shape = cand
+    if best_shape is not None:
+        return best_shape
 
     try:
         argv = shlex.split(text)

@@ -62,16 +62,9 @@ class TestMangoMASLive:
         )
 
         outcome = orchestrator.execute_loop(task)
-        history_str = str(orchestrator.conversation_history)
-        assert (
-            "PASS" in outcome.verifier_message
-            or "FAIL" in outcome.verifier_message
-            or "PASS" in history_str
-            or "FAIL" in history_str
-            or (tmp_path / "validator.py").exists()
-            or "validator.py" in history_str
-        )
-        assert (tmp_path / "validator.py").exists() or "validator.py" in history_str
+        assert outcome.verdict.is_pass
+        assert (tmp_path / "validator.py").exists()
+        assert (tmp_path / "test_validator.py").exists()
 
     def test_mango_mas_math_symbolic_reasoning_e2e(self, tmp_path, monkeypatch):
         """
@@ -86,13 +79,6 @@ class TestMangoMASLive:
             "Execute python math_solver.py and report the result."
         )
 
-        verification_result = orchestrator.execute_sequential_thinking_loop(task)
-        history_str = str(orchestrator.conversation_history)
-        assert (
-            "PASS" in verification_result
-            or "FAIL" in verification_result
-            or "PASS" in history_str
-            or "FAIL" in history_str
-            or (tmp_path / "math_solver.py").exists()
-            or "math_solver.py" in history_str
-        )
+        outcome = orchestrator.execute_loop(task)
+        assert outcome.verdict.is_pass
+        assert (tmp_path / "math_solver.py").exists()

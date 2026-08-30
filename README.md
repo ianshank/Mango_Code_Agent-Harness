@@ -175,7 +175,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **1,835 automated tests** (56 Vitest + 1,779 Pytest across 7 tiers)
+- **Total Automated Tests:** **1,975 automated tests** (57 Vitest + 1,918 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **97% total** (98.02% Lines | 95.01% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
