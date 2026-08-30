@@ -102,6 +102,13 @@ class TestTargetOverridesProgram:
         assert classify("head -5 ~/.netrc").action == "secret_access"
         assert classify("cat deploy.pem").action == "secret_access"
 
+    def test_reading_a_credential_file_is_not_a_plain_read_regardless_of_case(self) -> None:
+        """The pattern is shared with `read_policy.read_denial_reason`; a
+        case-sensitive match let `.ENV` and `ID_RSA` through on both doors."""
+        assert classify("cat .ENV").action == "secret_access"
+        assert classify("cat ID_RSA").action == "secret_access"
+        assert classify("cat SECRETS.PEM").action == "secret_access"
+
     def test_an_ordinary_file_whose_name_contains_env_is_still_a_read(self) -> None:
         """A pattern that catches `src/env_utils.py` would deny ordinary work."""
         assert classify("cat src/env_utils.py").action == "read"

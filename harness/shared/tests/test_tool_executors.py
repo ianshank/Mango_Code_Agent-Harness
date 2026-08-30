@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES
+from harness.shared.tests.conftest import POSIX_ONLY
 from harness.shared.tool_executors import (
     execute_apply_patch,
     execute_read_file,
@@ -88,6 +89,23 @@ class TestReadFile:
         (mock_workspace / "adir").mkdir()
         assert execute_read_file(mock_workspace, "adir").startswith("Error reading file")
 
+    @POSIX_ONLY
+    def test_a_symlink_pointing_outside_the_workspace_is_refused(self, mock_workspace: Path) -> None:
+        """`.resolve()` follows the link before the containment check, so the
+        escape is caught by its destination rather than its (innocent-looking)
+        name inside the workspace."""
+        outside = mock_workspace.parent / "outside_secret.txt"
+        outside.write_text("NVIDIA_API_KEY=nvapi-outside\n", encoding="utf-8")
+        (mock_workspace / "innocent.txt").symlink_to(outside)
+        result = execute_read_file(mock_workspace, "innocent.txt")
+        assert "path escapes workspace" in result
+        assert "nvapi-outside" not in result
+
+    def test_a_non_utf8_file_reports_the_error_without_crashing(self, mock_workspace: Path) -> None:
+        (mock_workspace / "bin.dat").write_bytes(bytes([0xFF, 0xFE, 0x00, 0x01]))
+        result = execute_read_file(mock_workspace, "bin.dat")
+        assert result.startswith("Error reading file")
+
 
 class TestApplyPatch:
     def test_replaces_a_unique_substring(self, mock_workspace: Path) -> None:
@@ -147,6 +165,14 @@ class TestApplyPatch:
         git_dir.mkdir(exist_ok=True)
         (git_dir / "config").write_text("[core]\n", encoding="utf-8")
         assert ".git directory" in execute_apply_patch(mock_workspace, ".git/config", "core", "x")
+
+    def test_a_directory_target_reports_the_error_without_crashing(self, mock_workspace: Path) -> None:
+        (mock_workspace / "adir").mkdir()
+        assert execute_apply_patch(mock_workspace, "adir", "x", "y").startswith("Error patching file")
+
+    def test_a_non_utf8_file_reports_the_error_without_crashing(self, mock_workspace: Path) -> None:
+        (mock_workspace / "bin.dat").write_bytes(bytes([0xFF, 0xFE, 0x00, 0x01]))
+        assert execute_apply_patch(mock_workspace, "bin.dat", "x", "y").startswith("Error patching file")
 
     def test_a_missing_file_reports_the_error(self, mock_workspace: Path) -> None:
         assert execute_apply_patch(mock_workspace, "nope.txt", "a", "b").startswith("Error patching file")

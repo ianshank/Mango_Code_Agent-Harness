@@ -118,20 +118,37 @@ class MangoMASOrchestrator:
         # Tool dispatch registry: every function name declared in
         # NEMOTRON_TOOLS must have an entry here (pinned by a unit test), so
         # declaration and dispatch cannot drift apart.
+        # `args.get(key) or ""` rather than `args.get(key, "")`: a *present* key
+        # whose value is JSON `null` -- a model sending a field it has nothing for --
+        # returns `None` from `.get(key, default)`, because the default only applies
+        # to a *missing* key. `None` then reaches `workspace / filepath` or
+        # `content.count(old_text)` unchanged and raises `TypeError` outside any
+        # handler's own try/except, violating the "every handler returns a string"
+        # contract `test_handlers_return_strings` exists to pin -- caught only by
+        # the dispatcher's generic `except Exception` in `_dispatch_tool_calls`,
+        # which produces a bare `TypeError: ...` string in place of the handler's
+        # own scoped `Error reading/writing/patching file ...` message. `or ""`
+        # normalises both "missing" and "null" to the same empty string every
+        # handler already treats as "nothing supplied". Not applied to
+        # `start_line`/`end_line` (`None` is their valid "not requested" sentinel,
+        # handled explicitly) or `confidence` (`0.0` is a legitimate value that
+        # `or DEFAULT` would silently discard).
         self._tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
-            "write_file": lambda args: self._execute_write_file(args.get("filepath", ""), args.get("content", "")),
+            "write_file": lambda args: self._execute_write_file(
+                args.get("filepath") or "", args.get("content") or ""
+            ),
             "read_file": lambda args: self._execute_read_file(
-                args.get("filepath", ""), args.get("start_line"), args.get("end_line")
+                args.get("filepath") or "", args.get("start_line"), args.get("end_line")
             ),
             "apply_patch": lambda args: self._execute_apply_patch(
-                args.get("filepath", ""), args.get("old_text", ""), args.get("new_text", "")
+                args.get("filepath") or "", args.get("old_text") or "", args.get("new_text") or ""
             ),
-            "run_command": lambda args: self._execute_run_command(args.get("command", "")),
+            "run_command": lambda args: self._execute_run_command(args.get("command") or ""),
             "knowledge_gap_log": lambda args: knowledge_gap_log(
-                args.get("question", ""), args.get("what_needed", ""), args.get("proposed_approach", "")
+                args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
             ),
             "hypothesis_register": lambda args: hypothesis_register(
-                args.get("claim", ""), args.get("reasoning", ""),
+                args.get("claim") or "", args.get("reasoning") or "",
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
             ),
         }

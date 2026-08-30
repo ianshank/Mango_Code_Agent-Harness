@@ -42,7 +42,13 @@ CREDENTIAL_FILENAME_ALTERNATION = r"\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|
 #: Anchored to a whole path segment. Matching a *segment* rather than searching
 #: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
 #: while still catching ``secrets/id_rsa``.
-CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION})$")
+#:
+#: Case-insensitive: a case-sensitive match let ``.ENV``, ``ID_RSA`` and
+#: ``SECRETS.PEM`` -- valid names on the case-preserving filesystems this harness
+#: already targets (macOS default, Windows, and any Linux checkout an agent could
+#: simply create by that name) -- through both this policy and
+#: ``command_actions.classify`` untouched, since neither carried ``re.IGNORECASE``.
+CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION})$", re.IGNORECASE)
 
 
 def _normalise(relpath: str) -> str:

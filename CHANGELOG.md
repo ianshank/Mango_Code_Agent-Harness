@@ -53,6 +53,34 @@ tool's name as well as the old one.
 
 Spec: `docs/specs/agent-read-patch-tools.md`.
 
+### Fixed — two credential-protection gaps found reviewing the tool above, before either shipped
+
+An adversarial pass over `read_file`/`apply_patch` before merge, not a bug reported after
+the fact.
+
+**Case-sensitive credential matching.** `CREDENTIAL_FILENAME_ALTERNATION` had no
+`re.IGNORECASE`, so `.ENV`, `ID_RSA` and `SECRETS.PEM` passed both doors ungoverned —
+`read_denial_reason` and `command_actions.classify` alike. Neither filesystem case rules
+nor an agent's own naming choice are something either door can assume; both patterns now
+compile with `re.IGNORECASE`. No tracked file collides with the widened match (checked
+against `git ls-files`).
+
+**`JSON null` crashed a tool handler outside its own error handling.** `args.get(key, "")`
+only substitutes the default for a *missing* key; a model sending `{"old_text": null}` — a
+present key with nothing to put in it — gets `None` back unchanged, and `None` then hit
+`workspace / filepath` or `content.count(old_text)` as a bare `TypeError` outside any
+handler's `try/except`. The orchestrator's dispatcher already contains that as a generic
+exception (the loop never crashed), but the message the model saw was a raw Python
+exception instead of the handler's own scoped `Error reading/writing/patching file ...` —
+and the "every handler returns a string, never raises" contract `tool_executors.py`
+documents was silently false for this input. `args.get(key) or ""` at the one place these
+values are extracted normalises "missing" and "null" to the same empty string every
+handler already treats as "nothing supplied"; `confidence` and `start_line`/`end_line` are
+deliberately excluded; `0.0` and `None` are both meaningful values there. Fixed for all six
+tool handlers in `_tool_handlers`, not only the two new ones — found by testing `read_file`
+and `apply_patch`, but the vulnerable `.get(key, "")` idiom was shared by every handler in
+the dict.
+
 
 ### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
 

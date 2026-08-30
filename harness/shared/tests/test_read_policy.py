@@ -72,6 +72,24 @@ class TestOrdinaryFilesStayReadable:
         assert read_denial_reason("harness/shared/governance-policy.json") is None
 
 
+class TestCredentialMatchingIsCaseInsensitive:
+    """A case-sensitive match let `.ENV`, `ID_RSA`, `SECRETS.PEM` through untouched
+    -- valid names on the case-preserving filesystems this harness already targets
+    (macOS default, Windows), and a name an agent could simply create on Linux."""
+
+    @pytest.mark.parametrize(
+        "path", [".ENV", ".Env", "ID_RSA", "Id_Rsa", "SECRETS.PEM", ".NeTrC", ".NPMRC"]
+    )
+    def test_case_variants_are_denied(self, path: str) -> None:
+        assert read_denial_reason(path) is not None, f"{path} was readable"
+
+    def test_ordinary_uppercase_filenames_stay_readable(self) -> None:
+        """Case-insensitivity must not turn into a substring search -- an
+        unrelated file that happens to share letters must stay permitted."""
+        assert read_denial_reason("README.MD") is None
+        assert read_denial_reason("MAKEFILE") is None
+
+
 class TestGitDirectoryIsDenied:
     @pytest.mark.parametrize("path", [".git/config", ".git/HEAD", "sub/.git/config"])
     def test_git_internals_are_denied(self, path: str) -> None:

@@ -188,7 +188,7 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     # The alternation is owned by `read_policy`, which is the other door onto
     # the same files. Composing it here rather than restating it is what keeps
     # `cat .env` and `read_file(".env")` refusing for the same reason.
-    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)"),
+    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
      "secret_access", "the command names a credential-bearing file"),
 )
 
