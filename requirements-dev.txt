@@ -4,7 +4,7 @@
 -r requirements.txt
 pytest==8.4.2
 pytest-cov==7.1.0
-pytest-mock==3.14.0
+pytest-mock==3.15.1
 # Egress floor (R-EGF-1): sockets are disabled by default in addopts so an
 # attempted connection fails the test instead of succeeding quietly.
 pytest-socket==0.7.0
