@@ -1,6 +1,9 @@
 pytest==8.4.2
 pytest-cov==7.1.0
 pytest-mock==3.14.0
+# Egress floor (R-EGF-1): sockets are disabled by default in addopts so an
+# attempted connection fails the test instead of succeeding quietly.
+pytest-socket==0.7.0
 # tomllib entered the stdlib in 3.11; tomli is its backport. The
 # configuration-liveness gates read pyproject.toml, so without this they would
 # fail to import on the 3.9 and 3.10 matrix legs.

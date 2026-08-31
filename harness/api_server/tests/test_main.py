@@ -33,6 +33,7 @@ def _api_server_key(monkeypatch):
     return key
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_static_files():
     """Test that static UI files are served successfully."""
     response = client.get("/")
@@ -40,6 +41,7 @@ def test_static_files():
     assert "Mango MAS Dashboard" in response.text
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_success(_api_server_key):
     """Test successful orchestration via the API."""
     with patch("harness.api_server.main.MangoMASOrchestrator") as mock_orchestrator_class:
@@ -64,6 +66,7 @@ def test_api_orchestrate_success(_api_server_key):
 
 
 @patch("harness.api_server.main.MangoMASOrchestrator")
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     """Test orchestration failure handling — internals must not leak to clients."""
     mock_instance = mock_orchestrator_class.return_value
@@ -82,6 +85,7 @@ def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     assert detail == "Internal orchestration error"
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_unauthorized(_api_server_key):
     """Test unauthorized access."""
     response = client.post(
@@ -132,6 +136,7 @@ def test_dev_runner_env_overrides(monkeypatch):
     assert calls["reload"] is True
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
     """AC-11 / R-VP-13: the verdict names the command and its exit code.
 
@@ -155,6 +160,7 @@ def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
     assert body["termination_reason"] is None
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_a_failing_verdict_is_reported_while_status_stays_success(monkeypatch):
     """The defect, pinned: before this change these two runs were identical."""
     from harness.shared.governance.verdict import LoopOutcome, Verdict

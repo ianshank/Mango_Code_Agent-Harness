@@ -33,6 +33,10 @@ if (fs.existsSync(envPath)) {
 // ensuring we do not break uncredentialed CI jobs (R-AI-NEMO-4).
 const hasApiKey = Boolean(process.env['NVIDIA_API_KEY']);
 
+// This suite gates on its own key check rather than IS_LIVE, so it declares its
+// egress intent independently (R-EGF-5).
+if (hasApiKey) process.env['NEMOTRON_MODE'] ??= 'online';
+
 describe.skipIf(!hasApiKey)('Nemotron CLI Live E2E (R-AI-NEMO-3, C-AI-SEC-2)', () => {
   it('executes a live completion request against the configured default model', async () => {
     let capturedOut = '';

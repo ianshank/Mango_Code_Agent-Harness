@@ -21,7 +21,11 @@ markers = [
 # with `make test-python` (which passes -m "not live" explicitly). Select them
 # with `pytest -m live`. Each live suite also carries its own skipif, so the
 # two mechanisms are belt and braces rather than one point of failure.
-addopts = "--strict-markers -v --tb=short -m 'not live'"
+# --disable-socket is the egress floor (R-EGF-1): an attempted connection
+# raises instead of succeeding quietly. Tests that genuinely need a socket
+# carry @pytest.mark.enable_socket at the test or class, so every exception is
+# visible in the test rather than in this file (R-EGF-6).
+addopts = "--strict-markers -v --tb=short -m 'not live' --disable-socket"
 
 [tool.coverage.run]
 # branch = true makes coverage.py record branch arcs. Note the knock-on effect:
