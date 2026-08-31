@@ -85,7 +85,7 @@ class TestRegressionTierIsWired:
 
 class TestCompositeTargetsStayInStep:
     def test_pre_pr_still_runs_ci_review_and_the_cold_typecheck(self) -> None:
-        assert _prerequisites("pre-pr") == ["ci", "review", "lint-cold"]
+        assert _prerequisites("pre-pr") == ["ci", "review", "lint-cold", "audit", "secrets"]
 
     def test_ci_and_ci_python_differ_only_by_the_node_gates(self) -> None:
         """A gate added to `ci` and forgotten in `ci-python` silently stops

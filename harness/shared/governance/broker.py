@@ -30,13 +30,13 @@ Spec: ``docs/specs/agent-containment.md`` (R-AC-11, R-AC-12).
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Final
 
 from harness.shared.debug_dump import redact_text
+from harness.shared.governance_json import read_json_object
 from harness.shared.write_policy import active_policy_path, write_denial_reason
 
 from .command_actions import classify, write_targets
@@ -225,10 +225,23 @@ class ExecutionBroker:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    parsed = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(parsed, dict):
-        raise ValueError(f"{path} is not a JSON object")
-    return parsed
+    """Load `path` as a JSON object, preserving the exception types this module
+    raised before it adopted the shared classifier (R-DH-5): FileNotFoundError for
+    a missing file, OSError for one that exists but cannot be read, ValueError for
+    one that is present and readable but not valid JSON or not an object. The
+    caller catches `Exception` broadly regardless, but the type is still part of
+    this function's contract -- collapsing everything to one ValueError is exactly
+    the kind of drift `governance_json` is supposed to prevent, not introduce.
+    """
+    result = read_json_object(path)
+    if result.error == "not_found":
+        raise FileNotFoundError(result.detail)
+    if result.error == "unreadable":
+        raise OSError(result.detail)
+    if result.error == "malformed":
+        raise ValueError(result.detail)
+    assert result.value is not None
+    return result.value
 
 
 __all__ = [

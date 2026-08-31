@@ -1,6 +1,6 @@
 # C4 Architecture: Agentic SSD & Mango MAS Platform
 
-**Version:** 2.3.0 (2026 Standards)  
+**Version:** 2.1.9 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -22,7 +22,7 @@ graph TD
     
     NIM["☁️ NVIDIA NIM / Nemotron API<br/>(NVIDIA Nemotron-4-340B-Instruct, Llama-3.1-Nemotron-70B-Instruct)"]
     LocalFS["💾 Local Workspace & Git Repository<br/>(Bounded file operations, protected path enforcement)"]
-    CIGates["🚦 Automated CI/CD Gates<br/>(Ruff, Mypy, Pytest, Zero-Skips, Gitleaks, Spec Traceability)"]
+    CIGates["🚦 Automated CI/CD Gates<br/>(Ruff, Mypy, Pytest, Zero-Skips, Gitleaks, pip-audit/OSV-Scanner, Spec Traceability)"]
 
     User -->|Submits prompt / task| Orchestrator
     Orchestrator -->|Streams reasoning & tool-call requests| NIM

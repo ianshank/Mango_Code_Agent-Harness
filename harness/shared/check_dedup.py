@@ -28,8 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
+    from harness.shared.governance_json import read_json_object
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
+    from governance_json import read_json_object  # type: ignore[no-redef]
     from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
@@ -91,29 +93,29 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
     """
     cfg = DedupConfig(repo_root=repo_root)
     policy_path = repo_root / POLICY_RELPATH
-    try:
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
-        if not isinstance(policy, dict):
-            raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
-        dedup = policy.get("dedup", {}) or {}
+    result = read_json_object(policy_path)
+    if result.error == "not_found":
+        # Absent policy -> defaults (adopter path).
+        logger.debug("No governance policy at %s; using defaults", policy_path)
+    elif result.error == "unreadable":
+        # Present but unreadable (permissions, I/O) is not the adopter path either.
+        logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, result.detail)
+        raise SystemExit(1)
+    elif result.error == "malformed":
+        # Present but unparseable -> corruption, and degrading to defaults would
+        # silently relax the shim budget. Governance fails closed, as
+        # load_protected_patterns does.
+        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, result.detail)
+        raise SystemExit(1)
+    else:
+        assert result.value is not None
+        dedup = result.value.get("dedup", {}) or {}
         if isinstance(dedup.get("max_shim_lines"), int):
             cfg.max_shim_lines = int(dedup["max_shim_lines"])
         exempt = dedup.get("exempt") or []
         if isinstance(exempt, list):
             cfg.exempt = frozenset(str(x) for x in exempt)
         logger.debug("Loaded dedup config from %s: %s", policy_path, dedup)
-    except FileNotFoundError:
-        logger.debug("No governance policy at %s; using defaults", policy_path)
-    except OSError as e:
-        # Present but unreadable (permissions, I/O) is not the adopter path either.
-        logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
-        raise SystemExit(1) from e
-    except (ValueError, TypeError) as e:
-        # Absent policy -> defaults (adopter path). Present but unparseable ->
-        # corruption, and degrading to defaults would silently relax the shim
-        # budget. Governance fails closed, as load_protected_patterns does.
-        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
-        raise SystemExit(1) from e
 
     env_override = os.environ.get("MAX_SHIM_LINES")
     if env_override:

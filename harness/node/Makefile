@@ -31,7 +31,7 @@ secrets: ## Working-tree and full-history secret scans
 	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed'; exit 1; }
 	@test -f $(ROOT)/.gitleaks.toml || { echo '.gitleaks.toml missing'; exit 1; }
 	$(GITLEAKS) dir $(ROOT) --config $(ROOT)/.gitleaks.toml --redact --no-banner
-	$(GITLEAKS) git $(ROOT) --config $(ROOT)/.gitleaks.toml --redact --no-banner
+	$(GITLEAKS) git $(ROOT) --config $(ROOT)/.gitleaks.toml --redact --no-banner --log-opts="HEAD"
 secrets-install: ## Install pinned gitleaks
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
 specs: ## Spec validation
