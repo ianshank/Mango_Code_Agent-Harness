@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -165,29 +166,95 @@ def _matches(pattern: str, tracked: list[str]) -> list[str]:
     return [f for f in tracked if is_protected(f, [pattern])]
 
 
+#: The four ways a pattern set and the tree it governs can disagree. Named
+#: constants rather than bare strings so a caller filtering on a kind cannot
+#: quietly filter on a typo and see no findings.
+DEAD = "dead"
+AWAKE = "awake"
+STALE = "stale"
+UNDECLARED = "undeclared"
+
+
+class Finding(NamedTuple):
+    kind: str
+    pattern: str
+    detail: str
+
+
+def liveness_findings(
+    patterns: list[str], tracked: list[str], dormant: dict[str, str]
+) -> list[Finding]:
+    """Findings from applying ``patterns`` to ``tracked`` -- whatever tree that is.
+
+    This is the assertion the in-repo tests below make. They differ from a
+    foreign tree's only in *which* policy and *which* file list they supply,
+    which is the point: a pattern set written for one layout matches nothing in
+    another, and matching nothing is indistinguishable from a clean pass unless
+    something says so (R-PPP-5). Nothing here reads this repository -- no
+    ``REPO``, no ``git`` -- so the same function decides for a harness governing
+    a tree it did not ship with.
+
+    A pattern intended to match nothing is not a finding, provided ``dormant``
+    declares it *with a reason*; an empty reason is a finding, because "declared
+    dormant" then carries no more information than deletion would.
+    """
+    findings: list[Finding] = []
+    for pattern in patterns:
+        if pattern in dormant or _matches(pattern, tracked):
+            continue
+        findings.append(
+            Finding(DEAD, pattern, "matches no file in the tree it governs, so it protects nothing")
+        )
+    for pattern, reason in dormant.items():
+        if pattern not in patterns:
+            findings.append(
+                Finding(STALE, pattern, "is declared dormant but is no longer in the pattern set")
+            )
+            continue
+        if not str(reason).strip():
+            findings.append(
+                Finding(UNDECLARED, pattern, "is declared dormant with no reason given")
+            )
+        matched = _matches(pattern, tracked)
+        if matched:
+            findings.append(
+                Finding(AWAKE, pattern, f"is declared dormant but matches {sorted(matched)[:3]}")
+            )
+    return findings
+
+
 class TestPatternLiveness:
     def test_every_live_pattern_matches_at_least_one_tracked_file(self, patterns, tracked):
         """A pattern matching nothing protects nothing, however plausible it reads."""
-        dead = [
-            p for p in patterns if p not in DORMANT_PATTERNS and not _matches(p, tracked)
-        ]
+        dead = sorted(
+            f.pattern
+            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
+            if f.kind == DEAD
+        )
         assert not dead, (
             "protected_paths patterns match no tracked file, so they protect nothing: "
-            f"{sorted(dead)}. Either fix the pattern or declare it in DORMANT_PATTERNS "
+            f"{dead}. Either fix the pattern or declare it in DORMANT_PATTERNS "
             "with a reason."
         )
 
     def test_dormant_patterns_are_still_dormant(self, patterns, tracked):
         """A dormant pattern that starts matching must be reclassified, not left declared dead."""
-        awake = {
-            p: _matches(p, tracked)
-            for p in DORMANT_PATTERNS
-            if p in patterns and _matches(p, tracked)
-        }
+        awake = [
+            f for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == AWAKE
+        ]
         assert not awake, (
             "patterns declared dormant now match real files; remove them from "
-            f"DORMANT_PATTERNS so the liveness gate covers them: { {k: v[:3] for k, v in awake.items()} }"
+            f"DORMANT_PATTERNS so the liveness gate covers them: {[(f.pattern, f.detail) for f in awake]}"
         )
+
+    def test_every_dormant_pattern_carries_a_declared_reason(self, patterns, tracked):
+        """"Dormant" without a reason says no more than deletion does (R-PPP-5)."""
+        undeclared = sorted(
+            f.pattern
+            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
+            if f.kind == UNDECLARED
+        )
+        assert not undeclared, f"dormant patterns declared with no reason: {undeclared}"
 
     @pytest.mark.parametrize("pattern", sorted(CRITICAL_PATTERNS))
     def test_critical_pattern_is_still_present(self, pattern, patterns):
@@ -203,9 +270,13 @@ class TestPatternLiveness:
         waived = sorted(set(CRITICAL_PATTERNS) & set(DORMANT_PATTERNS))
         assert not waived, f"critical patterns declared dormant: {waived}"
 
-    def test_dormant_declarations_all_reference_real_patterns(self, patterns):
+    def test_dormant_declarations_all_reference_real_patterns(self, patterns, tracked):
         """Stale dormancy waivers must not outlive the patterns they excuse."""
-        stale = sorted(set(DORMANT_PATTERNS) - set(patterns))
+        stale = sorted(
+            f.pattern
+            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
+            if f.kind == STALE
+        )
         assert not stale, (
             f"DORMANT_PATTERNS names patterns that are no longer in the policy: {stale}"
         )
@@ -290,3 +361,65 @@ class TestDiscoveredSurfacesAreGated:
             f"governance validator(s) not covered by protected_paths: {unprotected}. "
             "An agent could weaken the gate that checks its own work."
         )
+
+
+class TestPortableLiveness:
+    """The same assertion, applied to a tree this repository did not ship.
+
+    `harness/CONTRACT.md` records the failure this covers: *"a pattern written
+    for a different repository layout matches nothing and protects nothing --
+    silently."* The guard above already measures that for this repository. What
+    it could not do is travel, because it reads `REPO` and `git ls-files`.
+    `liveness_findings` is the same measurement with the tree passed in, so a
+    harness governing a foreign checkout gets the finding instead of a clean
+    pass (R-PPP-5, AC-PPP-6, DEC-PPP-003: generalised, not replaced).
+    """
+
+    #: A layout none of this repository's sixty patterns was written for. No
+    #: `Makefile`, no `pyproject.toml`, no `.github/`, no `harness/` -- which is
+    #: precisely the condition under which every pattern misses and the gate
+    #: reports success today.
+    FOREIGN_TREE = [
+        "Cargo.toml",
+        "README.md",
+        "src/main.rs",
+        "src/lib/mod.rs",
+        "tests/integration.rs",
+    ]
+
+    def test_pattern_set_matching_nothing_is_a_finding(self, patterns, tracked):
+        """A foreign tree produces findings; this repository's own tree stays quiet."""
+        foreign = liveness_findings(patterns, self.FOREIGN_TREE, {})
+        assert {f.kind for f in foreign} == {DEAD}, (
+            "a pattern set that matches nothing in the tree it governs must produce "
+            f"dead-pattern findings, got kinds {sorted({f.kind for f in foreign})}"
+        )
+        assert sorted(f.pattern for f in foreign) == sorted(patterns), (
+            "every pattern misses this layout, so every pattern must be reported; "
+            f"{len(patterns) - len(foreign)} were not"
+        )
+
+        own = liveness_findings(patterns, tracked, DORMANT_PATTERNS)
+        assert not own, (
+            "this repository's own pattern set against its own tree must stay quiet, "
+            f"got {[(f.kind, f.pattern) for f in own]}"
+        )
+        assert len(DORMANT_PATTERNS) == 7, (
+            "the seven declared dormant patterns are accepted unchanged by the "
+            f"generalised assertion; the declaration now holds {len(DORMANT_PATTERNS)}"
+        )
+
+    def test_a_pattern_that_does_match_the_foreign_tree_is_not_reported(self, patterns):
+        """Otherwise the finding above would be an artefact of the fixture, not a measurement."""
+        findings = liveness_findings([*patterns, "src/**"], self.FOREIGN_TREE, {})
+        assert "src/**" not in {f.pattern for f in findings}
+
+    def test_a_dormant_declaration_suppresses_the_finding_in_a_foreign_tree(self):
+        """The dormancy escape hatch has to travel too, or a portable check is unusable."""
+        declared = {"agents/**": "single-stack layout; this consumer has none"}
+        assert not liveness_findings(["agents/**"], self.FOREIGN_TREE, declared)
+
+    def test_a_dormant_declaration_without_a_reason_is_itself_a_finding(self):
+        """"Intended to match nothing" must be a statement someone made (R-PPP-5)."""
+        findings = liveness_findings(["agents/**"], self.FOREIGN_TREE, {"agents/**": "  "})
+        assert [f.kind for f in findings] == [UNDECLARED]
