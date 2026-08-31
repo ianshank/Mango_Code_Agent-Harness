@@ -27,7 +27,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 11 reusable skills; the only skill root
+│   ├── skills/                          # 12 reusable skills; the only skill root
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
@@ -38,6 +38,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   ├── tech-debt-audit/             # Repeatable full-repo SDLC/SQE audit procedure
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
 │
