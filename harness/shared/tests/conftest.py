@@ -5,6 +5,7 @@ Provides:
 - ``project_root``: Absolute path to the harness project root.
 - ``shared_dir``: Absolute path to harness/shared.
 - ``tmp_git_repo``: Ephemeral Git repository for isolated testing.
+- ``write_text_file``: Writes a fixture file, creating parent dirs.
 """
 
 from __future__ import annotations
@@ -23,6 +24,13 @@ POSIX_ONLY = pytest.mark.skipif(
     sys.platform == "win32",
     reason="POSIX-only: requires bash/chmod/symlinks not available on Windows"
 )
+
+
+def write_text_file(path: Path, text: str) -> Path:
+    """Write ``text`` to ``path``, creating parent directories as needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 # --- Fixtures ---

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from harness.shared import check_dedup as cd
+from harness.shared.tests.conftest import write_text_file
 
 SHIM_IMPORT = """\
 import sys
@@ -57,10 +58,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def _write(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return path
+_write = write_text_file
 
 
 def _policy(root: Path, dedup: dict) -> Path:
