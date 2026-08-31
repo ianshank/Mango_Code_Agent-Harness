@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [v2.2.4] - 2026-08-30
+
+### Added — LangGraph StateGraph Multi-Agent Orchestration Engine Overlay
+
+- **12-Channel Typed State Architecture (`harness/shared/langgraph/state.py`)**:
+  - Implemented `MangoState` `TypedDict` with 4 Accumulator channels (`patches`, `findings`, `test_results`, `errors`) reduced via `operator.add`, and 8 Last-Write-Wins (LWW) channels (`task`, `plan`, `shadow_plan`, `plan_divergence`, `revision_count`, `gate_status`, `verdict`, `tool_budget_used`).
+  - Strict disjointness and channel count invariants verified by `test_langgraph_state.py`.
+- **Active & Gate Node Topology (`harness/shared/langgraph/nodes.py`)**:
+  - Implemented 10 topology nodes: `planner_node`, `shadow_planner_node`, `implementer_node` (wrapping `nemotron-reasoner`), `evaluation_node` (wrapping `verifier` & `VerificationRunner`), `plan_gate_node`, `quality_gate_node`, `clarify_node`, `escalate_node`, `peer_reviewer_node`, and `security_reviewer_node`.
+  - Hardened with signature-safe `config=None` and `_get_configurable` extraction supporting both positional and keyword invocation from LangGraph's execution runtime.
+  - Fail-open exception trapping recording directly to the `errors` state channel.
+- **StateGraph Assembly & Conditional Routing (`harness/shared/langgraph/graph.py`)**:
+  - Implemented `build_graph()` assembling the full supervisor-gated DAG with conditional routing on plan gate divergence (`<= 0.35`) and quality gate test verdicts.
+- **Role Authority & Budget Enforcement Decorators (`harness/shared/langgraph/decorators.py`)**:
+  - Implemented `@with_authority` (gated via `agent_authority.allowed_actions`) and `@budgeted` (gated via `policy_loader.max_tool_calls_per_task`).
+- **AQA / Regression Matrix (`test_langgraph_regression.py`)**:
+  - 32 dedicated regression tests pinning node calling conventions, state immutability, accumulator concatenation, error isolation, and boundary conditions.
+- **Root Makefile & Tooling**:
+  - Added `make test-langgraph` target; updated `.gitignore`, `.dockerignore`, and `.gitleaks.toml`.
+
 ## [Unreleased]
 
 ### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup

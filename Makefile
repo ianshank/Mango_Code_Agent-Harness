@@ -88,6 +88,10 @@ test-python: ## Run full pytest suite (excludes live tests)
 test-regression: ## Run the regression/AQA tier on its own (one reproduction per fixed defect)
 	$(PYTEST) $(SHARED_TESTS)/regression/ -m "not live" -v
 
+.PHONY: test-langgraph
+test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, regression)
+	$(PYTEST) $(SHARED_TESTS)/test_langgraph_*.py $(SHARED_TESTS)/regression/test_langgraph_regression.py -m "not live" -v
+
 .PHONY: coverage-python
 coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
 	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json

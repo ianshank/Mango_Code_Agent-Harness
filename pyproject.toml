@@ -10,6 +10,12 @@ dependencies = [
     "httpx>=0.27,<1.0",
 ]
 
+[project.optional-dependencies]
+langgraph = [
+    "langgraph>=1.0.10,<2.0",
+    "langgraph-checkpoint-postgres>=3.0.1,<4.0",
+]
+
 [tool.setuptools.packages.find]
 include = ["harness*"]
 
@@ -22,6 +28,7 @@ markers = [
     "security: security and secret sanitization tests",
     "governance: governance invariant validation",
     "neurosym: neuro-symbolic synthesis and repair loop invariants",
+    "langgraph: LangGraph orchestration graph tests",
 ]
 # -m "not live": bare `pytest` used to collect the live suites and fail with
 # "NVIDIA_API_KEY is not configured", so the documented entry point disagreed

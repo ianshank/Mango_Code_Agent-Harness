@@ -129,7 +129,7 @@ _BY_PROGRAM: typing.Mapping[str, str] = {
     "grep": "read", "rg": "read", "pwd": "read", "echo": "read", "true": "read",
     "false": "read", "diff": "read", "stat": "read", "basename": "read", "dirname": "read",
     "sort": "read", "uniq": "read", "cut": "read", "tr": "read", "printf": "read",
-    "date": "read", "which": "read", "seq": "read", "sleep": "read", "test": "read",
+    "date": "read", "which": "read", "where": "read", "seq": "read", "sleep": "read", "test": "read",
     # Running the repository's own gates.
     "pytest": "test_execute", "make": "test_execute", "ruff": "test_execute",
     "mypy": "test_execute", "tsc": "test_execute", "vitest": "test_execute",

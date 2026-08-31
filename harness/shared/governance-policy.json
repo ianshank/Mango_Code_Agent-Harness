@@ -154,7 +154,8 @@
     ".mango/settings.local.json",
     "harness/shared/tests/test_protected_path_liveness.py",
     "harness/shared/tests/test_ci_gate_coverage.py",
-    "harness/shared/tests/test_coverage_policy_enforcement.py"
+    "harness/shared/tests/test_coverage_policy_enforcement.py",
+    "harness/shared/langgraph/**"
   ],
   "external_root_of_trust_required": true,
   "charter_version": "2.0",

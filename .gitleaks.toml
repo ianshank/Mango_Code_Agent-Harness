@@ -27,5 +27,6 @@ paths = [
   '''harness/shared/tests/regression/test_cross_platform_regression\.py''',
   '''harness/shared/tests/regression/test_bridge_retry_regression\.py''',
   '''harness/shared/tests/regression/test_api_server_regression\.py''',
-  '''harness/shared/tests/regression/test_e2e_nemotron_triage_regression\.py'''
+  '''harness/shared/tests/regression/test_e2e_nemotron_triage_regression\.py''',
+  '''harness/shared/tests/regression/test_langgraph_regression\.py'''
 ]
