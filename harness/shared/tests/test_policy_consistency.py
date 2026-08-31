@@ -369,3 +369,17 @@ class TestFallbackConstantsMirrorPolicy:
             policy_loader.max_tool_calls_per_task(missing)
             == _load(SHARED_POLICY)["agent_defaults"]["max_tool_calls_per_task"]
         )
+
+    def test_process_backend_timeout_reads_policy_not_an_independent_literal(self):
+        """Regression guard: DEFAULT_TIMEOUT_SEC used to be an unlinked literal
+        that happened to equal orchestrator.tool_timeout_sec, so the two could
+        silently drift. It is now computed from policy_loader at import time;
+        this pins that it stays a live read rather than reverting to a literal."""
+        from harness.shared import policy_loader
+        from harness.shared.governance import process_backend
+
+        assert process_backend.DEFAULT_TIMEOUT_SEC == policy_loader.orchestrator_defaults()["tool_timeout_sec"]
+        assert (
+            process_backend.DEFAULT_TIMEOUT_SEC
+            == _load(SHARED_POLICY)["orchestrator"]["tool_timeout_sec"]
+        )

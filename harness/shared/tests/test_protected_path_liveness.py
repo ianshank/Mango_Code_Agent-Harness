@@ -109,8 +109,8 @@ DORMANT_PATTERNS = {
     ".governance/**": "single-stack layout; this repo has harness/<stack>/.governance/",
     "agents/**": "single-stack layout; this repo has harness/<stack>/agents/",
     "docs/PROJECT-CHARTER.md": "single-stack layout; this repo has harness/<stack>/docs/",
-    ".github/CODEOWNERS": "no CODEOWNERS exists yet; arms the guard when one is added",
-    "**/.github/CODEOWNERS": "no nested CODEOWNERS exists yet; arms the guard when one is added",
+    "**/.github/CODEOWNERS": "no nested CODEOWNERS exists yet; arms the guard when one is added "
+    "(the root .github/CODEOWNERS now exists and is live, so only the nested pattern stays dormant)",
     ".claude/settings.local.json": (
         "no local override file exists yet; Claude Code reads it and it can declare hooks, "
         "so the guard is armed before one appears rather than after"
@@ -404,9 +404,11 @@ class TestPortableLiveness:
             "this repository's own pattern set against its own tree must stay quiet, "
             f"got {[(f.kind, f.pattern) for f in own]}"
         )
-        assert len(DORMANT_PATTERNS) == 7, (
-            "the seven declared dormant patterns are accepted unchanged by the "
-            f"generalised assertion; the declaration now holds {len(DORMANT_PATTERNS)}"
+        assert len(DORMANT_PATTERNS) == 6, (
+            "the six declared dormant patterns are accepted unchanged by the "
+            f"generalised assertion; the declaration now holds {len(DORMANT_PATTERNS)}. "
+            "(Was 7: `.github/CODEOWNERS` was reclassified out of this set when a real "
+            "root CODEOWNERS was added, per test_awake_patterns_reclassify's own contract.)"
         )
 
     def test_a_pattern_that_does_match_the_foreign_tree_is_not_reported(self, patterns):
