@@ -67,6 +67,14 @@ export const LIVE_DEFAULT_MODEL: string = resolvedEnv.defaultModel;
 /** Whether live API tests should run. */
 export const IS_LIVE: boolean = LIVE_API_KEY.length > 0 && LIVE_DEFAULT_MODEL.length > 0;
 
+// A live run is, by definition, a run that intends network egress. Declaring it
+// here -- next to the flag that decides whether the network is used at all --
+// keeps the declaration co-located with the decision (R-EGF-5, DEC-EGF-003).
+// Without it the client now refuses rather than silently reaching the vendor,
+// which is the whole point of the egress floor: egress is explicit or it is
+// denied. `??=` so an explicitly-set mode in the environment always wins.
+if (IS_LIVE) process.env['NEMOTRON_MODE'] ??= 'online';
+
 /** Default token budget for smoke tests — minimizes cost. */
 export const SMOKE_MAX_TOKENS = 50;
 
