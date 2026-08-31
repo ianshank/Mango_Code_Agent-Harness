@@ -10,7 +10,7 @@ from harness.shared.agent_authority import execution_identity
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
 from harness.shared.read_policy import read_denial_reason
 from harness.shared.tool_result_format import format_execution_result
-from harness.shared.write_policy import write_denial_reason
+from harness.shared.write_policy import active_policy_path, write_denial_reason
 
 if TYPE_CHECKING:
     from harness.shared.governance.broker import ExecutionBroker
@@ -85,7 +85,14 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         logger.warning("Denied write outside the workspace: %s", filepath)
         return f"Error writing file {filepath}: {denial}"
 
-    denial = write_denial_reason(str(target_path.relative_to(workspace)))
+    # `policy_path` is passed explicitly rather than defaulted: a parameter no
+    # caller supplies is never exercised outside tests, which is how the write
+    # gate came to match this repository's patterns against any tree at all
+    # (R-PPP-4). `active_policy_path` still resolves to the harness policy
+    # unless one is supplied, and a supplied one can only add denials.
+    denial = write_denial_reason(
+        str(target_path.relative_to(workspace)), policy_path=active_policy_path()
+    )
     if denial is not None:
         logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
         return f"Error writing file {filepath}: {denial}"
@@ -181,7 +188,9 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
         logger.warning("Denied patch outside the workspace: %s", filepath)
         return f"Error patching file {filepath}: {denial}"
 
-    denial = write_denial_reason(str(target_path.relative_to(workspace)))
+    denial = write_denial_reason(
+        str(target_path.relative_to(workspace)), policy_path=active_policy_path()
+    )
     if denial is not None:
         logger.warning("Denied patch of a governed path: %s (%s)", filepath, denial)
         return f"Error patching file {filepath}: {denial}"
@@ -227,7 +236,8 @@ def execute_run_command(
         kwargs["timeout"] = timeout
     result = broker.execute_command(command, **kwargs)
     if result.status == "BLOCKED":
-        logger.warning("Broker denied command %r for role %s: %s", command, active_role, result.reason)
+        from harness.shared.debug_dump import redact_text
+        logger.warning("Broker denied command %r for role %s: %s", redact_text(command), active_role, result.reason)
     return format_execution_result(result)
 
 

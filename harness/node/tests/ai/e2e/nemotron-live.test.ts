@@ -21,7 +21,10 @@ if (fs.existsSync(envPath)) {
       const idx = trimmed.indexOf('=');
       const k = trimmed.slice(0, idx).trim();
       const v = trimmed.slice(idx + 1).trim();
-      if (!process.env[k]) process.env[k] = v;
+      const allowedKeys = ['NVIDIA_API_KEY', 'NEMOTRON_DEFAULT_MODEL', 'NEMOTRON_BASE_URL'];
+      if (allowedKeys.includes(k) && !process.env[k]) {
+        process.env[k] = v;
+      }
     }
   }
 }

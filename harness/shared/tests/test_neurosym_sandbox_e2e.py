@@ -228,6 +228,7 @@ class TestNeurosymSandboxE2E:
         assert "network_access_denied" in history_str
         assert "network-isolated" in history_str
         assert "PASS" in verification_result or "FAIL" in verification_result
+        assert (tmp_path / "data.txt").read_text(encoding="utf-8").strip() == "MOCK_DATA"
 
     def test_sandbox_application_synthesis_with_repair(self, tmp_path):
         """
@@ -277,7 +278,7 @@ class TestNeurosymSandboxE2E:
                                 "function": {
                                     "name": "write_file",
                                     "arguments": (
-                                        '{"filepath": "app.py", '
+                                        '{"filepath": "weather_cli/app.py", '
                                         '"content": "import requests\\nrequests.get(\\"http://example.com/api\\")"}'
                                     ),
                                 },
@@ -297,7 +298,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest app.py"}',
+                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
                                 },
                             }],
                         }
@@ -315,7 +316,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "write_file",
-                                    "arguments": '{"filepath": "app.py", "content": "MOCK_DATA = 42"}',
+                                    "arguments": '{"filepath": "weather_cli/app.py", "content": "MOCK_DATA = 42"}',
                                 },
                             }],
                         }
@@ -333,7 +334,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest app.py"}',
+                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
                                 },
                             }],
                         }
@@ -370,4 +371,5 @@ class TestNeurosymSandboxE2E:
 
         # Ensure the test ran and the agent claimed a pass or fail
         assert "PASS" in verification_result or "FAIL" in verification_result
+        assert "MOCK_DATA = 42" in (app_dir / "app.py").read_text(encoding="utf-8")
 

@@ -56,7 +56,7 @@ def format_execution_result(result: _Renderable) -> str:
                         "normalized_message": parsed_violation.get("message", result.reason or result.stderr),
                         "redacted": False,
                     }
-                    return "Error: Critique received.\n" + json.dumps(critique, indent=2)
+                    return "Error: Critique received.\n" + json.dumps(critique, separators=(",", ":"))
             except ValueError:
                 pass
         return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
