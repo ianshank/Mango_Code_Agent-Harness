@@ -119,20 +119,24 @@ def _run_dev_runner(monkeypatch):
 
 
 def test_dev_runner_defaults_match_container(monkeypatch):
-    """The dev runner must default to the container port with reload off."""
+    """The dev runner must default to the container port, loopback host, reload off."""
     monkeypatch.delenv("API_SERVER_PORT", raising=False)
+    monkeypatch.delenv("API_SERVER_HOST", raising=False)
     monkeypatch.delenv("API_SERVER_RELOAD", raising=False)
     calls = _run_dev_runner(monkeypatch)
     assert calls["port"] == 8080
+    assert calls["host"] == "127.0.0.1"
     assert calls["reload"] is False
 
 
 def test_dev_runner_env_overrides(monkeypatch):
-    """Port and reload are opt-in via environment, never hard-coded."""
+    """Port, host, and reload are opt-in via environment, never hard-coded."""
     monkeypatch.setenv("API_SERVER_PORT", "9001")
+    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
     monkeypatch.setenv("API_SERVER_RELOAD", "1")
     calls = _run_dev_runner(monkeypatch)
     assert calls["port"] == 9001
+    assert calls["host"] == "0.0.0.0"
     assert calls["reload"] is True
 
 

@@ -137,3 +137,45 @@ def nemotron_defaults(policy_path: Path | None = None) -> dict:
 def max_tool_calls_per_task(policy_path: Path | None = None) -> int:
     """Cumulative tool-call budget per agent task; policy `agent_defaults` block."""
     return _int_value(_section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults")
+
+
+def langgraph_defaults(policy_path: Path | None = None) -> dict:
+    """LangGraph orchestration-graph tuning; policy `langgraph` block."""
+    section = _section("langgraph", policy_path)
+    return {
+        "recursion_limit": _int_value(section, "recursion_limit", 50, "langgraph"),
+        "max_concurrency": _int_value(section, "max_concurrency", 3, "langgraph"),
+        "plan_divergence_threshold": _float_value(
+            section, "plan_divergence_threshold", 0.35, "langgraph"
+        ),
+    }
+
+
+def coverage_defaults(policy_path: Path | None = None) -> dict:
+    """Coverage gate thresholds consumed outside coverage_gate.py; policy `coverage` block.
+
+    coverage_gate.py itself deliberately does not import this (policy-single-source.md's
+    standalone-stdlib decision); this accessor is for other callers, such as GraphPolicy,
+    that already depend on harness.shared and would otherwise read the section unvalidated.
+    """
+    section = _section("coverage", policy_path)
+    return {
+        "lines": _int_value(section, "lines", 90, "coverage"),
+        "branches": _int_value(section, "branches", 80, "coverage"),
+    }
+
+
+def agent_defaults(policy_path: Path | None = None) -> dict:
+    """Agent delegation/parallelism limits; policy `agent_defaults` block.
+
+    Returns only the integer tuning values other modules construct from; the
+    non-numeric keys in this section (approval/evidence lists, the
+    deny_unclassified_side_effects flag) are read directly by validate_policy.py
+    and test_policy_consistency.py and have no numeric-default shape for
+    _int_value/_float_value to validate.
+    """
+    section = _section("agent_defaults", policy_path)
+    return {
+        "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
+        "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
+    }

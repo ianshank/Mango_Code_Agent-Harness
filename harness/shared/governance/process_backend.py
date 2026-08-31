@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from harness.shared.debug_dump import credential_env_names
+from harness.shared.policy_loader import orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,13 @@ logger = logging.getLogger(__name__)
 #: than an ergonomic one.
 DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
 
-#: Wall-clock ceiling used when a caller supplies none.
-DEFAULT_TIMEOUT_SEC = 30
+#: Wall-clock ceiling used when a caller supplies none, from
+#: `orchestrator.tool_timeout_sec` -- previously an unlinked literal that
+#: happened to equal the policy value, so the two could silently drift.
+#: Read once at import, matching `command_actions.MAX_COMMAND_BYTES`: this is
+#: a bound a caller's default parameter is evaluated against, not a decision
+#: that can change mid-run.
+DEFAULT_TIMEOUT_SEC: int = orchestrator_defaults()["tool_timeout_sec"]
 
 
 @dataclass(frozen=True)

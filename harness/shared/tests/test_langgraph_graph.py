@@ -59,6 +59,47 @@ class TestRoutingFunctions:
         assert result == "escalate"
 
 
+class TestQualityGateRoutingUsesPolicy:
+    """docs/specs/langgraph-policy-wiring.md R-LPW-4: the revision cap comes
+    from GraphPolicy via config["configurable"]["policy"], not the literal
+    10 a prior version hard-coded."""
+
+    def test_custom_lower_cap_escalates_where_default_cap_would_not(self) -> None:
+        """revision_count=2 is well under the *default* policy's cap (10),
+        which would route to "implementer" -- proving a custom, lower cap
+        threaded through configurable is what actually decided "escalate"
+        here, not the old literal."""
+        custom_policy = GraphPolicy(max_iterations=2)
+        config = {"configurable": {"policy": custom_policy}}
+        state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 2}
+        assert _route_quality_gate(state, config=config) == "escalate"
+
+    def test_custom_lower_cap_still_retries_below_its_own_threshold(self) -> None:
+        custom_policy = GraphPolicy(max_iterations=2)
+        config = {"configurable": {"policy": custom_policy}}
+        state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 1}
+        assert _route_quality_gate(state, config=config) == "implementer"
+
+    def test_no_config_falls_back_to_default_policy_cap_unchanged(self) -> None:
+        """Bare-state calls (no config at all) must observe identical
+        behavior to before this fix: GraphPolicy()'s default is 10, matching
+        the literal it replaces."""
+        state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 9}
+        assert _route_quality_gate(state) == "implementer"
+        state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 10}
+        assert _route_quality_gate(state) == "escalate"
+
+    def test_accepts_config_via_kwargs_too(self) -> None:
+        """Matches the calling-convention contract nodes.py already
+        establishes for orchestrator: state, positional config, or keyword
+        config must all work."""
+        custom_policy = GraphPolicy(max_iterations=1)
+        state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 1}
+        via_positional = _route_quality_gate(state, {"configurable": {"policy": custom_policy}})
+        via_keyword = _route_quality_gate(state, config={"configurable": {"policy": custom_policy}})
+        assert via_positional == via_keyword == "escalate"
+
+
 class TestGraphBuilderWithMock:
     """Verifies graph assembly and edge wiring using builder mock."""
 
@@ -83,6 +124,26 @@ class TestGraphBuilderWithMock:
         with patch("harness.shared.langgraph.graph.StateGraph", None):
             with pytest.raises(RuntimeError, match="langgraph library is required"):
                 build_graph()
+
+    def test_default_policy_is_loaded_from_governance_json(self) -> None:
+        """R-LPW-3: build_graph() with no policy argument must call
+        GraphPolicy.from_governance_json(), not silently compile a bare
+        GraphPolicy() that skips policy loading entirely (the prior bug)."""
+        mock_builder_cls = MagicMock()
+        mock_compiled = MagicMock()
+        mock_compiled.nodes = {"planner": MagicMock()}
+        mock_builder_cls.return_value.compile.return_value = mock_compiled
+
+        sentinel_policy = GraphPolicy(recursion_limit=777)
+        with (
+            patch("harness.shared.langgraph.graph.StateGraph", mock_builder_cls),
+            patch(
+                "harness.shared.langgraph.graph.GraphPolicy.from_governance_json",
+                return_value=sentinel_policy,
+            ) as mock_from_governance_json,
+        ):
+            build_graph()  # no policy argument
+            mock_from_governance_json.assert_called_once()
 
 
 @pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed")

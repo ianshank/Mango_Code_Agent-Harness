@@ -92,6 +92,11 @@
     "timeout_ms": 30000,
     "max_retries": 0
   },
+  "langgraph": {
+    "recursion_limit": 50,
+    "max_concurrency": 3,
+    "plan_divergence_threshold": 0.35
+  },
   "protected_paths": [
     ".governance/**",
     "**/.governance/**",

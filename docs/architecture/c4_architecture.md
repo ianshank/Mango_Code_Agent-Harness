@@ -1,5 +1,11 @@
 # C4 Architecture: Agentic SSD & Mango MAS Platform
 
+> **Canonical.** This is the actively-maintained C4 model for this
+> repository. `harness/docs/C4_ARCHITECTURE.md` is an older (v2.1.9)
+> snapshot kept for detail not yet mirrored here (notably the Node-stack
+> `harness/node/src/ai/nemotron/` subsystem) — where the two disagree, this
+> file wins.
+
 **Version:** 2.2.4 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
