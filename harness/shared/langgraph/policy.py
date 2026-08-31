@@ -71,26 +71,30 @@ class GraphPolicy:
         malformed-policy failure along with the (already-handled) absent
         case; see docs/specs/langgraph-policy-wiring.md.
         """
-        from harness.shared.policy_loader import langgraph_defaults, load_policy, orchestrator_defaults
+        from harness.shared.policy_loader import (
+            agent_defaults,
+            coverage_defaults,
+            langgraph_defaults,
+            orchestrator_defaults,
+        )
 
         orch: dict[str, Any] = orchestrator_defaults()
         lg: dict[str, Any] = langgraph_defaults()
-        policy = load_policy()
-        coverage = policy.get("coverage", {})
-        agent_defs = policy.get("agent_defaults", {})
+        cov: dict[str, Any] = coverage_defaults()
+        agents: dict[str, Any] = agent_defaults()
 
         return cls(
             max_iterations=orch["max_iterations"],
             api_timeout_sec=orch["api_timeout_sec"],
             tool_timeout_sec=orch["tool_timeout_sec"],
             max_command_bytes=orch["max_command_bytes"],
-            coverage_floor_lines=coverage.get("lines", cls.coverage_floor_lines),
-            coverage_floor_branches=coverage.get("branches", cls.coverage_floor_branches),
+            coverage_floor_lines=cov["lines"],
+            coverage_floor_branches=cov["branches"],
             recursion_limit=lg["recursion_limit"],
             max_concurrency=lg["max_concurrency"],
             plan_divergence_threshold=lg["plan_divergence_threshold"],
-            max_delegation_depth=agent_defs.get("max_delegation_depth", cls.max_delegation_depth),
-            max_parallel_subagents=agent_defs.get("max_parallel_subagents", cls.max_parallel_subagents),
+            max_delegation_depth=agents["max_delegation_depth"],
+            max_parallel_subagents=agents["max_parallel_subagents"],
         )
 
 

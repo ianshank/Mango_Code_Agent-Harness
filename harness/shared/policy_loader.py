@@ -149,3 +149,33 @@ def langgraph_defaults(policy_path: Path | None = None) -> dict:
             section, "plan_divergence_threshold", 0.35, "langgraph"
         ),
     }
+
+
+def coverage_defaults(policy_path: Path | None = None) -> dict:
+    """Coverage gate thresholds consumed outside coverage_gate.py; policy `coverage` block.
+
+    coverage_gate.py itself deliberately does not import this (policy-single-source.md's
+    standalone-stdlib decision); this accessor is for other callers, such as GraphPolicy,
+    that already depend on harness.shared and would otherwise read the section unvalidated.
+    """
+    section = _section("coverage", policy_path)
+    return {
+        "lines": _int_value(section, "lines", 90, "coverage"),
+        "branches": _int_value(section, "branches", 80, "coverage"),
+    }
+
+
+def agent_defaults(policy_path: Path | None = None) -> dict:
+    """Agent delegation/parallelism limits; policy `agent_defaults` block.
+
+    Returns only the integer tuning values other modules construct from; the
+    non-numeric keys in this section (approval/evidence lists, the
+    deny_unclassified_side_effects flag) are read directly by validate_policy.py
+    and test_policy_consistency.py and have no numeric-default shape for
+    _int_value/_float_value to validate.
+    """
+    section = _section("agent_defaults", policy_path)
+    return {
+        "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
+        "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
+    }

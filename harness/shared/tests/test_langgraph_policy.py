@@ -119,6 +119,31 @@ class TestGraphPolicyFailClosed:
         with pytest.raises(policy_loader.PolicyError):
             GraphPolicy.from_governance_json()
 
+    def test_non_object_coverage_section_raises_policy_error_not_attribute_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """GitHub Copilot's review of PR #53: a present-but-non-object `coverage`
+        section used to reach `coverage.get("lines", ...)` via a raw, unvalidated
+        `policy.get("coverage", {})` -- raising AttributeError (not PolicyError),
+        contradicting this method's own documented fail-closed contract. Fixed by
+        routing through policy_loader.coverage_defaults(), which validates the
+        section's shape the same way langgraph_defaults() already does."""
+        bad_policy = tmp_path / "governance-policy.json"
+        bad_policy.write_text(json.dumps({"coverage": "not-an-object"}), encoding="utf-8")
+        monkeypatch.setattr(policy_loader, "POLICY_PATH", bad_policy)
+        with pytest.raises(policy_loader.PolicyError):
+            GraphPolicy.from_governance_json()
+
+    def test_non_object_agent_defaults_section_raises_policy_error_not_attribute_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Same defect, the other unvalidated section Copilot's review named."""
+        bad_policy = tmp_path / "governance-policy.json"
+        bad_policy.write_text(json.dumps({"agent_defaults": [1, 2, 3]}), encoding="utf-8")
+        monkeypatch.setattr(policy_loader, "POLICY_PATH", bad_policy)
+        with pytest.raises(policy_loader.PolicyError):
+            GraphPolicy.from_governance_json()
+
     def test_distinguishable_value_actually_flows_through(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -136,6 +161,8 @@ class TestGraphPolicyFailClosed:
                         "plan_divergence_threshold": 0.01,
                     },
                     "orchestrator": {"max_iterations": 42},
+                    "coverage": {"lines": 71, "branches": 61},
+                    "agent_defaults": {"max_delegation_depth": 9, "max_parallel_subagents": 13},
                 }
             ),
             encoding="utf-8",
@@ -146,3 +173,7 @@ class TestGraphPolicyFailClosed:
         assert policy.max_concurrency == 17
         assert policy.plan_divergence_threshold == 0.01
         assert policy.max_iterations == 42
+        assert policy.coverage_floor_lines == 71
+        assert policy.coverage_floor_branches == 61
+        assert policy.max_delegation_depth == 9
+        assert policy.max_parallel_subagents == 13
