@@ -75,13 +75,16 @@ enforcement, and the policy-loaded decision-ID grammar.
 
 - Enable per-file **branch** enforcement once #19 lands (`per_file_branches`);
   it needs the per-file machinery that only exists there.
-- Enable `DTZ` (8 findings) once #18 lands — one of its two source sites is in
-  a file that PR rewrites.
-- Six files sit below the per-file coverage floor on `main`
-  (`publish_policy_artifact.py`, `check_traceability.py`, `coverage_gate.py`,
-  `governance/pretooluse_guard.py`, `validate_adoption.py`,
-  `validate_invariants.py`). #18 carries the lift; if it is abandoned, that
-  work needs re-doing before per-file enforcement can be switched on.
+- ~~Enable `DTZ` (8 findings) once #18 lands~~ — done: `DTZ` is live in
+  `pyproject.toml`'s `[tool.ruff.lint].select`, confirmed by direct read
+  (2026-08-31).
+- ~~Six files sit below the per-file coverage floor on `main`~~ — re-checked
+  2026-08-31 via `make coverage-python` against current `main`: all 61
+  measured files, including the six named here, now pass the 90% per-file
+  lines floor (`publish_policy_artifact.py` 100%, `check_traceability.py`
+  100% lines, `coverage_gate.py` 94%, `governance/pretooluse_guard.py` 97%,
+  `validate_adoption.py` 97%, `validate_invariants.py` 100%). No further work
+  needed here.
 - Annotating the test suite is a separate project: `--disallow-untyped-defs`
   reports 533 findings, essentially all `no-untyped-def` on test functions.
 
