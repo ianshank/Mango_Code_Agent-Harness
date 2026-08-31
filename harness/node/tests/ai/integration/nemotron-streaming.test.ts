@@ -66,7 +66,6 @@ describe('Nemotron Streaming Integration (R-AI-NEMO-1, R-AI-NEMO-2)', () => {
     );
 
     await expect(async () => {
-
       for await (const _ of client.stream({
         messages: [{ role: 'user', content: 'Test fail' }],
       })) {

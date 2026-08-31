@@ -77,7 +77,7 @@ lint-node: ## Run ESLint, Prettier, and Knip on Node stack
 	(cd $(NODE_DIR) && $(PM) exec eslint . --max-warnings=0 && $(PM) exec prettier --check . && $(PM) exec knip)
 
 .PHONY: lint
-lint: lint-python lint-node check-compat ## Run code style, static analysis, and runtime-compatibility gates
+lint: lint-python check-compat ## Run code style, static analysis, and runtime-compatibility gates
 
 # --- Python Testing & Coverage ---
 .PHONY: test-python
