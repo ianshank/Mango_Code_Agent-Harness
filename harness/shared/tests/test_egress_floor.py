@@ -107,9 +107,10 @@ def test_the_python_bridge_permits_declared_online(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setenv("NEMOTRON_MODE", "online")
     assert nb.resolve_nemotron_mode() == "online"
-    # Returns rather than raising: the permitted path is asserted explicitly,
-    # not inferred from the absence of an exception.
-    assert nb._assert_egress_permitted("https://example.invalid/v1") is None
+    # The guard returns None by contract, so there is no return value to assert
+    # on (mypy: func-returns-value). What is being verified is that it does not
+    # raise -- any refusal here fails the test, which is the whole point.
+    nb._assert_egress_permitted("https://example.invalid/v1")
 
 
 def test_an_injected_transport_is_a_declaration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,7 +126,8 @@ def test_an_injected_transport_is_a_declaration(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.delenv("NEMOTRON_MODE", raising=False)
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: None)
     assert nb.resolve_nemotron_mode() is None, "no mode declared, yet the double must pass"
-    assert nb._assert_egress_permitted("https://integrate.api.nvidia.com/v1") is None
+    # Must not raise: the injected double is honoured despite no declared mode.
+    nb._assert_egress_permitted("https://integrate.api.nvidia.com/v1")
 
 
 def test_a_typo_in_the_mode_is_not_a_declaration(monkeypatch: pytest.MonkeyPatch) -> None:
