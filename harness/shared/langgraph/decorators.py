@@ -64,9 +64,16 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Authority check failed for %s: %s", fn.__name__, exc)
-                # Allow the node to proceed — fail-open on authority lookup errors
-                # to avoid blocking the graph due to policy file issues.
+                logger.error("Authority check failed for %s: %s", fn.__name__, exc)
+                return {
+                    "errors": [
+                        {
+                            "node": fn.__name__,
+                            "error": f"authority check failed: {exc}",
+                            "traceback": "",
+                        }
+                    ]
+                }
 
             return fn(*args, **kwargs)
         return wrapper
@@ -108,8 +115,16 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Budget check failed for %s: %s", fn.__name__, exc)
-                # Fail-open: if we can't check budget, proceed anyway.
+                logger.error("Budget check failed for %s: %s", fn.__name__, exc)
+                return {
+                    "errors": [
+                        {
+                            "node": fn.__name__,
+                            "error": f"budget check failed: {exc}",
+                            "traceback": "",
+                        }
+                    ]
+                }
 
             result = fn(state, *args, **kwargs)
 

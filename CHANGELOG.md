@@ -1,3 +1,15 @@
+## [2.3.0] - 2026-08-31
+
+### Added
+- harness/shared/autonomous_healing.py for test-driven agent remediation.
+- harness/shared/lats_optimizer.py and blation.py for MCTS node expansion.
+- gent-memory-manager skill.
+
+### Changed
+- Decomposed mango_mas_orchestrator.py into LangGraph nodes.
+- Fixed linter errors (W291, BLE001, I001) and Mypy typing issues in core orchestration files.
+- Synchronized policy-artifact.json drift.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

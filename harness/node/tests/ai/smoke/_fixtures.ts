@@ -141,7 +141,7 @@ export function assertNoSecretLeakage(
  */
 export function loadAgentSystemPrompt(agentFilePath: string): string {
   // Dynamically import fs to keep this module lightweight
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const fs = require('fs') as typeof import('fs');
   const content = fs.readFileSync(agentFilePath, 'utf-8');
 

@@ -8,11 +8,14 @@ it is workspace-agnostic and never hardcoded.
 """
 import contextlib
 import json
+import logging
 import os
 import time
 import typing
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 MEMORY_DIR = Path(__file__).resolve().parent.parent.parent / ".mango" / "memory"
 GAPS_FILE = MEMORY_DIR / "gaps.json"
@@ -26,6 +29,24 @@ def _ensure_memory_files() -> None:
         GAPS_FILE.write_text("[]", encoding="utf-8")
     if not HYPOTHESES_FILE.exists():
         HYPOTHESES_FILE.write_text("[]", encoding="utf-8")
+
+
+def _read_json_safe(file_path: Path) -> list:
+    """Read a JSON file safely, backing it up and resetting if malformed."""
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise ValueError("Expected JSON list")
+        return data
+    except (json.JSONDecodeError, ValueError) as exc:
+        backup_path = file_path.with_name(f"{file_path.name}.malformed.{int(time.time())}")
+        try:
+            file_path.rename(backup_path)
+        except OSError:
+            pass
+        file_path.write_text("[]", encoding="utf-8")
+        logger.error("Malformed JSON in %s backed up to %s (Error: %s). Resetting store.", file_path, backup_path, exc)
+        return []
 
 
 DEFAULT_LOCK_TIMEOUT_S = 10.0
@@ -95,7 +116,7 @@ def knowledge_gap_log(question: str, what_needed: str, proposed_approach: str) -
     }
 
     with _file_lock(GAPS_FILE):
-        gaps = json.loads(GAPS_FILE.read_text(encoding="utf-8"))
+        gaps = _read_json_safe(GAPS_FILE)
         gaps.append(entry)
 
         # Write to a temp file first for atomic replacement
@@ -122,7 +143,7 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
     }
 
     with _file_lock(HYPOTHESES_FILE):
-        hypotheses = json.loads(HYPOTHESES_FILE.read_text(encoding="utf-8"))
+        hypotheses = _read_json_safe(HYPOTHESES_FILE)
         hypotheses.append(entry)
 
         temp_file = HYPOTHESES_FILE.with_suffix(".tmp")

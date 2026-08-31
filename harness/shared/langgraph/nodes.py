@@ -32,6 +32,7 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     VERIFIER_PROMPT_TEMPLATE,
 )
+from harness.shared.langgraph.decorators import budgeted, with_authority
 from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
 
@@ -58,6 +59,7 @@ def _get_configurable(config: Any = None, kwargs: dict[str, Any] | None = None) 
 # ── Active nodes (wrap existing orchestrator methods) ────────
 
 
+@with_authority("planner", may_write=False)
 def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Planner agent: generates a plan from the task description.
 
@@ -86,6 +88,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         return {"errors": [{"node": "planner", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("shadow_planner", may_write=False)
 def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Shadow planner: generates an independent plan for divergence comparison.
 
@@ -103,6 +106,8 @@ def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[
         return {"errors": [{"node": "shadow_planner", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("nemotron-reasoner", may_write=True)
+@budgeted("tool_budget_used")
 def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Implementer (nemotron-reasoner): applies patches to implement the plan.
 
@@ -139,6 +144,7 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
         return {"errors": [{"node": "implementer", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("verifier", may_write=False)
 def evaluation_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Test evaluator: runs the verification suite.
 
@@ -263,6 +269,7 @@ def escalate_node(state: MangoState) -> dict:
 # ── Review nodes (Phase 5 fan-out) ──────────────────────────
 
 
+@with_authority("peer_reviewer", may_write=False)
 def peer_reviewer_node(state: MangoState) -> dict:
     """Peer reviewer: reviews patches for correctness.
 
@@ -282,6 +289,7 @@ def peer_reviewer_node(state: MangoState) -> dict:
     }
 
 
+@with_authority("security_reviewer", may_write=False)
 def security_reviewer_node(state: MangoState) -> dict[str, Any]:
     """Security reviewer: reviews patches for security issues.
 
