@@ -1,3 +1,11 @@
+# NOTE: This workflow is a reference adoption template -- it is never executed by
+# GitHub Actions. GitHub only discovers and runs workflows under the repository's
+# ROOT .github/workflows/ (see .github/workflows/python-package.yml for the real,
+# live CI). The gitleaks/osv-scanner steps below are not live enforcement; treat
+# this file as a starting point for adopters standing up this stack independently,
+# not as evidence that any of these gates run against this repository. This stack
+# in particular is an unadopted template overall -- see harness/CONTRACT.md's
+# "Template adoption blockers" section.
 name: ci
 on: [push, pull_request]
 permissions:
