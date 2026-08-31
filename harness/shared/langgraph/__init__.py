@@ -19,7 +19,7 @@ from __future__ import annotations
 
 # ── Feature detection ────────────────────────────────────────
 
-try:
+try:  # pragma: no cover
     from langgraph.graph import StateGraph  # noqa: F401 — probe only
 
     LANGGRAPH_AVAILABLE = True
