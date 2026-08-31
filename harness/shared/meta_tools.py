@@ -1,3 +1,11 @@
+"""
+Meta-tools: in-process memory and hypothesis tracking for the Mango MAS agent loop.
+
+Provides file-locked JSON stores for gap tracking (``gaps.json``), hypothesis
+logging (``hypotheses.json``), and audit trail writing (``audit.jsonl``), all
+rooted at ``<repo-root>/.mango/memory/``. Path is resolved from ``__file__`` so
+it is workspace-agnostic and never hardcoded.
+"""
 import contextlib
 import json
 import os

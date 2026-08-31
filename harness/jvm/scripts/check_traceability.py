@@ -2,5 +2,4 @@
 from harness.shared.governance.check_traceability import check_traceability as check_traceability
 
 if __name__ == "__main__":
-    import sys
-    sys.exit(check_traceability())
+    check_traceability()

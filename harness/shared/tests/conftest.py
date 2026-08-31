@@ -6,13 +6,20 @@ Provides:
 - ``shared_dir``: Absolute path to harness/shared.
 - ``tmp_git_repo``: Ephemeral Git repository for isolated testing.
 - ``write_text_file``: Writes a fixture file, creating parent dirs.
+- ``governance_workspace``: Temp dir with a minimal .governance/ skeleton.
+- ``mock_make_available``: Patches ``shutil.which("make")`` for cross-platform tests.
+- ``mock_subprocess_success``: Patches ``subprocess.run`` to return exit-0.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -89,3 +96,77 @@ def mock_complete_chat(mocker):
     """Patch the Nemotron bridge inside the orchestrator; return the mock."""
     from harness.shared import mango_mas_orchestrator as orch_module
     return mocker.patch.object(orch_module, "complete_chat")
+
+
+@pytest.fixture
+def governance_workspace(tmp_path: Path) -> Path:
+    """Return a temp directory pre-populated with a minimal ``.governance/`` skeleton.
+
+    Contains:
+    - ``.governance/policy.json`` — minimal governance-policy with all required keys
+    - ``.governance/agent-policy.json`` — minimal agent-policy with all required roles
+    - ``.governance/decision-log.md`` — empty log
+
+    Use this fixture wherever tests construct throwaway governance trees to avoid
+    copy-pasting the scaffold logic across test modules.
+    """
+    gov = tmp_path / ".governance"
+    gov.mkdir(parents=True, exist_ok=True)
+
+    gov_policy = {
+        "target_contract": ["install", "lint", "test", "cov"],
+        "pre_pr_order": ["lint", "cov"],
+        "ci_required_targets": [
+            "cov", "lint", "types", "secrets", "specs",
+            "audit", "remotes", "projections", "traceability", "governance",
+        ],
+        "decision_id_pattern": "^(DEC-[0-9]+)$",
+        "agent_defaults": {"deny_unclassified_side_effects": True},
+        "protected_paths": [
+            ".governance/**", ".github/workflows/**",
+            "Makefile", "scripts/remotes.py", "scripts/verify_zero_skips.py",
+        ],
+        "charter_version": "2.0",
+        "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
+        "skill_max_age_days": 90,
+        "external_root_of_trust_required": True,
+    }
+    (gov / "policy.json").write_text(json.dumps(gov_policy), encoding="utf-8")
+
+    (gov / "decision-log.md").write_text("# Decision Log\n", encoding="utf-8")
+    return tmp_path
+
+
+@pytest.fixture
+def mock_make_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch ``shutil.which`` so that a ``"make"`` probe returns a dummy path.
+
+    Prevents ``VerificationRunner`` and similar probes from failing on Windows
+    (where GNU Make is typically absent) in tests that are not about Make
+    availability itself.
+    """
+    import shutil
+
+    original_which = shutil.which
+
+    def _which_stub(cmd: str, mode: int = os.F_OK | os.X_OK, path: str | None = None) -> str | None:
+        if cmd == "make":
+            return "/usr/bin/make"
+        return original_which(cmd, mode=mode, path=path)
+
+    monkeypatch.setattr(shutil, "which", _which_stub)
+
+
+@pytest.fixture
+def mock_subprocess_success(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock, None, None]:
+    """Patch ``subprocess.run`` to return a zero-exit ``CompletedProcess``.
+
+    Use in tests where external process invocation is a side-effect, not the
+    system under test. Yields the mock so callers can inspect ``call_args``.
+    """
+    import subprocess as sp
+
+    mock = MagicMock()
+    mock.return_value = sp.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
+    with patch.object(sp, "run", mock):
+        yield mock

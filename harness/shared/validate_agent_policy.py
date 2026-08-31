@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Validation script: enforce structural correctness of ``.governance/agent-policy.json``.
+
+Checks: required roles, default_deny, high_risk_actions, delegation depth,
+allowed_actions, human_approval_required_for, and mandatory rule assertions.
+Exits non-zero with a descriptive message on any violation.
+"""
 import json
 from pathlib import Path
 
