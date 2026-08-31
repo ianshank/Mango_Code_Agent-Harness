@@ -1,6 +1,6 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.2.4  
+**Version:** 2.2.5  
 **Status:** In Progress / Strategic Roadmap
 
 ---
