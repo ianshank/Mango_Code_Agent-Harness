@@ -98,11 +98,13 @@ class TestDefaultState:
 
     def test_accumulator_defaults_are_empty_lists(self) -> None:
         """Accumulators must start empty so operator.add has a base."""
+        state_dict = dict(DEFAULT_STATE)
         for name in ACCUMULATOR_CHANNELS:
-            assert DEFAULT_STATE[name] == [], f"{name} default is not []"
+            assert state_dict[name] == [], f"{name} default is not []"
 
     def test_lww_defaults_are_zero_values(self) -> None:
         """LWW channels start at their type's zero value."""
+        state_dict = dict(DEFAULT_STATE)
         for name in LWW_CHANNELS:
-            val = DEFAULT_STATE[name]
+            val = state_dict[name]
             assert val is not None, f"{name} default is None"

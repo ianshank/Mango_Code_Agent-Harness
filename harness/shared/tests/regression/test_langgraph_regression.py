@@ -18,8 +18,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from harness.shared.governance.verdict import VERIFIED, Verdict
+from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.decorators import budgeted, with_authority
-from harness.shared.langgraph.graph import build_graph
 from harness.shared.langgraph.nodes import (
     clarify_node,
     escalate_node,
@@ -39,6 +39,11 @@ from harness.shared.langgraph.state import (
     LWW_CHANNELS,
     MangoState,
 )
+
+pytestmark = [
+    pytest.mark.langgraph,
+    pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed"),
+]
 
 
 class TestLangGraphNodeInvocationRegression:
@@ -135,6 +140,8 @@ class TestLangGraphChannelReducersRegression:
 
     def test_state_graph_accumulation_over_turns(self) -> None:
         """StateGraph compiled execution must accumulate patches and findings."""
+        from harness.shared.langgraph.graph import build_graph
+
         graph = build_graph()
         initial_state: MangoState = {
             "task": "Test accumulation",
@@ -245,6 +252,8 @@ class TestLangGraphMockOrchestratorLiveE2E:
             exit_code=0,
         )
         mock_orch._harness_verdict.return_value = mock_verdict
+
+        from harness.shared.langgraph.graph import build_graph
 
         graph = build_graph()
         config = {"configurable": {"orchestrator": mock_orch}}

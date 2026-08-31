@@ -15,7 +15,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langgraph.graph import END, START, StateGraph
+try:
+    from langgraph.graph import END, START, StateGraph
+except ImportError:  # pragma: no cover
+    END = "__end__"  # type: ignore[assignment]
+    START = "__start__"  # type: ignore[assignment]
+    StateGraph = None  # type: ignore[assignment, misc]
 
 from harness.shared.langgraph.nodes import (
     clarify_node,
@@ -50,7 +55,7 @@ def _route_quality_gate(state: dict) -> str:
     """Route after quality_gate: pass → END, revision → implementer, exhausted → escalate."""
     gate_status = state.get("gate_status", {})
     if gate_status.get("quality_gate") == "pass":
-        return END
+        return str(END)
     # Check revision count against policy max
     revision_count = state.get("revision_count", 0)
     # Default max from GraphPolicy — read from state if available
@@ -83,6 +88,9 @@ def build_graph(
     """
     if policy is None:
         policy = GraphPolicy()
+
+    if StateGraph is None:
+        raise RuntimeError("langgraph library is required to build StateGraph")
 
     builder = StateGraph(MangoState)
 
