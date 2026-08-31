@@ -7,6 +7,54 @@
 
 ## 0. Completed Milestones
 
+### 🚧 Tech-debt reduction, LangGraph policy wiring & enterprise hygiene batch (PR #53, in review)
+
+A full audit (3 parallel research passes) whose draft plan was itself put
+through a 4-persona peer review (Architect, SDLC/CI Lead, QA Director,
+Product Manager) before implementation — the review caught that the
+flagship finding targeted code no CI job installs `langgraph` for, and
+surfaced a second, more severe bug the first draft missed. Spec:
+`docs/specs/langgraph-policy-wiring.md`.
+
+- [x] **`GraphPolicy` fully wired to `governance-policy.json`**: `recursion_limit`,
+      `max_concurrency`, `plan_divergence_threshold` were never read from
+      policy at all; `graph.py`'s `_route_quality_gate()` and `nodes.py`'s
+      `plan_gate_node()` used raw literals (`10`, `0.35`) instead of
+      consulting it. Both now read policy via `config["configurable"]["policy"]`,
+      the same mechanism already used for `orchestrator`, with a
+      behavior-preserving fallback when none is supplied.
+- [x] **Fail-open bug fixed**: `GraphPolicy.from_governance_json()` silently
+      substituted defaults on a *malformed* policy, not just an absent one —
+      the sixth recurrence of this exact pattern in the decision log. Now
+      raises. The existing test for this code asserted nothing that could
+      distinguish wiring from coincidence; rewritten with a
+      distinguishable-value liveness test and a malformed-policy fixture.
+- [x] **Enterprise hygiene**: `.github/CODEOWNERS`, PR/issue templates,
+      `SECURITY.md`, `CONTRIBUTING.md`.
+- [x] **Evidence-checked coverage-gap closure**: direct tests for
+      `agent_prompts.py`, `tool_result_format.py`, `tool_schemas.py` — each
+      confirmed to have a real gap first; `tool_dispatch.py` dropped from
+      scope after confirming it's already well covered.
+- [x] **Two hard-coded-value fixes**: `api_server/main.py`'s dev-runner host
+      is now env-overridable; `process_backend.py`'s `DEFAULT_TIMEOUT_SEC`
+      now reads policy instead of an unlinked duplicate literal.
+- [x] **`.mango/agents/nemotron-reasoner.md`'s `tools:` frontmatter fixed** —
+      open since `SDLC_HYGIENE_REPORT.md` (2026-08-26); the existing test
+      didn't catch it because it checked the whole file's text, satisfied by
+      a prose mention alone. New test asserts the parsed frontmatter field.
+- [x] **Two diverged C4 docs reconciled** with a banner (not a destructive
+      merge — the older doc's content is still detailed and partly unique).
+- [x] **Two tech-debt findings recorded as accepted debt** (DEC-019, DEC-020)
+      rather than left ambiguous: the control-plane `digest()` triplication
+      is intentional (root-of-trust isolation); `harness/shared/gates/`
+      adopted as the convention for new gate modules, not a migration.
+- [x] **Fixed a live `R-CEG-1` regression**: `pyproject.toml` still said
+      `2.1.9` while `README.md`/this file had already moved to `2.2.4`.
+- [ ] **Not yet green**: CI requires the `infra-reviewed` label (this batch
+      touches multiple protected paths, each individually attested in its
+      commit message) — a human sign-off step, not something this batch can
+      self-certify.
+
 ### ✅ v2.2.4 — LangGraph StateGraph Multi-Agent Architecture & Deterministic Node Orchestration
 
 - [x] **12-Channel Typed State Architecture (`MangoState`)**: Designed and implemented the 12-channel StateGraph schema with partitioned Accumulator channels (reduced via `operator.add`) and LWW channels.
