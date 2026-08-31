@@ -91,3 +91,34 @@ class TestValidatePolicy:
         path.write_text(json.dumps(data), encoding="utf-8")
         with pytest.raises(SystemExit):
             main(path)
+
+    def test_missing_key_raises_systemexit_with_key_name(self, tmp_path: Path) -> None:
+        """Cover line 28: missing top-level key triggers SystemExit with key name in message."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        del data["charter_version"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert "charter_version" in str(exc_info.value)
+
+    def test_missing_github_workflows_protected_path_fails(self, tmp_path: Path) -> None:
+        """Cover line 55: individual critical protected-path entries checked one-by-one."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        # Remove only .github/workflows/** so the loop hits line 55 on that specific entry
+        data["protected_paths"] = [p for p in data["protected_paths"] if p != ".github/workflows/**"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert ".github/workflows/**" in str(exc_info.value)
+
+    def test_missing_makefile_protected_path_fails(self, tmp_path: Path) -> None:
+        """Cover line 55: Makefile entry individually checked."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        data["protected_paths"] = [p for p in data["protected_paths"] if p != "Makefile"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert "Makefile" in str(exc_info.value)

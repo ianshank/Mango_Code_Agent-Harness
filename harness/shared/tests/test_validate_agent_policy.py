@@ -111,3 +111,34 @@ class TestValidateAgentPolicy:
         with pytest.raises(SystemExit) as exc_info:
             main(path)
         assert "high-risk" in str(exc_info.value).lower() or "approval" in str(exc_info.value).lower()
+
+    def test_approval_not_subset_of_allowed_fails(self, tmp_path: Path) -> None:
+        """Cover line 45: approval action that is not in allowed_actions."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        # Add an approval action that is NOT in allowed_actions
+        data["agents"][0]["human_approval_required_for"] = ["destructive", "external_write", "not_allowed"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert "approval action is not allowed" in str(exc_info.value)
+
+    def test_delegation_does_not_transfer_false_fails(self, tmp_path: Path) -> None:
+        """Cover line 64: delegation_does_not_transfer_authority set to False."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        data["rules"]["delegation_does_not_transfer_authority"] = False
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert "delegation" in str(exc_info.value)
+
+    def test_side_effects_require_trace_id_false_fails(self, tmp_path: Path) -> None:
+        """Cover line 66: every_side_effect_requires_trace_id set to False."""
+        path = _scaffold_valid_policy(tmp_path)
+        data = json.loads(path.read_text())
+        data["rules"]["every_side_effect_requires_trace_id"] = False
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            main(path)
+        assert "trace" in str(exc_info.value)

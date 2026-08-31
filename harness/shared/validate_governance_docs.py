@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Validation script: enforce governance documentation health.
+
+Checks: charter version presence, governance skill freshness (staleness gate
+from policy's ``skill_max_age_days``), and decision-log completeness (every
+entry since the skill's anchor date must appear in the skill body).
+Exits non-zero with a structured failure list on any violation.
+"""
 from __future__ import annotations
 
 import datetime as dt

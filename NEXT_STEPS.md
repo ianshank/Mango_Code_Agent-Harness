@@ -7,6 +7,20 @@
 
 ## 0. Completed Milestones
 
+### ✅ Full test suite coverage gap fill and AQA/regression expansion (2026-08-31)
+
+Systematic coverage audit found 9 source modules with zero direct test
+coverage. Created 11 new test files (107 tests), bringing Pytest total to
+2,300 (0 failures). Four defects triaged with RCA. Coverage: 98.17% lines,
+95.71% branches, 60/60 per-file. All CI gates green (ruff, mypy, coverage
+gate, `test_test_quality.py` meta-tests).
+
+New modules covered: `json_logging`, `tool_dispatch`, `validate_adoption`,
+`validate_agent_policy`, `validate_governance_docs`, `validate_policy`,
+`governance/check_traceability`, `governance/process_backend`,
+`governance/verification`. New regression tier:
+`test_coverage_gap_regression.py`, `test_nemotron_api_aqa.py`.
+
 ### 🚧 Tech-debt reduction, LangGraph policy wiring & enterprise hygiene batch (PR #53, in review)
 
 A full audit (3 parallel research passes) whose draft plan was itself put

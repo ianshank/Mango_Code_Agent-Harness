@@ -111,3 +111,35 @@ class TestValidateGovernanceDocs:
         with pytest.raises(SystemExit) as exc_info:
             main(tmp_path)
         assert "decision log" in str(exc_info.value).lower()
+
+    def test_decision_in_log_missing_from_skill_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Cover lines 56-58: a decision log entry after the anchor date that is not in the skill body."""
+        _scaffold_valid(tmp_path)
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        # Write a decision log entry that references DEC-MISSING which is NOT in the skill
+        (tmp_path / ".governance" / "decision-log.md").write_text(
+            f"{today} | DEC-MISSING | A decision that is not in the skill\n",
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as exc_info:
+            main(tmp_path)
+        assert "DEC-MISSING" in str(exc_info.value)
+
+    def test_skill_missing_decisions_since_section_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Cover line 42: governance skill has Reviewed: date but no 'Decisions since' section."""
+        _scaffold_valid(tmp_path)
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        # Write skill with Reviewed but without the 'Decisions since' header
+        (tmp_path / "agents" / "GOVERNANCE_SKILL.md").write_text(
+            f"# Governance Skill\nReviewed: {today}\n\nSome content but no Decisions since header.\n",
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as exc_info:
+            main(tmp_path)
+        assert "decisions since" in str(exc_info.value).lower() or "lacks" in str(exc_info.value).lower()

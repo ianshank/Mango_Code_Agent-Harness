@@ -6,7 +6,7 @@
 > `harness/node/src/ai/nemotron/` subsystem) — where the two disagree, this
 > file wins.
 
-**Version:** 2.2.4 (2026 Standards)  
+**Version:** 2.2.5 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -49,7 +49,7 @@ The Container diagram zooms into the Agentic SSD system boundaries, displaying i
 ```mermaid
 graph TD
     subgraph Client_Plane ["Client & Interface Tier"]
-        CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr, make test-langgraph)"]
+        CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr, make test-langgraph, make test-aqa)"]
         APIServer["FastAPI Gateway (Port 8080)<br/>(/health, /v1/orchestrator/run, /v1/models)"]
     end
 
