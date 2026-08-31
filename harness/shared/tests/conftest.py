@@ -14,6 +14,7 @@ Provides:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Generator
@@ -148,10 +149,10 @@ def mock_make_available(monkeypatch: pytest.MonkeyPatch) -> None:
 
     original_which = shutil.which
 
-    def _which_stub(name: str, *args: object, **kwargs: object) -> object:
-        if name == "make":
+    def _which_stub(cmd: str, mode: int = os.F_OK | os.X_OK, path: str | None = None) -> str | None:
+        if cmd == "make":
             return "/usr/bin/make"
-        return original_which(name, *args, **kwargs)  # type: ignore[arg-type]
+        return original_which(cmd, mode=mode, path=path)
 
     monkeypatch.setattr(shutil, "which", _which_stub)
 

@@ -5,9 +5,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from harness.api_server.main import app  # noqa: E402
+from harness.api_server.main import app
 
 client = TestClient(app)
 
