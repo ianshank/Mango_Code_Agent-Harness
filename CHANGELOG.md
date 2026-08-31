@@ -128,6 +128,59 @@ rule DEC-013 enforced once already): `pyproject.toml` still said `2.1.9`
 while `README.md`/`NEXT_STEPS.md` had already moved to `2.2.4` as of the
 LangGraph-engine release above — bumped to match.
 
+### Added — second-round tech-debt audit: skill, dead-code removal, edge-case coverage (PR #53)
+
+A second pass, triggered by the same broad SDLC/SQE-style review request
+recurring three times verbatim in one session. New
+`.mango/skills/tech-debt-audit/SKILL.md` codifies the recurring shape
+(drift-vs-main check, god-file scan, adversarial hardcoded-value/dead-code/
+edge-case sweep, doc sync) as a repeatable procedure instead of re-deriving
+it by hand each time; composes the existing `validation-runner` and
+`repo-invariant-review` skills rather than re-declaring their checks.
+
+An independent, evidence-based scan (verify every claim via grep/read
+before reporting, no speculation) found: `harness/shared/enforce_coverage.py`
+was dead — confirmed via a repo-wide reference search (only its own test
+file matched) — a functional duplicate of the live `coverage_gate.py` with
+weaker semantics (lines only, no branches; no absent-vs-malformed
+distinction); deleted, with its test file. Three real missed-edge-case
+gaps closed with new tests: `command_actions.py`'s `write_targets()`
+`WRITE_TARGET_PROGRAMS` branch (untested even for the exact `cp evil
+.mango/hooks/x.sh` scenario its own docstring names as the reason it
+exists); `check_dedup.py`'s `load_config()` `unreadable`-policy branch, its
+wrongly-typed `max_shim_lines`/`exempt` fallback behavior, and `run()`'s
+full-relative-path exemption form (previously only the bare-filename form
+was tested). Two findings verified as already covered rather than acted on:
+`write_policy.py`'s non-object-supplied-policy branch (already exercised,
+under a different stated purpose, by the existing
+`test_a_broken_policy_does_not_kill_the_process`); `coverage_gate.py` vs.
+`governance_json.py`'s near-identical JSON-loading helper (already a
+deliberate, documented exclusion — DEC-013).
+
+Two findings evaluated and intentionally not fixed, recorded as DEC-022 so
+a future audit does not rediscover them as undiscovered debt:
+`verification.py`'s `timeout: int = 300` duplicates a policy value but the
+module documents a stronger no-filesystem-reads-at-import contract that
+sourcing it from policy would violate, and the one production caller
+already injects the real value explicitly. `langgraph/decorators.py`'s
+`@with_authority`/`@budgeted` are implemented and unit-tested in isolation
+but never applied to any real node function — contradicting a checked-off
+`NEXT_STEPS.md` claim, now corrected — and both fail open (moot only while
+unwired); wiring them is deferred to its own spec, since doing it correctly
+means fixing the fail-open behavior in the same change, not just adding
+decorator syntax to live-shaped node code.
+
+Also: re-verified the prior plan's "test-helper duplication" claim (5
+files) directly rather than trusting it — only 2 (`test_check_dedup.py`,
+`test_check_py_compat.py`) had genuinely identical logic; consolidated
+those into `conftest.py`'s new `write_text_file()`, left the other 3 alone
+since their helpers serve different subsystems with different shapes.
+Corrected `docs/specs/god-file-decomposition.md`'s stale
+`mango_mas_orchestrator.py` line count (465 → 483, now 96.6% of the
+enforced 500-line ceiling) and flagged — without implementing — the
+existing, fully-specified-but-unstarted `orchestrator-tool-registry.md` as
+worth prioritizing given the shrinking headroom.
+
 ### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup
 
 Paired specs: `docs/specs/dependency-hygiene.md` and `docs/specs/ci-enforcement-gaps.md` (DEC-013).

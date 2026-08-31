@@ -50,17 +50,27 @@ surfaced a second, more severe bug the first draft missed. Spec:
       adopted as the convention for new gate modules, not a migration.
 - [x] **Fixed a live `R-CEG-1` regression**: `pyproject.toml` still said
       `2.1.9` while `README.md`/this file had already moved to `2.2.4`.
-- [ ] **Not yet green**: CI requires the `infra-reviewed` label (this batch
-      touches multiple protected paths, each individually attested in its
-      commit message) — a human sign-off step, not something this batch can
-      self-certify.
+- [x] **Green**: `infra-reviewed` label applied; all 9 required checks pass
+      on the current head.
+- [x] **Second-round audit**: new `.mango/skills/tech-debt-audit/SKILL.md`
+      codifies this recurring review shape as a repeatable procedure.
+      Deleted confirmed-dead `enforce_coverage.py` (superseded by
+      `coverage_gate.py`); closed 3 real missed-edge-case gaps
+      (`command_actions.write_targets()`'s `WRITE_TARGET_PROGRAMS` branch,
+      `check_dedup.load_config()`'s `unreadable`/wrongly-typed-value/
+      full-relative-path-exemption branches); corrected this file's own
+      overclaimed "Authority & Budget Decorators" checkbox below (they exist
+      and are tested in isolation, but are not applied to any real node —
+      see DEC-022); recorded two evaluated-and-intentionally-not-fixed
+      findings as DEC-022 rather than leaving them for a future audit to
+      rediscover.
 
 ### ✅ v2.2.4 — LangGraph StateGraph Multi-Agent Architecture & Deterministic Node Orchestration
 
 - [x] **12-Channel Typed State Architecture (`MangoState`)**: Designed and implemented the 12-channel StateGraph schema with partitioned Accumulator channels (reduced via `operator.add`) and LWW channels.
 - [x] **10 Topology Nodes & Dynamic Parameter Ingestion**: Implemented 10 topology nodes with fail-open error isolation and runtime configuration extraction supporting both positional and keyword invocation.
 - [x] **Active Node Wiring**: Connected `planner_node`, `implementer_node` (reasoner), and `evaluation_node` (verifier + `VerificationRunner`) to the active orchestrator.
-- [x] **Authority & Budget Decorators (`@with_authority`, `@budgeted`)**: Enforced role-based write gates and per-task tool invocation budgets at node boundaries.
+- [ ] **Authority & Budget Decorators (`@with_authority`, `@budgeted`)**: Corrected 2026-08-31 (tech-debt audit) — implemented and unit-tested in isolation (`test_langgraph_decorators.py`), but **not applied to any of the 10 real node functions** in `nodes.py`; the only non-test usages decorate synthetic dummy functions. Neither enforces a role-based write gate nor a tool-invocation budget at a node boundary today. Also found: both decorators fail *open* on a lookup error ("Allow the node to proceed"/"proceed anyway"), the opposite of every other governance control in this repository — moot only while unwired. Wiring them requires fixing the fail-open behavior in the same change (Pattern 1, this repository's decision log), not just adding the decorator syntax; scope as its own spec before attempting (`make spec NAME=langgraph-authority-budget-wiring` or similar) rather than folding it into a hygiene pass — it changes live-shaped node behavior, not just a default.
 - [x] **AQA Regression Suite (`test_langgraph_regression.py`)**: Added 32 automated regression tests covering calling conventions, state immutability, accumulator concatenation, error trapping, and divergence thresholds.
 - [x] **C4 Architecture v2.2.4**: Updated Level 1-4 diagrams and documented LangGraph invariants (`INV-LG-1` .. `INV-LG-4`).
 

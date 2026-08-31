@@ -187,6 +187,40 @@ def test_load_config_reads_a_distinguishable_policy_value(repo: Path):
     assert cd.load_config(repo).max_shim_lines == 1
 
 
+def test_load_config_fails_closed_on_unreadable_policy(repo: Path, caplog):
+    """`read_json_object`'s "unreadable" classification is proven correct by
+    test_governance_json.py directly; what is untested is check_dedup.py's own
+    handling of that outcome -- it must raise closed like "malformed", not slip
+    through as though the policy were merely absent.
+
+    A directory in place of the file is a portable way to force a non-missing
+    OSError (IsADirectoryError): unlike a chmod'd file it fires identically
+    whether or not the test happens to run as root.
+    """
+    (repo / "harness" / "shared" / "governance-policy.json").mkdir(parents=True)
+    with caplog.at_level(logging.ERROR, logger=cd.logger.name):
+        with pytest.raises(SystemExit) as excinfo:
+            cd.load_config(repo)
+    assert excinfo.value.code == 1
+    assert "Could not read governance policy" in caplog.text
+
+
+def test_load_config_ignores_a_wrongly_typed_max_shim_lines(repo: Path):
+    """`isinstance(..., int)` guards the assignment -- a policy author who
+    quotes the number ("12" instead of 12) must degrade to the module default,
+    not raise and not silently coerce the string."""
+    _policy(repo, {"max_shim_lines": "12"})
+    assert cd.load_config(repo).max_shim_lines == cd.DEFAULT_MAX_SHIM_LINES
+
+
+def test_load_config_ignores_a_wrongly_typed_exempt(repo: Path):
+    """`isinstance(..., list)` guards the assignment -- a policy author who
+    writes a bare string instead of a one-element list must degrade to no
+    exemptions, not iterate the string's characters as filenames."""
+    _policy(repo, {"exempt": "thing.py"})
+    assert cd.load_config(repo).exempt == frozenset()
+
+
 # --- check_script ---
 
 def test_check_script_accepts_import_shim(repo: Path):
@@ -275,6 +309,20 @@ def test_run_honors_policy_exemptions(repo: Path):
     _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
     _write(repo / "harness" / "node" / "scripts" / "thing.py", REAL_LOGIC)
     _policy(repo, {"exempt": ["thing.py"]})
+    report = cd.run(cd.load_config(repo))
+    assert report.ok
+    assert "harness/node/scripts/thing.py" in report.skipped
+
+
+def test_run_honors_a_full_relative_path_exemption(repo: Path):
+    """`run()` checks `script.name in cfg.exempt or rel in cfg.exempt` -- the
+    bare-filename form is covered above; this is the other half, a policy
+    author who disambiguates by writing the whole repo-relative path instead
+    (needed when two stacks both ship a same-named script and only one should
+    be exempt)."""
+    _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
+    _write(repo / "harness" / "node" / "scripts" / "thing.py", REAL_LOGIC)
+    _policy(repo, {"exempt": ["harness/node/scripts/thing.py"]})
     report = cd.run(cd.load_config(repo))
     assert report.ok
     assert "harness/node/scripts/thing.py" in report.skipped
