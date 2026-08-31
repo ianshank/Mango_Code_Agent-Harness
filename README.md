@@ -1,10 +1,10 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.9 (2026 Standards)
+**Version:** 2.2.4 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem** and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -70,6 +70,12 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
+│   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
+│   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
+│   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
+│   │   │   ├── policy.py                # GraphExecutionPolicy configuration
+│   │   │   └── decorators.py            # @with_authority & @budgeted runtime gates
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
@@ -95,6 +101,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── tests/                       # Python AQA Engine (2,007 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
+│   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
 │   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
 │   │       │   └── test_orchestrator_dispatch_regression.py # Dispatch edge-cases & budget handling
@@ -208,7 +215,7 @@ Optional environment variables for the shadow planner comparison channel
 | `MANGO_SHADOW_PLANNER`     | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
 | `MANGO_SHADOW_MODEL`       | Alternate model for the shadow pass (defaults to the orchestrator model).                |
 | `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout.                             |
-| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).       |
+| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).      |
 
 ### 4.2 Querying NVIDIA Nemotron Ultra
 

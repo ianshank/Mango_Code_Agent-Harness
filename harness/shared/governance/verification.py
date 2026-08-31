@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import shlex
+import shutil
 import time
 import typing
 from pathlib import Path
@@ -101,6 +102,15 @@ class VerificationRunner:
         an operator is told which one to fix, though both mean the same thing to
         the verdict: no signal is obtainable here.
         """
+        # Pre-flight: `make` itself must be on PATH. On Windows dev machines
+        # without GNU Make, the broker subprocess would fail with an OS-level
+        # CommandNotFound that produces the misleading diagnostic "test-python
+        # is not a target of Makefile". This gives a specific, actionable
+        # message instead. CI runs Linux where `make` is always present, so
+        # this branch is exercised only in local development.
+        if shutil.which("make") is None:
+            return False, "make is not installed; install GNU Make or add it to PATH"
+
         dry = self._broker.execute_command(
             self._probe_command(), {"agent_id": self._agent_id}, cwd=cwd, timeout=self._timeout
         )

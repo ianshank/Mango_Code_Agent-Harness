@@ -1,11 +1,20 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.9  
+**Version:** 2.2.4  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.2.4 — LangGraph StateGraph Multi-Agent Architecture & Deterministic Node Orchestration
+
+- [x] **12-Channel Typed State Architecture (`MangoState`)**: Designed and implemented the 12-channel StateGraph schema with partitioned Accumulator channels (reduced via `operator.add`) and LWW channels.
+- [x] **10 Topology Nodes & Dynamic Parameter Ingestion**: Implemented 10 topology nodes with fail-open error isolation and runtime configuration extraction supporting both positional and keyword invocation.
+- [x] **Active Node Wiring**: Connected `planner_node`, `implementer_node` (reasoner), and `evaluation_node` (verifier + `VerificationRunner`) to the active orchestrator.
+- [x] **Authority & Budget Decorators (`@with_authority`, `@budgeted`)**: Enforced role-based write gates and per-task tool invocation budgets at node boundaries.
+- [x] **AQA Regression Suite (`test_langgraph_regression.py`)**: Added 32 automated regression tests covering calling conventions, state immutability, accumulator concatenation, error trapping, and divergence thresholds.
+- [x] **C4 Architecture v2.2.4**: Updated Level 1-4 diagrams and documented LangGraph invariants (`INV-LG-1` .. `INV-LG-4`).
 
 ### ✅ v2.2.3 — Live NVIDIA Nemotron NIM Multi-Domain Triage, RCA & Autonomous MAS Certification
 

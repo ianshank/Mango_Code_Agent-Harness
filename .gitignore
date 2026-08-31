@@ -55,3 +55,7 @@ weather_cli/
 
 # IDE agent workspace customizations
 .agents/
+
+# LangGraph Studio & local state caches
+.langgraph/
+.langgraph_api/
