@@ -32,6 +32,7 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     VERIFIER_PROMPT_TEMPLATE,
 )
+from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
 
 logger = logging.getLogger(__name__)
@@ -190,17 +191,27 @@ def evaluation_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str,
 # ── Gate/routing nodes ───────────────────────────────────────
 
 
-def plan_gate_node(state: MangoState) -> dict:
-    """Plan gate: validates the plan and checks shadow divergence.
+def plan_gate_node(state: MangoState, config=None, **_kwargs: Any) -> dict:
+    """Plan gate: compares shadow divergence against ``GraphPolicy.plan_divergence_threshold``.
 
-    Phase 1 stub: always passes.  Real logic in Phase 4.
+    The threshold comes from ``config["configurable"]["policy"]`` when the
+    caller supplies one (the same mechanism ``orchestrator`` already uses
+    above), falling back to ``GraphPolicy()``'s built-in default (0.35) —
+    numerically identical to the literal this replaces — otherwise. Phase 1:
+    ``shadow_planner_node`` always reports 0.0 divergence ("No real
+    comparison yet"), so this always passes today regardless of the
+    threshold; real divergence computation is Phase 5 scope, not this fix.
     """
+    configurable = _get_configurable(config, _kwargs)
+    policy: GraphPolicy = configurable.get("policy") or GraphPolicy()
     divergence = state.get("plan_divergence", 0.0)
-    logger.info("plan_gate_node: divergence=%.3f", divergence)
+    logger.info(
+        "plan_gate_node: divergence=%.3f threshold=%.3f", divergence, policy.plan_divergence_threshold
+    )
     return {
         "gate_status": {
             **state.get("gate_status", {}),
-            "plan_gate": "pass" if divergence <= 0.35 else "fail",
+            "plan_gate": "pass" if divergence <= policy.plan_divergence_threshold else "fail",
         },
     }
 

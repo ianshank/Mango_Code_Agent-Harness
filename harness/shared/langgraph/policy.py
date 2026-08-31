@@ -6,11 +6,8 @@ Reads thresholds from ``governance-policy.json`` via the existing
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -60,38 +57,41 @@ class GraphPolicy:
     def from_governance_json(cls) -> GraphPolicy:
         """Construct policy from the live ``governance-policy.json``.
 
-        Falls back to defaults if the policy file is absent or malformed,
-        logging a warning rather than raising — the graph must compile even
-        on a minimal workspace.
+        Fails closed (raises ``policy_loader.PolicyError``) when the policy
+        file is *present but malformed* — matching ``policy_loader.py``'s
+        documented contract, since silently falling back would let a
+        corrupted policy weaken a gate or a runtime limit. Only a genuinely
+        *absent* policy file is the adopter path, and that is already
+        handled gracefully by ``policy_loader`` itself (``load_policy``
+        returns ``{}``, and every ``*_defaults()`` accessor fills in its
+        own built-in default from an empty section) — so this method does
+        not need, and must not add, a second fallback layer on top of it.
+        A prior version wrapped this whole method in a blanket
+        ``except Exception: return cls()``, which silently swallowed a
+        malformed-policy failure along with the (already-handled) absent
+        case; see docs/specs/langgraph-policy-wiring.md.
         """
-        try:
-            from harness.shared.policy_loader import orchestrator_defaults
+        from harness.shared.policy_loader import langgraph_defaults, load_policy, orchestrator_defaults
 
-            orch: dict[str, Any] = orchestrator_defaults()
+        orch: dict[str, Any] = orchestrator_defaults()
+        lg: dict[str, Any] = langgraph_defaults()
+        policy = load_policy()
+        coverage = policy.get("coverage", {})
+        agent_defs = policy.get("agent_defaults", {})
 
-            # Attempt to load coverage and agent_defaults sections
-            from harness.shared.policy_loader import load_policy
-
-            policy = load_policy()
-            coverage = policy.get("coverage", {})
-            agent_defs = policy.get("agent_defaults", {})
-
-            return cls(
-                max_iterations=orch.get("max_iterations", cls.max_iterations),
-                api_timeout_sec=orch.get("api_timeout_sec", cls.api_timeout_sec),
-                tool_timeout_sec=orch.get("tool_timeout_sec", cls.tool_timeout_sec),
-                max_command_bytes=orch.get("max_command_bytes", cls.max_command_bytes),
-                coverage_floor_lines=coverage.get("lines", cls.coverage_floor_lines),
-                coverage_floor_branches=coverage.get("branches", cls.coverage_floor_branches),
-                max_delegation_depth=agent_defs.get("max_delegation_depth", cls.max_delegation_depth),
-                max_parallel_subagents=agent_defs.get("max_parallel_subagents", cls.max_parallel_subagents),
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "GraphPolicy: could not load governance-policy.json; using defaults",
-                exc_info=True,
-            )
-            return cls()
+        return cls(
+            max_iterations=orch["max_iterations"],
+            api_timeout_sec=orch["api_timeout_sec"],
+            tool_timeout_sec=orch["tool_timeout_sec"],
+            max_command_bytes=orch["max_command_bytes"],
+            coverage_floor_lines=coverage.get("lines", cls.coverage_floor_lines),
+            coverage_floor_branches=coverage.get("branches", cls.coverage_floor_branches),
+            recursion_limit=lg["recursion_limit"],
+            max_concurrency=lg["max_concurrency"],
+            plan_divergence_threshold=lg["plan_divergence_threshold"],
+            max_delegation_depth=agent_defs.get("max_delegation_depth", cls.max_delegation_depth),
+            max_parallel_subagents=agent_defs.get("max_parallel_subagents", cls.max_parallel_subagents),
+        )
 
 
 __all__ = ["GraphPolicy"]

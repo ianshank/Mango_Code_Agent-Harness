@@ -137,3 +137,15 @@ def nemotron_defaults(policy_path: Path | None = None) -> dict:
 def max_tool_calls_per_task(policy_path: Path | None = None) -> int:
     """Cumulative tool-call budget per agent task; policy `agent_defaults` block."""
     return _int_value(_section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults")
+
+
+def langgraph_defaults(policy_path: Path | None = None) -> dict:
+    """LangGraph orchestration-graph tuning; policy `langgraph` block."""
+    section = _section("langgraph", policy_path)
+    return {
+        "recursion_limit": _int_value(section, "recursion_limit", 50, "langgraph"),
+        "max_concurrency": _int_value(section, "max_concurrency", 3, "langgraph"),
+        "plan_divergence_threshold": _float_value(
+            section, "plan_divergence_threshold", 0.35, "langgraph"
+        ),
+    }

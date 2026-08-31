@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
     StateGraph = None  # type: ignore[assignment, misc]
 
 from harness.shared.langgraph.nodes import (
+    _get_configurable,
     clarify_node,
     escalate_node,
     evaluation_node,
@@ -51,15 +52,23 @@ def _route_plan_gate(state: dict) -> str:
     return "clarify"
 
 
-def _route_quality_gate(state: dict) -> str:
-    """Route after quality_gate: pass → END, revision → implementer, exhausted → escalate."""
+def _route_quality_gate(state: dict, config: Any = None, **kwargs: Any) -> str:
+    """Route after quality_gate: pass → END, revision → implementer, exhausted → escalate.
+
+    The revision cap comes from ``GraphPolicy.max_iterations`` via
+    ``config["configurable"]["policy"]`` when the caller supplies one — the
+    same mechanism ``nodes.py`` already uses to thread ``orchestrator``
+    through node calls. With no policy supplied, falls back to
+    ``GraphPolicy()``'s built-in default (10), numerically identical to the
+    literal this replaces, so bare-``state`` callers see unchanged behavior.
+    """
     gate_status = state.get("gate_status", {})
     if gate_status.get("quality_gate") == "pass":
         return str(END)
-    # Check revision count against policy max
+    configurable = _get_configurable(config, kwargs)
+    policy: GraphPolicy = configurable.get("policy") or GraphPolicy()
     revision_count = state.get("revision_count", 0)
-    # Default max from GraphPolicy — read from state if available
-    if revision_count < 10:  # Will be overridden by policy in Phase 4
+    if revision_count < policy.max_iterations:
         return "implementer"
     return "escalate"
 
@@ -76,7 +85,9 @@ def build_graph(
     Parameters
     ----------
     policy:
-        Graph configuration. Defaults to ``GraphPolicy()`` if not provided.
+        Graph configuration. Defaults to ``GraphPolicy.from_governance_json()``
+        if not provided — reads recursion/concurrency/divergence tuning from
+        ``governance-policy.json`` rather than the bare dataclass defaults.
     checkpointer:
         LangGraph checkpointer for durable state. Defaults to ``None``
         (no checkpointing — suitable for unit tests).
@@ -87,7 +98,7 @@ def build_graph(
         The compiled, ready-to-invoke graph.
     """
     if policy is None:
-        policy = GraphPolicy()
+        policy = GraphPolicy.from_governance_json()
 
     if StateGraph is None:
         raise RuntimeError("langgraph library is required to build StateGraph")

@@ -361,6 +361,16 @@ class TestFallbackConstantsMirrorPolicy:
         missing = REPO / "does-not-exist.json"
         assert policy_loader.nemotron_defaults(missing) == _load(SHARED_POLICY)["nemotron"]
 
+    def test_policy_loader_langgraph_fallbacks_mirror_policy(self):
+        """docs/specs/langgraph-policy-wiring.md: recursion_limit/max_concurrency/
+        plan_divergence_threshold were previously never read from policy at all;
+        this pins the new accessor the same way its orchestrator/nemotron
+        siblings are already pinned above."""
+        from harness.shared import policy_loader
+
+        missing = REPO / "does-not-exist.json"
+        assert policy_loader.langgraph_defaults(missing) == _load(SHARED_POLICY)["langgraph"]
+
     def test_policy_loader_tool_budget_fallback_mirrors_policy(self):
         from harness.shared import policy_loader
 

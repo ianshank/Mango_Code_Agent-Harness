@@ -27,6 +27,7 @@ from harness.shared.langgraph.nodes import (
     security_reviewer_node,
     shadow_planner_node,
 )
+from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import DEFAULT_STATE, MangoState
 
 pytestmark = pytest.mark.langgraph
@@ -212,6 +213,46 @@ class TestPlanGateNode:
         fail_result = plan_gate_node({**DEFAULT_STATE, "plan_divergence": 0.36})
         assert pass_result["gate_status"]["plan_gate"] == "pass"
         assert fail_result["gate_status"]["plan_gate"] == "fail"
+
+
+class TestPlanGateNodeUsesPolicy:
+    """docs/specs/langgraph-policy-wiring.md R-LPW-5: the divergence
+    threshold comes from GraphPolicy via config["configurable"]["policy"],
+    not the literal 0.35 a prior version hard-coded."""
+
+    def test_custom_lower_threshold_fails_where_default_would_pass(self) -> None:
+        """0.2 passes against the *default* policy's 0.35 threshold -- proving
+        a custom, lower threshold threaded through configurable is what
+        actually decided "fail" here, not the old literal."""
+        custom_policy = GraphPolicy(plan_divergence_threshold=0.1)
+        config = {"configurable": {"policy": custom_policy}}
+        result = plan_gate_node({**DEFAULT_STATE, "plan_divergence": 0.2}, config=config)
+        assert result["gate_status"]["plan_gate"] == "fail"
+
+    def test_custom_lower_threshold_still_passes_below_its_own_bound(self) -> None:
+        custom_policy = GraphPolicy(plan_divergence_threshold=0.1)
+        config = {"configurable": {"policy": custom_policy}}
+        result = plan_gate_node({**DEFAULT_STATE, "plan_divergence": 0.05}, config=config)
+        assert result["gate_status"]["plan_gate"] == "pass"
+
+    def test_no_config_falls_back_to_default_policy_threshold_unchanged(self) -> None:
+        """Bare-state calls (no config at all) must observe identical
+        behavior to before this fix: GraphPolicy()'s default is 0.35,
+        matching the literal it replaces."""
+        pass_result = plan_gate_node({**DEFAULT_STATE, "plan_divergence": 0.35})
+        fail_result = plan_gate_node({**DEFAULT_STATE, "plan_divergence": 0.36})
+        assert pass_result["gate_status"]["plan_gate"] == "pass"
+        assert fail_result["gate_status"]["plan_gate"] == "fail"
+
+    def test_accepts_config_via_kwargs_too(self) -> None:
+        custom_policy = GraphPolicy(plan_divergence_threshold=0.1)
+        via_positional = plan_gate_node(
+            {**DEFAULT_STATE, "plan_divergence": 0.2}, {"configurable": {"policy": custom_policy}}
+        )
+        via_keyword = plan_gate_node(
+            {**DEFAULT_STATE, "plan_divergence": 0.2}, config={"configurable": {"policy": custom_policy}}
+        )
+        assert via_positional["gate_status"]["plan_gate"] == via_keyword["gate_status"]["plan_gate"] == "fail"
 
 
 class TestQualityGateNode:
