@@ -1,7 +1,7 @@
 ---
 name: nemotron-reasoner
 description: Use for deep architectural reasoning, formal constraint verification, adversarial security reviews, and specification synthesis powered by NVIDIA Nemotron Ultra.
-tools: Bash, Read, Grep, Glob
+tools: Bash, Read, Grep, Glob, knowledge_gap_log, hypothesis_register
 ---
 
 # Nemotron Reasoner Subagent
