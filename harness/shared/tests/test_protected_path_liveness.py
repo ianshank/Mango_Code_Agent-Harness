@@ -109,8 +109,10 @@ DORMANT_PATTERNS = {
     ".governance/**": "single-stack layout; this repo has harness/<stack>/.governance/",
     "agents/**": "single-stack layout; this repo has harness/<stack>/agents/",
     "docs/PROJECT-CHARTER.md": "single-stack layout; this repo has harness/<stack>/docs/",
-    "**/.github/CODEOWNERS": "no nested CODEOWNERS exists yet; arms the guard when one is added "
-    "(the root .github/CODEOWNERS now exists and is live, so only the nested pattern stays dormant)",
+    "**/.github/CODEOWNERS": (
+        "no nested CODEOWNERS exists yet; arms the guard when one is added "
+        "(the root .github/CODEOWNERS now exists and is live, so only the nested pattern stays dormant)"
+    ),
     ".claude/settings.local.json": (
         "no local override file exists yet; Claude Code reads it and it can declare hooks, "
         "so the guard is armed before one appears rather than after"

@@ -26,7 +26,12 @@ class _Result:
     reason: str = ""
 
 
-class TestSuccessPath:
+class TestNonBlockedPath:
+    """SUCCESS and FAILED share the same rendering branch in
+    format_execution_result() -- only BLOCKED gets special handling (see
+    TestBlockedPath below) -- so this class covers both statuses, including
+    the FAILED case in test_a_reason_wins_over_stdout."""
+
     def test_stdout_only(self) -> None:
         assert format_execution_result(_Result("SUCCESS", stdout="hello\n")) == "hello\n"
 
