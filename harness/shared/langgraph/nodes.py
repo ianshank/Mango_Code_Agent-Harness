@@ -37,7 +37,7 @@ from harness.shared.langgraph.state import MangoState
 logger = logging.getLogger(__name__)
 
 
-def _get_configurable(config: RunnableConfig | None = None, kwargs: dict[str, Any] | None = None) -> dict[str, Any]:
+def _get_configurable(config: Any = None, kwargs: dict[str, Any] | None = None) -> dict[str, Any]:
     """Helper to extract configurable dict whether passed positionally or via kwargs."""
     if isinstance(config, dict):
         cfg = config.get("configurable", {})

@@ -19,11 +19,11 @@ from __future__ import annotations
 
 # ── Feature detection ────────────────────────────────────────
 
-try:
+try:  # pragma: no cover
     from langgraph.graph import StateGraph  # noqa: F401 — probe only
 
     LANGGRAPH_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover
     LANGGRAPH_AVAILABLE = False
 
 # ── Always-available exports (stdlib only) ───────────────────
@@ -49,7 +49,7 @@ __all__ = [
 
 # ── Conditional LangGraph exports ────────────────────────────
 
-if LANGGRAPH_AVAILABLE:
+if LANGGRAPH_AVAILABLE:  # pragma: no cover
     # These imports are only available when langgraph is installed.
     # They are added to __all__ dynamically.
     try:
@@ -57,5 +57,4 @@ if LANGGRAPH_AVAILABLE:
 
         __all__ = [*__all__, "build_graph"]
     except ImportError:
-        # graph.py may not exist yet (Phase 1 in progress)
         pass
