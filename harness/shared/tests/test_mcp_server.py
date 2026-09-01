@@ -253,6 +253,44 @@ def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBro
     assert not (tmp_path / "x.py").exists()
 
 
+def test_mcp_server_broker_pdp_blocks_apply_patch(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """AC-3 (C-MCP-1): broker PDP denial applies to apply_patch too, not just write_file --
+    both go through the same _broker_authorize_write check in _build_tool_handlers, but
+    only write_file's denial path had a test before this."""
+    from harness.shared.governance.broker import ExecutionResult as ER
+    target = tmp_path / "x.py"
+    target.write_text("hello", encoding="utf-8")
+    broker._policy_decision.return_value = ER(  # type: ignore[attr-defined]
+        status="BLOCKED", stdout="", stderr="", exit_code=1,
+        reason="BLOCKED: write denied by policy", action="write",
+    )
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    result = asyncio.run(
+        server._call_tool_handler("apply_patch", {"filepath": "x.py", "old_text": "hello", "new_text": "world"})
+    )
+    assert len(result) == 1
+    assert "Denied" in result[0].text
+    assert target.read_text(encoding="utf-8") == "hello"
+
+
+def test_mcp_server_unknown_tool_error_message_preserved(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """The registry refactor must not change the "Unknown tool" wire message: the
+    dispatcher still raises internally and lets the outer except wrap it, rather than
+    returning a differently-worded string straight from the registry-miss branch.
+
+    Patches tool_is_permitted rather than picking a real tool name: an unmapped
+    name is withheld by tool_is_permitted itself (agent_authority.py's own
+    "undecided grant reads as no" rule), so a genuinely-unknown name never
+    reaches the registry lookup this test targets -- it would hit the
+    not-permitted branch first and never exercise the code under test.
+    """
+    with patch("harness.shared.mcp_server.tool_is_permitted", return_value=True):
+        server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+        result = asyncio.run(server._call_tool_handler("not_a_real_tool", {}))
+    assert len(result) == 1
+    assert result[0].text == "Error executing tool 'not_a_real_tool': Unknown tool: not_a_real_tool"
+
+
 def test_mcp_server_policy_lookup_failure_denies(tmp_path: Path, broker: ExecutionBroker) -> None:
     """Policy lookup errors inside the handler must return a structured denial, not raise."""
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
