@@ -18,7 +18,7 @@ The `lats-optimization` module implements Language Agent Tree Search (LATS) to e
 
 - `lats_optimizer.py` implements UCB1 and node expansion, verified by `make test`.
 - `ablation.py` provides an `AblationChannel` that applies diffs without mutating the base `MangoState`, verified by `pytest -k test_ablation_channel_isolated_diff`.
-- State leakage during ablation is prevented by deep-copy isolation, verifiable by `pytest -k test_ablation_leak_denial`.
+- State leakage during ablation is denied by deep-copy isolation, verifiable by `pytest -k test_ablation_leak_denial`.
 - `vitest` and `pytest` CI gates remain green.
 
 ## 2. Architecture

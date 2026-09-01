@@ -114,10 +114,18 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     """Pins the real SDK's Tool constructor field names directly, bypassing MockTool
     entirely -- this is the one test that would have caught the original
     inputSchema/input_schema mismatch, and only runs where `mcp` is actually
-    installed (CI's 3.10/3.12/build-full legs)."""
-    if not mcp_mod.MCP_AVAILABLE:
+    installed (CI's 3.10/3.12/build-full legs).
+
+    Deliberately does NOT check `mcp_mod.MCP_AVAILABLE`: the autouse
+    `ensure_mock_mcp` fixture above unconditionally monkeypatches that flag to
+    `True` for every test in this file, real package or not -- exactly the
+    kind of always-mocked check this test exists to route around. Import the
+    real package directly and skip only on a genuine ImportError.
+    """
+    try:
+        import mcp.types as real_types
+    except ImportError:
         pytest.skip("mcp package not installed")
-    import mcp.types as real_types
 
     tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
     assert tool.name == "x"
