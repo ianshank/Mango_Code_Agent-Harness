@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Decomposed `mango_mas_orchestrator.py` into LangGraph nodes.
+- Wired authority and budget decorators onto existing LangGraph nodes.
 - Fortified `@with_authority` and `@budgeted` decorators to fail closed on lookup errors.
 - Synchronized `policy-artifact.json` drift and updated governance policy for healing retries.
 

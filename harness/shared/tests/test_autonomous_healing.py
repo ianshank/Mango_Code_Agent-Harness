@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from harness.shared.autonomous_healing import TestHealer
+from harness.shared.governance.broker import ExecutionResult
 
 pytestmark = pytest.mark.enable_socket
 
@@ -112,8 +113,23 @@ def test_healer_broker_routes_test_execution(tmp_path) -> None:
     """When a broker is injected, _run_test_suite routes through it (INV-8)."""
     from harness.shared.governance.broker import ExecutionBroker
     mock_broker = MagicMock(spec=ExecutionBroker)
-    mock_broker._policy_decision.return_value = None
+    mock_broker.execute_command.return_value = ExecutionResult(
+        status="SUCCESS", stdout="test output", stderr="", exit_code=0, reason="", action=""
+    )
     healer = TestHealer(workspace=str(tmp_path), max_retries=1, broker=mock_broker)
-    with patch("harness.shared.tool_executors.execute_run_command", return_value="test output") as mock_exec:
-        success, output = healer._run_test_suite(["pytest"])
-        assert mock_exec.called
+    success, output = healer._run_test_suite(["pytest"])
+    assert success is True
+    assert output == "test output"
+    assert mock_broker.execute_command.call_args.kwargs["cwd"] == tmp_path
+
+
+def test_healer_broker_preserves_failed_execution_status(tmp_path) -> None:
+    """A failed broker result starts the healing loop instead of reporting success."""
+    from harness.shared.governance.broker import ExecutionBroker
+    mock_broker = MagicMock(spec=ExecutionBroker)
+    mock_broker.execute_command.return_value = ExecutionResult(
+        status="FAILED", stdout="", stderr="failure", exit_code=1, reason="", action=""
+    )
+    healer = TestHealer(workspace=str(tmp_path), max_retries=0, broker=mock_broker)
+    success, _ = healer._run_test_suite(["pytest"])
+    assert success is False

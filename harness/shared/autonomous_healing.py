@@ -6,12 +6,16 @@ Parses test failures and triggers the orchestrator for automated remediation loo
 from __future__ import annotations
 
 import logging
+import shlex
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from harness.shared.agent_authority import execution_identity
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.state import MangoState
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.policy_loader import orchestrator_defaults
+from harness.shared.tool_result_format import format_execution_result
 
 if TYPE_CHECKING:
     from harness.shared.governance.broker import ExecutionBroker
@@ -49,29 +53,26 @@ class TestHealer:
         that command classification, pretool guard, and output caps apply.
         """
         if self.broker is not None:
-            from harness.shared.tool_executors import execute_run_command
             try:
-                result_str = execute_run_command(
-                    self.broker, "nemotron-reasoner", None, " ".join(command)
+                broker_result = self.broker.execute_command(
+                    shlex.join(command),
+                    context={"agent_id": execution_identity("nemotron-reasoner")},
+                    cwd=Path(self.workspace),
                 )
-                # Rely on the broker's structured status prefix rather than
-                # scanning the output for the word "error", which would produce
-                # false negatives for tests that legitimately mention "error".
-                success = not result_str.startswith("BLOCKED") and not result_str.startswith("Error")
-                return success, result_str
+                return broker_result.status == "SUCCESS", format_execution_result(broker_result)
             except Exception as e:  # noqa: BLE001
                 return False, f"Failed to run test suite: {e}"
         try:
             import subprocess
-            result = subprocess.run(
+            subprocess_result = subprocess.run(
                 command,
                 cwd=self.workspace,
                 capture_output=True,
                 text=True,
                 check=False
             )
-            success = result.returncode == 0
-            output = result.stdout + "\n" + result.stderr
+            success = subprocess_result.returncode == 0
+            output = subprocess_result.stdout + "\n" + subprocess_result.stderr
             return success, output
         except Exception as e:  # noqa: BLE001
             return False, f"Failed to run test suite: {e}"
@@ -115,19 +116,20 @@ class TestHealer:
 
             try:
                 if LANGGRAPH_AVAILABLE:
-                    from pathlib import Path
-
                     from harness.shared.langgraph.graph import build_graph
                     from harness.shared.langgraph.policy import GraphPolicy
-                    orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace))
+                    orchestrator = MangoMASOrchestrator(
+                        workspace_dir=Path(self.workspace), broker=self.broker
+                    )
                     graph = build_graph(policy=GraphPolicy.from_governance_json())
                     graph.invoke(
                         healing_state,
                         config={"configurable": {"orchestrator": orchestrator}},
                     )
                 else:
-                    from pathlib import Path
-                    orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace))
+                    orchestrator = MangoMASOrchestrator(
+                        workspace_dir=Path(self.workspace), broker=self.broker
+                    )
                     orchestrator.execute_loop(prompt)
             except Exception as e:  # noqa: BLE001
                 logger.error("Healing loop encountered an error: %s", e)

@@ -23,7 +23,7 @@ class TestWithAuthorityDecorator:
     """Verifies role authority enforcement on LangGraph node functions."""
 
     def test_read_only_node_executes_successfully(self) -> None:
-        @with_authority("nemotron-verifier", may_write=False)
+        @with_authority("verifier", may_write=False)
         def sample_node(state: dict) -> dict:
             return {"status": "ok"}
 
@@ -56,6 +56,25 @@ class TestWithAuthorityDecorator:
             res = fallback_node({"task": "fallback"})
             assert "errors" in res
             assert "authority check failed" in res["errors"][0]["error"]
+
+    def test_unknown_read_only_role_fails_closed(self) -> None:
+        @with_authority("unknown-role", may_write=False)
+        def read_node(state: dict) -> dict:
+            return {"executed": True}
+
+        res = read_node({"task": "read"})
+        assert "errors" in res
+        assert "lacks read authority" in res["errors"][0]["error"]
+
+    def test_read_only_role_without_read_fails_closed(self) -> None:
+        @with_authority("planner", may_write=False)
+        def read_node(state: dict) -> dict:
+            return {"executed": True}
+
+        with patch("harness.shared.agent_authority.allowed_actions", return_value=frozenset()):
+            res = read_node({"task": "read"})
+        assert "errors" in res
+        assert "lacks read authority" in res["errors"][0]["error"]
 
 
 class TestBudgetedDecorator:

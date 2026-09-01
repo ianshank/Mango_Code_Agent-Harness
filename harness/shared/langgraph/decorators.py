@@ -49,16 +49,17 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                 from harness.shared.agent_authority import allowed_actions
 
                 actions = allowed_actions(role)
-                if may_write and "write" not in actions:
+                required_action = "write" if may_write else "read"
+                if required_action not in actions:
                     logger.warning(
-                        "Node %s: role %r does not hold write authority",
-                        fn.__name__, role,
+                        "Node %s: role %r does not hold %s authority",
+                        fn.__name__, role, required_action,
                     )
                     return {
                         "errors": [
                             {
                                 "node": fn.__name__,
-                                "error": f"role {role!r} lacks write authority",
+                                "error": f"role {role!r} lacks {required_action} authority",
                                 "traceback": "",
                             }
                         ]

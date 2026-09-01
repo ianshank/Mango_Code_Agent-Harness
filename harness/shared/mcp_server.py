@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 try:
     import mcp.types as types
@@ -18,7 +19,7 @@ except ImportError:  # pragma: no cover
     Server = None  # type: ignore[assignment,misc]
     stdio_server = None  # type: ignore[assignment]
 
-from harness.shared.agent_authority import tool_is_permitted, tools_for_role
+from harness.shared.agent_authority import execution_identity, tool_is_permitted, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.tool_dispatch import DEFAULT_HYPOTHESIS_CONFIDENCE, _normalize_tool_arguments
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 def _broker_authorize_write(broker: ExecutionBroker, role: str, filepath: str) -> str | None:
     """Return a denial reason string if the broker's PDP blocks the write, else None."""
     denial = broker._policy_decision(
-        f"tee {filepath}", {"agent_id": role}
+        f"tee {filepath}", {"agent_id": execution_identity(role)}
     )
     if denial is not None:
         return denial.reason
@@ -46,17 +47,17 @@ def create_mcp_server(
     workspace_dir: Path,
     role: str = "nemotron-reasoner",
     broker: ExecutionBroker | None = None
-) -> Server:
+) -> Any:
     """Create and configure the MCP server instance."""
     if not MCP_AVAILABLE or Server is None:
         raise ImportError("The 'mcp' package is required to run the MCP server. Install it with `pip install mcp`.")
 
-    server = Server("nemotron-mcp-server")
+    server: Any = Server("nemotron-mcp-server")
     actual_broker = broker or ExecutionBroker()
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
-        from typing import Any, cast
+        from typing import cast
         allowed_schemas = tools_for_role(role, NEMOTRON_TOOLS)
         tools = []
         for schema in allowed_schemas:
@@ -65,7 +66,7 @@ def create_mcp_server(
                 types.Tool(
                     name=func["name"],
                     description=func["description"],
-                    inputSchema=func["parameters"],
+                    input_schema=func["parameters"],
                 )
             )
         return tools

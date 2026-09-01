@@ -22,7 +22,7 @@ class MockTool:
     def __init__(self, *args: Any, **kwargs: Any):
         self.name = kwargs.get("name", "")
         self.description = kwargs.get("description", "")
-        self.inputSchema = kwargs.get("inputSchema", {})
+        self.inputSchema = kwargs.get("input_schema", {})
 
 
 class MockTextContent:

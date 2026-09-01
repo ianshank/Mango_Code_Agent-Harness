@@ -25,9 +25,9 @@ class LATSOptimizer:
     def _ucb1(self, node: AblationNode, total_visits: int) -> float:
         if node.visits == 0:
             return float('inf')
-        exploitation = node.score / node.visits
+        exploitation = float(node.score / node.visits)
         exploration = self.exploration_weight * math.sqrt(math.log(total_visits) / node.visits)
-        return exploitation + exploration
+        return float(exploitation + exploration)
 
     def select(self, root: AblationNode) -> AblationNode:
         """Selects the best node using UCB1."""
@@ -55,8 +55,8 @@ class LATSOptimizer:
         while stack:
             node = stack.pop()
             if not node.children:
-                if node is not root:
-                    avg = node.score / node.visits if node.visits > 0 else 0.0
+                if node is not root and node.visits > 0:
+                    avg = node.score / node.visits
                     if best is None or avg > best_avg:
                         best = node
                         best_avg = avg

@@ -6,11 +6,11 @@
 
 ## 1. Overview
 
-The Autonomous Healing module empowers the `nemotron-reasoner` agent to automatically detect, diagnose, and remediate systemic errors during test suite execution (`vitest` / `pytest`). This capability turns reactive test failures into self-correcting feedback loops.
+The Autonomous Healing module enables the `nemotron-reasoner` agent to diagnose and remediate supplied test suite failures (`vitest` / `pytest`) in a bounded feedback loop.
 
 ## Requirements
 
-- Test failures trigger an automated healing sequence.
+- Callers can trigger an automated healing sequence for test failures.
 - The raw output and tracebacks are passed to the reasoning agent.
 - Healing attempts must be strictly bounded by a maximum retry budget.
 - The changes proposed by the healing loop must pass standard governance guardrails.
@@ -28,7 +28,7 @@ The Autonomous Healing module empowers the `nemotron-reasoner` agent to automati
 
 The module will utilize a specific test-driven trigger architecture:
 
-- **Watcher Hook**: A post-test runner script identifies test failures with a non-zero exit code.
+- **Caller Hook**: A caller supplies a failed test command and its non-zero exit is used to start healing.
 - **Auto-Triage**: Passes the raw error outputs and tracebacks to the agent via a `heal_target` node.
 - **Budgeting**: Autonomous healing loops are bounded by a fixed retry budget (e.g., max 3 attempts) to prevent infinite regression cycles.
 
