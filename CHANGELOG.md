@@ -212,7 +212,7 @@ as worth prioritizing given the shrinking headroom. That flag was itself stale:
 the spec's implementing commit (`6ae7eb0`) had already landed three days
 earlier — its acceptance-criteria checkboxes were simply never ticked, which is
 what made it look unstarted here. Corrected 2026-09-01 after re-verifying all
-five criteria directly against current source; see the spec's own status note.
+acceptance criteria directly against current source; see the spec's own status note.
 Separately, R-ORCH-1..4 as written would not have reduced the orchestrator's
 line count even if genuinely unstarted (they reorganize code within the file,
 unlike `god-file-decomposition.md`'s pattern of moving it into new files) — the
