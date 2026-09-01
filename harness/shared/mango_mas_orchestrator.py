@@ -84,6 +84,7 @@ class MangoMASOrchestrator:
         broker: ExecutionBroker | None = None,
         active_role: str = "nemotron-reasoner",
         verification: VerificationRunner | None = None,
+        verification_cwd: Path | None = None,
     ) -> None:
         # Operational limits come from governance-policy.json (the
         # `orchestrator` block); explicit constructor arguments still override
@@ -107,6 +108,12 @@ class MangoMASOrchestrator:
         self._verification = verification or VerificationRunner(
             self._broker, execution_identity("verifier"), timeout=self.api_timeout
         )
+        # Where the harness verification command (make test-python) runs.
+        # Distinct from workspace_dir, which is the agent's file-creation sandbox.
+        # In production both are the same (the project root). In live tests that
+        # use tmp_path as the agent workspace they differ -- the Makefile lives at
+        # the project root, not in the ephemeral test directory.
+        self._verification_cwd: Path = verification_cwd if verification_cwd is not None else workspace_dir
         # `execute_agent` overrides this per turn. The default is the implementer
         # contract, which is what a directly-driven orchestrator is doing; it is
         # not the widest role -- it holds neither external_write, destructive nor
@@ -203,6 +210,11 @@ class MangoMASOrchestrator:
         """Dynamically loads the agent instructions from the .mango directory."""
         agent_file = self.agents_dir / f"{agent_name}.md"
         if not agent_file.exists():
+            # Fallback to repo root .mango/agents when running in temporary or scratch workspaces
+            repo_agents_dir = Path(__file__).resolve().parent.parent.parent / ".mango" / "agents"
+            fallback_file = repo_agents_dir / f"{agent_name}.md"
+            if fallback_file.exists():
+                return fallback_file.read_text(encoding="utf-8")
             raise FileNotFoundError(f"Agent definition not found: {agent_file}")
         return agent_file.read_text(encoding="utf-8")
 
@@ -433,13 +445,19 @@ class MangoMASOrchestrator:
         return LoopOutcome(self._harness_verdict(), verification, plan, code_output)
 
     def _harness_verdict(self) -> Verdict:
-        """Run the configured check and grade it, or say why it could not run."""
+        """Run the configured check and grade it, or say why it could not run.
+
+        The check runs against ``_verification_cwd`` (the repo root with the
+        Makefile) rather than ``workspace_dir`` (the agent's file-creation sandbox).
+        They are identical in production; live tests that use ``tmp_path`` as the
+        agent workspace must pass the project root as ``verification_cwd``.
+        """
         runner = self._verification
         if runner.target is None:
             return not_configured()
         if runner.is_reentrant():
             return reentrant(runner.target)
-        return derive_verdict(runner.run(self.workspace_dir))
+        return derive_verdict(runner.run(self._verification_cwd))
 
     def execute_sequential_thinking_loop(self, initial_task: str) -> str:
         """The verifier agent's own message, as this method has always returned.

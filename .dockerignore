@@ -49,6 +49,10 @@ harness/jvm/src/test/
 **/.gradle/
 scratch/
 .benchmarks/
+coverage.json
+*_history.json
+*_history_pretty.json
+*_loop_dump.json
 
 # Editable install metadata (pip install -e .)
 *.egg-info/

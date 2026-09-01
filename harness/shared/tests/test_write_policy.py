@@ -14,6 +14,8 @@ from harness.shared.write_policy import (
     ALWAYS_DENIED_PREFIXES,
     ALWAYS_DENIED_SEGMENTS,
     DEFAULT_POLICY_PATH,
+    pin_key,
+    policy_digest,
     write_denial_reason,
 )
 
@@ -123,10 +125,25 @@ class TestFailsClosed:
         assert reason is not None
 
     def test_a_policy_without_protected_paths_still_denies_the_git_directory(self, tmp_path: Path) -> None:
-        empty = tmp_path / "policy.json"
+        """The property is unchanged -- an empty pattern set cannot reach the
+        git-directory denial, and does not deny ordinary work.
+
+        The supplied policy is pinned here because a policy supplied without a
+        digest record is now denied outright (R-PPP-3); before that requirement
+        an unpinned policy was simply used. Only the setup the new contract
+        demands is added; nothing this test asserted has been relaxed.
+        """
+        target = tmp_path / "target-repo"
+        target.mkdir()
+        empty = target / "policy.json"
         empty.write_text(json.dumps({"protected_paths": []}), encoding="utf-8")
-        assert write_denial_reason(".git/config", policy_path=empty) is not None
-        assert write_denial_reason("src/feature.py", policy_path=empty) is None
+        pins = tmp_path / "pins.json"
+        pins.write_text(
+            json.dumps({"pinned_policies": {pin_key(empty): policy_digest(empty.read_bytes())}}),
+            encoding="utf-8",
+        )
+        assert write_denial_reason(".git/config", policy_path=empty, pin_path=pins) is not None
+        assert write_denial_reason("src/feature.py", policy_path=empty, pin_path=pins) is None
 
 
 def test_policy_path_travels_with_the_installed_harness() -> None:

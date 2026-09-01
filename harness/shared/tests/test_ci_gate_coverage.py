@@ -34,6 +34,7 @@ ROOT_MAKEFILE = REPO / "Makefile"
 # harness/{node,jvm}/.github/workflows/ci.yml are adopter templates that never run,
 # so they must never be read as evidence that a gate is enforced here.
 ROOT_WORKFLOW_DIR = REPO / ".github" / "workflows"
+NEXT_STEPS = REPO / "NEXT_STEPS.md"
 
 pytestmark = pytest.mark.governance
 
@@ -230,6 +231,102 @@ def _workflow_jobs(workflow_text: str) -> dict[str, str]:
     return jobs
 
 
+def _strip_yaml_comment(value: str) -> str:
+    """Drop a trailing ` # comment` from a name-style scalar value.
+
+    A `#` starts a YAML comment only when preceded by whitespace; a quoted
+    scalar's closing quote ends it outright, so anything after that point
+    -- comment or otherwise -- is not content either way.
+    """
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        return value if end == -1 else value[: end + 1]
+    return re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+
+
+def _unquote(value: str) -> str:
+    """Strip one matching layer of YAML quoting, if present.
+
+    YAML quoting is syntax, not content: `name: "x"` and `name: x` both parse
+    to the string `x`, and GitHub reports the same check name either way. An
+    unstripped quote would read as drift the moment a job's `name:` or a
+    matrix entry picked up quotes for reasons unrelated to any real change.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
+_QUOTED = r'"[^"]*"|\'[^\']*\''
+
+
+def _matrix_python_versions(pre_steps: str) -> list[str] | None:
+    """The job's `strategy.matrix.python-version` values, or None if it has none.
+
+    GitHub Actions accepts this matrix axis in two equally valid YAML forms --
+    an inline flow list (`python-version: ["3.9", "3.10"]`) or a block list
+    (`python-version:` followed by indented `- "3.9"` lines) -- and treats
+    them identically. Recognizing only one would read a purely stylistic
+    reformat as the matrix disappearing, which fails the drift test loudly
+    but for a reason that isn't real drift.
+
+    Scoped to `pre_steps`, not the full job body, for the same reason the
+    `name:` search below is: a step's `with:` input is a different context,
+    and matching it there would be inspecting the wrong thing entirely, not
+    just a false drift signal.
+    """
+    inline = re.search(r"python-version:\s*\[(.*?)\]", pre_steps)
+    if inline:
+        return [_unquote(v) for v in re.findall(_QUOTED, inline.group(1))]
+    block = re.search(
+        rf"python-version:[ \t]*\n((?:[ \t]*-[ \t]*(?:{_QUOTED})[ \t]*\n)+)", pre_steps
+    )
+    if block:
+        return [_unquote(v) for v in re.findall(_QUOTED, block.group(1))]
+    return None
+
+
+def _job_check_names(job_id: str, body: str) -> list[str]:
+    """The GitHub-reported check name(s) for one job, matrix legs included.
+
+    A job-level `name:` (e.g. `secret-scan`) is distinct from step-level
+    `- name:` entries under `steps:`, so the search is scoped to the slice
+    before `steps:` -- an unscoped regex would occasionally match a step.
+    """
+    # YAML allows a trailing comment on the `steps:` line itself; matching
+    # only the bare key would leave the split silently not happening, and
+    # the search below would then be free to match a step's own `name:`
+    # instead of falling back to the job id.
+    pre_steps = re.split(r"^\s*steps:\s*(?:#.*)?$", body, maxsplit=1, flags=re.M)[0]
+    declared = re.search(r"^\s*name:\s*(.+?)\s*$", pre_steps, re.M)
+    base = _unquote(_strip_yaml_comment(declared.group(1).strip())) if declared else job_id
+
+    # A bare numeric entry (`[3.9, 3.10]` or a block list of bare `3.10`) is
+    # deliberately not supported: unquoted, `3.10` is the YAML float 3.1 --
+    # the exact footgun this workflow's own quoting exists to avoid -- so
+    # this file should never contain one, and treating it as absent fails
+    # the drift test loudly rather than guessing at what GitHub would
+    # actually resolve it to.
+    values = _matrix_python_versions(pre_steps)
+    if values is None:
+        return [base]
+    placeholder = "${{ matrix.python-version }}"
+    if placeholder in base:
+        return [base.replace(placeholder, v) for v in values]
+    # No placeholder in the job's own name: GitHub appends "(value)" itself,
+    # exactly as it does for `build`, which declares no `name:` at all.
+    return [f"{base} ({v})" for v in values]
+
+
+def _reported_check_names(workflow_text: str) -> set[str]:
+    """Every check name a PR against this workflow will actually show."""
+    names: set[str] = set()
+    for job_id, body in _workflow_jobs(workflow_text).items():
+        names.update(_job_check_names(job_id, body))
+    return names
+
+
 def _splice_continuations(makefile_text: str) -> str:
     """Join Make backslash continuations so a wrapped rule parses as one line."""
     return re.sub(r"\\\n\s*", " ", makefile_text)
@@ -274,6 +371,32 @@ def _recipe_body(makefile_text: str, target: str) -> str:
     return "\n".join(
         line for line in match.group(1).splitlines() if not re.match(r"^\t\s*[@-]*\s*#", line)
     )
+
+
+def _numeric_fallback_shape(source: str) -> re.Match[str] | None:
+    """The first fallback-shaped numeric literal found in `source`, if any.
+
+    Matches ANY numeric default in these shapes (argparse/kwarg `default=`,
+    a `dict.get` fallback, the `or` idiom, or a threshold-named constant) --
+    not only values equal to some particular policy's current thresholds, so
+    a fallback to an arbitrary unrelated number is caught exactly like one
+    that happens to collide with today's real threshold. Scoped to these
+    shapes rather than any bare `= N` so an unrelated literal that isn't
+    actually being used as a fallback -- a line length, a byte cap -- does
+    not read as one.
+    """
+    number = r"\d+(?:\.\d+)?"
+    shapes = (
+        rf"default\s*=\s*{number}\b",
+        rf"\.get\([^)]*,\s*{number}\s*\)",
+        rf"\bor\s+{number}\b",
+        rf"\b\w*(?:COV|COVERAGE|THRESHOLD|MIN|FLOOR)\w*\s*=\s*{number}\b",
+    )
+    for shape in shapes:
+        match = re.search(shape, source)
+        if match:
+            return match
+    return None
 
 
 def _reachable_from(makefile_text: str, root: str) -> set[str]:
@@ -450,9 +573,12 @@ class TestRootPipelineShape:
 
     def test_specs_target_invokes_the_validator_through_bash(self, makefile):
         """validate_specs.sh is mode 644: a bare ./ invocation is a guaranteed red CI."""
-        recipe = re.search(r"^specs:.*?\n((?:\t.*\n)+)", makefile, re.M)
-        assert recipe, "root Makefile has no specs recipe"
-        body = recipe.group(1)
+        # _recipe_body (not a hand-rolled regex here) strips comment lines and
+        # accepts both `:` and `::` rule syntax, exactly like every other
+        # target-body test in this file -- a bespoke regex would silently pass
+        # a commented-out invocation as if it were live.
+        body = _recipe_body(makefile, "specs")
+        assert body, "root Makefile has no specs recipe"
         assert "validate_specs.sh" in body, "specs target does not invoke validate_specs.sh"
         assert re.search(r"\bbash\b\s+\S*validate_specs\.sh", body), (
             "validate_specs.sh must be invoked via `bash`; it is not executable, so a "
@@ -577,14 +703,42 @@ class TestRootPipelineShape:
 
     def test_coverage_gate_script_has_no_numeric_fallback(self):
         """The gate script must carry no default threshold a broken policy could
-        silently fall back to -- the COV_MIN=80 inversion, one layer down."""
+        silently fall back to -- the COV_MIN=80 inversion, one layer down
+        (CHANGELOG: "COV_MIN fell back to the literal 80 whenever the policy
+        was unreadable or its coverage block absent").
+
+        Matches ANY numeric fallback in these shapes, not only values equal
+        to governance-policy.json's current thresholds: a fallback to an
+        arbitrary number unrelated to any real threshold (`.get("lines", 85)`
+        while policy says 90) is exactly as forbidden as one that happens to
+        collide with today's 80/90, and checking only the current values
+        would evade it entirely. Patterns are scoped to fallback-shaped
+        syntax (argparse/kwarg `default=`, a `dict.get` fallback, the `or`
+        idiom, or a threshold-named constant) rather than any bare `= N`, so
+        an unrelated literal that happens to look like one of these shapes
+        for a non-threshold reason does not fail this test with no real
+        defect present.
+        """
         source = (REPO / "harness" / "shared" / "coverage_gate.py").read_text(encoding="utf-8")
         assert "governance-policy.json" in source
-        for pattern in (r"=\s*(80|90)\b", r"default=\s*(80|90)\b"):
-            assert not re.search(pattern, source), (
-                "coverage_gate.py carries a numeric threshold literal; thresholds "
-                "have exactly one source, governance-policy.json"
-            )
+        match = _numeric_fallback_shape(source)
+        assert not match, (
+            f"coverage_gate.py has a fallback shape ({match.group(0)!r}); "
+            "thresholds have exactly one source, governance-policy.json"
+        )
+
+    def test_numeric_fallback_shape_catches_values_unrelated_to_current_policy(self) -> None:
+        """A fallback to an arbitrary number that doesn't equal any of
+        governance-policy.json's current thresholds is exactly as forbidden
+        as one that does. A Copilot review of this file correctly flagged
+        that an earlier version only checked the current (80, 90) pair and
+        would have missed a fallback to, say, 85."""
+        arbitrary = 'lines_min = policy.get("coverage", {}).get("lines", 85)\n'
+        match = _numeric_fallback_shape(arbitrary)
+        assert match is not None and match.group(0) == '.get("lines", 85)'
+
+        unrelated = "MAX_LINE_LENGTH = 80\nBYTE_CAP = 90\n"
+        assert _numeric_fallback_shape(unrelated) is None
 
     def test_coverage_run_does_not_exclude_tests(self, makefile):
         """Deselecting governance tests would silently drop these very gates."""
@@ -622,3 +776,145 @@ class TestRootPipelineShape:
             f"gate: {unmeasured}. The Makefile's explicit --cov flags take precedence "
             "over the static config, so these read as covered while being ignored."
         )
+
+
+class TestRequiredStatusChecksListIsAccurate:
+    """`NEXT_STEPS.md` hands a human the literal check names for the branch
+    ruleset GitHub has no API this repo's CI can configure on its own behalf --
+    someone pastes this list into Settings -> Rules by hand, once. A list that
+    silently drifts from what CI actually reports is exactly how the ruleset
+    would end up requiring a `build (3.11)` that never runs, or omitting a real
+    gate like `dependency-audit`: the ruleset would enforce a check GitHub
+    never sends, or leave a check GitHub does send permanently unrequired,
+    with nothing here to say so.
+    """
+
+    @pytest.fixture()
+    def workflow_text(self) -> str:
+        path = ROOT_WORKFLOW_DIR / "python-package.yml"
+        assert path.is_file(), f"{path} does not exist"
+        return path.read_text(encoding="utf-8")
+
+    @pytest.fixture()
+    def next_steps_text(self) -> str:
+        assert NEXT_STEPS.is_file(), f"{NEXT_STEPS} does not exist"
+        return NEXT_STEPS.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _documented_required_checks(next_steps_text: str) -> set[str]:
+        # Scoped to the sentence between "Required status checks" and its
+        # terminating period: the paragraph after it repeats one of these
+        # names in different prose, which would corrupt an unscoped search.
+        sentence = re.search(
+            r"Required status checks[^:]*:\s*(.+?)\.\s*\n", next_steps_text, re.S
+        )
+        assert sentence, "NEXT_STEPS.md has no 'Required status checks' sentence to parse"
+        return set(re.findall(r"`([^`]+)`", sentence.group(1)))
+
+    def test_documented_checks_match_what_ci_reports(
+        self, workflow_text: str, next_steps_text: str
+    ) -> None:
+        reported = _reported_check_names(workflow_text)
+        documented = self._documented_required_checks(next_steps_text)
+        missing = sorted(reported - documented)
+        extra = sorted(documented - reported)
+        assert not missing and not extra, (
+            "NEXT_STEPS.md's required-status-check list has drifted from what "
+            f"python-package.yml reports. CI reports but the doc omits: {missing}. "
+            f"The doc lists but CI no longer reports: {extra}. A branch ruleset "
+            "built from the doc as it stands would misconfigure at least one check."
+        )
+
+    def test_every_job_contributes_at_least_one_check_name(self, workflow_text: str) -> None:
+        """A job that silently derives zero names would make the comparison
+        above vacuously agree with an incomplete `reported` set -- this pins
+        that every job in the workflow contributes something to compare."""
+        jobs = _workflow_jobs(workflow_text)
+        assert jobs, "no jobs found in python-package.yml; the parser or the file is broken"
+        for job_id, body in jobs.items():
+            assert _job_check_names(job_id, body), f"job '{job_id}' derived no check name"
+
+    def test_quoted_name_and_matrix_values_parse_the_same_as_unquoted(self) -> None:
+        """YAML quoting is syntax, not content -- this repo's workflow never
+        quotes a job `name:`, but a future edit that adds quotes for style
+        reasons alone must not read as a check-name change. Covers exactly
+        the two cases a Copilot review of this file flagged as unverified."""
+        unquoted = '  audit:\n    name: dependency-audit\n    steps:\n'
+        double_quoted = '  audit:\n    name: "dependency-audit"\n    steps:\n'
+        single_quoted = "  audit:\n    name: 'dependency-audit'\n    steps:\n"
+        for body in (unquoted, double_quoted, single_quoted):
+            assert _job_check_names("audit", body) == ["dependency-audit"]
+
+        double_quoted_matrix = (
+            '  build:\n    strategy:\n      matrix:\n'
+            '        python-version: ["3.9", "3.10"]\n    steps:\n'
+        )
+        single_quoted_matrix = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version: ['3.9', '3.10']\n    steps:\n"
+        )
+        for body in (double_quoted_matrix, single_quoted_matrix):
+            assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
+
+    def test_block_list_matrix_syntax_parses_the_same_as_inline(self) -> None:
+        """GitHub Actions treats an inline flow list and a block list as the
+        identical matrix axis; a Copilot review of this file correctly
+        flagged that only the inline form was recognized, which would have
+        read a purely stylistic reformat as the matrix disappearing."""
+        inline = (
+            '  build:\n    strategy:\n      matrix:\n'
+            '        python-version: ["3.9", "3.10"]\n    steps:\n'
+        )
+        block = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version:\n"
+            '          - "3.9"\n'
+            '          - "3.10"\n'
+            "    steps:\n"
+        )
+        block_single_quoted = (
+            "  build:\n    strategy:\n      matrix:\n"
+            "        python-version:\n"
+            "          - '3.9'\n"
+            "          - '3.10'\n"
+            "    steps:\n"
+        )
+        for body in (inline, block, block_single_quoted):
+            assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
+
+    def test_matrix_search_is_scoped_to_pre_steps(self) -> None:
+        """A step's `with:` input is a different context than the job's own
+        `strategy.matrix`; matching a bracket-list-shaped step input there
+        would be inspecting the wrong thing, not just a false drift signal."""
+        body = (
+            "  build:\n    runs-on: ubuntu-latest\n    steps:\n"
+            '      - name: Some future step\n'
+            '        with:\n'
+            '          python-version: ["3.9", "3.10"]\n'
+        )
+        assert _job_check_names("build", body) == ["build"]
+
+    def test_steps_split_tolerates_a_trailing_comment(self) -> None:
+        """YAML allows `steps:  # comment`; a split that only recognizes the
+        bare key would leave the whole body -- steps included -- searched for
+        a job-level `name:`, and a step written in the rarer `-` / `name:`
+        two-line list-item style would then be mistaken for it. A Copilot
+        review of this file flagged exactly this gap."""
+        body = (
+            "  build:\n    runs-on: ubuntu-latest\n"
+            "    steps:  # comment\n"
+            "      -\n"
+            "        name: Checkout\n"
+            "        uses: actions/checkout@v4\n"
+        )
+        assert _job_check_names("build", body) == ["build"]
+
+    def test_a_trailing_comment_on_the_job_name_is_stripped(self) -> None:
+        """The other half of the same Copilot suggestion: a comment on the
+        job-level `name:` line itself must not become part of the derived
+        check name, quoted or not."""
+        unquoted = "  secrets:\n    name: secret-scan  # the security gate\n    steps:\n"
+        double_quoted = '  secrets:\n    name: "secret-scan"  # the security gate\n    steps:\n'
+        single_quoted = "  secrets:\n    name: 'secret-scan'  # the security gate\n    steps:\n"
+        for body in (unquoted, double_quoted, single_quoted):
+            assert _job_check_names("secrets", body) == ["secret-scan"]

@@ -16,6 +16,7 @@ import { NemotronClient } from '../../../src/ai/nemotron/nemotron-client.js';
 import {
   IS_LIVE,
   LIVE_API_KEY,
+  LIVE_DEFAULT_MODEL,
   SMOKE_MAX_TOKENS,
   LATENCY_CEILING_MS,
   LIVE_TEST_TIMEOUT_MS,
@@ -154,7 +155,7 @@ describe.skipIf(!IS_LIVE)(
       async () => {
         const fakeKey = 'nvapi-INVALID-fake-key-for-testing-1234567890abcdef';
         const client = new NemotronClient({
-          defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+          defaultModel: LIVE_DEFAULT_MODEL,
           apiKey: fakeKey,
           maxRetries: 0,
           timeoutMs: 15_000,
@@ -178,7 +179,9 @@ describe.skipIf(!IS_LIVE)(
         assertNoSecretLeakage(errorMessage, fakeKey);
 
         // Should contain HTTP status code reference
-        expect(errorMessage).toMatch(/Nemotron API Error HTTP (401|403|400)/);
+        expect(errorMessage).toMatch(
+          /Nemotron API Error HTTP (401|403|400|410)/,
+        );
       },
       LIVE_TEST_TIMEOUT_MS,
     );

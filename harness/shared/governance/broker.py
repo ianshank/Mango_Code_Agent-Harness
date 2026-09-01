@@ -37,7 +37,7 @@ from typing import Any, Final
 
 from harness.shared.debug_dump import redact_text
 from harness.shared.governance_json import read_json_object
-from harness.shared.write_policy import write_denial_reason
+from harness.shared.write_policy import active_policy_path, write_denial_reason
 
 from .command_actions import classify, write_targets
 from .policy_decision import decide
@@ -196,7 +196,9 @@ class ExecutionBroker:
         # the PDP's `ExecutionResult | None` above, and reusing it silently widens
         # the type. mypy caught it; the reader would not have.
         for target in write_targets(command):
-            write_denial = write_denial_reason(target)
+            # Explicit `policy_path`: see R-PPP-4. The bare call this replaced
+            # made the parameter unreachable outside tests.
+            write_denial = write_denial_reason(target, policy_path=active_policy_path())
             if write_denial is not None:
                 logger.warning("Denied a command writing to a governed path: %s", target)
                 return ExecutionResult(

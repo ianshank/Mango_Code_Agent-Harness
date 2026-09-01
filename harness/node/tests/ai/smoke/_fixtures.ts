@@ -16,12 +16,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Resolves the NVIDIA API key from process.env or .env files,
+ * Resolves the NVIDIA API key and default model from process.env or .env files,
  * mirroring the NemotronClient.resolveEnvironment() logic.
  */
-function resolveApiKey(): string {
-  const envKey = process.env['NVIDIA_API_KEY'];
-  if (envKey) return envKey;
+function resolveEnvVars(): { apiKey: string; defaultModel: string } {
+  let apiKey = process.env['NVIDIA_API_KEY'] || '';
+  let defaultModel = process.env['NEMOTRON_DEFAULT_MODEL'] || '';
 
   // Walk up from cwd looking for .env (same as NemotronClient)
   const candidates = [
@@ -40,7 +40,9 @@ function resolveApiKey(): string {
             const idx = trimmed.indexOf('=');
             const k = trimmed.slice(0, idx).trim();
             const v = trimmed.slice(idx + 1).trim();
-            if (k === 'NVIDIA_API_KEY') return v;
+            if (k === 'NVIDIA_API_KEY' && !apiKey) apiKey = v;
+            if (k === 'NEMOTRON_DEFAULT_MODEL' && !defaultModel)
+              defaultModel = v;
           }
         }
       } catch {
@@ -49,14 +51,31 @@ function resolveApiKey(): string {
     }
   }
 
-  return '';
+  return {
+    apiKey,
+    defaultModel: defaultModel || '',
+  };
 }
 
+const resolvedEnv = resolveEnvVars();
+
 /** The live API key resolved from environment or .env files. */
-export const LIVE_API_KEY: string = resolveApiKey();
+export const LIVE_API_KEY: string = resolvedEnv.apiKey;
+
+/** The default model resolved from environment or .env files. */
+export const LIVE_DEFAULT_MODEL: string = resolvedEnv.defaultModel;
 
 /** Whether live API tests should run. */
-export const IS_LIVE: boolean = LIVE_API_KEY.length > 0;
+export const IS_LIVE: boolean =
+  LIVE_API_KEY.length > 0 && LIVE_DEFAULT_MODEL.length > 0;
+
+// A live run is, by definition, a run that intends network egress. Declaring it
+// here -- next to the flag that decides whether the network is used at all --
+// keeps the declaration co-located with the decision (R-EGF-5, DEC-EGF-003).
+// Without it the client now refuses rather than silently reaching the vendor,
+// which is the whole point of the egress floor: egress is explicit or it is
+// denied. `??=` so an explicitly-set mode in the environment always wins.
+if (IS_LIVE) process.env['NEMOTRON_MODE'] ??= 'online';
 
 /** Default token budget for smoke tests — minimizes cost. */
 export const SMOKE_MAX_TOKENS = 50;
@@ -78,7 +97,7 @@ export function createLiveClient(
   overrides?: Partial<NemotronConfig>,
 ): NemotronClient {
   return new NemotronClient({
-    defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    defaultModel: LIVE_DEFAULT_MODEL,
     apiKey: LIVE_API_KEY,
     timeoutMs: LATENCY_CEILING_MS,
     maxRetries: 1,
@@ -124,7 +143,7 @@ export function assertNoSecretLeakage(
  */
 export function loadAgentSystemPrompt(agentFilePath: string): string {
   // Dynamically import fs to keep this module lightweight
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const fs = require('fs') as typeof import('fs');
   const content = fs.readFileSync(agentFilePath, 'utf-8');
 

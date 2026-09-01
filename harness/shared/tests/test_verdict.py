@@ -257,6 +257,20 @@ def _ok(stdout: str = "") -> ExecutionResult:
 
 
 class TestTheRunner:
+    @pytest.fixture(autouse=True)
+    def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Ensure the shutil.which pre-flight check passes in mocked tests.
+
+        The probe tests use RecordingBroker, which never shells out.  On
+        Windows dev machines without GNU Make, the new pre-flight gate would
+        intercept ALL probe calls before they reach the RecordingBroker.
+        Patching shutil.which in the verification module restores the
+        pre-existing test behaviour.
+        """
+        from harness.shared.governance import verification as _verification_mod
+
+        monkeypatch.setattr(_verification_mod.shutil, "which", lambda _name: "/usr/bin/make")
+
     def test_the_command_names_the_makefile(self, tmp_path: Path) -> None:
         """AC-2 / R-VP-3. GNU Make searches GNUmakefile, then makefile, then
         Makefile. Only `Makefile` is a protected path, so an agent holding `write`
@@ -266,6 +280,22 @@ class TestTheRunner:
         runner = VerificationRunner(RecordingBroker(), "test-eval")
         assert "-f Makefile" in runner.command
         assert runner.command.endswith("test-python")
+
+    def test_probe_fails_gracefully_when_make_is_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On Windows dev machines without GNU Make, the probe should return a
+        clear diagnostic instead of running the broker command and getting an
+        opaque error. This is the `shutil.which` pre-flight gate."""
+        from harness.shared.governance import verification as _verification_mod
+
+        monkeypatch.setattr(_verification_mod.shutil, "which", lambda _name: None)
+        broker = RecordingBroker()
+        ok, detail = VerificationRunner(broker, "test-eval").probe(tmp_path)
+        assert ok is False
+        assert "make is not installed" in detail
+        # The broker should NOT have been called at all.
+        assert broker.commands == []
 
     def test_the_probe_is_a_dry_run(self, tmp_path: Path) -> None:
         """AC-6 / R-VP-7. A probe that ran the target would recurse: the target
@@ -376,6 +406,13 @@ class TestTheRunner:
 
 class TestTheLoopReportsIt:
     """The unit tests above are worthless if `execute_loop` does not consult them."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bypass the shutil.which pre-flight in mocked broker tests."""
+        from harness.shared.governance import verification as _verification_mod
+
+        monkeypatch.setattr(_verification_mod.shutil, "which", lambda _name: "/usr/bin/make")
 
     @staticmethod
     def _orch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_code: int):
