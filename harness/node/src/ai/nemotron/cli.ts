@@ -28,6 +28,8 @@ Options:
   --temperature <number>  Sampling temperature (0.0 - 2.0, default: 0.2)
   --timeout <number>      Request timeout in milliseconds (default: 30000)
   --stream                Enable streaming response output
+  --offline               Forbid network egress (NEMOTRON_MODE=offline)
+  --online                Permit network egress (NEMOTRON_MODE=online)
   --json                  Output full JSON response with telemetry
   --help, -h              Show this help message
 `);
@@ -54,6 +56,12 @@ Options:
 
   const isStream = args.includes('--stream');
   const isJson = args.includes('--json');
+
+  // Declaring a mode is explicit and fail-closed (R-EGF-5). With neither flag
+  // and no NEMOTRON_MODE in the environment, the client refuses to open a
+  // network transport rather than silently resolving to the vendor endpoint.
+  if (args.includes('--offline')) process.env['NEMOTRON_MODE'] = 'offline';
+  else if (args.includes('--online')) process.env['NEMOTRON_MODE'] = 'online';
 
   const client = new NemotronClient(timeoutMs ? { timeoutMs } : {});
 

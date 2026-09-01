@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.1.9 — Root Makefile
+# Agentic SSD v2.2.5 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -87,6 +87,14 @@ test-python: ## Run full pytest suite (excludes live tests)
 .PHONY: test-regression
 test-regression: ## Run the regression/AQA tier on its own (one reproduction per fixed defect)
 	$(PYTEST) $(SHARED_TESTS)/regression/ -m "not live" -v
+
+.PHONY: test-langgraph
+test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, regression)
+	$(PYTEST) $(SHARED_TESTS)/test_langgraph_*.py $(SHARED_TESTS)/regression/test_langgraph_regression.py -m "not live" -v
+
+.PHONY: test-aqa
+test-aqa: ## Run AQA smoke tests and coverage-gap regression suite
+	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py $(SHARED_TESTS)/regression/test_nemotron_api_aqa.py -m "not live" -v
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
@@ -201,6 +209,15 @@ test-governance: ## Run every governance-marked gate in isolation (selected by m
 .PHONY: test-neurosym
 test-neurosym: ## Run neurosym synthesis tests (strategies, critique, evaluation, execution profiles)
 	$(PYTEST) $(SHARED_TESTS)/ -m "neurosym and not live" -v --tb=short
+
+# --- Live Model & MAS integration test targets ---
+.PHONY: test-live
+test-live: ## Run live API integration tests against NVIDIA Nemotron NIM
+	$(PYTEST) $(SHARED_TESTS)/ -m "live" -v
+
+.PHONY: test-live-mas
+test-live-mas: ## Run live multi-agent sequential thinking and synthesis loops against Nemotron
+	$(PYTEST) $(SHARED_TESTS)/test_mango_mas_live.py -m "live" -v
 
 # --- Composite Targets ---
 .PHONY: test

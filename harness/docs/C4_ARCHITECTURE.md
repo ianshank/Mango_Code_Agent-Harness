@@ -1,7 +1,23 @@
 # C4 Architecture Model: Agentic SSD & NVIDIA Nemotron AI Platform
 
+> **Not the canonical C4 doc.** `docs/architecture/c4_architecture.md` is the
+> actively-maintained C4 model for this repository and is kept current with
+> each release (currently ahead of this file — e.g. it covers the LangGraph
+> StateGraph engine, added after this snapshot). This file predates that
+> update (last revised at v2.1.9) and is kept because its Level 2 container
+> diagram and the Level 4 "what these gates add" narrative below contain
+> detail — particularly around the Node-stack `harness/node/src/ai/nemotron/`
+> subsystem (§3.1) — not yet mirrored into the canonical doc. Treat the
+> diagrams below as a detailed historical/Node-implementation reference, not
+> as the current source of truth for version numbers or overall system
+> state; where the two disagree, `docs/architecture/c4_architecture.md` wins.
+> (Tracked as a tech-debt finding rather than an on-the-spot rewrite, since a
+> careful content merge is real editorial work distinct from fixing the
+> version-drift/authority-ambiguity problem this banner resolves.)
+
 **System:** Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)  
-**Version:** 2.1.9 (2026 Standards)  
+**Version:** 2.1.9 (2026 Standards) — see banner above; the canonical doc is
+newer  
 **Governance:** `harness/CONTRACT.md` / Agentic SSD Governance Harness v2.1 (INV-1..INV-16)
 
 ---

@@ -80,6 +80,10 @@ def server_key(monkeypatch: pytest.MonkeyPatch) -> str:
     return key
 
 
+# Declared, not exempted (R-EGF-6): FastAPI's TestClient drives the app over a
+# real loopback socket, so these genuinely need one. The declaration is visible
+# here at the class rather than hidden in a global allow-list.
+@pytest.mark.enable_socket
 class TestConstantTimeKeyComparison:
     def test_key_check_routes_through_compare_digest(
         self, client: TestClient, server_key: str, monkeypatch: pytest.MonkeyPatch
@@ -146,6 +150,10 @@ class TestConstantTimeKeyComparison:
         assert excinfo.value.status_code == 401
 
 
+# Declared, not exempted (R-EGF-6): FastAPI's TestClient drives the app over a
+# real loopback socket, so these genuinely need one. The declaration is visible
+# here at the class rather than hidden in a global allow-list.
+@pytest.mark.enable_socket
 class TestHistoryRedaction:
     def test_credentials_do_not_leave_over_http(
         self, client: TestClient, server_key: str, monkeypatch: pytest.MonkeyPatch
@@ -188,6 +196,10 @@ class TestHistoryRedaction:
         assert response.json()["history"] == history
 
 
+# Declared, not exempted (R-EGF-6): FastAPI's TestClient drives the app over a
+# real loopback socket, so these genuinely need one. The declaration is visible
+# here at the class rather than hidden in a global allow-list.
+@pytest.mark.enable_socket
 class TestImportPurity:
     def test_importing_the_app_creates_nothing(self, tmp_path: Path) -> None:
         """Run in a subprocess with the static directory removed from view: a

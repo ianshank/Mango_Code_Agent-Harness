@@ -47,7 +47,12 @@ jobs:
 
       # Drift that no single PR can cause: two PRs each green against their own
       # base can still leave main with a stale digest bundle or a duplicated
-      # shim once both have merged.
+      # shim once both have merged. `coverage-python` joins this loop for a
+      # different reason: `main` has no branch ruleset yet (NEXT_STEPS.md's
+      # own "highest-value item"), so per-PR CI is advisory, not required --
+      # a PR that dropped coverage below the policy floor could merge
+      # unnoticed until this catches it on `main` itself. Purely Python; no
+      # Node/pnpm setup needed for this job.
       - name: Check for drift on main
         id: drift
         run: |
@@ -60,7 +65,7 @@ jobs:
             echo
           } > drift.md
           failed=0
-          for target in digest-regen check-dedup validate; do
+          for target in digest-regen check-dedup validate coverage-python; do
             if output=$(make "$target" 2>&1); then
               echo "- \`make $target\`: OK" >> drift.md
             else
