@@ -207,9 +207,16 @@ those into `conftest.py`'s new `write_text_file()`, left the other 3 alone
 since their helpers serve different subsystems with different shapes.
 Corrected `docs/specs/god-file-decomposition.md`'s stale
 `mango_mas_orchestrator.py` line count (465 → 483, now 96.6% of the
-enforced 500-line ceiling) and flagged — without implementing — the
-existing, fully-specified-but-unstarted `orchestrator-tool-registry.md` as
-worth prioritizing given the shrinking headroom.
+enforced 500-line ceiling) and flagged `docs/specs/orchestrator-tool-registry.md`
+as worth prioritizing given the shrinking headroom. That flag was itself stale:
+the spec's implementing commit (`6ae7eb0`) had already landed three days
+earlier — its acceptance-criteria checkboxes were simply never ticked, which is
+what made it look unstarted here. Corrected 2026-09-01 after re-verifying all
+five criteria directly against current source; see the spec's own status note.
+Separately, R-ORCH-1..4 as written would not have reduced the orchestrator's
+line count even if genuinely unstarted (they reorganize code within the file,
+unlike `god-file-decomposition.md`'s pattern of moving it into new files) — the
+size-budget headroom concern this entry raised remains open on its own terms.
 
 ### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup
 
