@@ -17,10 +17,12 @@ The Autonomous Healing module empowers the `nemotron-reasoner` agent to automati
 
 ## Acceptance criteria
 
-- `TestHealer` class correctly runs the test suite and captures output, proven by `pytest -k test_healer_class_execution`.
-- Non-zero exits successfully formulate a remediation prompt, proven by `pytest -k test_nonzero_exit_remediation`.
-- The LangGraph MAS orchestrator is invoked with the localized `healing_state`, proven by `pytest -k test_orchestrator_healing_invocation`.
-- Max retries gracefully terminate the loop, proven by `pytest -k test_max_retries_termination`.
+- `TestHealer` class correctly runs the test suite and captures output, proven by `pytest -k test_run_test_suite_success`.
+- Non-zero exits successfully formulate a remediation prompt, proven by `pytest -k test_heal_until_green_recovers_after_remediation`.
+- The LangGraph MAS orchestrator is invoked with the localized `healing_state`, proven by `pytest -k test_heal_until_green_langgraph_branch`.
+- Max retries gracefully terminate the loop, proven by `pytest -k test_heal_until_green_exhausted`.
+- `max_retries` above the governance policy limit is rejected at construction, proven by `pytest -k test_healer_max_retries_clamped_to_policy`.
+- Test execution routes through the injected ExecutionBroker (INV-8), proven by `pytest -k test_healer_broker_routes_test_execution`.
 
 ## 2. Architecture
 

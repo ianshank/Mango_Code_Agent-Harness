@@ -5,6 +5,7 @@ hypotheticals, ensuring that Language Agent Tree Search (LATS) rollouts
 do not mutate the primary MangoState channel.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
@@ -33,7 +34,7 @@ class AblationChannel:
 
     def apply_diff(self, node: AblationNode) -> MangoState:
         """Constructs a hypothetical state without mutating the primary base."""
-        hypothetical = self.base_state.copy()
+        hypothetical = copy.deepcopy(self.base_state)
         # Traverse up to collect diffs
         path = []
         current: Optional[AblationNode] = node
@@ -42,6 +43,6 @@ class AblationChannel:
             current = current.parent
 
         for n in reversed(path):
-            cast(dict[str, Any], hypothetical).update(n.state_diff)
+            cast(dict[str, Any], hypothetical).update(copy.deepcopy(n.state_diff))
 
         return hypothetical

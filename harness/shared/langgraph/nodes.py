@@ -88,7 +88,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         return {"errors": [{"node": "planner", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
-@with_authority("shadow_planner", may_write=False)
+@with_authority("planner", may_write=False)
 def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Shadow planner: generates an independent plan for divergence comparison.
 
@@ -269,7 +269,7 @@ def escalate_node(state: MangoState) -> dict:
 # ── Review nodes (Phase 5 fan-out) ──────────────────────────
 
 
-@with_authority("peer_reviewer", may_write=False)
+@with_authority("verifier", may_write=False)
 def peer_reviewer_node(state: MangoState) -> dict:
     """Peer reviewer: reviews patches for correctness.
 
@@ -289,7 +289,7 @@ def peer_reviewer_node(state: MangoState) -> dict:
     }
 
 
-@with_authority("security_reviewer", may_write=False)
+@with_authority("verifier", may_write=False)
 def security_reviewer_node(state: MangoState) -> dict[str, Any]:
     """Security reviewer: reviews patches for security issues.
 

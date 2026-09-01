@@ -42,10 +42,23 @@ def _read_json_safe(file_path: Path) -> list:
         backup_path = file_path.with_name(f"{file_path.name}.malformed.{int(time.time())}")
         try:
             file_path.rename(backup_path)
-        except OSError:
-            pass
+        except OSError as backup_err:
+            # The only surviving copy cannot be backed up; preserve it rather
+            # than destroying the malformed store, and propagate the failure so
+            # callers can route a structured alert into the errors channel.
+            logger.error(
+                "Malformed JSON in %s could not be backed up to %s (backup error: %s; parse error: %s)."
+                " Store NOT reset to prevent data loss.",
+                file_path, backup_path, backup_err, exc,
+            )
+            raise RuntimeError(
+                f"Memory store {file_path} is malformed and the backup attempt failed: {backup_err}"
+            ) from exc
         file_path.write_text("[]", encoding="utf-8")
-        logger.error("Malformed JSON in %s backed up to %s (Error: %s). Resetting store.", file_path, backup_path, exc)
+        logger.error(
+            "Malformed JSON in %s backed up to %s (Error: %s). Resetting store.",
+            file_path, backup_path, exc,
+        )
         return []
 
 

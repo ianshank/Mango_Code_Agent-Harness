@@ -180,3 +180,12 @@ def agent_defaults(policy_path: Path | None = None) -> dict:
         "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
         "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
     }
+
+
+def lats_defaults(policy_path: Path | None = None) -> dict:
+    """LATS/MCTS search tuning; policy `lats` block."""
+    section = _section("lats", policy_path)
+    return {
+        "max_budget": _int_value(section, "max_budget", 10, "lats"),
+        "exploration_weight": _float_value(section, "exploration_weight", 1.414, "lats"),
+    }

@@ -9,14 +9,18 @@ from typing import Any, Callable
 
 from harness.shared.langgraph.ablation import AblationChannel, AblationNode
 from harness.shared.langgraph.state import MangoState
+from harness.shared.policy_loader import lats_defaults
 
 
 class LATSOptimizer:
     """Monte Carlo Tree Search algorithm for agent planning."""
 
-    def __init__(self, exploration_weight: float = 1.414, max_budget: int = 10):
-        self.exploration_weight = exploration_weight
-        self.max_budget = max_budget
+    def __init__(self, exploration_weight: float | None = None, max_budget: int | None = None):
+        defaults = lats_defaults()
+        self.exploration_weight = (
+            exploration_weight if exploration_weight is not None else defaults["exploration_weight"]
+        )
+        self.max_budget = max_budget if max_budget is not None else defaults["max_budget"]
 
     def _ucb1(self, node: AblationNode, total_visits: int) -> float:
         if node.visits == 0:
@@ -42,6 +46,21 @@ class LATSOptimizer:
             current.visits += 1
             current.score += score
             current = current.parent
+
+    def _best_leaf(self, root: AblationNode) -> AblationNode | None:
+        """Return the highest-scoring leaf across the full tree (depth-first)."""
+        best: AblationNode | None = None
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            if not node.children:
+                if node is not root:
+                    avg = node.score / node.visits if node.visits > 0 else 0.0
+                    if best is None or (best.visits == 0 or avg > best.score / best.visits):
+                        best = node
+            else:
+                stack.extend(node.children)
+        return best
 
     def refine_plan(
         self,
@@ -73,9 +92,10 @@ class LATSOptimizer:
             # Backpropagate
             self.backpropagate(leaf, score)
 
-        # Pick the best child from root based on max visits (robustness) or max score
-        if channel.root.children:
-            best_node = max(channel.root.children, key=lambda c: c.score / c.visits if c.visits > 0 else 0.0)
-            return channel.apply_diff(best_node)
+        # Pick the highest-scoring leaf across the entire tree so that
+        # multi-step rollouts are not discarded in favour of only the first step.
+        best_leaf = self._best_leaf(channel.root)
+        if best_leaf is not None:
+            return channel.apply_diff(best_leaf)
 
         return base_state

@@ -6,12 +6,15 @@ Parses test failures and triggers the orchestrator for automated remediation loo
 from __future__ import annotations
 
 import logging
-import subprocess
+from typing import TYPE_CHECKING
 
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.state import MangoState
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.policy_loader import orchestrator_defaults
+
+if TYPE_CHECKING:
+    from harness.shared.governance.broker import ExecutionBroker
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +22,44 @@ class TestHealer:
     """Detects test failures and triggers automated remediation."""
     __test__ = False
 
-    def __init__(self, workspace: str, max_retries: int | None = None):
+    def __init__(
+        self,
+        workspace: str,
+        max_retries: int | None = None,
+        broker: ExecutionBroker | None = None,
+    ):
         self.workspace = workspace
+        self.broker = broker
         policy_limit = orchestrator_defaults().get("max_healing_retries", 3)
-        self.max_retries = max_retries if max_retries is not None else policy_limit
+        if max_retries is None:
+            self.max_retries = policy_limit
+        elif not isinstance(max_retries, int) or max_retries < 0:
+            raise ValueError(f"max_retries must be a non-negative integer, got {max_retries!r}")
+        elif max_retries > policy_limit:
+            raise ValueError(
+                f"max_retries={max_retries} exceeds governance policy limit of {policy_limit}"
+            )
+        else:
+            self.max_retries = max_retries
 
     def _run_test_suite(self, command: list[str]) -> tuple[bool, str]:
-        """Runs the test suite and returns (success, output)."""
+        """Runs the test suite and returns (success, output).
+
+        Routes through the injected ExecutionBroker (INV-8) when available so
+        that command classification, pretool guard, and output caps apply.
+        """
+        if self.broker is not None:
+            from harness.shared.tool_executors import execute_run_command
+            try:
+                result_str = execute_run_command(
+                    self.broker, "nemotron-reasoner", None, " ".join(command)
+                )
+                success = "BLOCKED" not in result_str and "error" not in result_str.lower()
+                return success, result_str
+            except Exception as e:  # noqa: BLE001
+                return False, f"Failed to run test suite: {e}"
         try:
+            import subprocess
             result = subprocess.run(
                 command,
                 cwd=self.workspace,
@@ -41,21 +74,20 @@ class TestHealer:
             return False, f"Failed to run test suite: {e}"
 
     def heal_until_green(self, command: list[str]) -> bool:
-        """Runs the test suite and repeatedly heals failures up to max_retries."""
-        attempts = 0
-        while attempts < self.max_retries:
-            success, output = self._run_test_suite(command)
-            if success:
-                logger.info("Test suite passed on attempt %s.", attempts + 1)
-                return True
+        """Runs tests, then heals up to max_retries times, retesting after each heal."""
+        # One initial run, then up to max_retries heal-and-retest cycles.
+        success, output = self._run_test_suite(command)
+        if success:
+            logger.info("Test suite passed on initial run.")
+            return True
 
+        for attempt in range(1, self.max_retries + 1):
             logger.warning(
                 "Test suite failed (Attempt %s/%s). Triggering healing...",
-                attempts + 1,
+                attempt,
                 self.max_retries,
             )
 
-            # Formulate the prompt for the reasoning agent
             prompt = (
                 f"The test suite failed with the following output:\n\n"
                 f"{output}\n\n"
@@ -63,7 +95,6 @@ class TestHealer:
                 f"Ensure your changes pass strict governance checks."
             )
 
-            # Create a localized state for the healing loop
             healing_state: MangoState = {
                 "task": prompt,
                 "plan": "",
@@ -79,13 +110,18 @@ class TestHealer:
                 "errors": [],
             }
 
-            # Invoke the orchestrator
             try:
                 if LANGGRAPH_AVAILABLE:
+                    from pathlib import Path
+
                     from harness.shared.langgraph.graph import build_graph
                     from harness.shared.langgraph.policy import GraphPolicy
+                    orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace))
                     graph = build_graph(policy=GraphPolicy.from_governance_json())
-                    graph.invoke(healing_state)
+                    graph.invoke(
+                        healing_state,
+                        config={"configurable": {"orchestrator": orchestrator}},
+                    )
                 else:
                     from pathlib import Path
                     orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace))
@@ -94,7 +130,11 @@ class TestHealer:
                 logger.error("Healing loop encountered an error: %s", e)
                 return False
 
-            attempts += 1
+            # Retest after healing
+            success, output = self._run_test_suite(command)
+            if success:
+                logger.info("Test suite passed after healing attempt %s.", attempt)
+                return True
 
         logger.error("Max healing retries exhausted. Test suite remains red.")
         return False

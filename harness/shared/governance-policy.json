@@ -190,5 +190,9 @@
       "__import__"
     ],
     "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
+  },
+  "lats": {
+    "max_budget": 10,
+    "exploration_weight": 1.414
   }
 }

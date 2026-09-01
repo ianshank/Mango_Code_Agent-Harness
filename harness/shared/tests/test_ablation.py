@@ -45,3 +45,42 @@ def test_ablation_channel_isolated_diff() -> None:
     # Ensure base state is untouched
     assert base_state["plan"] == ""
     assert base_state["tool_budget_used"] == 0
+
+
+def test_ablation_leak_denial() -> None:
+    """Nested-mutation regression: mutating a hypothetical state must not corrupt the base.
+
+    A rollout that appends to a mutable nested list (patches, errors, findings)
+    must not be visible in subsequent apply_diff calls — confirming that
+    deep-copy isolation prevents cross-rollout contamination (INV-LG-5).
+    """
+    base_state: MangoState = {
+        "task": "test",
+        "plan": "",
+        "shadow_plan": "",
+        "plan_divergence": 0.0,
+        "revision_count": 0,
+        "gate_status": {},
+        "verdict": "",
+        "tool_budget_used": 0,
+        "patches": [],
+        "findings": [],
+        "test_results": [],
+        "errors": [],
+    }
+    channel = AblationChannel(base_state)
+    child = AblationNode(state_diff={"patches": [{"file": "a.py", "diff": "+x"}]})
+    channel.root.add_child(child)
+
+    # First application gives an isolated copy
+    hyp1 = channel.apply_diff(child)
+    # Mutate the hypothetical's nested list (simulating a rollout appending data)
+    hyp1["patches"].append({"file": "b.py", "diff": "+y"})
+
+    # Second application must reflect only the node's diff, not hyp1's mutation
+    hyp2 = channel.apply_diff(child)
+    assert len(hyp2["patches"]) == 1, "Mutation of one rollout must not leak into another"
+
+    # The original base_state must also remain clean
+    assert base_state["patches"] == [], "Base state must not be modified by any rollout"
+

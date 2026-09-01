@@ -32,6 +32,16 @@ from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
 
+def _broker_authorize_write(broker: ExecutionBroker, role: str, filepath: str) -> str | None:
+    """Return a denial reason string if the broker's PDP blocks the write, else None."""
+    denial = broker._policy_decision(
+        f"tee {filepath}", {"agent_id": role}
+    )
+    if denial is not None:
+        return denial.reason
+    return None
+
+
 def create_mcp_server(
     workspace_dir: Path,
     role: str = "nemotron-reasoner",
@@ -62,21 +72,33 @@ def create_mcp_server(
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
-        if not tool_is_permitted(role, name):
-            return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
+        try:
+            if not tool_is_permitted(role, name):
+                return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
+        except Exception as e:  # noqa: BLE001
+            logger.error("Policy lookup failed for tool '%s': %s", name, e)
+            return [types.TextContent(type="text", text=f"Tool '{name}' denied: policy lookup failed.")]
 
         args = _normalize_tool_arguments(arguments, name)
 
         try:
             if name == "write_file":
-                result = execute_write_file(workspace_dir, args.get("filepath") or "", args.get("content") or "")
+                filepath = args.get("filepath") or ""
+                denial_reason = _broker_authorize_write(actual_broker, role, filepath)
+                if denial_reason is not None:
+                    return [types.TextContent(type="text", text=f"Denied: {denial_reason}")]
+                result = execute_write_file(workspace_dir, filepath, args.get("content") or "")
             elif name == "read_file":
                 result = execute_read_file(
                     workspace_dir, args.get("filepath") or "", args.get("start_line"), args.get("end_line")
                 )
             elif name == "apply_patch":
+                filepath = args.get("filepath") or ""
+                denial_reason = _broker_authorize_write(actual_broker, role, filepath)
+                if denial_reason is not None:
+                    return [types.TextContent(type="text", text=f"Denied: {denial_reason}")]
                 result = execute_apply_patch(
-                    workspace_dir, args.get("filepath") or "", args.get("old_text") or "", args.get("new_text") or ""
+                    workspace_dir, filepath, args.get("old_text") or "", args.get("new_text") or ""
                 )
             elif name == "run_command":
                 result = execute_run_command(actual_broker, role, workspace_dir, args.get("command") or "")

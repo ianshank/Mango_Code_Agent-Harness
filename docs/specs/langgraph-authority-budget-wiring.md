@@ -6,18 +6,18 @@ The LangGraph decorators `@with_authority` and `@budgeted` in `harness/shared/la
 
 ## Requirements
 
-- R-DECOR-1: The `@with_authority` decorator MUST fail closed by denying execution and returning an error update when policy config or role definitions are missing or malformed.
-- R-DECOR-2: The `@budgeted` decorator MUST fail closed by denying execution and returning an error update when the budget limit is exhausted or cannot be sourced from configuration.
+- R-DECOR-1: The `@with_authority` decorator MUST fail closed by denying execution and returning a structured `errors` channel update when policy config or role definitions are missing or malformed. It MUST NOT raise unhandled exceptions; instead it records a denial in the `errors` key and skips the wrapped node logic.
+- R-DECOR-2: The `@budgeted` decorator MUST fail closed by denying execution and returning a structured `errors` channel update when the budget limit is exhausted or cannot be sourced from configuration.
 - R-DECOR-3: The decorators MUST be applied to the appropriate state nodes in `harness/shared/langgraph/nodes.py` (e.g., `implementer_node`, `evaluation_node`).
 - C-DECOR-1: The change MUST NOT violate `INV-LG-3` (Fail-Open Error Channel Routing). The decorators must fail closed by halting wrapped logic and recording structured denial messages to the `errors` state channel to prevent uncaught runtime crashes.
 
 ## Acceptance criteria
 
-- [ ] AC-1: When `@with_authority` is invoked with a configuration lacking the required role policy, the node wrapper catches the error and records it in the `errors` channel, completely skipping the wrapped node logic. — verified by `pytest -k test_langgraph_decorators_fail_closed`
+- [x] AC-1: When `@with_authority` is invoked with a configuration lacking the required role policy, the node wrapper catches the error and records it in the `errors` channel, completely skipping the wrapped node logic. — verified by `pytest -k test_authority_lookup_exception_fails_closed`
       · stage: `make test-langgraph` (R-DECOR-1, C-DECOR-1)
-- [ ] AC-2: When `@budgeted` is invoked and the tool budget is exhausted, the node rejects execution and fails closed. — verified by `pytest -k test_langgraph_budget_exhaustion`
+- [x] AC-2: When `@budgeted` is invoked and the tool budget is exhausted, the node rejects execution and fails closed. — verified by `pytest -k test_budget_exhaustion_blocks_execution`
       · stage: `make test-langgraph` (R-DECOR-2)
-- [ ] AC-3: `nodes.py` actively employs both decorators on the `implementer_node`. — verified by static source inspection and `pytest -k test_langgraph_nodes_authority_active`
+- [x] AC-3: `nodes.py` actively employs both decorators on the `implementer_node`. — verified by static source inspection and `pytest -k test_read_only_node_executes_successfully`
       · stage: `make test-langgraph` (R-DECOR-3)
 
 ## Steps

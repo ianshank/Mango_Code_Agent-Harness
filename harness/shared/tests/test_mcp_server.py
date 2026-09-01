@@ -79,6 +79,7 @@ def broker() -> ExecutionBroker:
     mock.execute_command.return_value = ExecutionResult(
         status="SUCCESS", stdout="test stdout", stderr="", exit_code=0, reason="", action=""
     )
+    mock._policy_decision.return_value = None  # PDP approves all writes by default
     return mock
 
 
@@ -164,4 +165,24 @@ def test_run_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
         assert mock_run.called
 
 
+def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """AC-3 (C-MCP-1): broker PDP denial for write_file is honoured before the write executes."""
+    from harness.shared.governance.broker import ExecutionResult as ER
+    broker._policy_decision.return_value = ER(  # type: ignore[attr-defined]
+        status="BLOCKED", stdout="", stderr="", exit_code=1,
+        reason="BLOCKED: write denied by policy", action="write",
+    )
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    result = asyncio.run(server._call_tool_handler("write_file", {"filepath": "x.py", "content": ""}))
+    assert len(result) == 1
+    assert "Denied" in result[0].text
+    assert not (tmp_path / "x.py").exists()
 
+
+def test_mcp_server_policy_lookup_failure_denies(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Policy lookup errors inside the handler must return a structured denial, not raise."""
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with patch("harness.shared.mcp_server.tool_is_permitted", side_effect=RuntimeError("policy read failure")):
+        result = asyncio.run(server._call_tool_handler("write_file", {"filepath": "x.py", "content": ""}))
+    assert len(result) == 1
+    assert "denied" in result[0].text.lower()
