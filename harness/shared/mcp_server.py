@@ -33,6 +33,7 @@ from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
 
+
 def _broker_authorize_write(broker: ExecutionBroker, role: str, filepath: str) -> str | None:
     """Return a denial reason string if the broker's PDP blocks the write, else None."""
     denial = broker._policy_decision(
@@ -134,6 +135,7 @@ def run_mcp_server(workspace_dir: Path, role: str = "nemotron-reasoner") -> None
             await server.run(read_stream, write_stream, server.create_initialization_options())
 
     asyncio.run(main())
+
 
 if __name__ == "__main__":  # pragma: no cover
     import argparse

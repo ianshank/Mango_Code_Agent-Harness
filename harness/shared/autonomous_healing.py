@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class TestHealer:
     """Detects test failures and triggers automated remediation."""
     __test__ = False
@@ -52,28 +53,15 @@ class TestHealer:
         Routes through the injected ExecutionBroker (INV-8) when available so
         that command classification, pretool guard, and output caps apply.
         """
-        if self.broker is not None:
-            try:
-                broker_result = self.broker.execute_command(
-                    shlex.join(command),
-                    context={"agent_id": execution_identity("nemotron-reasoner")},
-                    cwd=Path(self.workspace),
-                )
-                return broker_result.status == "SUCCESS", format_execution_result(broker_result)
-            except Exception as e:  # noqa: BLE001
-                return False, f"Failed to run test suite: {e}"
+        from harness.shared.governance.broker import ExecutionBroker
+        broker = self.broker if self.broker is not None else ExecutionBroker()
         try:
-            import subprocess
-            subprocess_result = subprocess.run(
-                command,
-                cwd=self.workspace,
-                capture_output=True,
-                text=True,
-                check=False
+            broker_result = broker.execute_command(
+                shlex.join(command),
+                context={"agent_id": execution_identity("nemotron-reasoner")},
+                cwd=Path(self.workspace),
             )
-            success = subprocess_result.returncode == 0
-            output = subprocess_result.stdout + "\n" + subprocess_result.stderr
-            return success, output
+            return broker_result.status == "SUCCESS", format_execution_result(broker_result)
         except Exception as e:  # noqa: BLE001
             return False, f"Failed to run test suite: {e}"
 

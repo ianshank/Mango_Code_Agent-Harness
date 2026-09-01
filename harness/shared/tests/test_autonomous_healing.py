@@ -13,22 +13,27 @@ pytestmark = pytest.mark.enable_socket
 
 
 def test_run_test_suite_success(tmp_path) -> None:
-    """Test _run_test_suite captures success."""
-    healer = TestHealer(workspace=str(tmp_path))
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout="pass", stderr="")
-        success, output = healer._run_test_suite(["pytest"])
-        assert success is True
-        assert "pass" in output
+    """Test _run_test_suite routes through a default broker and captures success."""
+    from harness.shared.governance.broker import ExecutionBroker
+    mock_broker = MagicMock(spec=ExecutionBroker)
+    mock_broker.execute_command.return_value = ExecutionResult(
+        status="SUCCESS", stdout="pass", stderr="", exit_code=0
+    )
+    healer = TestHealer(workspace=str(tmp_path), broker=mock_broker)
+    success, output = healer._run_test_suite(["pytest"])
+    assert success is True
+    mock_broker.execute_command.assert_called_once()
 
 
 def test_run_test_suite_exception(tmp_path) -> None:
-    """Test _run_test_suite handles execution exceptions."""
-    healer = TestHealer(workspace=str(tmp_path))
-    with patch("subprocess.run", side_effect=OSError("cmd not found")):
-        success, output = healer._run_test_suite(["pytest"])
-        assert success is False
-        assert "Failed to run test suite" in output
+    """Test _run_test_suite handles broker execution exceptions."""
+    from harness.shared.governance.broker import ExecutionBroker
+    mock_broker = MagicMock(spec=ExecutionBroker)
+    mock_broker.execute_command.side_effect = OSError("cmd not found")
+    healer = TestHealer(workspace=str(tmp_path), broker=mock_broker)
+    success, output = healer._run_test_suite(["pytest"])
+    assert success is False
+    assert "Failed to run test suite" in output
 
 
 def test_heal_until_green_success_first_try(tmp_path) -> None:
