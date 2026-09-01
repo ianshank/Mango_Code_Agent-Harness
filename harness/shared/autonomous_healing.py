@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 class TestHealer:
     """Detects test failures and triggers automated remediation."""
+    __test__ = False
+
     def __init__(self, workspace: str, max_retries: int | None = None):
         self.workspace = workspace
         policy_limit = orchestrator_defaults().get("max_healing_retries", 3)

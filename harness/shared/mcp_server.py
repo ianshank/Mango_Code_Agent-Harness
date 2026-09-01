@@ -112,7 +112,7 @@ def run_mcp_server(workspace_dir: Path, role: str = "nemotron-reasoner") -> None
 
     asyncio.run(main())
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import argparse
 
     parser = argparse.ArgumentParser()
