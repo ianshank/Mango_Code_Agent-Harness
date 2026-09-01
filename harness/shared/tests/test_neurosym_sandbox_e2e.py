@@ -135,11 +135,12 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
         try:
             orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         history_str = str(orchestrator.conversation_history)
         assert "Sandbox unavailable" in history_str or "BLOCKED: the execution backend is unavailable" in history_str
@@ -160,7 +161,7 @@ class TestNeurosymSandboxE2E:
             "If it fails due to network restrictions, write 'MOCK_DATA' to a file using write_file."
         )
 
-        original_complete_chat = mmo.complete_chat
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
         call_count = 0
 
         def complete_chat_mock(*args, **kwargs):
@@ -222,11 +223,11 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
         try:
             verification_result = orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         assert mock_backend.call_count > 0
         history_str = str(orchestrator.conversation_history)
@@ -253,7 +254,7 @@ class TestNeurosymSandboxE2E:
             "After creating the file, you MUST use the `run_command` tool to execute: `python -m pytest app.py`.\n"
             "If your run_command is blocked with a SandboxViolation, replace the network call with MOCK_DATA."
         )
-        original_complete_chat = mmo.complete_chat
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
 
         call_count = 0
 
@@ -359,12 +360,12 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
 
         try:
             verification_result = orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         # Assertions
         assert mock_backend.call_count > 0

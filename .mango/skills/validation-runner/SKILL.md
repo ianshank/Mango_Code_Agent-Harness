@@ -29,7 +29,7 @@ gate should call.
 ## What it runs (in order)
 
 ```bash
-make ci   # lint (ruff + mypy + py-compat) -> coverage -> test-node -> zero-skips
+make ci   # lint (ruff + mypy + py-compat) -> coverage -> test-mcp -> test-lats -> test-node -> zero-skips
           # -> specs -> remotes -> validate -> check-dedup -> digest-regen
 ```
 

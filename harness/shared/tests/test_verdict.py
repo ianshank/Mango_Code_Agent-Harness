@@ -463,7 +463,7 @@ class TestTheLoopReportsIt:
         """AC-3. The broker must not be reached at all."""
         orch = self._orch(tmp_path, monkeypatch, exit_code=0)
         broker = RecordingBroker()
-        orch._verification = VerificationRunner(broker, "test-eval", target=None)
+        orch.execution_loop.verification = VerificationRunner(broker, "test-eval", target=None)
         outcome = orch.execute_loop("t")
         assert outcome.verdict.termination_reason == NOT_CONFIGURED
         assert broker.commands == []
@@ -474,7 +474,7 @@ class TestTheLoopReportsIt:
         """AC-5."""
         orch = self._orch(tmp_path, monkeypatch, exit_code=0)
         broker = RecordingBroker()
-        orch._verification = VerificationRunner(broker, "test-eval")
+        orch.execution_loop.verification = VerificationRunner(broker, "test-eval")
         monkeypatch.setenv(REENTRANCY_ENV, "1")
         outcome = orch.execute_loop("t")
         assert outcome.verdict.termination_reason == REENTRANT

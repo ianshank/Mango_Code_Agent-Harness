@@ -30,5 +30,8 @@ paths = [
   '''harness/shared/tests/regression/test_e2e_nemotron_triage_regression\.py''',
   '''harness/shared/tests/regression/test_langgraph_regression\.py''',
   '''harness/shared/tests/regression/test_coverage_gap_regression\.py''',
-  '''harness/shared/tests/regression/test_nemotron_api_aqa\.py'''
+  '''harness/shared/tests/regression/test_nemotron_api_aqa\.py''',
+  '''harness/shared/tests/test_mcp_server\.py''',
+  '''harness/shared/tests/test_lats_optimizer\.py''',
+  '''harness/shared/tests/test_ablation\.py'''
 ]

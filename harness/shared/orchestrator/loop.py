@@ -1,0 +1,198 @@
+"""ReAct Loop execution for the Mango MAS orchestrator."""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from harness.shared.agent_authority import tools_for_role
+from harness.shared.agent_prompts import (
+    PLANNER_PROMPT_TEMPLATE,
+    PRE_RUN_HOOK,
+    REASONER_PROMPT_TEMPLATE,
+    TASK_LOG_PREVIEW_CHARS,
+    VERIFIER_PROMPT_TEMPLATE,
+)
+from harness.shared.debug_dump import write_dump
+from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
+from harness.shared.governance.verification import VerificationRunner
+from harness.shared.nemotron_bridge import complete_chat
+from harness.shared.orchestrator.dispatcher import ToolDispatcher
+from harness.shared.orchestrator.hook_runner import HookRunner
+from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
+from harness.shared.tool_budget import ToolBudget
+from harness.shared.tool_schemas import NEMOTRON_TOOLS
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutionLoop:
+    """Manages the full ReAct loop and agent interactions."""
+
+    def __init__(
+        self,
+        workspace_dir: Path,
+        agents_dir: Path,
+        dispatcher: ToolDispatcher,
+        hook_runner: HookRunner,
+        verification: VerificationRunner,
+        verification_cwd: Path,
+        api_key: str | None = None,
+        model: str | None = None,
+        max_iterations: int = 15,
+        api_timeout: int = 30,
+        max_tool_calls_per_task: int = 50,
+        complete_chat_fn: Callable[..., Any] | None = None,
+    ) -> None:
+        self.workspace_dir = workspace_dir
+        self.agents_dir = agents_dir
+        self.dispatcher = dispatcher
+        self.hook_runner = hook_runner
+        self.verification = verification
+        self.verification_cwd = verification_cwd
+        self.api_key = api_key
+        self.model = model
+        self.max_iterations = max_iterations
+        self.api_timeout = api_timeout
+        self.max_tool_calls_per_task = max_tool_calls_per_task
+        self.conversation_history: list[dict[str, Any]] = []
+
+        if complete_chat_fn is None:
+            self.complete_chat_fn = complete_chat
+        else:
+            self.complete_chat_fn = complete_chat_fn
+
+    def load_agent_prompt(self, agent_name: str) -> str:
+        """Dynamically loads the agent instructions from the .mango directory."""
+        agent_file = self.agents_dir / f"{agent_name}.md"
+        if not agent_file.exists():
+            repo_agents_dir = Path(__file__).resolve().parent.parent.parent.parent / ".mango" / "agents"
+            fallback_file = repo_agents_dir / f"{agent_name}.md"
+            if fallback_file.exists():
+                return fallback_file.read_text(encoding="utf-8")
+            raise FileNotFoundError(f"Agent definition not found: {agent_file}")
+        return agent_file.read_text(encoding="utf-8")
+
+    def _finalize_response(self, messages: list[dict[str, Any]], content: Any) -> str:
+        final_content = str(content or "")
+        if not final_content.strip() and len(messages) > 3:
+            last_msg = messages[-2]
+            if last_msg.get("role") == "tool":
+                final_content = f"Completed via tool execution. Last tool result: {last_msg.get('content')}"
+
+        if messages and messages[-1].get("role") == "assistant":
+            messages[-1]["content"] = final_content
+        return final_content
+
+    def _dump_debug_history(self, agent_name: str) -> None:
+        write_dump(self.conversation_history, agent_name, api_key=self.api_key)
+
+    def execute_agent(
+        self,
+        agent_name: str,
+        task: str,
+        tools: list[dict[str, Any]] | None = None,
+        budget: ToolBudget | None = None,
+    ) -> str:
+        self.dispatcher.set_active_role(agent_name)
+        self.hook_runner.run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
+        logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.load_agent_prompt(agent_name)},
+            {"role": "user", "content": task},
+        ]
+        self.conversation_history.extend(messages)
+
+        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
+        turn_budget = budget if budget is not None else ToolBudget(self.max_tool_calls_per_task)
+
+        for _iteration in range(self.max_iterations):
+            try:
+                kwargs: dict[str, Any] = {
+                    "messages": self.conversation_history,
+                    "tools": active_tools,
+                    "timeout_sec": self.api_timeout,
+                    "api_key": self.api_key,
+                }
+                if self.model:
+                    kwargs["model"] = self.model
+
+                if self.api_key is None:
+                    kwargs.pop("api_key")
+
+                response = self.complete_chat_fn(**kwargs)
+            except Exception as e:
+                logger.error("[%s] API failed: %s", agent_name, e)
+                raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
+
+            choices = response.get("choices") or [{}]
+            first_choice = choices[0] if choices else {}
+            message_obj = first_choice.get("message") or {}
+            content = message_obj.get("content", "")
+            tool_calls = message_obj.get("tool_calls") or []
+
+            self.conversation_history.append(message_obj)
+
+            if not tool_calls:
+                final_content = self._finalize_response(self.conversation_history, content)
+                self._dump_debug_history(agent_name)
+                self.hook_runner.run_hook(f"post-{agent_name}-run", status="success")
+                return final_content
+
+            logger.info("[%s] requested %d tool calls.", agent_name, len(tool_calls))
+            if not turn_budget.consume(len(tool_calls)):
+                self.hook_runner.run_hook(f"post-{agent_name}-run", status="budget_exceeded")
+                raise RuntimeError(
+                    f"Agent {agent_name} exceeded the tool-call budget "
+                    f"({turn_budget.limit} per task; policy agent_defaults.max_tool_calls_per_task)."
+                )
+            self.dispatcher.dispatch(self.conversation_history, tool_calls)
+
+        self.hook_runner.run_hook(f"post-{agent_name}-run", status="timeout")
+        raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
+
+    def _harness_verdict(self) -> Verdict:
+        runner = self.verification
+        if runner.target is None:
+            return not_configured()
+        if runner.is_reentrant():
+            return reentrant(runner.target)
+        return derive_verdict(runner.run(self.verification_cwd))
+
+    def execute_loop(self, initial_task: str) -> LoopOutcome:
+        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
+        plan_started = time.monotonic()
+        plan = self.execute_agent("planner", planner_prompt, tools=[])
+        logger.info("Plan generated: %d bytes", len(plan))
+
+        if shadow_planner_enabled():
+            try:
+                run_shadow_comparison(
+                    ShadowContext(
+                        workspace_dir=self.workspace_dir,
+                        api_key=self.api_key,
+                        model=self.model,
+                        api_timeout=self.api_timeout,
+                        planner_system_prompt=self.load_agent_prompt("planner"),
+                        planner_user_prompt=planner_prompt,
+                        task=initial_task,
+                        incumbent_plan=plan,
+                        incumbent_elapsed_ms=int((time.monotonic() - plan_started) * 1000),
+                    )
+                )
+            except Exception:
+                logger.exception("Orchestrator-level guard caught a shadow planner failure")
+
+        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+        code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt)
+        logger.info("Code generation completed via tools: %d bytes", len(code_output))
+
+        verifier_prompt = VERIFIER_PROMPT_TEMPLATE.format(code_output=code_output)
+        verification = self.execute_agent("verifier", verifier_prompt)
+        logger.info("Verification result: %d bytes", len(verification))
+
+        return LoopOutcome(self._harness_verdict(), verification, plan, code_output)

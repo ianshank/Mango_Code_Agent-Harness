@@ -112,3 +112,159 @@ class TestApiKeyResolutionRegression:
         with patch("harness.shared.nemotron_bridge.resolve_environment", return_value={"api_key": ""}):
             key = resolve_api_key()
             assert key == ""
+
+
+class TestLATSNegativeRewardRegression:
+    """DEF-NEMO-002: Pins that MCTS selects the optimal branch even when all scores are negative."""
+
+    def test_best_leaf_with_all_negative_scores(self) -> None:
+        from harness.shared.langgraph.ablation import AblationNode
+        from harness.shared.lats_optimizer import LATSOptimizer
+
+        optimizer = LATSOptimizer()
+        root = AblationNode(state_diff={})
+
+        child1 = AblationNode(state_diff={"step": 1})
+        child2 = AblationNode(state_diff={"step": 2})
+        root.add_child(child1)
+        root.add_child(child2)
+
+        # child1 has average score -0.8, child2 has average score -0.2 (better)
+        optimizer.backpropagate(child1, -0.8)
+        optimizer.backpropagate(child2, -0.2)
+
+        best = optimizer._best_leaf(root)
+        assert best is not None
+        assert best == child2
+        assert best.state_diff == {"step": 2}
+
+    def test_refine_plan_with_negative_evaluations(self) -> None:
+        from harness.shared.lats_optimizer import LATSOptimizer
+
+        optimizer = LATSOptimizer(exploration_weight=0.0, max_budget=3)
+        from typing import Any, cast
+
+        from harness.shared.langgraph.state import MangoState
+
+        base_state = cast(MangoState, {"task": "solve bug", "plan": "initial"})
+
+        def rollout(state: MangoState) -> list[dict[str, Any]]:
+            return [{"plan": "attempt A"}, {"plan": "attempt B"}]
+
+        def evaluate(state: MangoState) -> float:
+            if state.get("plan") == "attempt B":
+                return -0.1
+            return -0.9
+
+        refined = optimizer.refine_plan(base_state, rollout_fn=rollout, eval_fn=evaluate)
+        assert refined.get("plan") == "attempt B"
+
+
+class TestMultiToolBudgetExhaustionRegression:
+    """DEF-NEMO-003: Pins multi-tool turn budget rejection and hook telemetry."""
+
+    def test_multi_tool_call_exceeding_budget_halts_and_fires_hook(
+        self, tmp_path: Path
+    ) -> None:
+        from harness.shared.tests._orchestrator_helpers import _resp, _tool_call
+        from harness.shared.tool_budget import ToolBudget
+
+        budget = ToolBudget(limit=1)
+        two_calls = [
+            _tool_call("read_file", {"filepath": "a.txt"}),
+            _tool_call("read_file", {"filepath": "b.txt"}),
+        ]
+
+        with patch(
+            "harness.shared.mango_mas_orchestrator.complete_chat",
+            return_value=_resp(None, tool_calls=two_calls),
+        ):
+            orch = MangoMASOrchestrator(workspace_dir=tmp_path)
+            hook_events: list[tuple[str, dict]] = []
+
+            def _recording_hook(hook_name: str, **kwargs: object) -> None:
+                hook_events.append((hook_name, kwargs))
+
+            orch.execution_loop.hook_runner.run_hook = _recording_hook  # type: ignore[assignment]
+
+            with pytest.raises(RuntimeError, match="exceeded the tool-call budget"):
+                orch.execute_agent("nemotron-reasoner", "read both files", budget=budget)
+
+        # Verify hook fired with budget_exceeded status
+        post_hooks = [e for e in hook_events if "post-nemotron-reasoner-run" in e[0]]
+        assert len(post_hooks) == 1
+        assert post_hooks[0][1].get("status") == "budget_exceeded"
+
+
+class TestMCPUnicodeAndErrorIsolationRegression:
+    """DEF-NEMO-004: Pins MCP tool execution with Unicode paths and error safety."""
+
+    def test_mcp_execute_unicode_path_and_content(self, tmp_path: Path) -> None:
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.mcp_server import _build_tool_handlers
+
+        broker = ExecutionBroker()
+        handlers = _build_tool_handlers(tmp_path, broker, "nemotron-reasoner")
+
+        unicode_file = "café_src.py"
+        unicode_content = "def résumé(): return 'succès' \u2713\n"
+
+        # Write
+        res_write = handlers["write_file"]({"filepath": unicode_file, "content": unicode_content})
+        assert "Success: Wrote" in res_write
+        assert (tmp_path / unicode_file).exists()
+
+        # Read back
+        res_read = handlers["read_file"]({"filepath": unicode_file})
+        assert res_read == unicode_content
+
+
+class TestAutonomousHealingE2ERegression:
+    """DEF-NEMO-006: Pins the autonomous self-healing loop in StateGraph."""
+
+    def test_state_graph_healing_loop_recovers_from_test_failure(self) -> None:
+        from unittest.mock import MagicMock
+
+        from harness.shared.governance.verdict import FAILED, VERIFIED, Verdict
+        from harness.shared.langgraph.graph import build_graph
+        from harness.shared.langgraph.policy import GraphPolicy
+
+        mock_orch = MagicMock()
+
+        # Planner -> Reasoner (turn 1 buggy) -> Verifier (fails) -> Reasoner (turn 2 fixed) -> Verifier (passes)
+        mock_orch.execute_agent.side_effect = [
+            "# Plan: Implement fib",           # Planner
+            "def fib(n): return n",             # Reasoner (turn 1 - buggy)
+            "VERDICT: FAIL - test_fib failed",   # Verifier (turn 1)
+            "def fib(n): return n if n < 2 else fib(n-1) + fib(n-2)",  # Reasoner (turn 2 - fixed)
+            "VERDICT: PASS",                    # Verifier (turn 2)
+        ]
+
+        verdict_fail = Verdict(
+            status=FAILED,
+            reason="AssertionError: fib(5) == 5 != 1",
+            termination_reason="",
+            command="pytest test_fib.py",
+            exit_code=1,
+        )
+        verdict_pass = Verdict(
+            status=VERIFIED,
+            reason="all 5 tests passed",
+            termination_reason="",
+            command="pytest test_fib.py",
+            exit_code=0,
+        )
+        mock_orch._harness_verdict.side_effect = [verdict_fail, verdict_pass]
+
+        policy = GraphPolicy(max_iterations=5, recursion_limit=25)
+        graph = build_graph(policy=policy)
+        config = {"configurable": {"orchestrator": mock_orch, "policy": policy}}
+
+        initial_state = {"task": "Write Fibonacci function with tests"}
+        final_state = graph.invoke(initial_state, config=config)
+
+        assert final_state.get("verdict") == "VERIFIED"
+        assert final_state.get("revision_count", 0) >= 1
+        assert len(final_state.get("patches", [])) >= 2
+
+

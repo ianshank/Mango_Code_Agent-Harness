@@ -88,40 +88,40 @@ class TestToolHandlersToleratesJsonNull:
 
     def test_a_null_filepath_does_not_crash_write_file(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch._tool_handlers["write_file"]({"filepath": None, "content": "x"})
+        result = orch.execution_loop.dispatcher.tool_handlers["write_file"]({"filepath": None, "content": "x"})
         assert result.startswith("Error writing file")
 
     def test_a_null_filepath_does_not_crash_read_file(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch._tool_handlers["read_file"]({"filepath": None})
+        result = orch.execution_loop.dispatcher.tool_handlers["read_file"]({"filepath": None})
         assert result.startswith("Error reading file")
 
     def test_a_null_old_text_does_not_crash_apply_patch(self, mock_workspace: Path) -> None:
         (mock_workspace / "f.py").write_text("hello\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch._tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": None, "new_text": "y"})
+        result = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": None, "new_text": "y"})
         assert result.startswith("Error patching file")
 
     def test_a_null_new_text_does_not_crash_apply_patch(self, mock_workspace: Path) -> None:
         (mock_workspace / "f.py").write_text("hello\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch._tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": "hello", "new_text": None})
+        result = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": "hello", "new_text": None})
         assert result.startswith("Success:")
         assert (mock_workspace / "f.py").read_text(encoding="utf-8") == "\n"
 
     def test_a_null_command_does_not_crash_run_command(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
-        result = orch._tool_handlers["run_command"]({"command": None})
+        result = orch.execution_loop.dispatcher.tool_handlers["run_command"]({"command": None})
         assert not result.startswith("Traceback")
 
 
 class TestToolRegistry:
     def test_every_declared_tool_has_a_handler(self, mock_workspace: Path) -> None:
-        """Declaration (NEMOTRON_TOOLS) and dispatch (_tool_handlers) must not drift."""
+        """Declaration (NEMOTRON_TOOLS) and dispatch (handlers) must not drift."""
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         tools: list[dict[str, Any]] = orch_module.NEMOTRON_TOOLS
         declared = {t["function"]["name"] for t in tools}
-        registered = set(orch._tool_handlers)
+        registered = set(orch.execution_loop.dispatcher.tool_handlers)
         assert declared == registered, (
             f"declared-but-unhandled: {declared - registered}; "
             f"handled-but-undeclared: {registered - declared}"
@@ -129,9 +129,10 @@ class TestToolRegistry:
 
     def test_handlers_return_strings(self, mock_workspace: Path, mocker) -> None:
         """Every handler returns a str for the tool message content (empty args)."""
-        mocker.patch.object(orch_module, "knowledge_gap_log", return_value="gap-logged")
-        mocker.patch.object(orch_module, "hypothesis_register", return_value="hypothesis-logged")
+        from harness.shared.orchestrator import dispatcher
+        mocker.patch.object(dispatcher, "knowledge_gap_log", return_value="gap-logged")
+        mocker.patch.object(dispatcher, "hypothesis_register", return_value="hypothesis-logged")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        for name, handler in orch._tool_handlers.items():
+        for name, handler in orch.execution_loop.dispatcher.tool_handlers.items():
             result = handler({})
             assert isinstance(result, str), f"handler {name} returned {type(result)}"

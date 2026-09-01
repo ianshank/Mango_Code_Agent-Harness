@@ -20,8 +20,6 @@ def mock_workspace(tmp_path):
 
 def test_tool_write_file_success(mock_workspace):
     """Test that the orchestrator can write a file via tools."""
-    orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
-
     # Simulate Nemotron asking to call 'write_file'
     mock_tool_call = {
         "id": "call_123",
@@ -39,6 +37,7 @@ def test_tool_write_file_success(mock_workspace):
 
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
         mock_complete.side_effect = [mock_response_1, mock_response_2]
+        orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
 
         result = orchestrator.execute_agent("nemotron-reasoner", "Write output.txt")
 
@@ -58,8 +57,6 @@ def test_tool_run_command_success(mock_workspace):
     execution is evaluated against the authority model, and a role that model
     does not declare is denied as an unknown identity (spec R-AC-11).
     """
-    orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
-
     mock_tool_call = {
         "id": "call_abc",
         "function": {"name": "run_command", "arguments": json.dumps({"command": "echo 'test command'"})},
@@ -71,8 +68,9 @@ def test_tool_run_command_success(mock_workspace):
 
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
         mock_complete.side_effect = [mock_response_1, mock_response_2]
+        orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
 
-        result = orchestrator.execute_agent("nemotron-reasoner", "Run echo")
+        result = orchestrator.execute_agent("nemotron-reasoner", "Run tests")
 
         assert result == "Command executed successfully."
 
@@ -96,17 +94,16 @@ def test_tool_run_command_success(mock_workspace):
 
 def test_tool_max_iterations(mock_workspace):
     """Test that the orchestrator breaks out of infinite tool loops."""
-    orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
-
     mock_tool_call = {
         "id": "call_inf",
         "function": {"name": "run_command", "arguments": json.dumps({"command": "echo 'loop'"})},
     }
 
-    mock_response = {"choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [mock_tool_call]}}]}
+    mock_response_tool = {"choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [mock_tool_call]}}]}
 
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
-        mock_complete.return_value = mock_response
+        mock_complete.return_value = mock_response_tool
+        orchestrator = MangoMASOrchestrator(workspace_dir=mock_workspace)
 
         with pytest.raises(RuntimeError, match="exceeded maximum tool iterations"):
             orchestrator.execute_agent("nemotron-reasoner", "Loop forever")

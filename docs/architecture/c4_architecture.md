@@ -6,7 +6,7 @@
 > `harness/node/src/ai/nemotron/` subsystem) — where the two disagree, this
 > file wins.
 
-**Version:** 2.2.5 (2026 Standards)  
+**Version:** 2.4.0 (2026 Standards - God File Decomposition)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -63,10 +63,12 @@ graph TD
     end
 
     subgraph Agentic_Orchestration ["MAS Orchestration Core (harness/shared)"]
-        MAS["Mango MAS Orchestrator<br/>(mango_mas_orchestrator.py)"]
+        MAS["MangoMASOrchestrator (Facade)<br/>(mango_mas_orchestrator.py)"]
+        Loop["ExecutionLoop<br/>(orchestrator/loop.py)"]
+        Dispatch["ToolDispatcher<br/>(orchestrator/dispatcher.py)"]
+        HookRunner["HookRunner<br/>(orchestrator/hook_runner.py)"]
         LangGraph_Engine["LangGraph StateGraph Engine<br/>(langgraph/graph.py, state.py, nodes.py)"]
         Bridge["Nemotron Bridge<br/>(nemotron_bridge.py)"]
-        Dispatch["Tool Dispatch Registry<br/>(tool_dispatch.py)"]
         Executors["Tool Executors<br/>(tool_executors.py)"]
         Prompts["Agent Persona Prompts<br/>(agent_prompts.py)"]
         Schemas["Tool Schemas<br/>(tool_schemas.py)"]
@@ -87,9 +89,11 @@ graph TD
     CLI --> APIServer
     CLI --> Governance_Kernel
     APIServer --> MAS
-    MAS --> LangGraph_Engine
-    MAS --> Bridge
-    MAS --> Dispatch
+    MAS --> Loop
+    Loop --> LangGraph_Engine
+    Loop --> Bridge
+    Loop --> Dispatch
+    Loop --> HookRunner
     Dispatch --> Executors
     Executors --> ExecBroker
     ExecBroker --> PDP

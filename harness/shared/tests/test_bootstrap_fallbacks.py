@@ -121,11 +121,11 @@ class TestCheckTraceabilityShimFallback:
 
 
 class TestCoverageGateFallback:
-    def test_import_error_leg_uses_sibling_module(self, hidden_harness):
+    def test_import_error_leg_uses_sibling_module(self, hidden_harness, monkeypatch: pytest.MonkeyPatch):
         """coverage_gate's fallback imports top-level ``json_logging``, which is
         how a direct ``python harness/shared/coverage_gate.py`` resolves it
         (the interpreter puts the script's directory on sys.path)."""
-        sys.path.insert(0, str(SHARED))
+        monkeypatch.syspath_prepend(str(SHARED))
         ns = runpy.run_path(str(SHARED / "coverage_gate.py"), run_name="coverage_gate_fallback")
         assert callable(ns["main"])
         assert callable(ns["resolve_log_level"])
@@ -138,7 +138,7 @@ class TestValidateInvariantsMainFallback:
         runs for an adopter. The gate runs against this repository (the CLI
         takes no --repo-root); the attestation env keeps a dirty-but-permitted
         working tree from failing the protected-path check."""
-        sys.path.insert(0, str(SHARED))
+        monkeypatch.syspath_prepend(str(SHARED))
         monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
         monkeypatch.setenv("GITHUB_BASE_REF", "")
         with pytest.raises(SystemExit) as exc:

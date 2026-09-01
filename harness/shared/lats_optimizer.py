@@ -48,20 +48,18 @@ class LATSOptimizer:
             current = current.parent
 
     def _best_leaf(self, root: AblationNode) -> AblationNode | None:
-        """Return the highest-scoring leaf across the full tree (depth-first)."""
+        """Return the highest-scoring visited node across the full tree (depth-first)."""
         best: AblationNode | None = None
-        best_avg = 0.0
+        best_avg = float("-inf")
         stack = [root]
         while stack:
             node = stack.pop()
-            if not node.children:
-                if node is not root and node.visits > 0:
-                    avg = node.score / node.visits
-                    if best is None or avg > best_avg:
-                        best = node
-                        best_avg = avg
-            else:
-                stack.extend(node.children)
+            if node is not root and node.visits > 0:
+                avg = node.score / node.visits
+                if best is None or avg > best_avg:
+                    best = node
+                    best_avg = avg
+            stack.extend(node.children)
         return best
 
     def refine_plan(

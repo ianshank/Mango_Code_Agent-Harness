@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [2.4.0] - 2026-09-01
+
+### Added
+
+- `harness/shared/orchestrator/` module encompassing `dispatcher.py`, `loop.py`, and `hook_runner.py` to cleanly encapsulate the previously monolithic ReAct orchestrator loop.
+- Comprehensive LATS MCTS optimization fixes for negative reward bounds.
+- MCP Unicode logging safety in the `mcp_server.py`.
+
+### Changed
+
+- Decomposed `mango_mas_orchestrator.py` into smaller domain modules (`harness.shared.orchestrator.*`).
+- `MangoMASOrchestrator` is now a backwards-compatible facade that delegates to the new submodules.
+- Strict `mypy` typing across `harness/shared` completely stabilized for dict mappings and `MangoState` implementations.
+
 ## [2.3.0] - 2026-08-31
 
 ### Added
@@ -41,9 +55,7 @@ All notable changes to this project will be documented in this file.
 - **Root Makefile & Tooling**:
   - Added `make test-langgraph` target; updated `.gitignore`, `.dockerignore`, and `.gitleaks.toml`.
 
-## [Unreleased]
-
-### Added — Full test suite coverage gap fill and AQA/regression expansion
+### Operations & Testing — Full test suite coverage gap fill and AQA/regression expansion
 
 Systematic coverage audit identified 9 source modules with zero direct test
 coverage, plus 2 missing regression/AQA tiers. Created 11 new test files

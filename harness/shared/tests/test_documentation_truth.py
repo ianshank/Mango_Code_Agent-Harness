@@ -122,7 +122,8 @@ class TestGitignoreHasNoDeadRules:
                 continue
             # A concrete directory path with no glob: its parent should exist,
             # or the rule is describing a tree that is gone.
-            parent = (REPO / rule.rstrip("/")).parent
+            check_path = rule.lstrip("!")
+            parent = (REPO / check_path.rstrip("/")).parent
             if not parent.exists():
                 offenders.append(rule)
         assert not offenders, (

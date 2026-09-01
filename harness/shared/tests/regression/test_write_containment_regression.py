@@ -155,7 +155,7 @@ class TestRunCommandCannotWriteWhereWriteFileCannot:
         self, agent_workspace: Path, command: str, target: str
     ) -> None:
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-        result = orch._execute_run_command(command)
+        result = orch.execution_loop.dispatcher._execute_run_command(command)
         assert result.startswith("Error"), f"{command!r} was permitted"
         landed = agent_workspace / target
         content = landed.read_text(encoding="utf-8") if landed.is_file() else ""
@@ -172,8 +172,8 @@ class TestRunCommandCannotWriteWhereWriteFileCannot:
         """`2>&1` and `>&2` duplicate a descriptor; treating `&1` as a filename
         would deny ordinary commands."""
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-        assert not orch._execute_run_command("echo hi 2>&1").startswith("Error")
-        assert not orch._execute_run_command("echo hi >&2").startswith("Error")
+        assert not orch.execution_loop.dispatcher._execute_run_command("echo hi 2>&1").startswith("Error")
+        assert not orch.execution_loop.dispatcher._execute_run_command("echo hi >&2").startswith("Error")
 
 
 class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
@@ -193,9 +193,9 @@ class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
         self, agent_workspace: Path
     ) -> None:
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-        orch._active_role = "verifier"
+        orch.execution_loop.dispatcher.active_role = "verifier"
         messages: list[dict[str, object]] = []
-        orch._dispatch_tool_calls(
+        orch.execution_loop.dispatcher.dispatch(
             messages,
             [{
                 "id": "call_1",

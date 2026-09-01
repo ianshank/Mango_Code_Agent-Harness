@@ -61,3 +61,6 @@ mango_code_agent_harness.egg-info/
 # Pytest / Hypothesis temp directories created during local runs
 harness/node/test-*/
 .hypothesis/
+
+# MCP Server local storage
+.mcp_storage/
