@@ -30,7 +30,7 @@
         "scripts/validate_adoption.py": "f80b39ec9fb1be9478e1f39c758b7adf05399932e41275d407b5a2d43846a107",
         "scripts/check_traceability.py": "5c6bbc13f07a22263e2327cc5b2f817f91d910448fbd58d6243b0514cdd49abc",
         "scripts/check_projections.py": "0593677337e2a6f536ddfdafc9d1ff2a3508e421e788c30f7a9ec81032efe361",
-        "package.json": "6bc8965604ca929503d8e0db609c364a009a5696cd9941382011c26aca017cab",
+        "package.json": "2291355e60c2a4f58979dd21d2138de733ba23025cdc191bb8e3926e1da04f66",
         "tsconfig.json": "ed88b96aaf42c7f9552e4360216c1ef096f537ea6d38c5c8b7e8b12c0e2da742",
         "vitest.config.ts": "f8f3e4e5d1cb31a78c8cec6625ee14b14f568cfad152709c36b702606f982d73",
         "tests/governance/meta.test.ts": "47e948abb93aa1d83b544095e2784e12701fe52c2d5d7bbb75beee9f93fbafde"
