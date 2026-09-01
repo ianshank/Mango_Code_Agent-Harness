@@ -179,7 +179,9 @@ describe.skipIf(!IS_LIVE)(
         assertNoSecretLeakage(errorMessage, fakeKey);
 
         // Should contain HTTP status code reference
-        expect(errorMessage).toMatch(/Nemotron API Error HTTP (401|403|400|410)/);
+        expect(errorMessage).toMatch(
+          /Nemotron API Error HTTP (401|403|400|410)/,
+        );
       },
       LIVE_TEST_TIMEOUT_MS,
     );

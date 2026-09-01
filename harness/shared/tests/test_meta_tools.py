@@ -1,4 +1,9 @@
+from __future__ import annotations
+
 import json
+from pathlib import Path
+
+import pytest
 
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 
@@ -170,3 +175,46 @@ def test_file_lock_swallows_cleanup_failure(tmp_path, monkeypatch):
     # swallowed-cleanup path was the one exercised, not an unlink that worked).
     assert entered, "the caller's block never ran"
     assert (tmp_path / "data.lock").exists(), "cleanup succeeded; the swallow path was not exercised"
+
+
+def test_read_json_safe_malformed(tmp_path: Path) -> None:
+    """Test reading corrupted JSON file triggers backup and reset."""
+    from harness.shared.meta_tools import _read_json_safe
+
+    target = tmp_path / "corrupted.json"
+    target.write_text("{not valid json", encoding="utf-8")
+
+    data = _read_json_safe(target)
+    assert data == []
+    assert target.read_text(encoding="utf-8") == "[]"
+    backup_files = list(tmp_path.glob("corrupted.json.malformed.*"))
+    assert len(backup_files) == 1
+
+
+def test_read_json_safe_non_list(tmp_path: Path) -> None:
+    """Test reading JSON that is a dict instead of list triggers reset."""
+    from harness.shared.meta_tools import _read_json_safe
+
+    target = tmp_path / "dict.json"
+    target.write_text('{"key": "value"}', encoding="utf-8")
+
+    data = _read_json_safe(target)
+    assert data == []
+    assert target.read_text(encoding="utf-8") == "[]"
+
+
+def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test handling OSError when backup rename fails."""
+    from harness.shared.meta_tools import _read_json_safe
+
+    target = tmp_path / "locked.json"
+    target.write_text("invalid", encoding="utf-8")
+
+    def mock_rename(self: Path, target: Path) -> None:
+        raise OSError("Permission denied")
+
+    monkeypatch.setattr(Path, "rename", mock_rename)
+    data = _read_json_safe(target)
+    assert data == []
+    assert target.read_text(encoding="utf-8") == "[]"
+

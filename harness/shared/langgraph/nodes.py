@@ -32,6 +32,7 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     VERIFIER_PROMPT_TEMPLATE,
 )
+from harness.shared.langgraph.decorators import budgeted, with_authority
 from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
 
@@ -58,6 +59,7 @@ def _get_configurable(config: Any = None, kwargs: dict[str, Any] | None = None) 
 # ── Active nodes (wrap existing orchestrator methods) ────────
 
 
+@with_authority("planner", may_write=False)
 def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Planner agent: generates a plan from the task description.
 
@@ -86,6 +88,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         return {"errors": [{"node": "planner", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("planner", may_write=False)
 def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Shadow planner: generates an independent plan for divergence comparison.
 
@@ -103,6 +106,8 @@ def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[
         return {"errors": [{"node": "shadow_planner", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("nemotron-reasoner", may_write=True)
+@budgeted("tool_budget_used")
 def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Implementer (nemotron-reasoner): applies patches to implement the plan.
 
@@ -110,6 +115,9 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
     Phase 2: Uses the real orchestrator to generate implementations.
     """
     try:
+        from harness.shared.policy_loader import max_tool_calls_per_task
+        from harness.shared.tool_budget import ToolBudget
+
         revision = state.get("revision_count", 0)
         plan = state.get("plan", "")
         logger.info("implementer_node: implementing plan (revision=%d)...", revision)
@@ -119,26 +127,29 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
 
         if orchestrator:
             reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
-            # execute_agent will return the text the agent produced.
-            # In Phase 2, we can just run it. Tool execution happens inside execute_agent
-            # via MangoMASOrchestrator._dispatch_tool_calls.
-            # However, patches aren't surfaced natively unless we parse them.
-            # For now, we will just track budget.
-            code_output = orchestrator.execute_agent("nemotron-reasoner", reasoner_prompt)
+            # Build a shared budget initialised from the cumulative state counter so
+            # the per-task limit is enforced across all revisions, not per-revision.
+            budget_limit = max_tool_calls_per_task()
+            already_used = state.get("tool_budget_used", 0)
+            task_budget = ToolBudget(limit=budget_limit, used=already_used)
+            code_output = orchestrator.execute_agent("nemotron-reasoner", reasoner_prompt, budget=task_budget)
             patches = [{"file": "implemented", "old_text": "", "new_text": code_output, "agent": "nemotron-reasoner"}]
+            new_budget_used = task_budget.used
         else:
             patches = [{"file": "stub.py", "old_text": "", "new_text": "# implemented", "agent": "implementer"}]
+            new_budget_used = state.get("tool_budget_used", 0) + 1
 
         return {
             "patches": patches,
             "revision_count": revision + 1,
-            "tool_budget_used": state.get("tool_budget_used", 0) + 1,
+            "tool_budget_used": new_budget_used,
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("implementer_node failed: %s", exc)
         return {"errors": [{"node": "implementer", "error": str(exc), "traceback": traceback.format_exc()}]}
 
 
+@with_authority("verifier", may_write=False)
 def evaluation_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, Any]:
     """Test evaluator: runs the verification suite.
 
@@ -263,6 +274,7 @@ def escalate_node(state: MangoState) -> dict:
 # ── Review nodes (Phase 5 fan-out) ──────────────────────────
 
 
+@with_authority("verifier", may_write=False)
 def peer_reviewer_node(state: MangoState) -> dict:
     """Peer reviewer: reviews patches for correctness.
 
@@ -282,6 +294,7 @@ def peer_reviewer_node(state: MangoState) -> dict:
     }
 
 
+@with_authority("verifier", may_write=False)
 def security_reviewer_node(state: MangoState) -> dict[str, Any]:
     """Security reviewer: reviews patches for security issues.
 

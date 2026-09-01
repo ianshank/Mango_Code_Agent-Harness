@@ -95,6 +95,11 @@ STANDALONE_SKILLS = {
         "one composes for the per-PR case; wiring a full drift-and-doc-sync pass into every "
         "PR's checklist would apply the wrong cadence to what it does."
     ),
+    "agent-memory-manager": (
+        "Provides guidelines for persisting memory and managing context retention. "
+        "It acts as a protocol specification for agents to read and write persistent data, "
+        "rather than an automated CI step."
+    ),
 }
 
 
