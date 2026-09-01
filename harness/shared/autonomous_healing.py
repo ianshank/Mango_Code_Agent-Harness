@@ -3,20 +3,24 @@
 Parses test failures and triggers the orchestrator for automated remediation loops.
 """
 
+from __future__ import annotations
+
 import logging
 import subprocess
 
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.state import MangoState
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+from harness.shared.policy_loader import orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
 class TestHealer:
     """Detects test failures and triggers automated remediation."""
-    def __init__(self, workspace: str, max_retries: int = 3):
+    def __init__(self, workspace: str, max_retries: int | None = None):
         self.workspace = workspace
-        self.max_retries = max_retries
+        policy_limit = orchestrator_defaults().get("max_healing_retries", 3)
+        self.max_retries = max_retries if max_retries is not None else policy_limit
 
     def _run_test_suite(self, command: list[str]) -> tuple[bool, str]:
         """Runs the test suite and returns (success, output)."""

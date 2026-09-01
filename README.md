@@ -72,15 +72,16 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── autonomous_healing.py        # Test-driven autonomous self-healing engine
+│   │   ├── lats_optimizer.py            # Language Agent Tree Search (LATS) MCTS optimizer
+│   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server
 │   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
 │   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
-│   │   │   ├── ablation.py              # MCTS logic
-│   │   │   ├── autonomous_healing.py    # Test-driven self-correction module
-│   │   │   ├── lats_optimizer.py        # LangGraph autonomous tree search optimizer
 │   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
 │   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
 │   │   │   ├── policy.py                # GraphExecutionPolicy configuration
-│   │   │   └── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   ├── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   └── ablation.py              # MCTS ablation & hypothetical state channels
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch

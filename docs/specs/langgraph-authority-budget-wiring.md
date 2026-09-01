@@ -6,10 +6,10 @@ The LangGraph decorators `@with_authority` and `@budgeted` in `harness/shared/la
 
 ## Requirements
 
-- R-DECOR-1: The `@with_authority` decorator MUST raise an exception (failing closed) rather than allowing execution to proceed when policy config or role definitions are missing or malformed.
-- R-DECOR-2: The `@budgeted` decorator MUST raise an exception (failing closed) when the budget limit cannot be sourced from configuration.
+- R-DECOR-1: The `@with_authority` decorator MUST fail closed by denying execution and returning an error update when policy config or role definitions are missing or malformed.
+- R-DECOR-2: The `@budgeted` decorator MUST fail closed by denying execution and returning an error update when the budget limit is exhausted or cannot be sourced from configuration.
 - R-DECOR-3: The decorators MUST be applied to the appropriate state nodes in `harness/shared/langgraph/nodes.py` (e.g., `implementer_node`, `evaluation_node`).
-- C-DECOR-1: The change MUST NOT violate `INV-LG-3` (Fail-Open Error Channel Routing). The decorators must fail closed, but the surrounding node invocation or graph routing must catch these exceptions and record them to the `errors` state channel to prevent full graph crashes.
+- C-DECOR-1: The change MUST NOT violate `INV-LG-3` (Fail-Open Error Channel Routing). The decorators must fail closed by halting wrapped logic and recording structured denial messages to the `errors` state channel to prevent uncaught runtime crashes.
 
 ## Acceptance criteria
 

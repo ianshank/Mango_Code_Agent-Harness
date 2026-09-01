@@ -7,10 +7,18 @@ import logging
 import sys
 from pathlib import Path
 
-import mcp.types as types
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
+try:
+    import mcp.types as types
+    from mcp.server import Server
+    from mcp.server.stdio import stdio_server
+    MCP_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    MCP_AVAILABLE = False
+    types = None  # type: ignore[assignment]
+    Server = None  # type: ignore[assignment,misc]
+    stdio_server = None  # type: ignore[assignment]
 
+from harness.shared.agent_authority import tool_is_permitted, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.tool_dispatch import DEFAULT_HYPOTHESIS_CONFIDENCE, _normalize_tool_arguments
@@ -30,14 +38,18 @@ def create_mcp_server(
     broker: ExecutionBroker | None = None
 ) -> Server:
     """Create and configure the MCP server instance."""
+    if not MCP_AVAILABLE or Server is None:
+        raise ImportError("The 'mcp' package is required to run the MCP server. Install it with `pip install mcp`.")
+
     server = Server("nemotron-mcp-server")
     actual_broker = broker or ExecutionBroker()
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
         from typing import Any, cast
+        allowed_schemas = tools_for_role(role, NEMOTRON_TOOLS)
         tools = []
-        for schema in NEMOTRON_TOOLS:
+        for schema in allowed_schemas:
             func = cast(dict[str, Any], schema["function"])
             tools.append(
                 types.Tool(
@@ -50,6 +62,9 @@ def create_mcp_server(
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
+        if not tool_is_permitted(role, name):
+            return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
+
         args = _normalize_tool_arguments(arguments, name)
 
         try:

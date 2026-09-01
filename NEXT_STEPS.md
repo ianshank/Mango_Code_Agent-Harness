@@ -394,15 +394,15 @@ no UC-4 experiment evidence is claimed by this milestone.
 
 ### 1.1 Optimize Language Agent Tree Search (LATS)
 
-- [x] **MCTS Refinement:** Refine the Monte Carlo Tree Search components in the reasoning layer.
-- [x] **Ablation Studies:** Measure the efficacy of LATS implementations against standard chain-of-thought methods.
-- [x] **Trace Logging:** Formalize the trace logging formats for LATS pathways.
+- [x] **MCTS Scaffolding:** Implement Monte Carlo Tree Search optimization data structures (`lats_optimizer.py`).
+- [x] **Ablation Studies:** Measure the efficacy of LATS implementations against standard chain-of-thought methods (`langgraph/ablation.py`).
+- [ ] **End-to-End Orchestrator Wiring:** Wire LATS search nodes into the main supervisor StateGraph loop.
 
 ### 1.2 Autonomous Healing Integration
 
-- [x] **Merge Experimental Branch:** Merge and stabilize the experimental Autonomous Healing branch.
-- [x] **Test-Driven Healing:** Wire the healing routines to automatically trigger upon test suite failures (`vitest` and `pytest`).
-- [x] **Policy Enforcement:** Gate autonomous healing behind the `.governance/` policy invariants to prevent out-of-bounds structural modifications.
+- [x] **Autonomous Healing Engine:** Implement `TestHealer` test-driven agent remediation engine (`autonomous_healing.py`).
+- [x] **Policy Enforcement:** Gate autonomous healing behind `max_healing_retries` policy bounds.
+- [ ] **CI / Test Failure Trigger Hook:** Wire automated lifecycle hooks to trigger healing directly upon test suite failures (`vitest` and `pytest`).
 
 ### 1.3 Multi-Agent Memory Maturation
 
@@ -417,4 +417,4 @@ no UC-4 experiment evidence is claimed by this milestone.
 
 - [ ] **Dynamic Model Fallback:** Implement multi-tier routing (e.g. fast reasoning → deep synthesis).
 - [ ] **Prompt Cache & Cost Tracking:** Add local disk/memory prompt-cache adapter to minimize repeated token costs on invariant verification prompts.
-- [ ] **Model Context Protocol (MCP) Server:** Package `NemotronClient` as an independent standard STDIO/SSE MCP server for seamless integration with external AI IDEs and clients.
+- [x] **Model Context Protocol (MCP) Server:** Implement standard STDIO MCP server (`mcp_server.py`) exposing role-gated Nemotron tool execution.
