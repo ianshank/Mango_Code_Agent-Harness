@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import harness.shared.write_policy as write_policy_module
 from harness.shared.write_policy import (
     ALWAYS_DENIED_PREFIXES,
     ALWAYS_DENIED_SEGMENTS,
@@ -123,6 +124,30 @@ class TestFailsClosed:
         except SystemExit:  # pragma: no cover - the assertion below is the report
             pytest.fail("SystemExit escaped the write gate and would end the agent run")
         assert reason is not None
+
+    def test_the_default_policy_itself_being_unreadable_does_not_kill_the_process(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The sibling case to ``test_a_broken_policy_does_not_kill_the_process``:
+        that test only ever exercises the *supplied*-policy branch (it always
+        passes ``policy_path=``, so ``DEFAULT_POLICY_PATH`` -- the harness's own
+        real, valid, shipped policy -- is what ``load_protected_patterns`` reads
+        and it never fails). This test forces the *other* branch: the harness's
+        own default policy failing to load, which is what
+        ``except (Exception, SystemExit)`` at write_policy.py's first try/except
+        actually guards. Without this, a narrowing of that except clause that
+        dropped ``SystemExit`` (letting ``load_protected_patterns``'s
+        ``sys.exit(1)`` escape and kill the agent process) would pass the full
+        suite undetected.
+        """
+        bad = tmp_path / "policy.json"
+        bad.write_text("[]", encoding="utf-8")
+        monkeypatch.setattr(write_policy_module, "DEFAULT_POLICY_PATH", bad)
+        try:
+            reason = write_denial_reason("src/feature.py")
+        except SystemExit:  # pragma: no cover - the assertion below is the report
+            pytest.fail("SystemExit escaped the write gate and would end the agent run")
+        assert reason is not None and "could not be read" in reason
 
     def test_a_policy_without_protected_paths_still_denies_the_git_directory(self, tmp_path: Path) -> None:
         """The property is unchanged -- an empty pattern set cannot reach the
