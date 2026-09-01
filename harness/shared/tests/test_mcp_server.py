@@ -19,10 +19,10 @@ pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:
-    def __init__(self, *args: Any, **kwargs: Any):
-        self.name = kwargs.get("name", "")
-        self.description = kwargs.get("description", "")
-        self.inputSchema = kwargs.get("inputSchema", {})
+    def __init__(self, *, name: str, description: str, input_schema: dict[str, Any]):
+        self.name = name
+        self.description = description
+        self.input_schema = input_schema
 
 
 class MockTextContent:
@@ -90,6 +90,41 @@ def test_create_mcp_server_missing_package(monkeypatch: pytest.MonkeyPatch, tmp_
         create_mcp_server(tmp_path)
 
 
+def test_import_failure_sets_mcp_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real try/except ImportError guard (not a monkeypatched flag) must leave the
+    module in a safe, fully-None state when `mcp` cannot be imported -- this is the
+    Python 3.9 CI leg's actual code path, otherwise untested."""
+    import importlib
+    import sys
+
+    for name in ("mcp", "mcp.types", "mcp.server", "mcp.server.stdio"):
+        monkeypatch.setitem(sys.modules, name, None)
+    # monkeypatch.delitem records the current (real) module object and restores it to
+    # sys.modules on teardown regardless of how this test exits -- no manual cleanup needed.
+    monkeypatch.delitem(sys.modules, "harness.shared.mcp_server", raising=False)
+    mod = importlib.import_module("harness.shared.mcp_server")
+    assert mod.MCP_AVAILABLE is False
+    assert mod.types is None
+    assert mod.Server is None
+    assert mod.stdio_server is None
+
+
+@pytest.mark.enable_socket
+def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
+    """Pins the real SDK's Tool constructor field names directly, bypassing MockTool
+    entirely -- this is the one test that would have caught the original
+    inputSchema/input_schema mismatch, and only runs where `mcp` is actually
+    installed (CI's 3.10/3.12/build-full legs)."""
+    if not mcp_mod.MCP_AVAILABLE:
+        pytest.skip("mcp package not installed")
+    import mcp.types as real_types
+
+    tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
+    assert tool.name == "x"
+    assert tool.description == "y"
+    assert tool.input_schema == {"type": "object"}
+
+
 def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) -> None:
     """AC-2: Tool descriptions match the schemas allowed for the active role."""
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
@@ -102,7 +137,7 @@ def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) 
     tool_names = {t.name for t in tools}
     schema_names = {schema["function"]["name"] for schema in expected_schemas}
     assert tool_names == schema_names
-    assert {tool.name: tool.inputSchema for tool in tools} == {
+    assert {tool.name: tool.input_schema for tool in tools} == {
         schema["function"]["name"]: schema["function"]["parameters"] for schema in expected_schemas
     }
 
