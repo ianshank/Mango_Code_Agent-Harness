@@ -204,7 +204,18 @@ def test_read_json_safe_non_list(tmp_path: Path) -> None:
 
 
 def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test handling OSError when backup rename fails."""
+    """A backup failure on an already-malformed store must raise, not silently reset.
+
+    Regression for a test/source drift, not an environment flake: this test
+    was written against an earlier `_read_json_safe` that swallowed the
+    backup ``OSError`` and reset the store to ``[]`` regardless. That was
+    deliberately changed (commit 5d9554c) to raise ``RuntimeError`` and leave
+    the file untouched instead -- "the only surviving copy cannot be backed
+    up; preserve it rather than destroying the malformed store" -- but this
+    test kept asserting the old, now-incorrect behavior, so it failed
+    deterministically (reproducible on the very first local run, unrelated to
+    which user pytest runs as).
+    """
     from harness.shared.meta_tools import _read_json_safe
 
     target = tmp_path / "locked.json"
@@ -214,7 +225,11 @@ def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.Monke
         raise OSError("Permission denied")
 
     monkeypatch.setattr(Path, "rename", mock_rename)
-    data = _read_json_safe(target)
-    assert data == []
-    assert target.read_text(encoding="utf-8") == "[]"
+    with pytest.raises(RuntimeError, match=r"is malformed and the backup attempt failed"):
+        _read_json_safe(target)
+
+    # The unbacked-up, still-malformed original must survive untouched --
+    # this is the data-loss-prevention behavior the RuntimeError exists for.
+    assert target.read_text(encoding="utf-8") == "invalid"
+    assert not list(tmp_path.glob("locked.json.malformed.*"))
 
