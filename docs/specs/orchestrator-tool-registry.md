@@ -1,9 +1,10 @@
 # Spec: orchestrator-tool-registry
 
-> **Status: Implemented (`6ae7eb0`, 2026-08-28).** All five acceptance criteria
+> **Status: Implemented (`6ae7eb0`, 2026-08-28).** All acceptance criteria
 > below were re-verified directly against current `main` on 2026-09-01: every
-> requirement holds in the live source, and the full targeted test suite
-> (`68 passed`) plus the repository's ruff/mypy gates are clean. This spec had
+> requirement holds in the live source, and the full targeted test suite (the
+> exact `pytest` invocation in the Validation matrix below) plus the
+> repository's ruff/mypy gates are clean. This spec had
 > sat with its checkboxes unticked since the implementing commit, which led
 > `CHANGELOG.md` and `docs/architecture/god-file-refactoring-guide.md` to later
 > describe it as unstarted — both corrected alongside this note. See
@@ -87,6 +88,10 @@ this spec explicitly leaves `shadow_planner.py` unchanged.
   occurs — verified by unit tests.
   (`test_nemotron_bridge.py::test_complete_chat_retries_transient_http_error`,
   `::test_complete_chat_no_retry_by_default`)
+- [x] AC-6: A tool name absent from the registry fails gracefully — dispatch
+  returns the existing `Error: Unknown tool '<name>'` string to the model
+  rather than raising, and the agent loop continues.
+  (`test_orchestrator_agent_loop.py::TestExecuteAgent::test_unknown_tool`)
 
 ## Invariants touched
 
@@ -105,10 +110,12 @@ this spec explicitly leaves `shadow_planner.py` unchanged.
   harness/shared/tests/test_orchestrator_tools.py
   harness/shared/tests/test_orchestrator_hooks.py
   harness/shared/tests/test_orchestrator_agent_loop.py
-  harness/shared/tests/test_nemotron_bridge.py`
+  harness/shared/tests/test_nemotron_bridge.py
+  harness/shared/tests/test_shadow_planner.py`
   (`test_mango_mas_orchestrator.py` no longer exists — split into the four
   `test_orchestrator_*.py` files above by R-GFD-6 the day after this spec's
-  implementing commit landed)
+  implementing commit landed; `test_shadow_planner.py` added so this command
+  actually covers all three suites AC-2 names, not just two of them)
 
 ## Backward compatibility
 
