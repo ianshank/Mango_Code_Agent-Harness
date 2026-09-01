@@ -6,7 +6,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, cast
 
 try:
     import mcp.types as types
@@ -44,6 +44,59 @@ def _broker_authorize_write(broker: ExecutionBroker, role: str, filepath: str) -
     return None
 
 
+def _build_tool_handlers(
+    workspace_dir: Path, broker: ExecutionBroker, role: str
+) -> dict[str, Callable[[dict[str, Any]], str]]:
+    """Tool dispatch registry: every function name declared in NEMOTRON_TOOLS
+    must have an entry here (pinned by test_every_declared_tool_has_a_handler,
+    mirroring mango_mas_orchestrator.py's identical registry so the two
+    dispatch tables -- same six tools, same tool_executors call sites -- can't
+    silently drift apart the way an if/elif chain re-authored by hand could).
+
+    ``args.get(key) or ""`` rather than ``args.get(key, "")``: a *present* key
+    whose value is JSON ``null`` returns ``None`` from ``.get(key, default)``,
+    since the default only applies to a *missing* key -- ``or ""`` normalises
+    both to the empty string every executor already treats as "nothing
+    supplied". Not applied to ``confidence`` (``0.0`` is a legitimate value
+    ``or DEFAULT`` would silently discard).
+    """
+
+    def _write_file(args: dict[str, Any]) -> str:
+        filepath = args.get("filepath") or ""
+        denial_reason = _broker_authorize_write(broker, role, filepath)
+        if denial_reason is not None:
+            return f"Denied: {denial_reason}"
+        return execute_write_file(workspace_dir, filepath, args.get("content") or "")
+
+    def _apply_patch(args: dict[str, Any]) -> str:
+        filepath = args.get("filepath") or ""
+        denial_reason = _broker_authorize_write(broker, role, filepath)
+        if denial_reason is not None:
+            return f"Denied: {denial_reason}"
+        return execute_apply_patch(
+            workspace_dir, filepath, args.get("old_text") or "", args.get("new_text") or ""
+        )
+
+    return {
+        "write_file": _write_file,
+        "read_file": lambda args: execute_read_file(
+            workspace_dir, args.get("filepath") or "", args.get("start_line"), args.get("end_line")
+        ),
+        "apply_patch": _apply_patch,
+        "run_command": lambda args: execute_run_command(
+            broker, role, workspace_dir, args.get("command") or ""
+        ),
+        "knowledge_gap_log": lambda args: knowledge_gap_log(
+            args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
+        ),
+        "hypothesis_register": lambda args: hypothesis_register(
+            args.get("claim") or "",
+            args.get("reasoning") or "",
+            args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
+        ),
+    }
+
+
 def create_mcp_server(
     workspace_dir: Path,
     role: str = "nemotron-reasoner",
@@ -55,10 +108,10 @@ def create_mcp_server(
 
     server: Any = Server("nemotron-mcp-server")
     actual_broker = broker or ExecutionBroker()
+    tool_handlers = _build_tool_handlers(workspace_dir, actual_broker, role)
 
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
-        from typing import cast
         allowed_schemas = tools_for_role(role, NEMOTRON_TOOLS)
         tools = []
         for schema in allowed_schemas:
@@ -84,39 +137,10 @@ def create_mcp_server(
         args = _normalize_tool_arguments(arguments, name)
 
         try:
-            if name == "write_file":
-                filepath = args.get("filepath") or ""
-                denial_reason = _broker_authorize_write(actual_broker, role, filepath)
-                if denial_reason is not None:
-                    return [types.TextContent(type="text", text=f"Denied: {denial_reason}")]
-                result = execute_write_file(workspace_dir, filepath, args.get("content") or "")
-            elif name == "read_file":
-                result = execute_read_file(
-                    workspace_dir, args.get("filepath") or "", args.get("start_line"), args.get("end_line")
-                )
-            elif name == "apply_patch":
-                filepath = args.get("filepath") or ""
-                denial_reason = _broker_authorize_write(actual_broker, role, filepath)
-                if denial_reason is not None:
-                    return [types.TextContent(type="text", text=f"Denied: {denial_reason}")]
-                result = execute_apply_patch(
-                    workspace_dir, filepath, args.get("old_text") or "", args.get("new_text") or ""
-                )
-            elif name == "run_command":
-                result = execute_run_command(actual_broker, role, workspace_dir, args.get("command") or "")
-            elif name == "knowledge_gap_log":
-                result = knowledge_gap_log(
-                    args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
-                )
-            elif name == "hypothesis_register":
-                result = hypothesis_register(
-                    args.get("claim") or "",
-                    args.get("reasoning") or "",
-                    args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
-                )
-            else:
+            handler = tool_handlers.get(name)
+            if handler is None:
                 raise ValueError(f"Unknown tool: {name}")
-
+            result = handler(args)
         except Exception as e:
             logger.exception("Error executing tool %s", name)
             result = f"Error executing tool '{name}': {e}"

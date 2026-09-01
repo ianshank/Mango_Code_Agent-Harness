@@ -147,6 +147,20 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     assert tool.input_schema == {"type": "object"}
 
 
+def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Declaration (NEMOTRON_TOOLS) and dispatch (_build_tool_handlers) must not
+    drift -- mirrors mango_mas_orchestrator.py's identical registry-drift test
+    for its own copy of this same six-tool dispatch table."""
+    handlers = mcp_mod._build_tool_handlers(tmp_path, broker, "nemotron-reasoner")
+    tools: list[dict[str, Any]] = NEMOTRON_TOOLS
+    declared = {t["function"]["name"] for t in tools}
+    registered = set(handlers)
+    assert declared == registered, (
+        f"declared-but-unhandled: {declared - registered}; "
+        f"handled-but-undeclared: {registered - declared}"
+    )
+
+
 def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) -> None:
     """AC-2: Tool descriptions match the schemas allowed for the active role."""
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
