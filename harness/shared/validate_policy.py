@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Validation script: enforce required keys and CI gate structure in ``governance-policy.json``.
+
+Checks: presence of required top-level keys, ``ci_required_targets`` entry format
+(must contain colon-delimited path:target pairs), and ``agent_defaults`` key types.
+Exits non-zero with a descriptive message on any violation.
+"""
 import json
 import re
 from pathlib import Path

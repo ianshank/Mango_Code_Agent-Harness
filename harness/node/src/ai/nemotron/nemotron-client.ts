@@ -27,6 +27,35 @@ export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   maxBackoffMs: 5000,
 };
 
+/**
+ * The real `fetch` as it existed at module load.
+ *
+ * The egress floor (R-EGF-5) must refuse the *vendor network path* without
+ * breaking a caller that supplied its own transport. A test double installed
+ * over `globalThis.fetch` is a declared transport; this pristine reference is
+ * how we tell the two apart, rather than guessing from the URL.
+ */
+const PRISTINE_FETCH: typeof fetch | undefined = globalThis.fetch;
+
+/** Transport modes. `online` is the only value that permits the real network. */
+export type NemotronMode = 'online' | 'offline';
+
+/** Raised when a run would reach the network without an explicit declaration. */
+export class NemotronEgressRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NemotronEgressRefused';
+  }
+}
+
+export function resolveNemotronMode(
+  env: NodeJS.ProcessEnv = process.env,
+): NemotronMode | undefined {
+  const raw = env['NEMOTRON_MODE'];
+  if (raw === 'online' || raw === 'offline') return raw;
+  return undefined;
+}
+
 export class NemotronClient {
   public readonly config: NemotronConfig;
   private readonly circuitBreaker: CircuitBreaker;
@@ -304,11 +333,50 @@ export class NemotronClient {
     };
   }
 
+  /**
+   * Resolve the transport, failing closed (R-EGF-5, DEC-EGF-003).
+   *
+   * An injected `customFetch` is always honoured -- supplying a transport IS
+   * the declaration. A `globalThis.fetch` that is no longer the pristine
+   * reference is a test double, likewise declared. Only the genuine vendor
+   * network path requires `NEMOTRON_MODE=online`; unset refuses rather than
+   * silently resolving to the vendor endpoint, which is the defect this
+   * change exists to close.
+   */
+  private resolveTransport(): typeof fetch {
+    if (this.customFetch) return this.customFetch;
+
+    const current = globalThis.fetch;
+    const isPristine = current === PRISTINE_FETCH;
+    if (!isPristine && current) return current;
+
+    const mode = resolveNemotronMode();
+    if (mode === 'online') {
+      if (!current) {
+        throw new NemotronEgressRefused(
+          'NEMOTRON_MODE=online but no fetch implementation is available',
+        );
+      }
+      return current;
+    }
+    if (mode === 'offline') {
+      throw new NemotronEgressRefused(
+        'NEMOTRON_MODE=offline: refusing to open a network transport. ' +
+          'Inject a transport (the NemotronClient customFetch argument) to run offline.',
+      );
+    }
+    throw new NemotronEgressRefused(
+      'no transport mode declared: refusing to reach ' +
+        `${this.config.baseUrl}. Set NEMOTRON_MODE=online to permit network ` +
+        'egress, NEMOTRON_MODE=offline to forbid it, or inject a transport.',
+    );
+  }
+
   private async doFetch(
     endpoint: string,
     init: RequestInit,
   ): Promise<Response> {
-    const fetchFn = this.customFetch || globalThis.fetch;
+    const fetchFn = this.resolveTransport();
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}${endpoint}`;
 
     const controller = new AbortController();

@@ -88,6 +88,18 @@ STANDALONE_SKILLS = {
         "`make specs`; choosing the right acceptance criteria is the part that needs a human, "
         "which is what the skill is for."
     ),
+    "tech-debt-audit": (
+        "A periodic, broad-scope audit (drift vs. main, god-file watch list, hardcoded-value "
+        "and dead-code sweep, doc/decision-log sync) invoked on request or on a cadence, not a "
+        "per-PR mechanical step. `make review`'s checklist already names the four skills this "
+        "one composes for the per-PR case; wiring a full drift-and-doc-sync pass into every "
+        "PR's checklist would apply the wrong cadence to what it does."
+    ),
+    "agent-memory-manager": (
+        "Provides guidelines for persisting memory and managing context retention. "
+        "It acts as a protocol specification for agents to read and write persistent data, "
+        "rather than an automated CI step."
+    ),
 }
 
 
