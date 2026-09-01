@@ -1,45 +1,115 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.9  
+**Version:** 2.2.5  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
 
+### ✅ Full test suite coverage gap fill and AQA/regression expansion (2026-08-31)
+
+Systematic coverage audit found 9 source modules with zero direct test
+coverage. Created 11 new test files (107 tests), bringing Pytest total to
+2,300 (0 failures). Four defects triaged with RCA. Coverage: 98.17% lines,
+95.71% branches, 60/60 per-file. All CI gates green (ruff, mypy, coverage
+gate, `test_test_quality.py` meta-tests).
+
+New modules covered: `json_logging`, `tool_dispatch`, `validate_adoption`,
+`validate_agent_policy`, `validate_governance_docs`, `validate_policy`,
+`governance/check_traceability`, `governance/process_backend`,
+`governance/verification`. New regression tier:
+`test_coverage_gap_regression.py`, `test_nemotron_api_aqa.py`.
+
+### 🚧 Tech-debt reduction, LangGraph policy wiring & enterprise hygiene batch (PR #53, in review)
+
+A full audit (3 parallel research passes) whose draft plan was itself put
+through a 4-persona peer review (Architect, SDLC/CI Lead, QA Director,
+Product Manager) before implementation — the review caught that the
+flagship finding targeted code no CI job installs `langgraph` for, and
+surfaced a second, more severe bug the first draft missed. Spec:
+`docs/specs/langgraph-policy-wiring.md`.
+
+- [x] **`GraphPolicy` fully wired to `governance-policy.json`**: `recursion_limit`,
+      `max_concurrency`, `plan_divergence_threshold` were never read from
+      policy at all; `graph.py`'s `_route_quality_gate()` and `nodes.py`'s
+      `plan_gate_node()` used raw literals (`10`, `0.35`) instead of
+      consulting it. Both now read policy via `config["configurable"]["policy"]`,
+      the same mechanism already used for `orchestrator`, with a
+      behavior-preserving fallback when none is supplied.
+- [x] **Fail-open bug fixed**: `GraphPolicy.from_governance_json()` silently
+      substituted defaults on a *malformed* policy, not just an absent one —
+      the sixth recurrence of this exact pattern in the decision log. Now
+      raises. The existing test for this code asserted nothing that could
+      distinguish wiring from coincidence; rewritten with a
+      distinguishable-value liveness test and a malformed-policy fixture.
+- [x] **Enterprise hygiene**: `.github/CODEOWNERS`, PR/issue templates,
+      `SECURITY.md`, `CONTRIBUTING.md`.
+- [x] **Evidence-checked coverage-gap closure**: direct tests for
+      `agent_prompts.py`, `tool_result_format.py`, `tool_schemas.py` — each
+      confirmed to have a real gap first; `tool_dispatch.py` dropped from
+      scope after confirming it's already well covered.
+- [x] **Two hard-coded-value fixes**: `api_server/main.py`'s dev-runner host
+      is now env-overridable; `process_backend.py`'s `DEFAULT_TIMEOUT_SEC`
+      now reads policy instead of an unlinked duplicate literal.
+- [x] **`.mango/agents/nemotron-reasoner.md`'s `tools:` frontmatter fixed** —
+      open since `SDLC_HYGIENE_REPORT.md` (2026-08-26); the existing test
+      didn't catch it because it checked the whole file's text, satisfied by
+      a prose mention alone. New test asserts the parsed frontmatter field.
+- [x] **Two diverged C4 docs reconciled** with a banner (not a destructive
+      merge — the older doc's content is still detailed and partly unique).
+- [x] **Two tech-debt findings recorded as accepted debt** (DEC-019, DEC-020)
+      rather than left ambiguous: the control-plane `digest()` triplication
+      is intentional (root-of-trust isolation); `harness/shared/gates/`
+      adopted as the convention for new gate modules, not a migration.
+- [x] **Fixed a live `R-CEG-1` regression**: `pyproject.toml` still said
+      `2.1.9` while `README.md`/this file had already moved to `2.2.4`.
+- [x] **Green**: `infra-reviewed` label applied; all 9 required checks pass
+      on the current head.
+- [x] **Second-round audit**: new `.mango/skills/tech-debt-audit/SKILL.md`
+      codifies this recurring review shape as a repeatable procedure.
+      Deleted confirmed-dead `enforce_coverage.py` (superseded by
+      `coverage_gate.py`); closed 3 real missed-edge-case gaps
+      (`command_actions.write_targets()`'s `WRITE_TARGET_PROGRAMS` branch,
+      `check_dedup.load_config()`'s `unreadable`/wrongly-typed-value/
+      full-relative-path-exemption branches); corrected this file's own
+      overclaimed "Authority & Budget Decorators" checkbox below (they exist
+      and are tested in isolation, but are not applied to any real node —
+      see DEC-022); recorded two evaluated-and-intentionally-not-fixed
+      findings as DEC-022 rather than leaving them for a future audit to
+      rediscover.
+
+### ✅ v2.2.4 — LangGraph StateGraph Multi-Agent Architecture & Deterministic Node Orchestration
+
+- [x] **12-Channel Typed State Architecture (`MangoState`)**: Designed and implemented the 12-channel StateGraph schema with partitioned Accumulator channels (reduced via `operator.add`) and LWW channels.
+- [x] **10 Topology Nodes & Dynamic Parameter Ingestion**: Implemented 10 topology nodes with fail-open error isolation and runtime configuration extraction supporting both positional and keyword invocation.
+- [x] **Active Node Wiring**: Connected `planner_node`, `implementer_node` (reasoner), and `evaluation_node` (verifier + `VerificationRunner`) to the active orchestrator.
+- [ ] **Authority & Budget Decorators (`@with_authority`, `@budgeted`)**: Corrected 2026-08-31 (tech-debt audit) — implemented and unit-tested in isolation (`test_langgraph_decorators.py`), but **not applied to any of the 10 real node functions** in `nodes.py`; the only non-test usages decorate synthetic dummy functions. Neither enforces a role-based write gate nor a tool-invocation budget at a node boundary today. Also found: both decorators fail *open* on a lookup error ("Allow the node to proceed"/"proceed anyway"), the opposite of every other governance control in this repository — moot only while unwired. Wiring them requires fixing the fail-open behavior in the same change (Pattern 1, this repository's decision log), not just adding the decorator syntax; scope as its own spec before attempting (`make spec NAME=langgraph-authority-budget-wiring` or similar) rather than folding it into a hygiene pass — it changes live-shaped node behavior, not just a default.
+- [x] **AQA Regression Suite (`test_langgraph_regression.py`)**: Added 32 automated regression tests covering calling conventions, state immutability, accumulator concatenation, error trapping, and divergence thresholds.
+- [x] **C4 Architecture v2.2.4**: Updated Level 1-4 diagrams and documented LangGraph invariants (`INV-LG-1` .. `INV-LG-4`).
+
+### ✅ v2.2.3 — Live NVIDIA Nemotron NIM Multi-Domain Triage, RCA & Autonomous MAS Certification
+
+- [x] **Live Multi-Domain E2E Defect Triage & RCA (`docs/rca/e2e_nemotron_live_triage_rca.md`)**: Triaged and remediated 10 defects across cross-platform newline preservation, credentials discovery, scratch workspace prompt fallback, cross-drive workspace confinement, discard stream filtering, verifier verdict guarantees, python execution in command actions, tool version queries, prompt chaining, and cryptographic policy-bundle digest synchronization.
+- [x] **Command Broker Action Classification & Tool Discovery**: Added `test_execute` for `python [flags] script.py` and `python -m (pytest|unittest|py_compile|doctest)`, `read` for tool version queries (`--version`, `-V`, `command -v`), and excluded stream bit buckets (`/dev/null`, `nul`, `NUL`, `/dev/zero`, `/dev/stdout`, `/dev/stderr`) from write target checks.
+- [x] **Multi-Domain Live MAS E2E Scenarios**: Validated full multi-agent sequential thinking loop (`calculate_fibonacci`), multi-file application synthesis (`DataValidator`), and symbolic mathematical reasoning (`prime_factors`) with 100% pass rate.
+- [x] **AQA Regression Suite (`test_e2e_nemotron_triage_regression.py`)**: 11 new automated regression tests integrated into the test matrix, bringing the total regression suite to 132 tests.
+- [x] **Live Ecosystem Parity**: Verified end-to-end against live NVIDIA Nemotron NIM endpoints across Python (`test_nemotron_bridge_live.py`, `test_mango_mas_live.py`, `test_neurosym_sandbox_e2e.py`) and Node TypeScript (`vitest run`).
+- [x] **Cryptographic Governance Bundle**: Synchronized all SHA256 digests in `policy-bundle.example.json` with zero drift.
+
+### ✅ v2.2.1 — Neuro-Symbolic Sandbox Synthesis, Critique Normalization & E2E Validation
+
+- [x] **Critique Normalization (`AC-NS-3`)**: Implemented normalization in `tool_result_format.py` for sandbox violations (`network_access_denied`, capability constraints) into structured critiques with backwards-compatible error handling.
+- [x] **Deterministic Sandbox E2E Matrix (`test_neurosym_sandbox_e2e.py`)**: Verified `INV-9` fail-closed backend checks, `AC-CE-1` capability profiles, and `AC-NS-3` multi-turn critique repair loops.
+- [x] **Regression & AQA Suite**: Expanded with `test_sandbox_violation_regression.py`, achieving 1,779 passing tests across 7 tiers with 97% code coverage.
+- [x] **Invariants Performance Optimization**: Replaced recursive directory scans with pruned `os.walk` in `validate_invariants.py`.
+
 ### 🚧 Direct file I/O: `read_file` / `apply_patch` (PR #32, in review)
 
-Closes the precision gap in the reasoner's tool surface: every read went through
-a subprocess (`run_command("cat ...")`) and every edit through `write_file`,
-which overwrites whole files, so a three-line change meant regenerating the
-whole file from the model's context.
-
-- [x] **`read_file`**: reads workspace files directly and verbatim (no
-      line-number prefixes, so output pastes straight into `apply_patch`'s
-      `old_text`), bounded by the same output cap and `[truncated at N bytes]`
-      marker `run_command` uses.
-- [x] **`apply_patch`**: replaces one exactly-unique substring in place,
-      refusing (and naming the count) unless `old_text` matches exactly once,
-      and preserving the file's existing line endings byte-for-byte
-      (`harness/shared/tool_executors.py`).
-- [x] **`read_policy.py`** (new, `DEC-012`): the read-side counterpart to
-      `write_policy.py`. `command_actions.classify` already denied reading a
-      credential through `run_command` (graded `secret_access`, an action no
-      role holds); a direct `read_file` would have bypassed that grading
-      entirely — mapped to the plain `read` action, it would have returned
-      `NVIDIA_API_KEY` into `conversation_history`. The two doors now compose
-      one shared credential-filename pattern instead of two that can drift,
-      verified by a parity property test over a corpus rather than a fixed
-      list (`test_read_file_credential_parity.py`).
-      Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
-- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` pointed at a
-      different vendor's model than the README documents; corrected and pinned
-      by `test_documentation_truth.py` so the two cannot drift apart again.
-
-**Follow-up this change identified but did not take:** `execute_write_file`
-still uses universal-newline semantics while `apply_patch` preserves the
-original line endings byte-for-byte; unifying them is deferred to the INV-7
-evidence-coverage work (`harness/CONTRACT.md`).
+- [x] **`read_file`**: reads workspace files directly and verbatim (no line-number prefixes, so output pastes straight into `apply_patch`'s `old_text`), bounded by the same output cap and `[truncated at N bytes]` marker `run_command` uses.
+- [x] **`apply_patch`**: replaces one exactly-unique substring in place, refusing (and naming the count) unless `old_text` matches exactly once, and preserving the file's existing line endings byte-for-byte (`harness/shared/tool_executors.py`).
+- [x] **`read_policy.py`** (`DEC-012`): the read-side counterpart to `write_policy.py`. Composes one shared credential-filename pattern verified by `test_read_file_credential_parity.py`. Spec: [`docs/specs/agent-read-patch-tools.md`](docs/specs/agent-read-patch-tools.md).
+- [x] **`.env.example` correctness**: `NEMOTRON_DEFAULT_MODEL` corrected and pinned by `test_documentation_truth.py`.
 
 ### ✅ v2.2.0 — God-File Decomposition, Codebase Hardening & Live E2E Readiness
 
@@ -77,13 +147,16 @@ enforcement, and the policy-loaded decision-ID grammar.
 
 - Enable per-file **branch** enforcement once #19 lands (`per_file_branches`);
   it needs the per-file machinery that only exists there.
-- Enable `DTZ` (8 findings) once #18 lands — one of its two source sites is in
-  a file that PR rewrites.
-- Six files sit below the per-file coverage floor on `main`
-  (`publish_policy_artifact.py`, `check_traceability.py`, `coverage_gate.py`,
-  `governance/pretooluse_guard.py`, `validate_adoption.py`,
-  `validate_invariants.py`). #18 carries the lift; if it is abandoned, that
-  work needs re-doing before per-file enforcement can be switched on.
+- ~~Enable `DTZ` (8 findings) once #18 lands~~ — done: `DTZ` is live in
+  `pyproject.toml`'s `[tool.ruff.lint].select`, confirmed by direct read
+  (2026-08-31).
+- ~~Six files sit below the per-file coverage floor on `main`~~ — re-checked
+  2026-08-31 via `make coverage-python` against current `main`: all 61
+  measured files, including the six named here, now pass the 90% per-file
+  lines floor (`publish_policy_artifact.py` 100%, `check_traceability.py`
+  100% lines, `coverage_gate.py` 94%, `governance/pretooluse_guard.py` 97%,
+  `validate_adoption.py` 97%, `validate_invariants.py` 100%). No further work
+  needed here.
 - Annotating the test suite is a separate project: `--disallow-untyped-defs`
   reports 533 findings, essentially all `no-untyped-def` on test functions.
 
@@ -158,14 +231,33 @@ round-trip.
       before merge. Every gate above is advisory until one exists. A
       repository-settings change, not code.
 
-      The check names, taken from a real run rather than from memory: the matrix
-      is **three** legs — `build (3.9)`, `build (3.10)`, `build (3.12)`, each
-      running `make ci-python` — plus `build-full` (Python 3.11, the only leg
-      that runs `make ci`, the Node stack and the regression tier) and
-      `secret-scan`. This item previously read "the four `build (3.x)` legs",
-      which names a `build (3.11)` that does not exist: a ruleset configured
-      from that sentence would require a check GitHub never reports — blocking
-      every merge — while omitting the one leg that runs the Node gates.
+      Required status checks (derived from `.github/workflows/python-package.yml`,
+      not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
+      `build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
+      `dependency-audit (3.10)`, `dependency-audit (3.12)`.
+
+      `build (3.x)` runs `make ci-python`; `build-full` (Python 3.11) is the
+      only leg that runs `make ci`, the Node stack and the regression tier;
+      `secret-scan` is a dedicated job because it is genuinely interpreter-
+      independent (gitleaks doesn't care which Python runs it). `dependency-audit`
+      is dedicated for the opposite reason: its outcome *is* interpreter-specific
+      (DEC-015/DEC-017), which is exactly why it further splits into a single-
+      interpreter `audit` job and the matrixed `audit-matrix` legs rather than
+      folding into `build`. `dependency-audit (3.9)` sets `continue-on-error`
+      at the step level, per DEC-017 (unpatchable CVEs on that interpreter), so
+      the job's reported conclusion is success regardless of what `pip-audit`
+      finds. Requiring it as a status check only ensures the leg keeps running
+      and reporting — a rename or silent removal would surface as this repo's
+      own liveness test failing — not that a new vulnerability on that leg
+      could ever block a merge; that finding stays visible solely in the job's
+      own log.
+
+      This item previously listed only 5 checks — the three `build (3.x)` legs,
+      `build-full` and `secret-scan` — and omitted `dependency-audit` and its
+      three matrix legs entirely, added by DEC-013/DEC-016/DEC-017 after that
+      list was last written. `test_ci_gate_coverage.py` now asserts this list
+      against the workflow file mechanically, so it cannot drift silently
+      again the way it did between the two paragraphs above.
 - [x] **`audit` (dependency vulnerability scanning) is now enforced at root**
       (DEC-013): `make audit` runs `pip-audit` against `requirements.txt` and
       delegates to the Node stack's existing `osv-scanner` target, enforced by

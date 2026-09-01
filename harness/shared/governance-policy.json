@@ -92,6 +92,11 @@
     "timeout_ms": 30000,
     "max_retries": 0
   },
+  "langgraph": {
+    "recursion_limit": 50,
+    "max_concurrency": 3,
+    "plan_divergence_threshold": 0.35
+  },
   "protected_paths": [
     ".governance/**",
     "**/.governance/**",
@@ -154,7 +159,8 @@
     ".mango/settings.local.json",
     "harness/shared/tests/test_protected_path_liveness.py",
     "harness/shared/tests/test_ci_gate_coverage.py",
-    "harness/shared/tests/test_coverage_policy_enforcement.py"
+    "harness/shared/tests/test_coverage_policy_enforcement.py",
+    "harness/shared/langgraph/**"
   ],
   "external_root_of_trust_required": true,
   "charter_version": "2.0",

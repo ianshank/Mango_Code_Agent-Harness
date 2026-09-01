@@ -5,7 +5,211 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [v2.2.4] - 2026-08-30
+
+### Added — LangGraph StateGraph Multi-Agent Orchestration Engine Overlay
+
+- **12-Channel Typed State Architecture (`harness/shared/langgraph/state.py`)**:
+  - Implemented `MangoState` `TypedDict` with 4 Accumulator channels (`patches`, `findings`, `test_results`, `errors`) reduced via `operator.add`, and 8 Last-Write-Wins (LWW) channels (`task`, `plan`, `shadow_plan`, `plan_divergence`, `revision_count`, `gate_status`, `verdict`, `tool_budget_used`).
+  - Strict disjointness and channel count invariants verified by `test_langgraph_state.py`.
+- **Active & Gate Node Topology (`harness/shared/langgraph/nodes.py`)**:
+  - Implemented 10 topology nodes: `planner_node`, `shadow_planner_node`, `implementer_node` (wrapping `nemotron-reasoner`), `evaluation_node` (wrapping `verifier` & `VerificationRunner`), `plan_gate_node`, `quality_gate_node`, `clarify_node`, `escalate_node`, `peer_reviewer_node`, and `security_reviewer_node`.
+  - Hardened with signature-safe `config=None` and `_get_configurable` extraction supporting both positional and keyword invocation from LangGraph's execution runtime.
+  - Fail-open exception trapping recording directly to the `errors` state channel.
+- **StateGraph Assembly & Conditional Routing (`harness/shared/langgraph/graph.py`)**:
+  - Implemented `build_graph()` assembling the full supervisor-gated DAG with conditional routing on plan gate divergence (`<= 0.35`) and quality gate test verdicts.
+- **Role Authority & Budget Enforcement Decorators (`harness/shared/langgraph/decorators.py`)**:
+  - Implemented `@with_authority` (gated via `agent_authority.allowed_actions`) and `@budgeted` (gated via `policy_loader.max_tool_calls_per_task`).
+- **AQA / Regression Matrix (`test_langgraph_regression.py`)**:
+  - 32 dedicated regression tests pinning node calling conventions, state immutability, accumulator concatenation, error isolation, and boundary conditions.
+- **Root Makefile & Tooling**:
+  - Added `make test-langgraph` target; updated `.gitignore`, `.dockerignore`, and `.gitleaks.toml`.
+
 ## [Unreleased]
+
+### Added — Full test suite coverage gap fill and AQA/regression expansion
+
+Systematic coverage audit identified 9 source modules with zero direct test
+coverage, plus 2 missing regression/AQA tiers. Created 11 new test files
+containing 107 new tests, bringing the Pytest total from 2,174 to 2,300
+(0 failures). All 60 source files now meet the per-file 90% line coverage
+floor. Four defects triaged with RCA:
+
+- **11 new test files** covering previously untested modules:
+  `json_logging`, `tool_dispatch`, `validate_adoption`,
+  `validate_agent_policy`, `validate_governance_docs`, `validate_policy`,
+  `governance/check_traceability`, `governance/process_backend`,
+  `governance/verification`.
+- **2 regression/AQA expansion files**:
+  `regression/test_coverage_gap_regression.py` (pins fixes for log level
+  fallback, tool argument normalization, byte-level truncation),
+  `regression/test_nemotron_api_aqa.py` (bridge smoke, env resolution,
+  secret masking, egress floor via `pytest-socket`).
+- **RCA-1**: Escaped docstrings (`\"\"\"` vs `"""`) caused `SyntaxError` in
+  the `test_test_quality.py` AST scanner; rewrote with proper syntax.
+- **RCA-2**: Case-sensitivity bug — `"no requirement IDs".lower()` doesn't
+  match `"no requirement IDs"` because `IDs` → `ids`.
+- **RCA-3**: `VerificationRunner.probe()` returned `BLOCKED` on Windows
+  because `shutil.which("make")` is `None`; tests now mock the PATH lookup.
+- **RCA-4**: 5 happy-path tests lacked explicit `assert` statements; added
+  `capsys` fixtures asserting `"passed"` in stdout.
+
+**Verified**: 2,300 passed | 0 failed | 98.17% lines | 95.71% branches |
+60/60 per-file | ruff clean | mypy clean (162 files, 0 issues).
+
+### Fixed — `GraphPolicy` hardcoded values and a fail-open bug (PR #53)
+
+Spec: `docs/specs/langgraph-policy-wiring.md`. Found by a tech-debt audit
+whose draft plan was itself peer-reviewed by four personas (Architect,
+SDLC/CI Lead, QA Director, Product Manager) before implementation, which
+caught that the flagship finding targeted code no CI job installs
+`langgraph` for, and found a second, more severe bug in the same function
+the first draft missed.
+
+`harness/shared/langgraph/policy.py`'s `GraphPolicy.from_governance_json()`
+never populated `recursion_limit`, `max_concurrency`, or
+`plan_divergence_threshold` from `governance-policy.json` at all — the
+policy had no corresponding section — despite the module's own docstring
+claiming it avoided hardcoded values. A new `policy_loader.langgraph_defaults()`
+closes this, matching the existing `orchestrator_defaults()`/`nemotron_defaults()`
+pattern. Two call sites bypassed `GraphPolicy` entirely with independent
+literals that happened to match its dataclass defaults, so nothing had ever
+caught the drift risk: `graph.py`'s `_route_quality_gate()` (`revision_count < 10`)
+and `nodes.py`'s `plan_gate_node()` (`divergence <= 0.35`). Both now read
+`GraphPolicy` via `config["configurable"]["policy"]` — the same mechanism
+`nodes.py` already uses to thread `orchestrator` through node calls — falling
+back to `GraphPolicy()`'s built-in defaults (numerically identical to the
+literals removed) when no config is supplied, so every existing bare-state
+caller observes unchanged behavior. `build_graph()` now defaults to
+`GraphPolicy.from_governance_json()` instead of a bare `GraphPolicy()`.
+
+The more severe bug, found independently during peer review:
+`from_governance_json()` wrapped its entire load in a bare
+`except Exception: return cls()`, silently substituting hardcoded defaults
+not only when the policy file was absent (the legitimate adopter path,
+already handled gracefully by `policy_loader`) but also when it was
+*present and malformed* — contradicting `policy_loader.py`'s own documented
+fail-closed contract. This is the sixth recurrence of the same pattern in
+this repository's decision log (`COV_MIN=80`; the `size_budget_lines`/
+`check_dedup`/`check_py_compat` trio; DEC-005; DEC-006; DEC-009). The
+blanket `except` is removed; a malformed policy now raises. The existing
+test for this code (`test_langgraph_policy.py`) was not a safety net — its
+assertions all checked values numerically identical between the dataclass
+default and the live policy, so they passed whether or not wiring worked,
+and its one fallback test defined a helper it never called and monkeypatched
+a method it never invoked. Rewritten with tests that inject a distinguishable
+(non-default) policy value and a malformed-policy fixture to prove both the
+wiring and the fail-closed behavior directly.
+
+Both target branches are masked by other Phase-1 stubs today
+(`quality_gate_node` always passes; `shadow_planner_node` always reports
+0.0 divergence) and `build_graph()` is not called from any live
+orchestration path (confirmed: no CI job installs the `langgraph` package),
+so this completes self-documented scaffolding rather than fixing a live
+production defect — fail-open is still fixed regardless of reachability.
+
+### Added — enterprise hygiene, evidence-checked coverage-gap closure, and two accepted-debt decisions (PR #53)
+
+`.github/CODEOWNERS` (a `protected_paths` pattern existed for it but the
+file didn't — the "silently protects nothing" class `test_protected_path_liveness.py`
+exists to catch), a PR template scaffolding the protected-path attestation
+convention, issue templates, `SECURITY.md`, `CONTRIBUTING.md`.
+
+Direct test coverage for three modules confirmed to have real gaps (checked
+against actual current coverage first, not just a missing same-named test
+file — `tool_dispatch.py` was dropped from scope after confirming it's
+already well covered by `test_orchestrator_dispatch_regression.py`):
+`agent_prompts.py` (the prompt templates encode security-relevant
+instructions — no chained shell commands, no `python -c` — that nothing
+previously pinned), `tool_result_format.py` (zero direct tests previously;
+covers every branch including two edge cases with no prior coverage:
+malformed-JSON and wrong-shape-JSON stderr during a `BLOCKED` result),
+`tool_schemas.py` (adds the specific missing check: every `required` field
+name is a declared `properties` key — schema drift the existing
+name-matching test can't see). `.mango/agents/nemotron-reasoner.md`'s
+`tools:` frontmatter listed only `Bash, Read, Grep, Glob` though the body
+has instructed using `knowledge_gap_log`/`hypothesis_register` since
+`SDLC_HYGIENE_REPORT.md` flagged it open (2026-08-26); fixed, with a new
+test asserting the parsed frontmatter field specifically (the existing
+test only checked the whole file's text, which the prose mention alone
+already satisfied — exactly why the gap went unnoticed).
+
+`harness/api_server/main.py`'s dev-runner `host="127.0.0.1"` had no
+override, unlike `port`/`reload` in the same block; now `API_SERVER_HOST`,
+same pattern, same default. `harness/shared/governance/process_backend.py`'s
+`DEFAULT_TIMEOUT_SEC=30` was an unlinked duplicate of
+`orchestrator.tool_timeout_sec`; now reads from policy.
+
+Resolved the version/title/diagram divergence between
+`docs/architecture/c4_architecture.md` (2.2.4) and
+`harness/docs/C4_ARCHITECTURE.md` (2.1.9) — the one doc the original
+version-unification pass missed — with a banner naming the former
+canonical, rather than discarding the latter's still-detailed content
+(notably its Node-subsystem diagram). Recorded two tech-debt findings as
+accepted debt (DEC-019, DEC-020) rather than leaving them ambiguous for the
+next audit: the triplicated `digest()` helper across the three
+control-plane scripts is intentional (root-of-trust isolation, not a dedup
+opportunity), and `harness/shared/gates/` is adopted as the convention for
+*new* gate-like modules going forward without migrating the 11 existing
+`check_*.py`/`validate_*.py` files.
+
+Also fixed a live regression of `R-CEG-1` (the version-string consistency
+rule DEC-013 enforced once already): `pyproject.toml` still said `2.1.9`
+while `README.md`/`NEXT_STEPS.md` had already moved to `2.2.4` as of the
+LangGraph-engine release above — bumped to match.
+
+### Added — second-round tech-debt audit: skill, dead-code removal, edge-case coverage (PR #53)
+
+A second pass, triggered by the same broad SDLC/SQE-style review request
+recurring three times verbatim in one session. New
+`.mango/skills/tech-debt-audit/SKILL.md` codifies the recurring shape
+(drift-vs-main check, god-file scan, adversarial hardcoded-value/dead-code/
+edge-case sweep, doc sync) as a repeatable procedure instead of re-deriving
+it by hand each time; composes the existing `validation-runner` and
+`repo-invariant-review` skills rather than re-declaring their checks.
+
+An independent, evidence-based scan (verify every claim via grep/read
+before reporting, no speculation) found: `harness/shared/enforce_coverage.py`
+was dead — confirmed via a repo-wide reference search (only its own test
+file matched) — a functional duplicate of the live `coverage_gate.py` with
+weaker semantics (lines only, no branches; no absent-vs-malformed
+distinction); deleted, with its test file. Three real missed-edge-case
+gaps closed with new tests: `command_actions.py`'s `write_targets()`
+`WRITE_TARGET_PROGRAMS` branch (untested even for the exact `cp evil
+.mango/hooks/x.sh` scenario its own docstring names as the reason it
+exists); `check_dedup.py`'s `load_config()` `unreadable`-policy branch, its
+wrongly-typed `max_shim_lines`/`exempt` fallback behavior, and `run()`'s
+full-relative-path exemption form (previously only the bare-filename form
+was tested). Two findings verified as already covered rather than acted on:
+`write_policy.py`'s non-object-supplied-policy branch (already exercised,
+under a different stated purpose, by the existing
+`test_a_broken_policy_does_not_kill_the_process`); `coverage_gate.py` vs.
+`governance_json.py`'s near-identical JSON-loading helper (already a
+deliberate, documented exclusion — DEC-013).
+
+Two findings evaluated and intentionally not fixed, recorded as DEC-022 so
+a future audit does not rediscover them as undiscovered debt:
+`verification.py`'s `timeout: int = 300` duplicates a policy value but the
+module documents a stronger no-filesystem-reads-at-import contract that
+sourcing it from policy would violate, and the one production caller
+already injects the real value explicitly. `langgraph/decorators.py`'s
+`@with_authority`/`@budgeted` are implemented and unit-tested in isolation
+but never applied to any real node function — contradicting a checked-off
+`NEXT_STEPS.md` claim, now corrected — and both fail open (moot only while
+unwired); wiring them is deferred to its own spec, since doing it correctly
+means fixing the fail-open behavior in the same change, not just adding
+decorator syntax to live-shaped node code.
+
+Also: re-verified the prior plan's "test-helper duplication" claim (5
+files) directly rather than trusting it — only 2 (`test_check_dedup.py`,
+`test_check_py_compat.py`) had genuinely identical logic; consolidated
+those into `conftest.py`'s new `write_text_file()`, left the other 3 alone
+since their helpers serve different subsystems with different shapes.
+Corrected `docs/specs/god-file-decomposition.md`'s stale
+`mango_mas_orchestrator.py` line count (465 → 483, now 96.6% of the
+enforced 500-line ceiling) and flagged — without implementing — the
+existing, fully-specified-but-unstarted `orchestrator-tool-registry.md` as
+worth prioritizing given the shrinking headroom.
 
 ### Added — dependency-audit gate, a runtime/dev dependency split, and CI-enforcement cleanup
 
@@ -169,7 +373,6 @@ deliberately excluded; `0.0` and `None` are both meaningful values there. Fixed 
 tool handlers in `_tool_handlers`, not only the two new ones — found by testing `read_file`
 and `apply_patch`, but the vulnerable `.get(key, "")` idiom was shared by every handler in
 the dict.
-
 
 ### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
 

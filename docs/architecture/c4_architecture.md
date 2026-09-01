@@ -1,6 +1,12 @@
 # C4 Architecture: Agentic SSD & Mango MAS Platform
 
-**Version:** 2.1.9 (2026 Standards)  
+> **Canonical.** This is the actively-maintained C4 model for this
+> repository. `harness/docs/C4_ARCHITECTURE.md` is an older (v2.1.9)
+> snapshot kept for detail not yet mirrored here (notably the Node-stack
+> `harness/node/src/ai/nemotron/` subsystem) — where the two disagree, this
+> file wins.
+
+**Version:** 2.2.5 (2026 Standards)  
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -8,14 +14,14 @@
 
 ## 1. Level 1: System Context Diagram
 
-The System Context diagram illustrates the high-level boundaries between human operators, autonomous agent personas, the Mango MAS Orchestrator, external LLM inference providers (NVIDIA Nemotron / NIM), and the local system environment.
+The System Context diagram illustrates the high-level boundaries between human operators, autonomous agent personas, the Mango MAS Orchestrator (and its LangGraph StateGraph engine), external LLM inference providers (NVIDIA Nemotron / NIM), and the local system environment.
 
 ```mermaid
 graph TD
     User["👨‍💻 Human Operator / SDCS Engineer<br/>(Specifies tasks, reviews attestations, approves gated actions)"]
     
     subgraph Harness_System ["Agentic SSD & Mango MAS Platform"]
-        Orchestrator["🧠 Mango MAS Orchestrator<br/>(ReAct execution loop, persona dispatch, verdict derivation)"]
+        Orchestrator["🧠 Mango MAS Orchestrator<br/>(StateGraph & ReAct execution loops, persona dispatch, verdict derivation)"]
         Broker["🛡️ Governed Execution Broker<br/>(Policy Decision Point, credential scrubbing, execution budgets)"]
         ControlPlane["📜 Control Plane & Policy Store<br/>(Immutably anchored agent-policy.json, digest validation)"]
     end
@@ -38,12 +44,12 @@ graph TD
 
 ## 2. Level 2: Container Diagram
 
-The Container diagram zooms into the Agentic SSD system boundaries, displaying its primary runtimes, APIs, and policy enforcement engines.
+The Container diagram zooms into the Agentic SSD system boundaries, displaying its primary runtimes, APIs, LangGraph StateGraph engine overlay, and policy enforcement engines.
 
 ```mermaid
 graph TD
     subgraph Client_Plane ["Client & Interface Tier"]
-        CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr)"]
+        CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr, make test-langgraph, make test-aqa)"]
         APIServer["FastAPI Gateway (Port 8080)<br/>(/health, /v1/orchestrator/run, /v1/models)"]
     end
 
@@ -58,6 +64,7 @@ graph TD
 
     subgraph Agentic_Orchestration ["MAS Orchestration Core (harness/shared)"]
         MAS["Mango MAS Orchestrator<br/>(mango_mas_orchestrator.py)"]
+        LangGraph_Engine["LangGraph StateGraph Engine<br/>(langgraph/graph.py, state.py, nodes.py)"]
         Bridge["Nemotron Bridge<br/>(nemotron_bridge.py)"]
         Dispatch["Tool Dispatch Registry<br/>(tool_dispatch.py)"]
         Executors["Tool Executors<br/>(tool_executors.py)"]
@@ -80,6 +87,7 @@ graph TD
     CLI --> APIServer
     CLI --> Governance_Kernel
     APIServer --> MAS
+    MAS --> LangGraph_Engine
     MAS --> Bridge
     MAS --> Dispatch
     Dispatch --> Executors
@@ -97,7 +105,7 @@ graph TD
 
 ## 3. Level 3: Component Diagram (MAS Orchestration & Execution)
 
-Detailed view of the internal components within `harness/shared/` responsible for governed tool execution and multi-agent loops.
+Detailed view of the internal components within `harness/shared/` responsible for governed tool execution, multi-agent loops, and LangGraph StateGraph topology.
 
 ```mermaid
 classDiagram
@@ -112,21 +120,45 @@ classDiagram
         -_dispatch_tool_calls(tool_calls, agent_name, budget)
     }
 
+    class LangGraphEngine {
+        +build_graph(policy, checkpointer) CompiledGraph
+        +MangoState state_schema
+        +GraphPolicy policy
+    }
+
+    class MangoState {
+        +str task
+        +str plan
+        +str shadow_plan
+        +float plan_divergence
+        +int revision_count
+        +dict gate_status
+        +str verdict
+        +int tool_budget_used
+        +list patches (accumulator)
+        +list findings (accumulator)
+        +list test_results (accumulator)
+        +list errors (accumulator)
+    }
+
+    class GraphNodes {
+        +planner_node(state, config) dict
+        +shadow_planner_node(state, config) dict
+        +implementer_node(state, config) dict
+        +evaluation_node(state, config) dict
+        +plan_gate_node(state) dict
+        +quality_gate_node(state) dict
+        +clarify_node(state) dict
+        +escalate_node(state) dict
+        +peer_reviewer_node(state) dict
+        +security_reviewer_node(state) dict
+    }
+
     class ToolExecutors {
         +execute_write_file(workspace_dir, filepath, content) str
         +execute_read_file(workspace_dir, filepath, start_line, end_line) str
         +execute_apply_patch(workspace_dir, filepath, old_text, new_text) str
         +execute_run_command(broker, active_role, workspace_dir, command, timeout) str
-    }
-
-    class FilePolicies {
-        +write_denial_reason(relpath) str?
-        +read_denial_reason(relpath) str?
-    }
-
-    class ToolDispatch {
-        +DEFAULT_HYPOTHESIS_CONFIDENCE
-        +_normalize_tool_arguments(tc, agent_name) dict
     }
 
     class ExecutionBroker {
@@ -152,12 +184,14 @@ classDiagram
         +mask_api_key(key) str
     }
 
-    MangoMASOrchestrator --> ToolDispatch : normalizes calls
+    MangoMASOrchestrator --> LangGraphEngine : delegates graph orchestration
+    LangGraphEngine --> MangoState : state channels
+    LangGraphEngine --> GraphNodes : invokes nodes
+    GraphNodes --> MangoMASOrchestrator : wraps execute_agent & _harness_verdict
     MangoMASOrchestrator --> ToolExecutors : invokes operations
     MangoMASOrchestrator --> NemotronBridge : requests chat completions
     MangoMASOrchestrator --> VerificationRunner : derives terminal verdict
     ToolExecutors --> ExecutionBroker : brokers run_command only
-    ToolExecutors --> FilePolicies : governs direct file I/O (read_file, write_file,\napply_patch) in-process, outside the broker
     ExecutionBroker --> ProcessBackend : executes with budget & containment
 ```
 
@@ -196,3 +230,17 @@ classDiagram
 - Direct file I/O is governed instead by two symmetric, in-process policy modules consulted at tool-call granularity: `write_policy.write_denial_reason` (denies `protected_paths` matches and any `.git` path segment) and its read-side counterpart `read_policy.read_denial_reason` (denies credential-bearing filenames and any `.git` segment).
 - Both modules compose the same credential-filename alternation (`read_policy.CREDENTIAL_FILENAME_ALTERNATION`) that `command_actions.classify` uses to grade `cat <credential-file>` as `secret_access` — a single source, so the shell-command door and the direct-read door cannot independently drift apart.
 - `apply_patch` reuses `write_denial_reason` unchanged, so it reaches no path `write_file` cannot reach; `agent-policy.json` grants it no new action.
+
+### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+
+- **Capability Profiles**: The production `ProcessBackend` only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. Full filesystem and network isolation via fine-grained capability profiles (e.g., `network-isolated`, `read-only-fs`) are explicitly out of scope for production as defined in the code-execution spec.
+- **Violation Trapping**: In testing environments, a mock backend simulates isolation by emitting a structured `SandboxViolation` payload when a command violates assumed constraints (e.g., outbound socket I/O).
+- **Critique Normalization (`tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` payloads from `stderr` (when generated by the mock backend) and translates them into a standardized Critique schema (`failure_type`, `evidence_id`, `normalized_message`, `location: execution_broker`). This enables deterministic agent repair loops for neuro-symbolic testing.
+- **Fail-Closed Sandbox Availability (`INV-9`)**: If the backend is configured as unavailable (`sandbox_available=False`), commands are blocked immediately rather than falling back to host execution.
+
+### 4.7 LangGraph StateGraph Architecture & Invariants (`INV-LG-1` .. `INV-LG-4`)
+
+- **INV-LG-1: 12-Channel Typed State**: The StateGraph operates over a partitioned 12-channel `MangoState` TypedDict: 4 Accumulator channels (`patches`, `findings`, `test_results`, `errors`) reduced via `operator.add`, and 8 Last-Write-Wins (LWW) scalar channels.
+- **INV-LG-2: Pure Node Immutability**: Node functions must never mutate state dictionaries in-place; all node outputs return pure partial dictionary updates.
+- **INV-LG-3: Fail-Open Error Channel Routing**: Errors occurring within agent tool invocations or model inference are isolated within `try/except` handlers and recorded into the `errors` channel rather than causing unhandled graph crashes.
+- **INV-LG-4: Role Authority & Tool Budget Decorators**: Nodes holding execution authority are annotated with `@with_authority(role=..., may_write=...)` and `@budgeted(budget_key=...)` to enforce role constraints at the node boundary.
