@@ -75,6 +75,11 @@ class TestNeurosymSandboxE2E:
         monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
         monkeypatch.setattr(MangoMASOrchestrator, "_run_hook", lambda *args, **kwargs: None)
 
+    @pytest.fixture(autouse=True)
+    def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bypass the pre-flight check so the broker is actually called."""
+        monkeypatch.setattr("shutil.which", lambda cmd: "mock/make" if cmd == "make" else None)
+
     def test_sandbox_unavailable_inv9_fallback(self, tmp_path):
         """
         Verifies INV-9: Sandbox unavailable -> BLOCKED, never direct host execution.

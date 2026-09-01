@@ -84,13 +84,19 @@
     "max_iterations": 10,
     "api_timeout_sec": 300,
     "tool_timeout_sec": 30,
-    "max_command_bytes": 8192
+    "max_command_bytes": 8192,
+    "max_healing_retries": 3
   },
   "nemotron": {
     "temperature": 0.2,
     "max_tokens": 4096,
     "timeout_ms": 30000,
     "max_retries": 0
+  },
+  "langgraph": {
+    "recursion_limit": 50,
+    "max_concurrency": 3,
+    "plan_divergence_threshold": 0.35
   },
   "protected_paths": [
     ".governance/**",
@@ -154,7 +160,8 @@
     ".mango/settings.local.json",
     "harness/shared/tests/test_protected_path_liveness.py",
     "harness/shared/tests/test_ci_gate_coverage.py",
-    "harness/shared/tests/test_coverage_policy_enforcement.py"
+    "harness/shared/tests/test_coverage_policy_enforcement.py",
+    "harness/shared/langgraph/**"
   ],
   "external_root_of_trust_required": true,
   "charter_version": "2.0",
@@ -183,5 +190,9 @@
       "__import__"
     ],
     "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
+  },
+  "lats": {
+    "max_budget": 10,
+    "exploration_weight": 1.414
   }
 }

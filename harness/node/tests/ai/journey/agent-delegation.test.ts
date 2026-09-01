@@ -86,7 +86,8 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
     );
 
     // Step 1: Mango Agent prepares subagent task payload
-    const userGoal = 'Perform formal review of the circuit breaker FSM and backoff logic.';
+    const userGoal =
+      'Perform formal review of the circuit breaker FSM and backoff logic.';
     const subagentMessages = [
       {
         role: 'system' as const,
@@ -189,7 +190,10 @@ describe('Mango Agent Delegation User Journey (R-AI-NEMO-1, R-AI-NEMO-2, INV-7)'
           role: 'system',
           content: 'You are the planner subagent in .mango/agents/planner.md.',
         },
-        { role: 'user', content: 'Generate implementation roadmap for the Nemotron adapter.' },
+        {
+          role: 'user',
+          content: 'Generate implementation roadmap for the Nemotron adapter.',
+        },
       ],
     });
     const plan = JSON.parse(planRes.content) as PlannerOutput;

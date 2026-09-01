@@ -128,10 +128,13 @@ if __name__ == "__main__":
     import uvicorn
 
     # Port matches the container's EXPOSE (see Dockerfile); auto-reload is a
-    # dev-only behavior and must be opted into, never the default.
+    # dev-only behavior and must be opted into, never the default. Host
+    # defaults to loopback-only (the secure default for a dev runner) but,
+    # like port and reload, is env-overridable rather than a bare literal
+    # with no escape hatch.
     uvicorn.run(
         "harness.api_server.main:app",
-        host="127.0.0.1",
+        host=os.environ.get("API_SERVER_HOST", "127.0.0.1"),
         port=int(os.environ.get("API_SERVER_PORT", "8080")),
         reload=os.environ.get("API_SERVER_RELOAD") == "1",
     )

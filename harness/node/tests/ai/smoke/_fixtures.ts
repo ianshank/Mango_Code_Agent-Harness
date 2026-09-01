@@ -41,7 +41,8 @@ function resolveEnvVars(): { apiKey: string; defaultModel: string } {
             const k = trimmed.slice(0, idx).trim();
             const v = trimmed.slice(idx + 1).trim();
             if (k === 'NVIDIA_API_KEY' && !apiKey) apiKey = v;
-            if (k === 'NEMOTRON_DEFAULT_MODEL' && !defaultModel) defaultModel = v;
+            if (k === 'NEMOTRON_DEFAULT_MODEL' && !defaultModel)
+              defaultModel = v;
           }
         }
       } catch {
@@ -65,7 +66,8 @@ export const LIVE_API_KEY: string = resolvedEnv.apiKey;
 export const LIVE_DEFAULT_MODEL: string = resolvedEnv.defaultModel;
 
 /** Whether live API tests should run. */
-export const IS_LIVE: boolean = LIVE_API_KEY.length > 0 && LIVE_DEFAULT_MODEL.length > 0;
+export const IS_LIVE: boolean =
+  LIVE_API_KEY.length > 0 && LIVE_DEFAULT_MODEL.length > 0;
 
 // A live run is, by definition, a run that intends network egress. Declaring it
 // here -- next to the flag that decides whether the network is used at all --
@@ -141,7 +143,7 @@ export function assertNoSecretLeakage(
  */
 export function loadAgentSystemPrompt(agentFilePath: string): string {
   // Dynamically import fs to keep this module lightweight
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const fs = require('fs') as typeof import('fs');
   const content = fs.readFileSync(agentFilePath, 'utf-8');
 

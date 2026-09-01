@@ -1,10 +1,10 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.1.9 (2026 Standards)
+**Version:** 2.2.4 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem** and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -27,7 +27,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 11 reusable skills; the only skill root
+│   ├── skills/                          # 13 reusable skills; the only skill root
+│   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
@@ -38,6 +39,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   ├── tech-debt-audit/             # Repeatable full-repo SDLC/SQE audit procedure
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
 │
@@ -70,6 +72,16 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── autonomous_healing.py        # Test-driven autonomous self-healing engine
+│   │   ├── lats_optimizer.py            # Language Agent Tree Search (LATS) MCTS optimizer
+│   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server
+│   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
+│   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
+│   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
+│   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
+│   │   │   ├── policy.py                # GraphExecutionPolicy configuration
+│   │   │   ├── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   └── ablation.py              # MCTS ablation & hypothetical state channels
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
@@ -92,9 +104,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (2,007 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (2,253 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
+│   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
 │   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
 │   │       │   └── test_orchestrator_dispatch_regression.py # Dispatch edge-cases & budget handling
@@ -180,9 +193,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **1,975 automated tests** (57 Vitest + 1,918 Pytest across 7 tiers)
+- **Total Automated Tests:** **2,357 automated tests** (57 Vitest + 2,300 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **97% total** (98.02% Lines | 95.01% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
+- **Python AQA Coverage:** **98% total** (98.17% Lines | 95.71% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
@@ -208,7 +221,7 @@ Optional environment variables for the shadow planner comparison channel
 | `MANGO_SHADOW_PLANNER`     | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
 | `MANGO_SHADOW_MODEL`       | Alternate model for the shadow pass (defaults to the orchestrator model).                |
 | `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout.                             |
-| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).       |
+| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).      |
 
 ### 4.2 Querying NVIDIA Nemotron Ultra
 

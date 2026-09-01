@@ -12,6 +12,8 @@ import pytest
 from harness.shared import policy_loader
 from harness.shared.policy_loader import (
     PolicyError,
+    agent_defaults,
+    coverage_defaults,
     load_policy,
     max_tool_calls_per_task,
     nemotron_defaults,
@@ -51,6 +53,7 @@ class TestSectionAccessors:
             "api_timeout_sec": 7,
             "tool_timeout_sec": 5,
             "max_command_bytes": 4096,
+            "max_healing_retries": 3,
         }
         p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
         assert orchestrator_defaults(p) == declared
@@ -80,6 +83,35 @@ class TestSectionAccessors:
         with pytest.raises(PolicyError):
             nemotron_defaults(p)
 
+    def test_coverage_values_come_from_policy(self, tmp_path: Path) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"coverage": {"lines": 77, "branches": 66}}), encoding="utf-8")
+        assert coverage_defaults(p) == {"lines": 77, "branches": 66}
+
+    def test_coverage_non_object_section_fails_closed(self, tmp_path: Path) -> None:
+        """A GraphPolicy caller must see PolicyError here, not an AttributeError
+        from treating a non-dict section as one -- the exact shape GitHub Copilot's
+        review of PR #53 found: `coverage`/`agent_defaults` present but not an
+        object was reaching `.get()` unvalidated before this accessor existed."""
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"coverage": "not-an-object"}), encoding="utf-8")
+        with pytest.raises(PolicyError):
+            coverage_defaults(p)
+
+    def test_agent_defaults_values_come_from_policy(self, tmp_path: Path) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(
+            json.dumps({"agent_defaults": {"max_delegation_depth": 5, "max_parallel_subagents": 9}}),
+            encoding="utf-8",
+        )
+        assert agent_defaults(p) == {"max_delegation_depth": 5, "max_parallel_subagents": 9}
+
+    def test_agent_defaults_non_object_section_fails_closed(self, tmp_path: Path) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"agent_defaults": [1, 2]}), encoding="utf-8")
+        with pytest.raises(PolicyError):
+            agent_defaults(p)
+
 
 class TestRepoPolicyIsWired:
     """In this repository the policy file exists, so the wired readers must
@@ -96,3 +128,15 @@ class TestRepoPolicyIsWired:
     def test_tool_budget_reads_agent_defaults(self) -> None:
         repo_policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
         assert max_tool_calls_per_task() == repo_policy["agent_defaults"]["max_tool_calls_per_task"]
+
+    def test_coverage_defaults_reads_policy_block(self) -> None:
+        repo_policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+        values = coverage_defaults()
+        assert values["lines"] == repo_policy["coverage"]["lines"]
+        assert values["branches"] == repo_policy["coverage"]["branches"]
+
+    def test_agent_defaults_reads_policy_block(self) -> None:
+        repo_policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+        values = agent_defaults()
+        assert values["max_delegation_depth"] == repo_policy["agent_defaults"]["max_delegation_depth"]
+        assert values["max_parallel_subagents"] == repo_policy["agent_defaults"]["max_parallel_subagents"]

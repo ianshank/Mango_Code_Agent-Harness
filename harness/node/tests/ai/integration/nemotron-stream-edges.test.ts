@@ -97,7 +97,9 @@ describe('Nemotron Streaming Edge Cases (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3)',
 
     // Default failure threshold is 5; each non-retried 500 records one failure.
     for (let i = 0; i < 5; i++) {
-      await expect(consume()).rejects.toThrow(/Nemotron API Stream Error HTTP 500/);
+      await expect(consume()).rejects.toThrow(
+        /Nemotron API Stream Error HTTP 500/,
+      );
     }
 
     await expect(consume()).rejects.toThrow(/Circuit breaker is OPEN/);

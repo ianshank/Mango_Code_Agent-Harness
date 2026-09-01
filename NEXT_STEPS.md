@@ -1,11 +1,92 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.1.9  
+**Version:** 2.2.5  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ Full test suite coverage gap fill and AQA/regression expansion (2026-08-31)
+
+Systematic coverage audit found 9 source modules with zero direct test
+coverage. Created 11 new test files (107 tests), bringing Pytest total to
+2,300 (0 failures). Four defects triaged with RCA. Coverage: 98.17% lines,
+95.71% branches, 60/60 per-file. All CI gates green (ruff, mypy, coverage
+gate, `test_test_quality.py` meta-tests).
+
+New modules covered: `json_logging`, `tool_dispatch`, `validate_adoption`,
+`validate_agent_policy`, `validate_governance_docs`, `validate_policy`,
+`governance/check_traceability`, `governance/process_backend`,
+`governance/verification`. New regression tier:
+`test_coverage_gap_regression.py`, `test_nemotron_api_aqa.py`.
+
+### 🚧 Tech-debt reduction, LangGraph policy wiring & enterprise hygiene batch (PR #53, in review)
+
+A full audit (3 parallel research passes) whose draft plan was itself put
+through a 4-persona peer review (Architect, SDLC/CI Lead, QA Director,
+Product Manager) before implementation — the review caught that the
+flagship finding targeted code no CI job installs `langgraph` for, and
+surfaced a second, more severe bug the first draft missed. Spec:
+`docs/specs/langgraph-policy-wiring.md`.
+
+- [x] **`GraphPolicy` fully wired to `governance-policy.json`**: `recursion_limit`,
+      `max_concurrency`, `plan_divergence_threshold` were never read from
+      policy at all; `graph.py`'s `_route_quality_gate()` and `nodes.py`'s
+      `plan_gate_node()` used raw literals (`10`, `0.35`) instead of
+      consulting it. Both now read policy via `config["configurable"]["policy"]`,
+      the same mechanism already used for `orchestrator`, with a
+      behavior-preserving fallback when none is supplied.
+- [x] **Fail-open bug fixed**: `GraphPolicy.from_governance_json()` silently
+      substituted defaults on a *malformed* policy, not just an absent one —
+      the sixth recurrence of this exact pattern in the decision log. Now
+      raises. The existing test for this code asserted nothing that could
+      distinguish wiring from coincidence; rewritten with a
+      distinguishable-value liveness test and a malformed-policy fixture.
+- [x] **Enterprise hygiene**: `.github/CODEOWNERS`, PR/issue templates,
+      `SECURITY.md`, `CONTRIBUTING.md`.
+- [x] **Evidence-checked coverage-gap closure**: direct tests for
+      `agent_prompts.py`, `tool_result_format.py`, `tool_schemas.py` — each
+      confirmed to have a real gap first; `tool_dispatch.py` dropped from
+      scope after confirming it's already well covered.
+- [x] **Two hard-coded-value fixes**: `api_server/main.py`'s dev-runner host
+      is now env-overridable; `process_backend.py`'s `DEFAULT_TIMEOUT_SEC`
+      now reads policy instead of an unlinked duplicate literal.
+- [x] **`.mango/agents/nemotron-reasoner.md`'s `tools:` frontmatter fixed** —
+      open since `SDLC_HYGIENE_REPORT.md` (2026-08-26); the existing test
+      didn't catch it because it checked the whole file's text, satisfied by
+      a prose mention alone. New test asserts the parsed frontmatter field.
+- [x] **Two diverged C4 docs reconciled** with a banner (not a destructive
+      merge — the older doc's content is still detailed and partly unique).
+- [x] **Two tech-debt findings recorded as accepted debt** (DEC-019, DEC-020)
+      rather than left ambiguous: the control-plane `digest()` triplication
+      is intentional (root-of-trust isolation); `harness/shared/gates/`
+      adopted as the convention for new gate modules, not a migration.
+- [x] **Fixed a live `R-CEG-1` regression**: `pyproject.toml` still said
+      `2.1.9` while `README.md`/this file had already moved to `2.2.4`.
+- [x] **Green**: `infra-reviewed` label applied; all 9 required checks pass
+      on the current head.
+- [x] **Second-round audit**: new `.mango/skills/tech-debt-audit/SKILL.md`
+      codifies this recurring review shape as a repeatable procedure.
+      Deleted confirmed-dead `enforce_coverage.py` (superseded by
+      `coverage_gate.py`); closed 3 real missed-edge-case gaps
+      (`command_actions.write_targets()`'s `WRITE_TARGET_PROGRAMS` branch,
+      `check_dedup.load_config()`'s `unreadable`/wrongly-typed-value/
+      full-relative-path-exemption branches); corrected this file's own
+      overclaimed "Authority & Budget Decorators" checkbox below (they exist
+      and are tested in isolation, but are not applied to any real node —
+      see DEC-022); recorded two evaluated-and-intentionally-not-fixed
+      findings as DEC-022 rather than leaving them for a future audit to
+      rediscover.
+
+### ✅ v2.2.4 — LangGraph StateGraph Multi-Agent Architecture & Deterministic Node Orchestration
+
+- [x] **12-Channel Typed State Architecture (`MangoState`)**: Designed and implemented the 12-channel StateGraph schema with partitioned Accumulator channels (reduced via `operator.add`) and LWW channels.
+- [x] **10 Topology Nodes & Dynamic Parameter Ingestion**: Implemented 10 topology nodes with fail-open error isolation and runtime configuration extraction supporting both positional and keyword invocation.
+- [x] **Active Node Wiring**: Connected `planner_node`, `implementer_node` (reasoner), and `evaluation_node` (verifier + `VerificationRunner`) to the active orchestrator.
+- [ ] **Authority & Budget Decorators (`@with_authority`, `@budgeted`)**: Corrected 2026-08-31 (tech-debt audit) — implemented and unit-tested in isolation (`test_langgraph_decorators.py`), but **not applied to any of the 10 real node functions** in `nodes.py`; the only non-test usages decorate synthetic dummy functions. Neither enforces a role-based write gate nor a tool-invocation budget at a node boundary today. Also found: both decorators fail *open* on a lookup error ("Allow the node to proceed"/"proceed anyway"), the opposite of every other governance control in this repository — moot only while unwired. Wiring them requires fixing the fail-open behavior in the same change (Pattern 1, this repository's decision log), not just adding the decorator syntax; scope as its own spec before attempting (`make spec NAME=langgraph-authority-budget-wiring` or similar) rather than folding it into a hygiene pass — it changes live-shaped node behavior, not just a default.
+- [x] **AQA Regression Suite (`test_langgraph_regression.py`)**: Added 32 automated regression tests covering calling conventions, state immutability, accumulator concatenation, error trapping, and divergence thresholds.
+- [x] **C4 Architecture v2.2.4**: Updated Level 1-4 diagrams and documented LangGraph invariants (`INV-LG-1` .. `INV-LG-4`).
 
 ### ✅ v2.2.3 — Live NVIDIA Nemotron NIM Multi-Domain Triage, RCA & Autonomous MAS Certification
 
@@ -66,13 +147,16 @@ enforcement, and the policy-loaded decision-ID grammar.
 
 - Enable per-file **branch** enforcement once #19 lands (`per_file_branches`);
   it needs the per-file machinery that only exists there.
-- Enable `DTZ` (8 findings) once #18 lands — one of its two source sites is in
-  a file that PR rewrites.
-- Six files sit below the per-file coverage floor on `main`
-  (`publish_policy_artifact.py`, `check_traceability.py`, `coverage_gate.py`,
-  `governance/pretooluse_guard.py`, `validate_adoption.py`,
-  `validate_invariants.py`). #18 carries the lift; if it is abandoned, that
-  work needs re-doing before per-file enforcement can be switched on.
+- ~~Enable `DTZ` (8 findings) once #18 lands~~ — done: `DTZ` is live in
+  `pyproject.toml`'s `[tool.ruff.lint].select`, confirmed by direct read
+  (2026-08-31).
+- ~~Six files sit below the per-file coverage floor on `main`~~ — re-checked
+  2026-08-31 via `make coverage-python` against current `main`: all 61
+  measured files, including the six named here, now pass the 90% per-file
+  lines floor (`publish_policy_artifact.py` 100%, `check_traceability.py`
+  100% lines, `coverage_gate.py` 94%, `governance/pretooluse_guard.py` 97%,
+  `validate_adoption.py` 97%, `validate_invariants.py` 100%). No further work
+  needed here.
 - Annotating the test suite is a separate project: `--disallow-untyped-defs`
   reports 533 findings, essentially all `no-untyped-def` on test functions.
 
@@ -306,23 +390,23 @@ no UC-4 experiment evidence is claimed by this milestone.
 
 ---
 
-## 1. Near-Term Milestones (v2.2.0)
+## 1. Near-Term Milestones (v2.2.0 / v2.3.0)
 
 ### 1.1 Optimize Language Agent Tree Search (LATS)
 
-- [ ] **MCTS Refinement:** Refine the Monte Carlo Tree Search components in the reasoning layer.
-- [ ] **Ablation Studies:** Measure the efficacy of LATS implementations against standard chain-of-thought methods.
-- [ ] **Trace Logging:** Formalize the trace logging formats for LATS pathways.
+- [x] **MCTS Scaffolding:** Implement Monte Carlo Tree Search optimization data structures (`lats_optimizer.py`).
+- [x] **Ablation Studies:** Measure the efficacy of LATS implementations against standard chain-of-thought methods (`langgraph/ablation.py`).
+- [ ] **End-to-End Orchestrator Wiring:** Wire LATS search nodes into the main supervisor StateGraph loop.
 
 ### 1.2 Autonomous Healing Integration
 
-- [ ] **Merge Experimental Branch:** Merge and stabilize the experimental Autonomous Healing branch.
-- [ ] **Test-Driven Healing:** Wire the healing routines to automatically trigger upon test suite failures (`vitest` and `pytest`).
-- [ ] **Policy Enforcement:** Gate autonomous healing behind the `.governance/` policy invariants to prevent out-of-bounds structural modifications.
+- [x] **Autonomous Healing Engine:** Implement `TestHealer` test-driven agent remediation engine (`autonomous_healing.py`).
+- [x] **Policy Enforcement:** Gate autonomous healing behind `max_healing_retries` policy bounds.
+- [ ] **CI / Test Failure Trigger Hook:** Wire automated lifecycle hooks to trigger healing directly upon test suite failures (`vitest` and `pytest`).
 
 ### 1.3 Multi-Agent Memory Maturation
 
-- [ ] **Persistent Storage:** Extend `meta_tools.py` for persistent JSON/Markdown storage for knowledge gap logs.
+- [x] **Persistent Storage:** Extend `meta_tools.py` for persistent JSON/Markdown storage for knowledge gap logs (via `agent-memory-manager` skill).
 - [ ] **Retention Policies:** Establish retention policies and periodic context summarization protocols for the agent `memory/` directory.
 
 ---
@@ -333,4 +417,4 @@ no UC-4 experiment evidence is claimed by this milestone.
 
 - [ ] **Dynamic Model Fallback:** Implement multi-tier routing (e.g. fast reasoning → deep synthesis).
 - [ ] **Prompt Cache & Cost Tracking:** Add local disk/memory prompt-cache adapter to minimize repeated token costs on invariant verification prompts.
-- [ ] **Model Context Protocol (MCP) Server:** Package `NemotronClient` as an independent standard STDIO/SSE MCP server for seamless integration with external AI IDEs and clients.
+- [x] **Model Context Protocol (MCP) Server:** Implement standard STDIO MCP server (`mcp_server.py`) exposing role-gated Nemotron tool execution.

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from harness.shared import check_py_compat as cc
+from harness.shared.tests.conftest import write_text_file
 
 WORKFLOW = """\
 name: CI
@@ -61,10 +62,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _write(root: Path, rel: str, text: str) -> Path:
-    p = root / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8")
-    return p
+    return write_text_file(root / rel, text)
 
 
 # --- minimum version resolution ---
