@@ -328,7 +328,7 @@ def write_denial_reason(
 
     try:
         patterns = load_protected_patterns(DEFAULT_POLICY_PATH)
-    except (Exception, SystemExit) as exc:  # noqa: BLE001 - an unreadable policy must deny
+    except (Exception, SystemExit) as exc:
         # An unreadable policy must deny. Falling back to a built-in list would let
         # a malformed policy widen what an agent may write, which is the failure
         # mode this module exists to prevent.
@@ -342,7 +342,7 @@ def write_denial_reason(
     if policy_path is not None and policy_path.resolve() != DEFAULT_POLICY_PATH:
         try:
             raw, supplied_policy = _load_supplied_policy(policy_path)
-        except (Exception, SystemExit) as exc:  # noqa: BLE001 - an unreadable policy must deny
+        except (Exception, SystemExit) as exc:
             # Same fail-closed stance as the DEFAULT_POLICY_PATH branch above.
             # SystemExit is not currently reachable from _load_supplied_policy
             # (it raises OSError/JSONDecodeError/ValueError), but is kept broad
