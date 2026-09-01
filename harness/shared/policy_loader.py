@@ -120,6 +120,7 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         "api_timeout_sec": _int_value(section, "api_timeout_sec", 300, "orchestrator"),
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
         "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
+        "max_healing_retries": _int_value(section, "max_healing_retries", 3, "orchestrator"),
     }
 
 
@@ -178,4 +179,13 @@ def agent_defaults(policy_path: Path | None = None) -> dict:
     return {
         "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
         "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
+    }
+
+
+def lats_defaults(policy_path: Path | None = None) -> dict:
+    """LATS/MCTS search tuning; policy `lats` block."""
+    section = _section("lats", policy_path)
+    return {
+        "max_budget": _int_value(section, "max_budget", 10, "lats"),
+        "exploration_weight": _float_value(section, "exploration_weight", 1.414, "lats"),
     }

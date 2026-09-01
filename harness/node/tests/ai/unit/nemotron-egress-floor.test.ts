@@ -82,16 +82,17 @@ describe('AC-EGF-5: an unset mode refuses the network', () => {
 
 describe('AC-EGF-6: a declared transport is always honoured', () => {
   it('an injected fetch needs no mode at all', async () => {
-    const injected = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          id: 'x',
-          model: 'test-model',
-          choices: [{ message: { role: 'assistant', content: 'ok' } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+    const injected = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'x',
+            model: 'test-model',
+            choices: [{ message: { role: 'assistant', content: 'ok' } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
     ) as unknown as typeof fetch;
 
     const res = await ask(client(injected));
@@ -101,16 +102,17 @@ describe('AC-EGF-6: a declared transport is always honoured', () => {
 
   it('an injected transport is used even when the mode forbids egress', async () => {
     process.env[MODE] = 'offline';
-    const injected = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          id: 'x',
-          model: 'test-model',
-          choices: [{ message: { role: 'assistant', content: 'still ok' } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+    const injected = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'x',
+            model: 'test-model',
+            choices: [{ message: { role: 'assistant', content: 'still ok' } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
     ) as unknown as typeof fetch;
 
     const res = await ask(client(injected));

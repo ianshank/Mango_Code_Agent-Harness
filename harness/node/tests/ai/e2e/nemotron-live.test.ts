@@ -21,7 +21,11 @@ if (fs.existsSync(envPath)) {
       const idx = trimmed.indexOf('=');
       const k = trimmed.slice(0, idx).trim();
       const v = trimmed.slice(idx + 1).trim();
-      const allowedKeys = ['NVIDIA_API_KEY', 'NEMOTRON_DEFAULT_MODEL', 'NEMOTRON_BASE_URL'];
+      const allowedKeys = [
+        'NVIDIA_API_KEY',
+        'NEMOTRON_DEFAULT_MODEL',
+        'NEMOTRON_BASE_URL',
+      ];
       if (allowedKeys.includes(k) && !process.env[k]) {
         process.env[k] = v;
       }
@@ -37,45 +41,51 @@ const hasApiKey = Boolean(process.env['NVIDIA_API_KEY']);
 // egress intent independently (R-EGF-5).
 if (hasApiKey) process.env['NEMOTRON_MODE'] ??= 'online';
 
-describe.skipIf(!hasApiKey)('Nemotron CLI Live E2E (R-AI-NEMO-3, C-AI-SEC-2)', () => {
-  it('executes a live completion request against the configured default model', async () => {
-    let capturedOut = '';
-    const origLog = console.log;
-    console.log = (msg: string) => {
-      capturedOut += msg + '\n';
-    };
+describe.skipIf(!hasApiKey)(
+  'Nemotron CLI Live E2E (R-AI-NEMO-3, C-AI-SEC-2)',
+  () => {
+    it('executes a live completion request against the configured default model', async () => {
+      let capturedOut = '';
+      const origLog = console.log;
+      console.log = (msg: string) => {
+        capturedOut += msg + '\n';
+      };
 
-    let capturedErr = '';
-    const origErr = console.error;
-    console.error = (msg: string) => {
-      capturedErr += msg + '\n';
-    };
+      let capturedErr = '';
+      const origErr = console.error;
+      console.error = (msg: string) => {
+        capturedErr += msg + '\n';
+      };
 
-    const origProcessExitCode = process.exitCode;
-    process.exitCode = undefined;
+      const origProcessExitCode = process.exitCode;
+      process.exitCode = undefined;
 
-    try {
-      // Execute the CLI natively. By not providing --model, it relies on NEMOTRON_DEFAULT_MODEL
-      // which we are testing to ensure it is not deprecated (410 Gone) or otherwise broken.
-      await runNemotronCli(['--prompt', 'Reply with exactly the word: LIVE_OK']);
+      try {
+        // Execute the CLI natively. By not providing --model, it relies on NEMOTRON_DEFAULT_MODEL
+        // which we are testing to ensure it is not deprecated (410 Gone) or otherwise broken.
+        await runNemotronCli([
+          '--prompt',
+          'Reply with exactly the word: LIVE_OK',
+        ]);
 
-      const apiKey = process.env['NVIDIA_API_KEY'] ?? '';
-      if (apiKey) {
-        expect(capturedOut).not.toContain(apiKey);
-        expect(capturedErr).not.toContain(apiKey);
+        const apiKey = process.env['NVIDIA_API_KEY'] ?? '';
+        if (apiKey) {
+          expect(capturedOut).not.toContain(apiKey);
+          expect(capturedErr).not.toContain(apiKey);
+        }
+
+        // If it failed with 410, capturedErr would contain the error and process.exitCode would be 1.
+        expect(capturedErr).toBe('');
+        expect(process.exitCode).toBeUndefined();
+
+        // We expect the CLI to render its success format.
+        expect(capturedOut).toContain('--- Nemotron Response');
+        expect(capturedOut.toUpperCase()).toContain('LIVE_OK');
+      } finally {
+        console.log = origLog;
+        console.error = origErr;
+        process.exitCode = origProcessExitCode;
       }
-      
-      // If it failed with 410, capturedErr would contain the error and process.exitCode would be 1.
-      expect(capturedErr).toBe('');
-      expect(process.exitCode).toBeUndefined();
-      
-      // We expect the CLI to render its success format.
-      expect(capturedOut).toContain('--- Nemotron Response');
-      expect(capturedOut.toUpperCase()).toContain('LIVE_OK');
-    } finally {
-      console.log = origLog;
-      console.error = origErr;
-      process.exitCode = origProcessExitCode;
-    }
-  }, 60000); // 60s timeout for live API
-});
+    }, 60000); // 60s timeout for live API
+  },
+);

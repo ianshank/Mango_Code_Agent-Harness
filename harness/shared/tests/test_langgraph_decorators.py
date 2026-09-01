@@ -2,9 +2,9 @@
 
 Verifies:
 - with_authority enforces write permissions from agent-policy.json
-- with_authority fails open gracefully on policy lookup exceptions
+- with_authority fails closed gracefully on policy lookup exceptions
 - budgeted enforces tool limits from governance policy
-- budgeted fails open gracefully on policy lookup exceptions
+- budgeted fails closed gracefully on policy lookup exceptions
 - budgeted increments budget counter correctly in state returns
 """
 
@@ -23,7 +23,7 @@ class TestWithAuthorityDecorator:
     """Verifies role authority enforcement on LangGraph node functions."""
 
     def test_read_only_node_executes_successfully(self) -> None:
-        @with_authority("nemotron-verifier", may_write=False)
+        @with_authority("verifier", may_write=False)
         def sample_node(state: dict) -> dict:
             return {"status": "ok"}
 
@@ -47,14 +47,34 @@ class TestWithAuthorityDecorator:
         assert "errors" in res
         assert "lacks write authority" in res["errors"][0]["error"]
 
-    def test_authority_lookup_exception_fails_open(self) -> None:
+    def test_authority_lookup_exception_fails_closed(self) -> None:
         @with_authority("unknown-role", may_write=True)
         def fallback_node(state: dict) -> dict:
             return {"executed": True}
 
         with patch("harness.shared.agent_authority.allowed_actions", side_effect=RuntimeError("Policy missing")):
             res = fallback_node({"task": "fallback"})
-            assert res == {"executed": True}
+            assert "errors" in res
+            assert "authority check failed" in res["errors"][0]["error"]
+
+    def test_unknown_read_only_role_fails_closed(self) -> None:
+        @with_authority("unknown-role", may_write=False)
+        def read_node(state: dict) -> dict:
+            return {"executed": True}
+
+        res = read_node({"task": "read"})
+        assert "errors" in res
+        assert "lacks read authority" in res["errors"][0]["error"]
+
+    def test_read_only_role_without_read_fails_closed(self) -> None:
+        @with_authority("planner", may_write=False)
+        def read_node(state: dict) -> dict:
+            return {"executed": True}
+
+        with patch("harness.shared.agent_authority.allowed_actions", return_value=frozenset()):
+            res = read_node({"task": "read"})
+        assert "errors" in res
+        assert "lacks read authority" in res["errors"][0]["error"]
 
 
 class TestBudgetedDecorator:
@@ -79,15 +99,15 @@ class TestBudgetedDecorator:
             assert "errors" in res
             assert "tool budget exhausted (5/5)" in res["errors"][0]["error"]
 
-    def test_budget_exception_fails_open(self) -> None:
+    def test_budget_exception_fails_closed(self) -> None:
         @budgeted("tool_budget_used")
         def safe_node(state: dict) -> dict:
             return {"data": "proceed"}
 
         with patch("harness.shared.policy_loader.max_tool_calls_per_task", side_effect=RuntimeError("IO Error")):
             res = safe_node({"tool_budget_used": 0})
-            assert res["data"] == "proceed"
-            assert res["tool_budget_used"] == 1
+            assert "errors" in res
+            assert "budget check failed" in res["errors"][0]["error"]
 
     def test_budget_preserves_explicit_budget_key_in_result(self) -> None:
         @budgeted("tool_budget_used")

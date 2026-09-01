@@ -70,7 +70,7 @@ graph TD
         Executors["Tool Executors<br/>(tool_executors.py)"]
         Prompts["Agent Persona Prompts<br/>(agent_prompts.py)"]
         Schemas["Tool Schemas<br/>(tool_schemas.py)"]
-        Shadow["Shadow Planner<br/>(shadow_planner.py)"]
+        Shadow["Shadow Planner<br/>(shadow_planner.py<br>        Autonomous Healing<br>(autonomous_healing.py)<br>        LATS Optimizer<br>(lats_optimizer.py, ablation.py))"]
     end
 
     subgraph Node_Stack ["Node/TypeScript Engine (harness/node)"]

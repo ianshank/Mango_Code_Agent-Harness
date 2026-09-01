@@ -49,24 +49,32 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                 from harness.shared.agent_authority import allowed_actions
 
                 actions = allowed_actions(role)
-                if may_write and "write" not in actions:
+                required_action = "write" if may_write else "read"
+                if required_action not in actions:
                     logger.warning(
-                        "Node %s: role %r does not hold write authority",
-                        fn.__name__, role,
+                        "Node %s: role %r does not hold %s authority",
+                        fn.__name__, role, required_action,
                     )
                     return {
                         "errors": [
                             {
                                 "node": fn.__name__,
-                                "error": f"role {role!r} lacks write authority",
+                                "error": f"role {role!r} lacks {required_action} authority",
                                 "traceback": "",
                             }
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Authority check failed for %s: %s", fn.__name__, exc)
-                # Allow the node to proceed — fail-open on authority lookup errors
-                # to avoid blocking the graph due to policy file issues.
+                logger.error("Authority check failed for %s: %s", fn.__name__, exc)
+                return {
+                    "errors": [
+                        {
+                            "node": fn.__name__,
+                            "error": f"authority check failed: {exc}",
+                            "traceback": "",
+                        }
+                    ]
+                }
 
             return fn(*args, **kwargs)
         return wrapper
@@ -108,8 +116,16 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Budget check failed for %s: %s", fn.__name__, exc)
-                # Fail-open: if we can't check budget, proceed anyway.
+                logger.error("Budget check failed for %s: %s", fn.__name__, exc)
+                return {
+                    "errors": [
+                        {
+                            "node": fn.__name__,
+                            "error": f"budget check failed: {exc}",
+                            "traceback": "",
+                        }
+                    ]
+                }
 
             result = fn(state, *args, **kwargs)
 

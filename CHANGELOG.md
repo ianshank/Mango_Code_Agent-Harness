@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [2.3.0] - 2026-08-31
+
+### Added
+
+- `harness/shared/autonomous_healing.py` for test-driven agent remediation.
+- `harness/shared/lats_optimizer.py` and `harness/shared/langgraph/ablation.py` for MCTS node expansion.
+- `harness/shared/mcp_server.py` Model Context Protocol (MCP) STDIO server.
+- `.mango/skills/agent-memory-manager/` skill for persistent multi-agent context.
+
+### Changed
+
+- Wired authority and budget decorators onto existing LangGraph nodes.
+- Fortified `@with_authority` and `@budgeted` decorators to fail closed on lookup errors.
+- Synchronized `policy-artifact.json` drift and updated governance policy for healing retries.
+
+
 ## [v2.2.4] - 2026-08-30
 
 ### Added — LangGraph StateGraph Multi-Agent Orchestration Engine Overlay

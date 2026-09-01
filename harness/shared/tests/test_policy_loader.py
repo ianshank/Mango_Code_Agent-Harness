@@ -53,6 +53,7 @@ class TestSectionAccessors:
             "api_timeout_sec": 7,
             "tool_timeout_sec": 5,
             "max_command_bytes": 4096,
+            "max_healing_retries": 3,
         }
         p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
         assert orchestrator_defaults(p) == declared

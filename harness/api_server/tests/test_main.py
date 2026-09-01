@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
+# Ensure fastapi is installed before importing anything from the module
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient

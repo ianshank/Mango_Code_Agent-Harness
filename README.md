@@ -27,7 +27,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 12 reusable skills; the only skill root
+│   ├── skills/                          # 13 reusable skills; the only skill root
+│   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
@@ -71,12 +72,16 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── autonomous_healing.py        # Test-driven autonomous self-healing engine
+│   │   ├── lats_optimizer.py            # Language Agent Tree Search (LATS) MCTS optimizer
+│   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server
 │   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
 │   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
 │   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
 │   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
 │   │   │   ├── policy.py                # GraphExecutionPolicy configuration
-│   │   │   └── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   ├── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   └── ablation.py              # MCTS ablation & hypothetical state channels
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
