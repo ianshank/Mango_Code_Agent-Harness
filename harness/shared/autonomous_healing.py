@@ -54,7 +54,10 @@ class TestHealer:
                 result_str = execute_run_command(
                     self.broker, "nemotron-reasoner", None, " ".join(command)
                 )
-                success = "BLOCKED" not in result_str and "error" not in result_str.lower()
+                # Rely on the broker's structured status prefix rather than
+                # scanning the output for the word "error", which would produce
+                # false negatives for tests that legitimately mention "error".
+                success = not result_str.startswith("BLOCKED") and not result_str.startswith("Error")
                 return success, result_str
             except Exception as e:  # noqa: BLE001
                 return False, f"Failed to run test suite: {e}"

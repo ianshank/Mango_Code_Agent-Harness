@@ -50,14 +50,16 @@ class LATSOptimizer:
     def _best_leaf(self, root: AblationNode) -> AblationNode | None:
         """Return the highest-scoring leaf across the full tree (depth-first)."""
         best: AblationNode | None = None
+        best_avg = 0.0
         stack = [root]
         while stack:
             node = stack.pop()
             if not node.children:
                 if node is not root:
                     avg = node.score / node.visits if node.visits > 0 else 0.0
-                    if best is None or (best.visits == 0 or avg > best.score / best.visits):
+                    if best is None or avg > best_avg:
                         best = node
+                        best_avg = avg
             else:
                 stack.extend(node.children)
         return best
