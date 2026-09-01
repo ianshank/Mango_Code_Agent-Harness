@@ -67,7 +67,7 @@ def create_mcp_server(
                 types.Tool(
                     name=func["name"],
                     description=func["description"],
-                    input_schema=func["parameters"],
+                    inputSchema=func["parameters"],
                 )
             )
         return tools

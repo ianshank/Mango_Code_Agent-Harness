@@ -22,7 +22,7 @@ class MockTool:
     def __init__(self, *args: Any, **kwargs: Any):
         self.name = kwargs.get("name", "")
         self.description = kwargs.get("description", "")
-        self.inputSchema = kwargs.get("input_schema", {})
+        self.inputSchema = kwargs.get("inputSchema", {})
 
 
 class MockTextContent:
@@ -102,6 +102,9 @@ def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) 
     tool_names = {t.name for t in tools}
     schema_names = {schema["function"]["name"] for schema in expected_schemas}
     assert tool_names == schema_names
+    assert {tool.name: tool.inputSchema for tool in tools} == {
+        schema["function"]["name"]: schema["function"]["parameters"] for schema in expected_schemas
+    }
 
 
 def test_mcp_server_role_unauthorized_tool_denied(tmp_path: Path, broker: ExecutionBroker) -> None:

@@ -38,7 +38,7 @@ class TestHealer:
         policy_limit = orchestrator_defaults().get("max_healing_retries", 3)
         if max_retries is None:
             self.max_retries = policy_limit
-        elif not isinstance(max_retries, int) or max_retries < 0:
+        elif isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
             raise ValueError(f"max_retries must be a non-negative integer, got {max_retries!r}")
         elif max_retries > policy_limit:
             raise ValueError(

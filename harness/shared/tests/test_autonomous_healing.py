@@ -112,6 +112,8 @@ def test_healer_max_retries_invalid_type(tmp_path) -> None:
     """max_retries must be a non-negative integer."""
     with pytest.raises(ValueError, match="non-negative integer"):
         TestHealer(workspace=str(tmp_path), max_retries=-1)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        TestHealer(workspace=str(tmp_path), max_retries=True)
 
 
 def test_healer_broker_routes_test_execution(tmp_path) -> None:
