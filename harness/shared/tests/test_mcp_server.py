@@ -93,20 +93,34 @@ def test_create_mcp_server_missing_package(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_import_failure_sets_mcp_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     """The real try/except ImportError guard (not a monkeypatched flag) must leave the
     module in a safe, fully-None state when `mcp` cannot be imported -- this is the
-    Python 3.9 CI leg's actual code path, otherwise untested."""
-    import importlib
+    Python 3.9 CI leg's actual code path, otherwise untested.
+
+    Loads a throwaway copy of mcp_server.py under a private module name via
+    importlib.util, rather than deleting/reimporting `sys.modules["harness.shared
+    .mcp_server"]` -- the latter briefly replaces the one module object every
+    other test in this file (and `unittest.mock.patch("harness.shared.mcp_server
+    .X", ...)`'s own string-path resolution) depends on. That replace-then-restore
+    passed in this sandbox and in isolation, but proved to leave `patch(...)`
+    silently no-op-ing for two other tests on real CI (3.9/3.10/3.11, not 3.12) --
+    this throwaway-module approach never touches the shared cache entry at all.
+    """
+    import importlib.util
     import sys
+    from pathlib import Path
 
     for name in ("mcp", "mcp.types", "mcp.server", "mcp.server.stdio"):
         monkeypatch.setitem(sys.modules, name, None)
-    # monkeypatch.delitem records the current (real) module object and restores it to
-    # sys.modules on teardown regardless of how this test exits -- no manual cleanup needed.
-    monkeypatch.delitem(sys.modules, "harness.shared.mcp_server", raising=False)
-    mod = importlib.import_module("harness.shared.mcp_server")
-    assert mod.MCP_AVAILABLE is False
-    assert mod.types is None
-    assert mod.Server is None
-    assert mod.stdio_server is None
+
+    module_path = Path(__file__).resolve().parents[1] / "mcp_server.py"
+    spec = importlib.util.spec_from_file_location("_mcp_server_import_guard_probe", module_path)
+    assert spec is not None and spec.loader is not None
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+
+    assert probe.MCP_AVAILABLE is False
+    assert probe.types is None
+    assert probe.Server is None
+    assert probe.stdio_server is None
 
 
 @pytest.mark.enable_socket
