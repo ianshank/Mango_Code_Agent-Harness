@@ -4,7 +4,7 @@ version = "2.2.5"
 requires-python = ">=3.9"
 # Mirrors requirements.txt (single set of literals; keep both in lockstep).
 dependencies = [
-    "fastapi>=0.110,<1.0",
+    "fastapi>=0.141.1,<1.0",
     "uvicorn[standard]>=0.27,<1.0",
     "pydantic>=2.5,<3.0",
     "httpx>=0.27,<1.0",
