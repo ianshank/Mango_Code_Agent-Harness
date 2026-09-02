@@ -16,13 +16,16 @@ import {
 } from './types.js';
 import { SecretMasker } from './secret-masker.js';
 import { CircuitBreaker } from './circuit-breaker.js';
+import { NEMOTRON_POLICY } from './policy.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+// Timeout and retry budget come from the governance policy (R-NPW-1); the
+// backoff window and endpoint have no policy key yet and stay as they are.
 export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
-  timeoutMs: 30000,
-  maxRetries: 3,
+  timeoutMs: NEMOTRON_POLICY.timeout_ms,
+  maxRetries: NEMOTRON_POLICY.max_retries,
   baseBackoffMs: 500,
   maxBackoffMs: 5000,
 };
@@ -168,12 +171,12 @@ export class NemotronClient {
       temperature:
         options.temperature !== undefined
           ? Math.max(0, Math.min(2.0, options.temperature))
-          : 0.2,
+          : NEMOTRON_POLICY.temperature,
       top_p:
         options.top_p !== undefined
           ? Math.max(0, Math.min(1.0, options.top_p))
           : 0.7,
-      max_tokens: options.max_tokens ?? 4096,
+      max_tokens: options.max_tokens ?? NEMOTRON_POLICY.max_tokens,
       stream: false,
       ...(options.stop ? { stop: options.stop } : {}),
     };
@@ -250,12 +253,12 @@ export class NemotronClient {
       temperature:
         options.temperature !== undefined
           ? Math.max(0, Math.min(2.0, options.temperature))
-          : 0.2,
+          : NEMOTRON_POLICY.temperature,
       top_p:
         options.top_p !== undefined
           ? Math.max(0, Math.min(1.0, options.top_p))
           : 0.7,
-      max_tokens: options.max_tokens ?? 4096,
+      max_tokens: options.max_tokens ?? NEMOTRON_POLICY.max_tokens,
       stream: true,
       ...(options.stop ? { stop: options.stop } : {}),
     };

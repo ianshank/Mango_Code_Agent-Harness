@@ -42,8 +42,10 @@ describe('Nemotron Unit Tests (R-AI-NEMO-1, C-AI-SEC-1)', () => {
 
     expect(client.config.baseUrl).toBe(DEFAULT_NEMOTRON_CONFIG.baseUrl);
     expect(client.config.defaultModel).toBeUndefined();
-    expect(client.config.timeoutMs).toBe(30000);
-    expect(client.config.maxRetries).toBe(3);
+    // Defaults are policy-sourced (R-NPW-1); the literals they replaced drifted
+    // from the policy unnoticed, so pin to the loaded default, not a number.
+    expect(client.config.timeoutMs).toBe(DEFAULT_NEMOTRON_CONFIG.timeoutMs);
+    expect(client.config.maxRetries).toBe(DEFAULT_NEMOTRON_CONFIG.maxRetries);
   });
 
   it('allows overriding base URL, model, and retry timeouts', () => {
