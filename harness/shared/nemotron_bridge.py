@@ -16,6 +16,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import warnings
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, cast
@@ -28,12 +30,76 @@ from harness.shared.retry_policy import RetryPolicy, is_retryable_connection_err
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+#: The real ``urlopen`` as it existed at import.
+#:
+#: The egress floor (R-EGF-5) must refuse the *vendor network path* without
+#: breaking a caller or test that supplied its own transport. A double
+#: monkeypatched over ``urllib.request.urlopen`` is a declared transport; this
+#: pristine reference is how the two are told apart. Mirrors the TypeScript
+#: client's PRISTINE_FETCH check so both runtimes behave identically (R-EGF-3).
+_PRISTINE_URLOPEN = urllib.request.urlopen
+
+
+class NemotronEgressRefused(RuntimeError):
+    """Raised when a run would reach the network without an explicit declaration."""
+
+
+def resolve_nemotron_mode(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """Return the declared transport mode, or None when nothing was declared."""
+    source = os.environ if env is None else env
+    raw = source.get("NEMOTRON_MODE")
+    return raw if raw in ("online", "offline") else None
+
+
+def _assert_egress_permitted(url: str) -> None:
+    """Fail closed unless egress was explicitly declared (R-EGF-5, DEC-EGF-003).
+
+    A monkeypatched ``urlopen`` is a declared transport and passes through, so
+    the offline test suite and any injected double keep working. Only the
+    genuine vendor path requires ``NEMOTRON_MODE=online``.
+    """
+    if urllib.request.urlopen is not _PRISTINE_URLOPEN:
+        return
+    mode = resolve_nemotron_mode()
+    if mode == "online":
+        return
+    if mode == "offline":
+        raise NemotronEgressRefused(
+            "NEMOTRON_MODE=offline: refusing to open a network transport to "
+            f"{url}. Inject a transport to run offline."
+        )
+    raise NemotronEgressRefused(
+        f"no transport mode declared: refusing to reach {url}. Set "
+        "NEMOTRON_MODE=online to permit network egress, NEMOTRON_MODE=offline "
+        "to forbid it, or inject a transport."
+    )
+
+
 # Timeout and retry fallbacks now come from governance-policy.json via
 # policy_loader.nemotron_defaults(); this module no longer carries its own.
 # Backoff between retry attempts. The arithmetic (exponential growth, cap and
-# jitter) lives in retry_policy.RetryPolicy; this alias is kept because it is
-# part of the module's public surface and is referenced by the test suite.
-RETRY_BACKOFF_BASE_SEC = retry_policy.DEFAULT_BASE_SEC
+# jitter) lives in retry_policy.RetryPolicy. The old alias RETRY_BACKOFF_BASE_SEC
+# has no first-party caller left; it is served through ``__getattr__`` below
+# with a DeprecationWarning for one minor release (tech-debt-hardening-plan
+# R-TDH-17, C-TDH-2) and removed after that.
+_DEPRECATED_NAMES = {
+    "RETRY_BACKOFF_BASE_SEC": (
+        retry_policy.DEFAULT_BASE_SEC,
+        "RETRY_BACKOFF_BASE_SEC is deprecated; use retry_policy.DEFAULT_BASE_SEC",
+    ),
+}
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562: deprecated module names warn on first use instead of vanishing."""
+    if name in _DEPRECATED_NAMES:
+        value, message = _DEPRECATED_NAMES[name]
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 # Transient HTTP statuses worth retrying; everything else fails immediately.
 RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
@@ -184,6 +250,8 @@ def complete_chat(
     # Named `retry` rather than `policy`: `policy` above is the governance
     # nemotron block, and shadowing it here would silently discard it.
     retry = replace(RetryPolicy.from_mapping(env_config), max_retries=max_retries)
+
+    _assert_egress_permitted(url)
 
     for attempt in range(retry.max_retries + 1):
         # Built per attempt: a urllib Request accumulates per-opener state (and

@@ -20,6 +20,7 @@ byte-for-byte the behaviour every existing caller had.
 from __future__ import annotations
 
 import dataclasses
+import warnings
 
 
 @dataclasses.dataclass
@@ -56,5 +57,15 @@ class ToolBudget:
 
     @property
     def remaining(self) -> int:
-        """Calls left before the limit is reached; never negative."""
+        """Calls left before the limit is reached; never negative.
+
+        Deprecated: no first-party caller reads it (the loop decides on the
+        boolean ``consume`` returns). Warns for one minor release and is then
+        removed (tech-debt-hardening-plan R-TDH-17, C-TDH-2).
+        """
+        warnings.warn(
+            "ToolBudget.remaining is deprecated; use the return value of consume()",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return max(0, self.limit - self.used)

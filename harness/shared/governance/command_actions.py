@@ -24,6 +24,7 @@ import shlex
 import typing
 
 from harness.shared.policy_loader import orchestrator_defaults
+from harness.shared.read_policy import CREDENTIAL_FILENAME_ALTERNATION
 
 #: The action assigned to a command this module does not model. `destructive` is
 #: declared in `agent-policy.json`'s `high_risk_actions` and appears in no role's
@@ -128,7 +129,7 @@ _BY_PROGRAM: typing.Mapping[str, str] = {
     "grep": "read", "rg": "read", "pwd": "read", "echo": "read", "true": "read",
     "false": "read", "diff": "read", "stat": "read", "basename": "read", "dirname": "read",
     "sort": "read", "uniq": "read", "cut": "read", "tr": "read", "printf": "read",
-    "date": "read", "which": "read", "seq": "read", "sleep": "read", "test": "read",
+    "date": "read", "which": "read", "where": "read", "seq": "read", "sleep": "read", "test": "read",
     # Running the repository's own gates.
     "pytest": "test_execute", "make": "test_execute", "ruff": "test_execute",
     "mypy": "test_execute", "tsc": "test_execute", "vitest": "test_execute",
@@ -167,25 +168,39 @@ _BY_SUBCOMMAND: typing.Mapping[tuple[str, str], str] = {
 #: Whole-command shapes that override the program table. `find` is a read tool
 #: until it is given an action, and then it is the most destructive tool present.
 _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    # Reading a credential-bearing file is `secret_access`, not `read`. The
+    # program is innocent; the target is not, and the action model grades the
+    # effect rather than the tool.
+    # The alternation is owned by `read_policy`, which is the other door onto
+    # the same files. Composing it here rather than restating it is what keeps
+    # `cat .env` and `read_file(".env")` refusing for the same reason.
+    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
+     "secret_access", "the command names a credential-bearing file"),
     (re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"), "destructive",
      "find with an action flag deletes or executes per match"),
     (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
+    (re.compile(r"\b(?:python[0-9.]*|py)\b\s+(?:--version|-V|--help|-h)\b"), "read",
+     "querying python tool version or help"),
+    (re.compile(r"\b(?:node|pnpm|npm|npx)\b\s+(?:--version|-V|-v|--help|-h)\b"), "read",
+     "querying node tool version or help"),
+    (re.compile(r"\bcommand\s+-v\s+(?:python[0-9.]*|py|node|pnpm|npm|npx)\b"), "read",
+     "resolving executable path"),
     # `[^\s]` rather than `.` between the interpreter and `-m`: `.*` here bridges
     # any distance, so the engine retries the whole tail from every `python` in
     # the string and the match becomes quadratic in the command length. A command
     # is a single command by this point (`_COMPOUND` rejected the rest), so the
     # only thing legitimately between `python` and `-m` is flags.
-    (re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pytest\b"), "test_execute",
-     "pytest through the interpreter"),
+    (
+        re.compile(r"\b(?:python[0-9.]*|py)\b(?:\s+-[^\s]+)*\s+-m\s+(?:pytest|unittest|py_compile|doctest)\b"),
+        "test_execute",
+        "pytest, unittest, doctest or compiler through the interpreter",
+    ),
     (re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pip\b\s+install\b"), "external_write",
      "pip install through the interpreter"),
     (re.compile(r"\bpython[0-9.]*\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline program can do anything"),
     (re.compile(r"\b(?:ba|z|k)?sh\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline shell program can do anything"),
-    # Reading a credential-bearing file is `secret_access`, not `read`. The
-    # program is innocent; the target is not, and the action model grades the
-    # effect rather than the tool.
-    (re.compile(r"(?:^|[\s/])(?:\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|id_[rd]sa|[\w.-]+\.pem)(?:\s|$)"),
-     "secret_access", "the command names a credential-bearing file"),
+    (re.compile(r"\b(?:python[0-9.]*|py)\b(?:\s+-[^\s]+)*\s+[^\s\-][^\s]*\.py\b"), "test_execute",
+     "executing a python script in workspace"),
 )
 
 
@@ -240,9 +255,14 @@ def classify(command: str) -> Classification:
 
 def _classify_program(text: str) -> Classification:
     """The action of the command itself, ignoring any redirection."""
+    best_shape: Classification | None = None
     for pattern, action, why in _BY_SHAPE:
         if pattern.search(text):
-            return Classification(action, why)
+            cand = Classification(action, why)
+            if best_shape is None or _severity(cand.action) > _severity(best_shape.action):
+                best_shape = cand
+    if best_shape is not None:
+        return best_shape
 
     try:
         argv = shlex.split(text)
@@ -287,11 +307,12 @@ def write_targets(command: str) -> list[str]:
         return []
 
     targets: list[str] = []
+    discard_targets = {"/dev/null", "nul", "NUL", "/dev/zero", "/dev/stdout", "/dev/stderr"}
     pending_redirect = False
     for token in argv:
         if pending_redirect:
             # `2>&1` and `>&2` duplicate a descriptor rather than naming a file.
-            if not token.startswith("&"):
+            if not token.startswith("&") and token not in discard_targets:
                 targets.append(token)
             pending_redirect = False
             continue
@@ -307,7 +328,7 @@ def write_targets(command: str) -> list[str]:
         if match is not None:
             # `>file` written without a space, or `2>file`.
             tail = token[match.end():]
-            if tail and not tail.startswith("&"):
+            if tail and not tail.startswith("&") and tail not in discard_targets:
                 targets.append(tail)
 
     program = argv[0].rsplit("/", 1)[-1] if argv else ""

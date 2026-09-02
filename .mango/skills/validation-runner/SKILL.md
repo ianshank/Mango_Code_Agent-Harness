@@ -29,8 +29,9 @@ gate should call.
 ## What it runs (in order)
 
 ```bash
-make ci   # lint (ruff + mypy + py-compat) -> coverage -> test-node -> zero-skips
-          # -> specs -> remotes -> validate -> check-dedup -> digest-regen
+make ci   # lint (ruff + mypy + vulture + py-compat) -> lock-check -> coverage
+          # -> python zero-skips -> test-node -> zero-skips -> specs -> remotes
+          # -> validate -> check-dedup -> digest-regen
 ```
 
 `make ci` is the source of truth; this skill does not re-declare the stages

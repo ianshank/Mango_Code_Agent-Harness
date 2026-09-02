@@ -7,6 +7,7 @@
  */
 
 import { NemotronClient } from './nemotron-client.js';
+import { NEMOTRON_POLICY } from './policy.js';
 
 export async function runNemotronCli(
   args: string[] = process.argv.slice(2),
@@ -25,9 +26,11 @@ Options:
   --prompt <string>       Prompt to send to Nemotron Ultra
   --system <string>       System instruction prompt
   --model <string>        Target model identifier (default: from NEMOTRON_DEFAULT_MODEL env)
-  --temperature <number>  Sampling temperature (0.0 - 2.0, default: 0.2)
-  --timeout <number>      Request timeout in milliseconds (default: 30000)
+  --temperature <number>  Sampling temperature (0.0 - 2.0, default: ${NEMOTRON_POLICY.temperature})
+  --timeout <number>      Request timeout in milliseconds (default: ${NEMOTRON_POLICY.timeout_ms})
   --stream                Enable streaming response output
+  --offline               Forbid network egress (NEMOTRON_MODE=offline)
+  --online                Permit network egress (NEMOTRON_MODE=online)
   --json                  Output full JSON response with telemetry
   --help, -h              Show this help message
 `);
@@ -46,7 +49,9 @@ Options:
 
   const tempIdx = args.indexOf('--temperature');
   const rawTemp = tempIdx !== -1 ? args[tempIdx + 1] : undefined;
-  const temperature = rawTemp ? parseFloat(rawTemp) : 0.2;
+  const temperature = rawTemp
+    ? parseFloat(rawTemp)
+    : NEMOTRON_POLICY.temperature;
 
   const timeoutIdx = args.indexOf('--timeout');
   const rawTimeout = timeoutIdx !== -1 ? args[timeoutIdx + 1] : undefined;
@@ -54,6 +59,12 @@ Options:
 
   const isStream = args.includes('--stream');
   const isJson = args.includes('--json');
+
+  // Declaring a mode is explicit and fail-closed (R-EGF-5). With neither flag
+  // and no NEMOTRON_MODE in the environment, the client refuses to open a
+  // network transport rather than silently resolving to the vendor endpoint.
+  if (args.includes('--offline')) process.env['NEMOTRON_MODE'] = 'offline';
+  else if (args.includes('--online')) process.env['NEMOTRON_MODE'] = 'online';
 
   const client = new NemotronClient(timeoutMs ? { timeoutMs } : {});
 

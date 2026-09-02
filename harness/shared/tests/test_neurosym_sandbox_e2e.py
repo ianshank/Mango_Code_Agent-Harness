@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -9,11 +8,7 @@ import pytest
 import harness.shared.mango_mas_orchestrator as mmo
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult, ProcessBackend
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
-from harness.shared.nemotron_bridge import resolve_api_key
-
-# Check if LIVE test execution is enabled
-IS_LIVE = bool(resolve_api_key())
-os.environ["ALLOW_GITHUB_CHANGES"] = "1"
+from harness.shared.orchestrator.hook_runner import HookRunner
 
 
 class MockSandboxProcessBackend(ProcessBackend):
@@ -69,9 +64,7 @@ class MockSandboxProcessBackend(ProcessBackend):
         return super().run(command, cwd, timeout, max_output_bytes)
 
 
-@pytest.mark.live
 @pytest.mark.neurosym
-@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
 class TestNeurosymSandboxE2E:
     """
     E2E integration tests for the code generation workflow executing inside a sandbox.
@@ -80,7 +73,15 @@ class TestNeurosymSandboxE2E:
 
     @pytest.fixture(autouse=True)
     def _mock_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(MangoMASOrchestrator, "_run_hook", lambda *args, **kwargs: None)
+        monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
+        # Hooks live on the HookRunner the facade composes (R-TDH-18); patch the
+        # class so every orchestrator built inside a test inherits the no-op.
+        monkeypatch.setattr(HookRunner, "run_hook", lambda *args, **kwargs: None)
+
+    @pytest.fixture(autouse=True)
+    def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bypass the pre-flight check so the broker is actually called."""
+        monkeypatch.setattr("shutil.which", lambda cmd: "mock/make" if cmd == "make" else None)
 
     def test_sandbox_unavailable_inv9_fallback(self, tmp_path):
         """
@@ -137,11 +138,12 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
         try:
             orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         history_str = str(orchestrator.conversation_history)
         assert "Sandbox unavailable" in history_str or "BLOCKED: the execution backend is unavailable" in history_str
@@ -162,7 +164,7 @@ class TestNeurosymSandboxE2E:
             "If it fails due to network restrictions, write 'MOCK_DATA' to a file using write_file."
         )
 
-        original_complete_chat = mmo.complete_chat
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
         call_count = 0
 
         def complete_chat_mock(*args, **kwargs):
@@ -224,17 +226,18 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
         try:
             verification_result = orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         assert mock_backend.call_count > 0
         history_str = str(orchestrator.conversation_history)
         assert "network_access_denied" in history_str
         assert "network-isolated" in history_str
         assert "PASS" in verification_result or "FAIL" in verification_result
+        assert (tmp_path / "data.txt").read_text(encoding="utf-8").strip() == "MOCK_DATA"
 
     def test_sandbox_application_synthesis_with_repair(self, tmp_path):
         """
@@ -254,7 +257,7 @@ class TestNeurosymSandboxE2E:
             "After creating the file, you MUST use the `run_command` tool to execute: `python -m pytest app.py`.\n"
             "If your run_command is blocked with a SandboxViolation, replace the network call with MOCK_DATA."
         )
-        original_complete_chat = mmo.complete_chat
+        original_complete_chat = orchestrator.execution_loop.complete_chat_fn
 
         call_count = 0
 
@@ -284,7 +287,7 @@ class TestNeurosymSandboxE2E:
                                 "function": {
                                     "name": "write_file",
                                     "arguments": (
-                                        '{"filepath": "app.py", '
+                                        '{"filepath": "weather_cli/app.py", '
                                         '"content": "import requests\\nrequests.get(\\"http://example.com/api\\")"}'
                                     ),
                                 },
@@ -304,7 +307,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest app.py"}',
+                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
                                 },
                             }],
                         }
@@ -322,7 +325,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "write_file",
-                                    "arguments": '{"filepath": "app.py", "content": "MOCK_DATA = 42"}',
+                                    "arguments": '{"filepath": "weather_cli/app.py", "content": "MOCK_DATA = 42"}',
                                 },
                             }],
                         }
@@ -340,7 +343,7 @@ class TestNeurosymSandboxE2E:
                                 "type": "function",
                                 "function": {
                                     "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest app.py"}',
+                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
                                 },
                             }],
                         }
@@ -360,12 +363,12 @@ class TestNeurosymSandboxE2E:
                     }]
                 }
 
-        mmo.complete_chat = complete_chat_mock
+        orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
 
         try:
             verification_result = orchestrator.execute_sequential_thinking_loop(task)
         finally:
-            mmo.complete_chat = original_complete_chat
+            orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
         # Assertions
         assert mock_backend.call_count > 0
@@ -377,4 +380,5 @@ class TestNeurosymSandboxE2E:
 
         # Ensure the test ran and the agent claimed a pass or fail
         assert "PASS" in verification_result or "FAIL" in verification_result
+        assert "MOCK_DATA = 42" in (app_dir / "app.py").read_text(encoding="utf-8")
 

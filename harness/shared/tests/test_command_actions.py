@@ -30,6 +30,11 @@ pytestmark = pytest.mark.governance
         ("git status", "read"),
         ("git log --oneline", "read"),
         ("find . -name '*.py'", "read"),
+        ("where python", "read"),
+        ("where node", "read"),
+        ("node --version", "read"),
+        ("python -V", "read"),
+        ("python --version", "read"),
         ("mkdir -p out", "write"),
         ("git add src/a.py", "write"),
         ("rm -rf /", "destructive"),
@@ -102,6 +107,13 @@ class TestTargetOverridesProgram:
         assert classify("head -5 ~/.netrc").action == "secret_access"
         assert classify("cat deploy.pem").action == "secret_access"
 
+    def test_reading_a_credential_file_is_not_a_plain_read_regardless_of_case(self) -> None:
+        """The pattern is shared with `read_policy.read_denial_reason`; a
+        case-sensitive match let `.ENV` and `ID_RSA` through on both doors."""
+        assert classify("cat .ENV").action == "secret_access"
+        assert classify("cat ID_RSA").action == "secret_access"
+        assert classify("cat SECRETS.PEM").action == "secret_access"
+
     def test_an_ordinary_file_whose_name_contains_env_is_still_a_read(self) -> None:
         """A pattern that catches `src/env_utils.py` would deny ordinary work."""
         assert classify("cat src/env_utils.py").action == "read"
@@ -173,6 +185,57 @@ class TestEveryRedirectSpellingIsAWrite:
         made in the first place -- so it has to keep passing."""
         assert write_targets(command) == []
         assert classify(command).action == "read"
+
+
+class TestWriteTargetPrograms:
+    """`WRITE_TARGET_PROGRAMS` and the branch that consumes it (`write_targets`'s
+    tail, after the redirect loop) shipped with no test at all -- not even the
+    exact scenario the module's own docstring names: ``cp evil
+    .mango/hooks/x.sh`` is ``cp`` by ``argv[0]``, carries no redirect, and would
+    classify as `read` (installing a hook file) if this branch did not exist."""
+
+    @pytest.mark.parametrize(
+        ("command", "target"),
+        [
+            pytest.param("cp evil .mango/hooks/x.sh", ".mango/hooks/x.sh", id="cp-the-reported-shape"),
+            pytest.param("mv evil .mango/hooks/x.sh", ".mango/hooks/x.sh", id="mv"),
+            pytest.param("install evil .mango/hooks/x.sh", ".mango/hooks/x.sh", id="install"),
+            pytest.param("tee .mango/hooks/x.sh", ".mango/hooks/x.sh", id="tee"),
+            pytest.param("touch .mango/hooks/x.sh", ".mango/hooks/x.sh", id="touch"),
+            pytest.param("mkdir .mango/hooks/newdir", ".mango/hooks/newdir", id="mkdir"),
+        ],
+    )
+    def test_the_target_is_seen_with_no_redirect_at_all(self, command: str, target: str) -> None:
+        assert target in write_targets(command), (
+            f"{command!r} writes to {target!r} via argument position, not a redirect, "
+            "and the gate cannot see it"
+        )
+
+    def test_source_operand_is_not_itself_a_target(self) -> None:
+        """`cp`/`mv`/`install` take source before destination; the source must
+        not be checked against the write policy as though it were a write."""
+        assert write_targets("cp evil .mango/hooks/x.sh") == [".mango/hooks/x.sh"]
+
+    def test_tee_grades_every_operand_a_target(self) -> None:
+        """Unlike `cp`, `tee FILE...` writes every named file -- there is no
+        source operand to skip, which is what `WRITE_TARGET_PROGRAMS["tee"] = 0`
+        (as opposed to `cp`'s `1`) encodes."""
+        assert write_targets("tee a.txt b.txt") == ["a.txt", "b.txt"]
+
+    def test_flags_are_not_mistaken_for_the_source_operand(self) -> None:
+        """`cp -r evil .mango/hooks/x.sh` must still see the destination -- a
+        flag consuming the "skip one operand" slot would either lose the real
+        target or misidentify `-r` as the source."""
+        assert write_targets("cp -r evil .mango/hooks/x.sh") == [".mango/hooks/x.sh"]
+
+    def test_missing_destination_operand_does_not_raise(self) -> None:
+        """`cp evil` with no destination is malformed, but `operands[1:]` on a
+        single-element list is `[]`, not an `IndexError` -- best effort, never
+        a crash (the module's own stated contract)."""
+        assert write_targets("cp evil") == []
+
+    def test_a_program_outside_the_table_gets_no_targets_from_this_branch(self) -> None:
+        assert write_targets("ls -la") == []
 
 
 class TestARedirectNeverDowngradesACommand:

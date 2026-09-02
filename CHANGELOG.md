@@ -3,957 +3,447 @@
 All notable changes to this project will be documented in this file.
 
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
-> gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
+> gate-contract versions v2.0.0–v2.1.5 are kept in the *Harness gate-contract
+> history* block at the end of this file; later ones live in the versioned
+> sections. Release sections are capped at `limits.changelog_section_lines`
+> (`governance-policy.json`); a longer release body moves to `docs/releases/`.
 
 ## [Unreleased]
 
-### Added — Neuro-Symbolic Sandbox Synthesis & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
-
-- **Critique Normalization (`harness/shared/tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` JSON payloads emitted by `ProcessBackend` / `ExecutionBroker` on capability violations (e.g. `network_access_denied` under `network-isolated`) and transforms them into standardized structured critiques. Preserves strict backward compatibility for policy guard denials.
-- **E2E Sandbox Synthesis Tests (`harness/shared/tests/test_neurosym_sandbox_e2e.py`)**: Multi-turn synthesis and repair tests verifying invariant `INV-9` (fail-closed sandbox fallback), `AC-CE-1` (capability profile violation trapping), and `AC-NS-3` (critique-guided multi-file app synthesis and repair).
-- **Regression Suite Expansion (`harness/shared/tests/regression/test_sandbox_violation_regression.py`)**: Dedicated AQA regression tests verifying critique serialization and schema conformance.
-- **Performance & Invariant Scanning Optimization (`harness/shared/validate_invariants.py`)**: Migrated `_first_party_py_files` traversal to pruned `os.walk` to eliminate performance bottlenecks over large directory trees.
-
-### Fixed — the invariant liveness gate could not see 13 of the 17 invariants
-
-`test_invariant_liveness.py` computed one set difference,
-`set(INVARIANT_MECHANISMS) - _declared_invariants()` — dict minus contract. **The
-reverse was never computed.** The dict held 4 entries (INV-8/9/16/17) against 17
-declared invariants, so the other 13 sat in no dict and were never examined; the only
-completeness guard was `assert len(_declared_invariants()) >= 16`, which an
-unclassified addition passes.
-
-That hole is why **INV-11, INV-12 and INV-14 were published as unqualified MUSTs over
-capability that does not exist** — no `critique.py`, no `repair_loop.py`, and no
-occurrence of `repair` or `critique` in the orchestrator — three lines from INV-13,
-which is scrupulously honest about exactly this and names *this module* as the gate
-that should have caught it.
-
-Every declared invariant is now classified in one of four dicts, each with a reason:
-`INVARIANT_MECHANISMS` (importable symbol with a live caller), `ENFORCED_ELSEWHERE` (a
-named gate covering every clause — INV-1/4/6/15), `PARTIALLY_ENFORCED` (what is covered
-*and* what is not — INV-2/3/5/7/10) and `DORMANT_INVARIANTS` (nothing enforces it —
-INV-11/12/13/14). `test_every_declared_invariant_is_classified` fails closed on an
-unclassified addition, mirroring `test_ci_gate_coverage.py`'s `KNOWN_GAPS` /
-`PARTIAL_COVERAGE` idiom.
-
-**Invariants are not atomic**, which the first draft of this change got wrong. Several
-have clauses with different enforcement status, so a single verdict per invariant is
-itself an overclaim: INV-7's delegation half is enforced by `validate_agent_policy.py`
-while its evidence half is not (the repo's own `DECLARED_NOT_YET_ENFORCED` already
-recorded that nothing cross-checks `evidence_required_for`); INV-2 and INV-3 name the
-JVM stack, which no root target runs because the root `Makefile` declares no `JVM_DIR`;
-INV-5's own gate declares `audit` a known gap and `specs` partial; INV-10's DENY
-*production* is tested but its *terminality* is not, for want of a repair loop able to
-violate it. `CONTRACT.md` now carries those qualifiers, so the published text and the
-classification cannot disagree — enforced by the existing marker test, whose accepted
-phrases are now a declared constant so INV-13's "Not currently satisfiable" keeps its
-DEC-010 explanation instead of being reworded to match a literal.
-
-Also: `synthesis.critique_schema_version` and `synthesis.max_repair_cycles` join
-`DECLARED_NOT_YET_ENFORCED` as *pinned but unconsumed* — a different state from their
-unpinned siblings. `DEC-NS-002`, which proposes `"1.0"`, is still BLOCKING in a DRAFT
-openspec document, so the pin records a proposal, not a decision. `decision_id_pattern`
-is documented as governing decision-log IDs only: both readers rewrite it into
-`\b(...)\b` and use it as a scanner over the log, never as a validator, so
-area-scoped `DEC-NS-002`-style identifiers in `openspec/changes/**` are proposal-local
-and read by no gate. The neurosym spec's Problem Statement claimed the orchestrator
-"runs unbounded multi-agent loops without policy verdicts… violating INV-9, INV-11, and
-INV-12"; two-thirds was false since DEC-011 wired `ExecutionBroker` and bounded the loop
-with `max_iterations` + `ToolBudget`, and nothing caught the drift because `openspec/`
-is outside every CI gate.
-
-**5/5 mutants killed** — one of which found a real defect in the new tests: the
-partial-reason check tested `"COVERED:" in reason`, which `"NOT COVERED:"` satisfies as
-a substring, so a reason stating only the uncovered half would have passed. The check is
-now anchored to the start of the string.
-
-### Added — the plan gate: `make specs` now checks that a plan's criteria could fail
-
-`make review`'s checklist named `openspec-peer-review` as the plan-review step: four
-job-title personas, no output schema, no severity vocabulary, and a termination rule
-that cannot fail ("Only proceed once all personas sign off"). The mechanical half was
-thinner — `validate_specs`' falsifiability check was a three-phrase blocklist
-(`works correctly`, `as expected`, `appropriately`) which, measured across all fifteen
-plans in the repository (104 acceptance criteria, 139 requirement IDs), **fires zero
-times.**
-
-`plan_rules.py` replaces it with four rules decided from the document alone, run by
-`validate_plan.py` as a third tier of `make specs` and scoped to plans git reports as
-modified: `UNFALSIFIABLE_ACCEPTANCE` (a criterion naming no observable),
-`STAGE_REACHABILITY` (one naming a check but assigning it to a human),
-`MISSING_FAILURE_PATH` (criteria describing only success) and `ORPHAN_REQUIREMENT` (a
-declared ID no criterion cites). On the same corpus they report 10 findings.
-
-**Every rule was calibrated against that corpus before shipping, and three were wrong
-on first contact with it.** The observable grammar recognised `make` targets and pytest
-selectors but not `ruff check .`, `git grep` or `python -m pytest` — 13 of its 20
-findings were that gap (65% false positives), fixed by treating a backticked span as the
-marker rather than a curated executable list, which would also have been a hard-coded
-value. The non-success vocabulary had `failure` but not `fails`, so
-"`test_lint_config_liveness.py` fails when a dead pattern is present" read as
-success-only — 4 of 7 findings (57%). And requiring every `R-*` to be cited by a
-criterion scored nine of eleven specs at 100% orphaned, because `SPEC_TEMPLATE.md` never
-asked for the citation; that rule is now scoped to plans carrying the sections this
-change adds. Uncalibrated, the gate's first run would have produced ~127 findings on a
-corpus holding perhaps 8 real defects.
-
-Three defects in the migrated structural rules are fixed in the move. Two were recorded
-in `NEXT_STEPS.md`: an unfilled `make spec` scaffold satisfied every rule (its
-placeholder IDs match the ID patterns), and an `AC-*` bullet containing MUST could never
-satisfy the `[CR]-` pattern — unsatisfiable for exactly the bullets the template tells
-authors to write. The third was found by running the gate against this change's own
-spec: the blocklist matched phrases inside code spans, so it failed any document that
-names the phrases it bans. Both phrase-matching rules now strip code spans first, since
-a backticked phrase is being named rather than used.
-
-The rules also stopped being defined twice. `validate_specs.sh` carried them as an
-inline heredoc and `validate_specs.py` carried them again, and the two had already
-drifted — the shell copy discovered specs recursively and skipped no template; the
-Python one did neither. One definition, two callers.
-
-INV-17 is added to `harness/CONTRACT.md` with its `test_invariant_liveness` mechanism
-entry in the same change, so it is never a published MUST with nothing behind it.
-**5/5 mutants killed**: dropping the human-deferral override, un-stripping code spans,
-removing the orphan rule's scoping, widening the modified-file scope to every plan, and
-turning an unparseable plan into a silent skip.
-
-### Added — Multi-Agent Orchestrator & Governance Kernel God-File Decomposition
-
-- **God-File Refactoring (`R-GFD-1` .. `R-GFD-8`)**: Decomposed large orchestration and governance modules into highly focused single-responsibility units:
-  - Extracted isolated executors into [`harness/shared/tool_executors.py`](harness/shared/tool_executors.py) (`execute_write_file`, `execute_run_command`).
-  - Extracted tool argument normalization into [`harness/shared/tool_dispatch.py`](harness/shared/tool_dispatch.py) (`_normalize_tool_arguments`).
-  - Extracted persona prompt templates and guardrails into [`harness/shared/agent_prompts.py`](harness/shared/agent_prompts.py).
-  - Decoupled process execution backend and byte-capping into [`harness/shared/governance/process_backend.py`](harness/shared/governance/process_backend.py) (`ProcessBackend`, `_cap`).
-  - Fortified `ExecutionResult` immutability via `@dataclass(frozen=True)` and non-mutating `dataclasses.replace` in [`harness/shared/governance/broker.py`](harness/shared/governance/broker.py).
-  - Split monolithic orchestrator tests into four modular test modules (`test_orchestrator_init.py`, `test_orchestrator_tools.py`, `test_orchestrator_hooks.py`, `test_orchestrator_agent_loop.py`).
-- **Comprehensive C4 Architecture**: Added full Level 1-4 architectural diagrams and threat boundary models in [`docs/architecture/c4_architecture.md`](docs/architecture/c4_architecture.md).
-- **PEP 585 / UP035 Type Modernization**: Standardized on modern typing across all modules (`collections.abc.Callable`, `collections.abc.Mapping`, `typing.Any`, `typing.Final`) and PEP 484 explicit re-export syntax.
-- **Cross-Platform Hook & Live E2E Hardening**:
-  - Implemented relative POSIX path resolution for `.mango/hooks/*.sh` invocations under Windows MSYS2/Git Bash to avoid backslash escaping issues.
-  - Enhanced live E2E test suites (`test_mango_mas_live.py`, `test_orchestrator_agent_loop.py`) to resolve credentials dynamically from `.env` and environment via `nemotron_bridge.resolve_api_key()`.
-  - Hardened `_reject_unsafe_relpath` in [`harness/control-plane/publish_policy_artifact.py`](harness/control-plane/publish_policy_artifact.py) to prevent Windows drive letter paths on POSIX hosts.
-  - Isolated regression fixtures from `GITHUB_BASE_REF` environment variables to ensure deterministic cross-platform runs.
-- **Strict Code Quality & Logging Normalization**:
-  - Hoisted all function-scoped `import logging` calls to module-level imports, maintaining 100% clean Ruff checks and Mypy strict validation across all 125 source files.
-  - Verified 97.92% total line coverage, 94.88% branch coverage, and 100% per-file compliance across all 50 monitored harness modules.
-
-### Added — every verdict is now logged, not just derived
-
-`status`/`termination_reason` were computable but never observed: nothing in
-`harness/` logged or aggregated them, so the question the merged verdict-propagation
-spec deferred — whether the observed `FAILED` rate justifies a repair loop — had no
-data to answer it with. `_emit()` is the one choke point all three `Verdict`
-constructors share (`derive_verdict`'s internal `_v()`, `not_configured()`,
-`reentrant()`); wrapping their returns logs `status`/`termination_reason`/
-`command`/`exit_code` as message-string fields, since `JSONFormatter.format()`
-reads four fixed record attributes and drops `extra=` kwargs. Nothing in `Verdict`
-needs redaction: `.reason` never carries captured stdout/stderr, traced through
-every branch of `derive_verdict`. Reaches disk today with nothing else built —
-`main.py` already configures a root JSON logger and `execute_loop` runs in the same
-request thread. **2/2 mutants killed** (dropped logging call; broken pass-through).
-
-A companion change in this same line of work — moving the four prompt-template
-constants out of `mango_mas_orchestrator.py` — was developed independently and in
-parallel with the God-File Decomposition above, which already extracted the same
-four constants (plus the hook-related ones) into `agent_prompts.py`. Superseded on
-merge rather than duplicated: no `prompt_templates.py` was added.
-
-### Added — the verifier's verdict is now a value the harness earned, not prose nobody read
-
-`execute_sequential_thinking_loop` ran planner → reasoner → verifier once each and
-returned the verifier's raw string. Nothing parsed it. The API wrapped it in a
-hardcoded `status="success"`, so a FAIL and a PASS were byte-identical to every
-consumer, and every test mocked the loop to return `"PASS"` — so no test had ever
-driven a failure through the pipeline. This is the shape
-`test_invariant_liveness.py` exists to catch, sitting in the product path while
-four milestones removed it from the gates.
-
-**Deriving the verdict from the agent's own commands would not have fixed it.**
-The model chooses what to run: a verifier executing `true` produces a
-SUCCESS/exit-0 broker result and would have earned VERIFIED. That is model
-authorship at one remove, and worse than prose, because the result carries
-mechanical authority. So the harness runs a check of its own —
-`make -f Makefile test-python`, through the same `ExecutionBroker`, under the
-verifier's canonical identity — and `derive_verdict` accepts only a `HarnessCheck`,
-which `verification.run` alone constructs. Passing it an `ExecutionResult` raises.
-Provenance is a property of the type, not of the call site.
-
-`-f Makefile` is load-bearing, not tidiness. GNU Make searches `GNUmakefile`, then
-`makefile`, then `Makefile`. Only the last is a protected path, so an agent holding
-`write` defeats the check in one tool call by adding a `GNUmakefile` whose target is
-a no-op. Naming the file removes the search.
-
-The probe runs `make -n` plus a `command -v` census rather than testing that a
-Makefile exists: a workspace whose Makefile lacks the target exits 2 with **no**
-broker reason, which is indistinguishable from a failing suite, and would have been
-reported as a failure of the change. `-n` is also why the probe cannot invoke what
-it probes — the configured target runs the suite containing this module.
-
-Three reported states, and nothing is promoted between them. **BLOCKED** means no
-verdict was obtained (not configured, re-entrant, probe failed, harness fault,
-broker denial); **FAILED** means the check ran and failed; **VERIFIED** means it ran
-and passed. An earlier draft promoted the unobtainable cases to FAILED on a
-misreading of INV-12, whose scope is what a repair loop produces at budget
-exhaustion — reporting "we could not check" as "it failed" in a change about honest
-verdicts.
-
-`execute_loop` is a new public method returning the typed outcome;
-`execute_sequential_thinking_loop` is now a one-line adapter returning the same
-string it always did, so R-ORCH-4's five members stay byte-compatible. This
-supersedes `orchestrator-tool-registry.md:98-99` (new methods are
-underscore-private; public methods keep identical semantics) for this method only,
-per `docs/specs/verdict-propagation.md`. Four in-repository test stubs are updated
-because they patch the orchestrator class — a `MagicMock` in a `str` field raises
-under Pydantic v2 and the endpoint's blanket `except` turns it into a 500.
-
-**`status` is unchanged and still means only "the orchestration did not raise."**
-A client reading that field alone still learns nothing, which is why the verdict has
-its own fields, why they name the command and exit code, and why `app.js` renders
-them: the configured target is one gate, not the repository's full matrix, and a
-bare verdict word would read as "CI green".
-
-**19/19 mutants killed** — among them: `derive_verdict` accepting an
-`ExecutionResult`; `probe_ok` ignored; a harness fault graded as a failure; either
-half of the status/exit-code pair deleted; `-f Makefile` dropped; the probe
-succeeding unconditionally, ignoring its result, or probing the file instead of the
-target; the census skipped; the sentinel never set or never restored; and the loop
-deriving its verdict from the model's prose. Each was applied to the tree and
-confirmed to fail the suite. `verdict.py` 100%, `verification.py` 98%.
-
-**Stated rather than implied: this is tamper-evident, not tamper-proof.** A reasoner
-holding `write` in the same workspace can defeat any check run inside it —
-`conftest.py` is airtight (`pytest_sessionfinish` assigning `session.exitstatus = 0`
-forces exit 0), and `pytest.ini`, `tox.ini`, `setup.cfg`, `vitest.config.ts` and
-`package.json` are all writable, as is any file `mv` can be pointed at, since `mv`
-does not classify its source operand. `docs/specs/verdict-propagation.md` carries
-the full list. VERIFIED means "the configured check exited 0" and nothing more.
-
-### Fixed — the tool-call budget was per turn while its name and message said per task
-
-`agent_defaults.max_tool_calls_per_task` is 100, and the refusal it raises says "per
-task". It was enforced by a counter initialised inside `execute_agent`, so the three
-turns of one orchestration could spend 300. The policy value and the enforced value
-agreed on the number and disagreed on the unit — the drift `test_policy_consistency`
-exists to catch, one layer down.
-
-`ToolBudget` is a value the caller owns and threads through the turns it wants
-accounted together; `execute_agent(..., budget=None)` creates a fresh one per call,
-which is byte-for-byte what every existing caller had. Deliberately not an
-accumulator on `self`: that needs a reset, a reset needs a correct call site, and a
-missing reset is invisible to every test in this repository, all of which build a
-fresh orchestrator. **7/7 mutants killed.**
-
-### Changed — `_format_execution_result` moved to `tool_result_format.py`
-
-Extracted so the rendering has one home and the orchestrator stays inside the
-500-line budget — the same split, for the same two reasons, as `tool_schemas`.
-Nothing outside the orchestrator referenced the private original. It takes a
-`typing.Protocol` rather than importing `ExecutionResult`, so it stays at the bottom
-of the import graph; `test_import_direction.py` now measures that graph (41 modules,
-zero cycles) and pins that `verdict.py` imports nothing first-party.
-
-### Security — the containment layer held against the shapes its own tests named, and little else
-
-An adversarial review of this branch, driven through the real broker in a
-temporary workspace, found four ways past the gates it added. Every one is
-reproduced by a test that fails against the code as shipped.
-
-#### `1>` and `2>` were not redirects
-
-`_REDIRECT` was `(?<![0-9<>&])(?:>>|>)(?!&)`. The `0-9` was added so `2>&1`
-would not read as a redirect — but `(?!&)` already did that, so the digit
-exclusion bought nothing and made **every fd-numbered redirect invisible**.
-`echo PWNED 1>.git/hooks/pre-commit` classified as `read`, produced no write
-targets, and installed a host-executed hook. Since the action never became
-`write`, it also let the **verifier** — which holds no `write` action at all —
-write files, and the full escalation the spec's problem statement describes was
-open end to end: write `post-verifier-run.sh` via `1>`, and the orchestrator
-runs it on the host at the end of that same turn.
-
-Now `(?<!>)>(?!&[0-9-])`: every `>` counts, including `1>`, `2>`, `&>`, `>|` and
-`<>`; only descriptor duplication and closing are excluded. The control that
-motivated the over-broad original — `2>&1` and `>&2` must not be graded writes,
-or ordinary commands are denied — is kept and pinned.
-
-#### A trailing redirect downgraded every dangerous command
-
-The redirect branch ran before the program and shape tables **and returned from
-it**, so the redirect *was* the classification. Appending ` > out.txt` regraded
-anything to `write`, the one action the implementer holds:
-
-| command | was | now |
-|---|---|---|
-| `rm -rf victim > log.txt` | `write` | `destructive` |
-| `curl --version > out.txt` | `write` | `external_write` |
-| `env > env.txt` | `write` | `secret_access` |
-| `sudo -n true > log.txt` | `write` | `permission_change` |
-
-Seven characters routed around `human_approval_required_for`,
-`external_network_default` and every entry in `high_risk_actions`. Classification
-now grades the command first and takes the **strictest** of that and the write,
-against an explicit severity order in which an action the table does not name
-sorts highest — so adding one can never make it downgradable.
-
-A command exercises a *set* of actions, and the strictest is not always the
-write: `pytest -q > x.txt` grades `test_execute`, and a role holding
-`test_execute` without `write` would still write through the redirect. The
-broker now requires `write` separately whenever a command has write targets.
-
-#### Tool authority was enforced by omission from a prompt
-
-`tools_for_role` filters the schema the model is *told* about.
-`_dispatch_tool_calls` looked handlers up by name with no reference to that
-filtered list — and `write_file` is in `conversation_history` from the reasoner's
-turn immediately before the verifier's. A verifier that named the tool anyway got
-it. The pre-existing test asserts on `chat.call_args.kwargs["tools"]`, which is
-exactly the advisory half, so it stayed green against this.
-
-`agent_authority.tool_is_permitted` now answers the same question at dispatch,
-where it decides what runs rather than what is advertised.
-
-#### Brokered commands inherited the full credential environment
-
-`_run_hook` filtered the environment; `ProcessBackend._spawn` did not — and
-`_spawn` is the path the model controls. `env` and `printenv` are graded
-`secret_access` and denied, but the action model cannot enumerate every
-spelling: `cat /proc/self/environ` is `cat`, which grades `read`, an action every
-role holds, and returned `NVIDIA_API_KEY`, `API_SERVER_KEY` and
-`AGENT_EVIDENCE_KEY` into the model's context. The last is the HMAC key evidence
-manifests are signed with, so that was forgery, not only disclosure.
-
-**14/14 mutants killed** across the four fixes, each with a control that a
-gate denying everything would fail.
-
-### Fixed — `classify` was quadratic in a model-supplied string
-
-Two `_BY_SHAPE` patterns bridged with `.*` after a repeatable literal, so the
-engine retried the tail from every match position. Measured: 0.28 s at 14 KB,
-1.07 s at 28 KB, 4.29 s at 56 KB, **17.1 s at 112 KB** — a clean 4× per
-doubling. The broker's timeout bounds the subprocess and `classify` runs before
-it, so nothing covered this: one oversized `run_command` stalled the
-orchestrator and, through `run_in_threadpool`, an API worker.
-
-Both patterns now bridge with a bounded flag run instead of `.*`, and the input
-is capped at `orchestrator.max_command_bytes` (new policy key, not a literal).
-Same input: 0.0003 s. The cap alone would have left the quadratic patterns live
-just beneath it, so both are fixed rather than one.
-
-`debug_dump`'s credential patterns were measured too and are **linear** — worst
-case 69 ms at 256 KB. No change needed there.
-
-### Fixed — `ProcessBackend.available()` returned True unconditionally
-
-That is not a probe. It is the `sandbox_available: bool = True` fail-open moved
-one method down: same unconditional yes, same unreachable INV-9 branch. And
-`test_default_probes_the_backend_rather_than_assuming` passed identically
-against both, so the test's *name* was the only thing separating the defect from
-the fix.
-
-`available()` now runs the shell. `shutil.which` would answer "a file with that
-name is on PATH", which a shell that is present but not executable also
-satisfies — and that fails at the first real command instead, with the caller
-already past the INV-9 branch. Cached, because `verify_sandbox` is consulted per
-tool call and the answer cannot change within a run. **4/4 mutants killed**,
-including the original `return True`.
-
-### Changed — the tool schema moved to `tool_schemas.py`
-
-`NEMOTRON_TOOLS` now lives in `harness/shared/tool_schemas.py` and is re-exported
-from the orchestrator unchanged; every caller reaches it as
-`orch_module.NEMOTRON_TOOLS` and none is affected. This keeps the orchestrator
-inside the 500-line budget, which the containment checks had pushed it past.
-
-`test_meta_tools_are_actually_wired_into_the_orchestrator` asserted by searching
-the orchestrator's *source text* for `META_TOOLS_SCHEMA`, `knowledge_gap_log` and
-`hypothesis_register` — which its own docstring would satisfy, and which a
-comment saying the tools are not wired would satisfy equally. It now asserts
-against the composed schema and the live dispatch registry.
-
-### Fixed — `.dockerignore` shipped a dead rule and the image shipped test fixtures
-
-`.agents/` was excluded long after the directory was consolidated into
-`.mango/skills/` (R-HYG-4). `TestGitignoreHasNoDeadRules` did not catch it: it
-reads `.gitignore` only, and its predicate is *the parent exists*, which
-`.agents/` satisfies because its parent is the repository root.
-`TestDockerignoreHasNoDeadRules` checks the rule's own path. **3/3 mutants
-killed.**
-
-`COPY harness/ /app/harness/` also put `harness/shared/tests/` — which holds a
-`ghp_...`, an `AKIA...` and `nvapi-...` literals — into the published image.
-Those are allowlisted for the *scan*; the allowlist says nothing about what
-ships. The Python and JVM suites are excluded from the build context;
-`harness/node/tests/` is removed in the runtime stage instead, because
-`tsconfig.json` includes `tests/**/*.ts` and dropping it from the context would
-not fail the build — it would quietly typecheck less.
-
-### Hardened — `_run_hook` executed any script whose name it was handed
-
-`_run_hook(name)` spawned `<hooks_dir>/<name>.sh` on the host whenever the file
-existed, and `execute_agent` builds that name by interpolating its `agent_name`
-argument: `f"post-{agent_name}-run"`. `hooks_dir` is inside the workspace, and
-in the deployed configuration the workspace *is* the repository, so the pair is
-a host-execution primitive keyed on a caller-supplied string.
-
-**Stated precisely, because the distinction matters:** this was not reachable by
-the agent. `agent_name` comes from `execute_sequential_thinking_loop`, which
-passes the three fixed roles; the model never chooses it. The write policy
-already refuses to create a file under `.mango/hooks/**`. This is
-defence-in-depth on a primitive whose safety otherwise rested on an argument
-being trustworthy — true today, and nothing enforced it.
-
-`_run_hook` now refuses any name outside `PERMITTED_HOOK_NAMES`, checked before
-the path is built so the verdict does not depend on whether the file exists.
-The set is *derived* — `{PRE_RUN_HOOK} | {f"post-{role}-run" for role in
-ACTIVE_TO_CANONICAL}` — so a role added to the authority model gets its hook
-without a second edit, and a hand-maintained list cannot go stale into a
-permission. Refusal raises rather than returning: a name the orchestrator never
-constructs indicates a bug or an injection, and skipping quietly would make it
-look like a hook that simply is not installed.
-
-`test_the_allowlist_covers_every_name_the_orchestrator_constructs` parses the
-`_run_hook` call sites out of the module and checks the set covers them, so a
-new call site the allowlist omits fails here rather than at runtime on whichever
-role happens to run last. **5/5 mutants killed**, including an empty allowlist —
-which every other assertion in the class would have passed.
-
-The orchestrator tests drove `execute_agent` with a fictional `test-agent`
-role. That is no longer a neutral placeholder: the authority model does not
-declare it, so `post-test-agent-run` is a name the orchestrator could not have
-constructed. Those tests and the regression-tier fixture now use the active
-roles, as `test_mango_mas_tools.py` already did.
-
-Raised by review on `mango_mas_orchestrator.py:203`. The companion comment on
-`:214` — `set(credential_env_names())` rebuilt once per environment variable
-inside the filter comprehension — was already hoisted.
-
-### Fixed — the command guard could hang instead of returning a verdict
-
-`check_command` delegates push-destination decisions to `remotes.py` in a
-subprocess, and that call carried no timeout. A guard that hangs produces the one
-outcome a fail-closed gate cannot: no verdict at all. The tool call waits on a
-subprocess that waits on a network read, and neither the broker's timeout nor
-INV-8 has anything to act on.
-
-Threading the broker's own budget through (`check_command(command,
-timeout=timeout)`) fixed the broker path and left the other one open.
-`main()` — the PreToolUse entry point Claude Code actually executes as a hook —
-has no tool budget to hand down, so it kept calling `check_command(str(cmd))`
-and the signature default `timeout: int | None = None` passed `None` straight
-into `subprocess.run`. A default that reads as "bounded" and is not is the same
-shape as the `sandbox_available: bool = True` fail-open removed one commit
-earlier.
-
-The default is now resolved from `orchestrator.tool_timeout_sec` in
-`governance-policy.json` rather than fixed in the signature, so the hook and the
-broker share one policy-declared bound and neither restates it. Read with
-`json.loads` rather than through `policy_loader`: Claude Code executes this
-module directly, so it takes no harness imports — the same standalone-stdlib
-contract `check_projections` and `verify_zero_skips` carry, and the reason they
-duplicate the absent-policy rule rather than importing it.
-
-Resolution is inside `check_command`, not at import time, so the value cannot be
-pinned to whatever the policy said when the hook module first loaded. An absent
-policy is the adopter path; a policy that is *present but unreadable* raises, and
-`check_command` converts that raise into a block — an exception escaping a
-PreToolUse hook is a crash, which Claude Code reads as a broken hook rather than
-as a denial. Absence is separated from inaccessibility by errno, not by a `Path`
-predicate, for the reason recorded below: `stat()` answers `NotADirectoryError`
-for a policy behind a file-where-a-directory-belongs and `ELOOP` for a symlink
-loop, and reading either as "no policy here" silently restores the default.
-
-**8/8 mutants killed** — restoring the unbounded default, dropping the
-`TimeoutExpired` catch, falling back on an unusable policy, dropping the
-positivity guard, dropping the `bool`-is-an-`int` guard (a policy of `true`
-otherwise reads as a one-second budget), letting the `ValueError` escape as a
-crash, and either of the two ways to collapse inaccessible into absent.
-
-### Agent containment — INV-8 becomes true on the live path
-
-`run_command` routes through `ExecutionBroker`. Generated code now executes
-through the approved broker, which derives the action from the command, obtains
-a policy verdict, runs the command guard, and pins the working directory, the
-timeout and the captured output size. Nothing falls back to host execution when
-the backend is unavailable (INV-9), and a denial is terminal (INV-10).
-
-#### Added
-
-- `test_invariant_liveness.py`, generalising the insight behind
-  `test_protected_path_liveness.py` — *a pattern that matches nothing protects
-  nothing, silently* — one layer up, to invariants whose enforcement mechanism
-  has no caller. It asserts on **resolved imports parsed from the AST**, not on
-  text: a symbol appearing in a comment is not a caller. **3/3 mutants killed** —
-  removing the orchestrator's broker import fails INV-8, INV-9 and the positive
-  control with the intended message.
-
-  It ships with an **empty** waiver dict. Landing it earlier alongside a waiver
-  for INV-8 was considered and rejected: a self-destructing waiver introduced in
-  the same commit as its own fix can never fire, and a gate whose first act is to
-  waive the invariant it exists to catch is the defect wearing a test file.
-- `agent_authority.execution_identity` — the canonical contract each active role
-  executes as. The active roles are not declared in `agent-policy.json`, and
-  adding them would be the agent's own governing policy gaining an execution
-  grant. The narrowest contract that covers the role's work is used instead, and
-  `test_execution_identity_is_no_wider_than_the_role` pins that it never exceeds
-  the role's derived authority.
-- `_format_execution_result`, a pure function, so the three output shapes stay
-  testable without spawning a process.
-
-#### Changed — accepted consequences
-
-- **An active role the mapping does not declare cannot execute at all.** It is
-  denied as an unknown identity rather than defaulting to a permissive one.
-- **`pip install` and other external or destructive commands are denied for the
-  reasoner.** The reasoner prompt instructed running `pip`; it now names the
-  repository's own gates and directs the agent to `knowledge_gap_log` instead of
-  retrying a command policy will keep refusing.
-- Two classifier defects found by the existing suite rather than by inspection:
-  `>&2` and `2>&1` were read as command chains, denying ordinary commands; and
-  `sleep`, `sort`, `cut` and similar were unmodelled and therefore denied.
-- `test_generic_exception` monkeypatched `orch_module.subprocess.run`. With
-  execution behind the broker that patch is inert — it would have passed while
-  asserting nothing. Replaced with an injected backend that cannot start.
-
-### Agent containment — the execution broker becomes real
-
-Third in the containment sequence. `ExecutionBroker` is the approved execution
-path INV-8 names; it had no production caller and `execute_command` ended at
-`FAILED: Execution engine not fully implemented`, so INV-8 was declared and
-unreached.
-
-#### Fixed — three fail-open shapes in the broker
-
-- **`sandbox_available: bool = True`.** A caller that never probed was told the
-  sandbox was healthy, so INV-9's no-fallback branch was unreachable from the
-  constructor most callers would write. The default is now *probe*; an explicit
-  bool is still honoured, which is what lets a test drive the unavailable path.
-- **`if _PDP_PATH.exists() and _POLICY_PATH.exists():`** skipped the policy
-  verdict entirely when either file was missing, rather than denying.
-- **The decision point ran as a host subprocess, before the command guard, from
-  a path inside the agent's workspace.** Replacing that file replaced every
-  subsequent verdict. It is evaluated in process now.
-  `tool_broker_reference.py` remains as the contract an external broker mirrors,
-  and `test_policy_decision.py` pins that the two agree on every representative
-  request.
-
-#### Added
-
-- `governance/command_actions.py` — derives the action a command exercises from
-  the command. The action was previously whatever the caller passed, and a
-  constant grades `pytest` and `rm -rf /` identically, so
-  `human_approval_required_for` was never reached. Classification is an
-  allowlist; anything unmodelled resolves to an action **no role holds**, pinned
-  by `test_unclassified_action_is_held_by_no_role`. Chained and substituted
-  commands are unclassified rather than graded by their first word, and reading
-  a credential-bearing file is `secret_access` rather than `read`.
-- `governance/policy_decision.py` — the verdict, in process, mirroring the
-  reference implementation's three denials in order.
-- A process backend that pins the working directory, bounds runtime and caps
-  captured output. `execute_command` gains `cwd` and `timeout`: the
-  orchestrator's contract is a pinned directory and a policy-declared
-  `tool_timeout_sec`, and a broker that dropped them would discard a governed
-  budget silently.
-
-#### Scope, stated plainly
-
-The backend **contains**; it does not **isolate**. It confines neither the
-filesystem nor the network, so INV-13's sandbox digest is not yet satisfiable
-and no result produced here claims otherwise. Isolation is deferred to a
-capability profile because the primitive cannot be exercised on this
-repository's CI runners — `ubuntu-latest` restricts unprivileged user
-namespaces — and a gate that cannot run is the defect this programme exists to
-close.
-
-**INV-8 is not yet true on the live path.** The broker still has no production
-caller; the orchestrator's `run_command` continues to execute directly. Routing
-is the next change, and it is separated deliberately: a self-destructing
-dormancy waiver that lands in the same commit as its own fix never fires.
-
-#### Changed
-
-- `test_governance_broker.py` rewritten. The previous tests patched
-  `broker.subprocess.run` module-wide to stand in for the PDP child process;
-  with a real engine behind the same attribute those patches would have
-  intercepted the engine instead and passed while testing nothing. Three of them
-  pinned behaviour since identified as a fail-open —
-  `test_pdp_skipped_when_files_absent` asserted that a missing policy file
-  skipped the verdict.
-
-### Agent containment — the write tool cannot reach the control surface
-
-The second change in the containment sequence. `protected_paths` was enforced
-only by `validate_invariants.py` at CI time, against the set of files a commit
-changed. In the deployed path the agent's workspace *is* the repository root
-(`api_server/main.py` passes `workspace_dir=PROJECT_ROOT`), so `write_file` --
-correctly confined to the workspace -- had write access to the guard, the policy
-decision point, the orchestrator's own hooks, both policies, the agent personas
-and `.git/`.
-
-Enforcement was not absent, it was at the wrong granularity: `pre-nemotron-run`
-runs `validate_invariants.py` at the top of every `execute_agent` call, so a
-protected-path write is caught at the *next* agent boundary — with a whole
-tool-call budget in between, and the last agent's own writes never re-checked
-before its post-run hook fires.
-
-#### Fixed
-
-- **`_execute_write_file` consults the write policy at tool-call time**
-  (`write_policy.py`), reusing `validate_invariants.is_protected` rather than a
-  second matcher. `.git/**` is denied explicitly: `validate_invariants`
-  enumerates staged, modified and untracked files, and git never reports
-  anything under `.git`, so `protected_paths` structurally cannot cover a hook
-  or a `core.fsmonitor` entry written there.
-- **The verifier no longer receives `write_file`.** `execute_agent` passed no
-  `tools=` for the reasoner or the verifier, so both fell through to the
-  implementer schema — the role that judges the work could edit it, and could
-  write the hook `_run_hook` executes on the host at the end of its own turn.
-  Exposure is now derived from `agent-policy.json`: the union of a role's
-  canonical contracts minus each contract's `human_approval_required_for`, so
-  `release-auditor`'s approval-gated `external_write` and `production_change` do
-  not leak into the verifier either.
-- **Credentials no longer leave over HTTP.** `debug_dump` scrubbed
-  `NVIDIA_API_KEY` alone while `/api/orchestrate` returned the conversation
-  history, so `API_SERVER_KEY` and `AGENT_EVIDENCE_KEY` passed in clear text.
-  The second is the HMAC key `EvidenceBuilder` signs with: disclosing it permits
-  forged evidence manifests, so this was an escalation rather than a leak. The
-  single redactor now covers the reviewed list, sweeps any variable whose *name*
-  marks it as a credential (with a length floor, since replacement is by
-  substring), and matches seven more provider shapes.
-- **Hook environments are filtered.** `_run_hook` handed every hook
-  `os.environ.copy()`. `agent-policy.json` has always declared
-  `secrets_may_not_be_propagated_to_subagents: true` and nothing enforced it.
-- **An escape attempt now leaves a trace.** A write outside the workspace was
-  refused and logged nothing at all.
-
-#### Added
-
-- `harness/shared/write_policy.py` and `harness/shared/agent_authority.py`, both
-  at 100% line coverage.
-- `test_write_containment_regression.py`, parametrised over ten steps of a
-  published escalation path and asserting on the filesystem rather than only on
-  the returned string. Confirmed failing against the pre-fix commit: the pre-fix
-  run reports `Success: Wrote 7 characters to .../pre-nemotron-run.sh`.
-- `tool_broker_reference.py`, `write_policy.py` and `mango_mas_orchestrator.py`
-  join `protected_paths` and `CRITICAL_PATTERNS`. The PDP is executed by the
-  broker as a host subprocess *before* the command guard runs, and was
-  unprotected; so were the two enforcement points themselves.
-
-#### Note on a defect found in this change's own first draft
-
-Path normalisation used `lstrip("./")`, which strips a character *set* rather
-than a prefix: `.mango/hooks/x.sh` became `mango/hooks/x.sh` and `.git/config`
-became `git/config`, so the entire control surface read as unprotected while the
-gate reported success. Caught by running the check against real files, and
-pinned by `test_dot_prefixed_paths_are_not_mangled`.
-
-### Agent containment — the policy guard is reached, and fails closed
-
-Spec: `docs/specs/agent-containment.md`. Peer-reviewed before implementation by
-the Architecture, QA, Security and SDLC/Product personas plus a sandbox-viability
-design review; all five rejected two earlier drafts of this work, and the
-findings reshaped its sequencing and scope.
-
-#### Fixed — the orchestrator's guard call could not block anything
-
-- **The guard evaluated the empty string for every command.** The orchestrator
-  sent `{"tool": ..., "args": {"command": ...}}` while `main()` read
-  `tool_input.command`, so `check_command` received `""` and returned 0. A
-  `git push` to an arbitrary remote exited 0 through the orchestrator's payload
-  shape. The guard now canonicalises both envelopes, so the historical payload is
-  evaluated rather than silently allowed, and a JSON object carrying neither
-  envelope is denied with the PreToolUse block code (DEC-006).
-- **The guard was optional and loaded from agent-writable ground.** It was
-  resolved at `workspace_dir / "harness/shared/pretooluse_guard.py"` and skipped
-  entirely when absent — the comment on the following line recorded the fail-open
-  as intended. It is now imported from the installed harness and consulted
-  in-process; absence, import failure and evaluation errors all deny (DEC-005).
-- **Non-object JSON exited 1** through an uncaught `AttributeError`, which a
-  PreToolUse consumer reads as a broken hook rather than a denial. It now exits 2.
-- **A denial's reason never reached the caller.** The remote-destination check
-  runs in a child process, so its stderr went to fd 2 rather than into the tool
-  result explaining the refusal. It is captured and routed through the guard's
-  own block path.
-
-#### Added
-
-- `harness/shared/tests/regression/test_guard_reachability_regression.py` — each
-  test confirmed failing against the pre-fix commit on **behaviour**, not on a
-  missing symbol: the pre-fix run executes the command (`fatal: not a git
-  repository`) where the fixed run refuses it, and the historical payload asserts
-  `0 == 2`.
-- Structured gate logging in the guard, which previously had no logger at all —
-  only a bare `print` to stderr. Blocks now carry a stable reason code, and DEBUG
-  records the resolved root, its source, and the allowlist path, so a denial
-  caused by a missing allowlist is distinguishable from a policy verdict.
-- `TestEnvelopeCanonicalisation`, `TestExtractCommand`, and a test pinning the
-  guard's *unmodelled* surface (`rm -rf /`, `curl | sh`, `cat .env`,
-  `pip install`) so its advertised scope cannot drift from its real scope.
-
-#### Changed
-
-- `test_block_dangerous_rm` renamed to `test_danger_matches_git_push_forms`: it
-  asserted on `git push`, in a guard whose `DANGER` pattern has never modelled
-  `rm`. The name advertised a control that does not exist.
-- The two orchestrator guard tests materialised a fake `pretooluse_guard.py` in
-  the workspace and asserted the orchestrator honoured its exit code — pinning
-  the wiring while leaving the payload contract, the thing that was broken,
-  unexercised. They now drive real commands through the real matcher.
-
-#### Known scope limit
-
-This change does **not** make `run_command` safe. `DANGER` models `git push` and
-`gh repo create --public` and nothing else, so `rm -rf /`, `curl | sh`,
-`cat .env` and `pip install` remain unblocked — now pinned by a test rather than
-left implicit. Command-level containment arrives with the execution broker.
-
-### Security — three policy readers could not tell an absent policy from an unusable one
-
-`policy_loader.load_policy`, `check_projections.decision_id_regex` and
-`verify_zero_skips._decision_id_regex` each documented the same contract — no
-policy file is the adopter path, a present-but-malformed policy fails closed —
-and each implemented it with a bare `Path.is_file()`, which cannot express it.
-`is_file()` answers False both for a path with nothing at it and for one holding
-a directory, a dangling symlink, a FIFO or a device node.
-
-The failure is a deployment away, not a hypothetical: a container mount whose
-source is missing leaves a directory, and a moved or unextracted target leaves a
-dangling symlink. Either one sent all three readers down the adopter branch, so
-every threshold and the decision-ID grammar silently fell back to built-in
-defaults and the run went green — the gate reporting success precisely because
-it had stopped reading the policy that governs it.
-
-Worse, the `Path` predicates also swallow `OSError`. `is_file()`, `exists()` and
-`is_symlink()` all answer False when the policy is *present and merely
-inaccessible* — a parent directory without execute permission, a path component
-that turned out to be a file (`NotADirectoryError`), a symlink loop. No
-predicate can express the question; only the errno can.
-
-All three readers now probe with `stat`/`lstat` and branch on the error.
-`FileNotFoundError` from both is the adopter path; anything else stops the run.
-`lstat` is what separates "nothing here" from "the symlink target is gone",
-since `stat` follows the link and reports both as `FileNotFoundError` — while a
-symlink to a *real* policy file must still be followed and read, so rejecting
-every symlink would be a fail-closed bug of its own. `policy_loader` exposes the
-rule as `policy_file_is_absent`; the other two inline it, because both are
-standalone-stdlib by contract (the adopter path copies them, so they take no
-harness imports).
-
-`test_policy_path_fail_closed.py` pins it twice over. Behaviourally, each reader
-is driven with a directory, a dangling symlink and a FIFO, and must raise with a
-reason — while a genuinely absent policy must still return the fallback, so the
-fix cannot quietly break the adopter case it stands in front of. Structurally, a
-source scan bans the shape outright: a policy path is never guarded by
-`is_file()`, because there is no correct way to answer this question with it.
-(An earlier version of the scan required a compensating `is_symlink()` nearby,
-which a guard checking *only* `is_symlink()` would have satisfied while still
-failing open on a directory.) The scan carries both a positive and a negative
-control, so neither a pattern that matches nothing nor one that matches the
-fixed form can pass unnoticed. Every claim about the stdlib that makes this a
-regression rather than a style choice is asserted too, not left in a comment.
-
-All of it was verified failing against the reverted code, including a guard
-written the way the first review round suggested.
-
-### Remediation programme v3 — peer review of the v2 tech-debt programme
-
-An objective review of PRs #15-#19 plus a wider gap analysis, shipped as three
-sequential PRs. Three of the review's own initial claims were wrong and were
-corrected against git before any work started: per-file coverage and the
-policy-loaded decision-ID grammar do **not** exist on `main` (they arrive with
-the open #18/#19), while the `socket.timeout` retry defect is in `main` *and*
-in #19 — neither open PR fixes it.
-
-#### Fixed — six runtime defects, each pinned by a failing-first regression test
-
-- **Retry was dead on Python 3.9**, a live CI matrix leg. `urlopen` read
-  timeouts raise `socket.timeout`, which only became an alias of `TimeoutError`
-  in 3.10, so `NEMOTRON_MAX_RETRIES` did nothing for the most common transient
-  failure. Peer resets were unretried on every version.
-- The `urllib.Request` was built once and replayed across retry attempts;
-  `Retry-After` was ignored; backoff had no ceiling (~34 minutes by the 11th
-  retry). A non-JSON body on an HTTP 200 was reported as "Connection Error".
-- `resolve_environment()` returned as soon as the key and model were in the
-  process environment, making `NEMOTRON_TIMEOUT_MS` / `NEMOTRON_MAX_RETRIES`
-  unreachable from `.env` in exactly the normal configuration.
-- Orchestrator tool dispatch crashed on `arguments: null` (`json.loads(None)`
-  raises `TypeError` past an `except json.JSONDecodeError`) and on
-  `arguments: "[]"`. A raising handler aborted the agent loop, leaving the
-  model's `tool_calls` message unanswered and skipping the post-run hook.
-- **Debug-history redaction never ran.** It was guarded on `self.api_key`,
-  which the orchestrator normally leaves `None` because the bridge resolves the
-  credential downstream — so `MANGO_DEBUG_DUMP=1` wrote plaintext credentials
-  to a predictably named file in the shared temp directory, with default
-  directory permissions. The existing test passed `api_key=` explicitly, the
-  one configuration where the old code did redact.
-- The API server compared its key with `!=` (a timing oracle) and returned
-  `conversation_history` verbatim over HTTP. Both fixed; note the hardening's
-  own second-order bug, caught by its test: `compare_digest` raises `TypeError`
-  on non-ASCII `str`, and header bytes are latin-1 decoded, so a naive fix
-  would have traded a timing leak for an unauthenticated 500.
-
-#### Added — enforcement where there was only intention
-
-- **Regression / AQA tier** (`harness/shared/tests/regression/`), selected by
-  path rather than by a marker, with one reproduction per defect above. Every
-  module was confirmed failing against the pre-fix commit.
-- **`test_import_purity.py`** — every shared and control-plane module must
-  import from a foreign working directory with exit 0, no output and no writes.
-  `validate_adoption.py` ran its entire gate at module scope; two sibling CLIs
-  had been fixed by hand in the previous programme and the third survived
-  because there was no rule.
-- **`test_test_quality.py`** — ten tests in the suite could not fail. It found
-  the tenth after the manual pass had found nine.
-- **`test_lint_config_liveness.py`** — three `per-file-ignores` patterns
-  suppressed nothing (including one for a gitignored directory that does not
-  exist), plus a dozen unused codes. Measured with `ruff --isolated`; a normal
-  run applies the very ignores under test.
-- **`test_deferred_rigor.py`** — every declined lint rule and mypy flag carries
-  its measured finding count and a reason, and the register fails in both
-  directions.
-- **`test_agent_surface_liveness.py`**, **`test_documentation_truth.py`**,
-  **`test_makefile_contracts.py`** — skills dated and classified, hooks
-  referencing only real paths, `.mango` proven the only skill root, the README
-  layout tree checked against the filesystem.
-- Three **scheduled workflows** that open issues and never block: nightly drift
-  on `main`, weekly skill staleness, weekly hook-install drift.
-- One new skill, `protected-path-attestation`, which produces the artifact the
-  labelled PRs in this programme need.
-
-#### Changed — measured, not speculative
-
-- ruff gains `BLE`, `RUF100`, `ICN`, `ISC`, `RSE`, `TID`, `A`, `C4`, `PIE`.
-  `BLE` turns 27 `# noqa: BLE001` justifications from prose into enforced
-  decisions. `RUF100` is safe *because* `BLE` is on: it flagged 20 inert
-  directives before, 13 of them exactly those justifications.
-- mypy gains `--check-untyped-defs` (14 findings, all fixed), which checks the
-  bodies of unannotated functions. Full `--strict` (604) and
-  `--disallow-untyped-defs` (533) are deferred with those numbers.
-- **Bare `pytest` now passes.** `addopts` deselects `live`, and the live suite
-  that lacked its sibling's `skipif` has one.
-- `.claude/hooks/session-start.sh` installs Node dependencies through
-  `make node-deps`, the same recipe CI uses. `make pre-pr` could not complete
-  in a web session before this.
-- `.mango/settings.json` routes hook commands through `bash`, matching
-  `.claude/settings.json`. Every tracked `.sh` is mode 644 and stays that way —
-  the defect was the invocation, not the mode.
-
-#### Removed
-
-- `.github/skills/code-review/` — a second skill root, fully orphaned, naming a
-  different project and asserting a >80% coverage bar against a policy of 90.
-- Pong ignore rules from `.gitignore`, two PRs after the demo was deleted.
-- `.agents/skills/` from the README layout tree; the directory does not exist.
-
-#### Collected — three deferrals that came due when the policy work merged
-
-The v3 stack was built on `main` deliberately excluding the then-open
-policy-single-source work, so re-implementing it could not conflict with review
-already spent. Three places recorded that dependency in a form that fails when
-it is discharged, rather than in a comment nobody re-reads:
-
-- `KNOWN_IMPORT_SIDE_EFFECTS` waived three modules that acted at import.
-  `test_every_waiver_is_still_necessary` failed on all three the moment they
-  imported cleanly, so the entries were deleted and the modules now fall under
-  the purity gate normally. The registry is empty and documents what earns a
-  new entry.
-- `DTZ` was deferred solely because one source site sat inside a rewritten
-  file. Both source sites — waiver expiry in `verify_zero_skips.py`, skill
-  staleness in `validate_governance_docs.py` — now anchor to UTC, the rule is
-  enabled, and the deferral entry is gone. A waiver keyed on a calendar date
-  expires a day early or late depending on the runner's timezone; six test
-  sites shared `date.today()` and would have disagreed with the validators for
-  the hours where the two dates differ, so they share one clock via a
-  `utc_today()` helper.
-- Three `per-file-ignores` E402 entries stopped suppressing anything once those
-  modules were restructured; `test_every_code_still_suppresses_something`
-  reported it and they were removed.
-
-
-Hygiene remediation batch (DEC-004), shaped by three adversarial reviews of its
-own plan -- nine elements of the first draft were rejected as wrong or
-net-negative before implementation (among them: a branch-coverage change that
-would have silently blended the metric it claimed to gate, regression tests
-that could never fail, and deletions that broke the policy template/instance
-relation).
-
-### Security — coverage is now two floors, not one blend
-
-- **Branch coverage was not measured at all.** `shadow_planner.py` read 100%
-  line-covered while half its branches — including the "no api_key / no model,
-  defer to the bridge" leg — had never executed. `branch = true` is now set,
-  and measurement exposed a trap: with branch arcs recorded, pytest-cov's
-  single total is a blended statements+branches number, so keeping
-  `--cov-fail-under` would have gated that blend against `coverage.lines` —
-  line coverage could regress below 90 while the blend stayed green, the same
-  "gate that lowers itself" inversion the COV_MIN=80 fallback had.
-- New `harness/shared/coverage_gate.py` enforces `coverage.lines` and
-  `coverage.branches` as **separate floors** from `coverage.json` + policy,
-  fail-closed on a missing/malformed report or policy, with no numeric default
-  anywhere. `branches` moved from `UNENFORCED_IN_ROOT_CI` to `PYTHON_ENFORCED`
-  (waiver deleted, not reworded). Measured: lines 94.10% ≥ 90, branches
-  89.46% ≥ 80. The four worst branch offenders were brought to 100% branches
-  with behavioural tests (bridge-defaults leg; shim bootstrap and `__main__`
-  dispatch legs via runpy, asserting the pretooluse guard's real verdicts).
-
-### Fixed — two crash paths in the policy-reading gates
-
-- `LOG_LEVEL=BOGUS` crashed all three gates with `ValueError` before any check
-  ran; `resolve_log_level()` existed for exactly this and none used it. All
-  three now degrade bad verbosity instead of failing the gate. Regression
-  tests are subprocesses on purpose: under pytest the root logger already has
-  a handler and `basicConfig` ignores `level`, so an in-process test passes
-  identically with and without the fix.
-- A policy of valid JSON that is not an object (`[]`) escaped as a raw
-  `AttributeError` traceback; it now routes to the same fail-closed
-  "[FAIL] Malformed governance policy" path as a syntax error, with a probe
-  per gate.
-
-### Added — cross-file policy consistency gates
-
-- `test_policy_consistency.py` (25 tests): the shared policy is pinned as a
-  **superset** of both per-stack instances (value-equal on common keys,
-  `protected_paths` the one declared divergence); five unwired keys are
-  classified in `DECLARED_NOT_YET_ENFORCED` with reviewed reasons — mirroring
-  `UNENFORCED_IN_ROOT_CI` — instead of deleted, because the per-stack mirrors
-  sit under root-of-trust + bundle digests and two of the five are
-  declarations other artifacts still reference; the decision-ID grammar is
-  equality-checked across **all five copies** (three policies, two scanners,
-  extracted via AST); `agent_defaults` is cross-checked against
-  `agent-policy.json` in all three stacks; `GITLEAKS_VERSION` must be
-  identical across the three Makefiles. 5/5 mutants killed.
-
-### Changed — the bundle's top level is finally regenerable
-
-- `build_policy_bundle.py` — the only regenerator of the bundle's top-level
-  `governance_policy_sha256`/`agent_policy_sha256`, which
-  `verify_repository.py` checks and CI exercises — was invoked by nothing. It
-  is now `main()`-guarded, tested, coverage-measured, and wired into
-  `make digest-regen` behind the existing `git diff --exit-code` (rebuild
-  verified byte-identical before wiring, so the first run is a zero-diff
-  no-op). A per-stack policy edit can no longer leave the committed bundle
-  stale unnoticed.
-- `check_traceability.py` gained the `sys.path` bootstrap it was the only shim
-  to lack, structured import-first-then-retry (no E402 exemption). Its
-  regression test runs under `python -S`, where the editable install cannot
-  mask a gutted bootstrap.
-
-### Removed
-
-- `harness/SHA256SUMS.txt`: pinned 10 files (9 digests stale, 5 entries in a
-  deleted directory), read by nothing. The live equivalents are
-  `policy-artifact.json` and `policy-bundle.example.json` + `digest-regen`.
-- The dead top-level `size_budget_lines` fallback in `validate_invariants.py`
-  (no policy file ever carried the key at top level), and the stale claim that
-  the module runs as a git pre-push hook.
-
-### Recorded, not built
-
-- The specs gate accepts an entirely unfilled template scaffold (placeholder
-  `R-EXAMPLE-*` IDs satisfy it), and an `AC-*` bullet containing MUST can
-  never pass its `[CR]-` ID regex — both are future gate refinements.
-- `validate_policy.py`'s `scripts/*` critical-path list is CORRECT for its
-  actual input (the per-stack policy it validates from CWD); it never reads
-  the shared file.
+### Post-implementation review — four gates that could pass on absent evidence (DEC-032)
+
+An objective peer review of the branch found, in the gates this branch itself
+shipped, the exact failure class DEC-024 was written about: a gate reporting
+PASS without the evidence it claims to check. Each is fixed with a test that
+fails without the fix.
+
+- **The Python zero-skip gate could not see a collection-time skip.** A
+  module-level `pytest.importorskip` is reported as a `CollectReport`, never
+  the `TestReport` the evidence hook read, so the module — sometimes a whole
+  directory, when it is a conftest that skips — vanished with no row and
+  `make verify-zero-skips-python` printed `passed`. Four live sites skip this
+  way, including `test_egress_floor.py`, whose silent disappearance would
+  remove the proof that the egress floor is armed. Added
+  `_skip_events.collect_skip_event` and a `pytest_collectreport` hook, with a
+  `pytester` reproduction. This is DEC-030's failure shape one layer up: there
+  the hooks saw one of three suites, here one of two report types.
+- **A coverage waiver widened by one character.**
+  `coverage_gate._waiving_extra` matched with a raw `str.startswith`, so a
+  policy prefix written without its trailing slash (`harness/shared/langgraph`)
+  waived every sibling that merely began the same way — `langgraph_helpers.py`,
+  `langgraphX.py`. The only policy check asserts the prefix names a real
+  directory, which the slashless form does. Now matched on whole path segments.
+- **A waiver covering everything still reported `[PASS]`.** `check_per_file`
+  printed `0 file(s) meet the lines floor` and returned success; one policy
+  edit (`path_prefixes: ["harness/"]`) disabled per-file enforcement entirely.
+  Now fails closed on zero measured files, per the module's own "absence of
+  evidence is never a pass" contract.
+- **The constant-triage decision check was vacuous.** It evaluated
+  `Path("harness.shared.retry_policy").name.split(".")[0]` — `"harness"`, a
+  substring of essentially every decision-log line — and with `or`/`and`
+  precedence only the symbol was really checked, so a constant could cite a
+  decision about a different or nonexistent module and stay green. R-TDH-16 /
+  AC-16's whole enforcement rested on that expression. Replaced with a
+  shape-aware derivation plus negative tests. `TEST_SIZE_BUDGET_LINES` — the one
+  constant this branch introduced without a triage row — is now pinned to
+  `limits.test_size_budget_lines`.
+- **A reproducible order-dependent test failure.**
+  `json_logging.configure_gate_logging(__name__)` under
+  `runpy.run_path(..., run_name="__main__")` permanently reconfigured the
+  process-global `__main__` logger. Fourteen modules across the three suites run
+  scripts that way, and `test_nemotron_bridge.py` failed whenever
+  `test_pretooluse_guard.py` collected first. The suite was green only because
+  alphabetical order happened to be favourable — reverse file order was red. An
+  autouse fixture in the repository-root conftest restores it; production
+  behaviour is untouched.
+- **A trimmed policy killed collection with a bare `KeyError`.**
+  `_session_hooks` indexed `coverage_optional_extras()` unguarded at module
+  scope, reached from the root conftest before collection, so an adopter fork
+  without the block could not run any suite and got no diagnostic. Absent now
+  falls back; malformed still fails closed with a reason.
+- **`deselect_langgraph` — the whole R-TDH-4 mechanism — had no test**, and is
+  invisible to the coverage gate because `harness/shared/tests/*` is omitted
+  from measurement. Now covered directly, including the refusal to deselect on
+  a leg that has the library and the run-header announcement.
+- Corrects the record: DEC-027 called the parked modules "byte-identical after
+  the move". `lats_optimizer.py` is; `autonomous_healing.py` is not — it carries
+  the Phase 2 `BROKER_SUCCESS` substitution.
+- `CLAUDE.md` and the reasoner persona pointed at `META_TOOLS_SCHEMA` in
+  `mango_mas_orchestrator.py`; it lives in `harness/shared/meta_tools.py` and is
+  composed by `tool_schemas.py`. The symbol has not been on that module since
+  the decomposition.
+
+### Post-implementation hygiene sweep — documentation truth, dead ignore rules, allowlist narrowing
+
+An objective review of the branch against `main` after Phases 0–5. No source
+behaviour changes; the corrections are to claims, ignore rules, and one
+security control that had drifted wider than its own description.
+
+- **The gitleaks allowlist is narrowed from 23 paths to 7.** A path there
+  exempts the whole file from every rule. Measured against the default ruleset
+  with the block removed, the tree yields exactly 8 findings across 5 files —
+  so 18 entries were suppressing nothing while permanently blinding their
+  files, under a description that called the list "strict". The 5 files with a
+  real finding are kept, plus `.*\.example.*` (adopter scaffolds) and the
+  designated leak-fixture module, both named in the config with their reason.
+  `make secrets` passes on both legs afterwards (working tree, and the
+  235-commit history scan). `nemotron-policy-wiring.test.ts` is deliberately
+  *not* listed: its fixture key is below the entropy floor, so listing it would
+  blind the file to a real key.
+- **`lock-check` is now pinned as a pipeline prerequisite.** It was the only
+  `ci` stage no test asserted, so it could have been dropped from the pipeline
+  with the whole suite green and an unlocked dependency set would have shipped.
+  `test_makefile_contracts.py` now asserts it is a direct prerequisite of both
+  `ci` and `ci-python` and that its recipe still recompiles and diffs.
+- **Two dead `.gitignore` rules removed** — `weather_cli/` (never tracked; only
+  a `tmp_path` fixture name) and `.agents/` (the directory was consolidated
+  into `.mango/skills/` and a test now fails if it returns, so ignoring it
+  would have hidden exactly that). Both sat at depth 0, where the existing
+  dead-rule gate's "parent exists" predicate cannot see them.
+- **`harness/control-plane/tests/` is excluded from the Docker context**, like
+  its two sibling test trees; `COPY harness/` had begun shipping 101 tests into
+  the runtime image. `.dockerignore` also now records that
+  `harness/shared/governance-policy.json` is load-bearing for the Node runtime
+  since R-TDH-13 — `policy.ts` reads it at module load, so the image's own
+  `CMD` fails to start without it.
+- **README figures corrected** against measured values: 2,882 automated tests
+  (97 Vitest + 2,785 Pytest, was 2,357), coverage 99.64% lines / 97.93%
+  branches (was 98.17/95.71 — the README had been contradicting the CHANGELOG
+  on the same branch), the per-module test counts, 22 specs (was 15), and the
+  `make ci` stage list. The Python skip-waiver path now names its real location
+  instead of the dormant root `.governance/`.
+- **`harness/CONTRACT.md` INV-2** described only the Node half; it now records
+  the Python half (DEC-026) and where the hooks live (DEC-030).
+- **C4 gate chain and AQA container updated** — `retry.ts`, the root
+  `conftest.py` session hooks, the control-plane suite, and the four gates the
+  branch added (`lock-check`, the Python zero-skip half, vulture, the two size
+  budgets) were all invisible in the diagrams.
+- **`NEXT_STEPS.md`** no longer lists orchestrator decomposition as pending
+  twenty lines after marking it delivered in v2.4.0, and gains the four items
+  this work opened (the 3.9 floor, the entrypoint contract, the Dependabot
+  signal, the allowlist liveness check).
+- **`CONTRIBUTING.md`** tells contributors the lock exists: `make lock` after a
+  requirements change, `make lock-upgrade` to take newer releases, never
+  hand-edit.
+
+### Tech-debt hardening plan, Phase 5 — control-plane tests colocated, session hooks at the rootdir
+
+- **`harness/control-plane/tests/` exists and is collected** (R-TDH-26).
+  `test_build_policy_bundle.py`, `test_publish_policy_artifact.py` and
+  `test_regenerate_bundle_digests.py` move there from `harness/shared/tests`;
+  `test_control_plane_clis.py` splits into `test_tool_broker_reference.py`
+  and `test_verify_repository.py`. `pyproject.toml` adds the directory to
+  `testpaths` and to the coverage `omit` list; `make test-python` and
+  `make coverage-python` run it through a new `CP_TESTS` variable that
+  `test_makefile_contracts.py` pins. `test_control_plane_layout.py` is the
+  meta-test: every script has a `test_<script>.py` that names it, every test
+  module maps to a script, and the configuration collects the directory.
+- **The skip-evidence and langgraph-deselection hooks move to a
+  repository-root `conftest.py`** (logic in
+  `harness/shared/tests/_session_hooks.py`, DEC-030). pytest scopes a
+  conftest's per-item hooks to its own directory, so while the hooks lived in
+  `harness/shared/tests/conftest.py` a skip under `harness/api_server/tests`
+  was never written to the file `make verify-zero-skips-python` reads. The
+  Python half of INV-2 now sees every suite; `test_session_hooks.py` proves it
+  with a real pytest run over two sibling directories and pins that no
+  directory conftest re-registers the hooks.
+- **Branch arcs closed in the Phase 2/3 files** (R-TDH-25). Behavioural
+  tests for every line and branch `coverage.json` reported missed in
+  `check_dedup`, `check_py_compat`, `nemotron_bridge`, `write_policy`,
+  `governance/verify_zero_skips`, the orchestrator facade pass-throughs,
+  `hook_runner`, `mcp_server`, `policy_loader`, `coverage_gate`, the
+  `lats_optimizer` shim and `control-plane/regenerate_bundle_digests`; all
+  twelve report zero missing lines and branches. Python coverage moves from
+  lines 98.44% / branches 96.01% to lines 99.64% / branches 97.93%; no
+  source file changed and no skip was added.
+- **Dependabot PRs #38–#46 closed as superseded** (R-TDH-10, DEC-031): the
+  universal lock and the Phase 1 toolchain bump carry every proposed version
+  at or above; #40's fastapi floor of `>=0.141.1` is not adopted because it
+  breaks the 3.9 leg. The weekly `lock-upgrade-check` job is the upgrade
+  signal from here on.
+
+### Tech-debt hardening plan, Phase 4 — test size budget, gate test split, Node client split, structure decisions
+
+- **Test modules have a line budget.** `validate_invariants.check_test_size_budget`
+  enforces `limits.test_size_budget_lines` (700) over every `test_*.py` /
+  `*_test.py`, alongside the existing source budget; `MAX_TEST_FILE_LINES`
+  overrides it the way `MAX_FILE_LINES` overrides the source one, and a
+  malformed policy fails closed (R-TDH-22).
+- **`test_ci_gate_coverage.py` (923 lines) is split by concern**: the
+  gate-coverage map stays, `test_ci_gate_pipeline_shape.py` holds the root
+  pipeline invariants, `test_ci_gate_required_checks.py` the required-status-
+  check list, and `_ci_gate_helpers.py` the Make and workflow parser they
+  share. The protected-path entry becomes the glob
+  `harness/shared/tests/*ci_gate*.py` so the helper is reviewed with the gates.
+- **The Nemotron client's retry/backoff loop moves to
+  `harness/node/src/ai/nemotron/retry.ts`** (`executeWithRetry`,
+  `isRetryableError`, `computeBackoffMs`, exported through the module barrel;
+  public surface unchanged), and an ESLint `max-lines` rule at `error` holds
+  every file under `src/` to `limits.size_budget_lines` read from
+  `governance-policy.json`, failing closed when the key is absent;
+  `test_lint_config_liveness.py` proves the rule stays policy-sourced
+  (R-TDH-23).
+- **DEC-029**: DEC-020 stands (no regroup of `harness/shared/`), and the four
+  `sys.path` bootstrap styles are accepted with the reason a helper cannot
+  replace them (R-TDH-20, R-TDH-21).
+- **`coverage_gate.py`'s importability probe no longer trusts its own
+  directory.** Run as `python harness/shared/coverage_gate.py`, the script's
+  directory heads `sys.path` and `harness/shared/langgraph/` shadowed the real
+  package, so the 3.9 leg's per-file waiver (DEC-028) was refused with nothing
+  installed. The probe now excludes that directory, treats a namespace-only hit
+  as absent, and the policy names a concrete module (`langgraph.graph`).
+- `limits.changelog_section_lines` (400) and `limits.test_size_budget_lines`
+  join the policy; the Node and JVM template policies mirror them and the node
+  root-of-trust digest is re-pinned.
+
+### Tech-debt hardening plan, Phase 4 — documentation consolidation
+
+- **The v2.2.4 release body moves out of `CHANGELOG.md`** (R-TDH-24). Its
+  ~1,300 lines now live in `docs/releases/v2.2.4.md`; the root keeps the
+  `## [v2.2.4]` heading with a pointer and the release's headline items.
+- **`test_documentation_truth.py` caps every `## [x.y.z]` section** at
+  `limits.changelog_section_lines` (`governance-policy.json`, 400; an absent
+  or non-numeric key fails the test, there is no default). `[Unreleased]` and
+  the trailing gate-contract history block are exempt; a negative case proves
+  that a synthetic section one line over the cap is reported by name.
+- **Three reports move to `docs/reports/`**: `SDLC_HYGIENE_REPORT.md` (from
+  the repository root), `PEER-REVIEW-REMEDIATION.md` and `TEST-REPORT.md`
+  (from `harness/`), basenames unchanged.
+- **`harness/CHANGELOG.md` folds into this file** as the trailing *Harness
+  gate-contract history* block (v2.0.0–v2.1.5, headings demoted one level)
+  and is deleted; the scope note at the top no longer points to it.
+- **Two document pairs merge, one survivor each.**
+  `docs/NEMOTRON_E2E_TRIAGE_AND_RCA.md` merges into
+  `docs/rca/e2e_nemotron_live_triage_rca.md` (both passes kept whole, as Part
+  A and Part B); `harness/docs/C4_ARCHITECTURE.md` merges into
+  `docs/architecture/c4_architecture.md` (the v2.1.9 snapshot's unique views
+  become §1.1, §2.1, §3.2, §4.8 and §4.9; where the two disagreed the newer
+  statement stands and the consolidation note says which). Inbound links in
+  `README.md`, `harness/README.md`, `NEXT_STEPS.md` and one test docstring
+  follow the moves.
+
+### Tech-debt hardening plan — CI repair on the pushed head (DEC-028)
+
+- **Per-file coverage is waived for optional extras a leg cannot install,
+  and nowhere else.** `governance-policy.json → coverage.optional_extras`
+  declares `langgraph` (`import_name`, `deselect_env`, `path_prefixes`).
+  `coverage_gate.py` holds files under those prefixes to the lines floor
+  unless the leg sets the env to `1` and the extra is not importable, in
+  which case each waived file is logged with its measured value; aggregate
+  floors and every other file are unchanged. `conftest.py` takes the deselect
+  variable's name from the same key. Before this the 3.9 leg failed
+  `coverage.per_file` on the three langgraph modules whose tests it
+  deselects.
+- **`pytest` forks on the interpreter**: `9.0.3` on Python ≥3.10
+  (PYSEC-2026-1845), `8.4.2` below it, since the fix release dropped 3.9.
+  `uv` moves to `0.11.15`. The lock is regenerated; `make audit` on the 3.10
+  and 3.12 legs is clean and the 3.9 audit leg reports the retained pytest
+  advisory (that leg was already continue-on-error).
+
+### Tech-debt hardening plan, Phase 2 (Node) — Nemotron client defaults from policy
+
+- **`harness/node/src/ai/nemotron/policy.ts` reads the `nemotron` block of
+  `governance-policy.json`** (child spec `docs/specs/node-policy-wiring.md`,
+  R-TDH-13). `nemotron-client.ts` and `cli.ts` take `timeoutMs`, `maxRetries`,
+  the default `temperature` and `max_tokens` from it; the literals they
+  replaced had drifted (`maxRetries: 3` against a policy of `0`). The reader
+  fails closed on a missing block or key, the same posture `vitest.config.ts`
+  takes for coverage thresholds. `DEFAULT_NEMOTRON_CONFIG` keeps its name and
+  shape; callers that pass their own values see no change. `baseUrl`, the
+  backoff window and `top_p` have no policy key yet and stay literal
+  (R-TDH-23).
+
+### Tech-debt hardening plan, Phase 3b — unwired features parked, facade trimmed
+
+- **`autonomous_healing.py` and `lats_optimizer.py` moved to
+  `harness/shared/experimental/` (DEC-027).** Neither has ever been reachable
+  from a runtime path; `synthesis.lats_enabled` is `false` with no reader and
+  INV-15 keeps LATS off. The modules, their tests and their policy sourcing
+  are unchanged; the old import paths are deprecation shims for one minor
+  release. README, `harness/README.md` and the C4 document updated.
+- **`MangoMASOrchestrator` loses three test-only pass-throughs**
+  (`_tool_handlers`, `_run_hook`, `_dispatch_tool_calls`); the tests that
+  used them address `dispatcher` and `hook_runner` directly.
+  `execute_sequential_thinking_loop` stays (R-ORCH-4, R-VP-11).
+
+### Tech-debt hardening plan, Phase 3a — Python skip accounting, deprecations, dead-code gate
+
+- **INV-2 now has a Python half (DEC-026).** `conftest.py` writes every skip
+  the run produced to `harness/shared/tests/.artifacts/pytest-skips.tsv`
+  (`unique_id`, display, reason); `make verify-zero-skips-python`, in `ci`
+  and `ci-python`, feeds it to the existing `verify_zero_skips.py` gate
+  against `harness/shared/tests/skip-waivers.json`. The gate gains
+  `unique_id_glob` for JUnit-framework waivers (a glob widens the address,
+  never the approval: the skip reason must still carry the waiver's `DEC-`
+  id). Every waived skip reason now names `DEC-026`. The four
+  empty-parametrize skips became loops. Result on this tree: one skip (the
+  live NVIDIA key), waived.
+- **Three compatibility exports deprecated, not deleted** (R-TDH-17,
+  C-TDH-2): `write_policy.ALWAYS_DENIED_PREFIXES`,
+  `nemotron_bridge.RETRY_BACKOFF_BASE_SEC` (both served through PEP 562
+  `__getattr__`) and `ToolBudget.remaining` warn with `DeprecationWarning`
+  for one minor release. `test_deprecation_shims.py` is the only suite
+  allowed to touch them; `pytest -W error::DeprecationWarning -k "not
+  deprecation_shims"` passes. `resolve_api_key` was on the plan's list and
+  is kept: the suite's live-detection fixtures call it, so it is used, not
+  dead.
+- **`vulture` joins `make lint-python`** at confidence 80 with
+  `vulture_whitelist.py` for framework-registered names; the dead
+  `RunnableConfig` fallback import in `langgraph/nodes.py` is gone.
+
+### Tech-debt hardening plan, Phase 2 — policy single-source (Python)
+
+- **`ExecutionLoop` budgets come from the policy.** The constructor defaulted
+  to `15 / 30 / 50` while `governance-policy.json` said `10 / 300 / 100`; the
+  facade always passed explicit values, so the drift was live only for direct
+  constructor calls. Omitted budgets now resolve at construction time from
+  `policy_loader` (`policy_path=` accepted; malformed policy fails closed;
+  resolution logged at DEBUG). `test_execution_loop_defaults.py` proves it
+  with distinguishable temp-policy values. Closes the orchestrator half of
+  `policy-single-source.md` AC-1.
+- **`GraphPolicy()` defaults are equality-pinned** to `policy_loader`'s
+  fallbacks and to `from_governance_json()` (`test_policy_consistency.py`);
+  the pure no-config fallback that `langgraph-policy-wiring` decided is kept,
+  not re-sourced at import.
+- **Verdict and broker statuses are named once.** `governance/verdict.py`
+  exports `BROKER_SUCCESS` / `BROKER_FAILED` / `BROKER_BLOCKED`; fourteen raw
+  `"BLOCKED"`/`"FAILED"`/`"VERIFIED"`/`"SUCCESS"` literals across six modules
+  now reference the constants. `test_verdict_literals.py` is an AST scan that
+  fails on a new one (docstrings and `Literal[...]` exempt).
+  `tool_result_format` moves one layer up in `test_import_direction.py`
+  because it now imports the vocabulary instead of restating it.
+- **The quality-gate stub no longer reports `"coverage": 85.0`** (or `0.0`);
+  the value was never read by the gate. Applying real coverage floors in the
+  gate is a separate behavioural spec (plan open question 5).
+- **Constant triage (DEC-025).** `process_backend.DEFAULT_MAX_OUTPUT_BYTES`
+  becomes `orchestrator.max_output_bytes`; `retry_policy.DEFAULT_MAX_RETRIES`
+  is pinned to `nemotron.max_retries`; the retry backoff shape, the
+  shadow-planner env knob, the cognitive-signal protocol ceilings and the Node
+  client's resilience defaults are accepted with reasons.
+  `test_constant_triage.py` holds the inventory and fails on any row with
+  neither a policy key nor a `DEC-` id. `.env.example`'s
+  `NEMOTRON_MAX_RETRIES` example now equals the policy (was 3, policy 0).
+  `policy-artifact.json` regenerated (it digests the policy file).
+
+### Tech-debt hardening plan, Phase 1 — toolchain
+
+- **One universal dependency lock.** `requirements-lock.txt` is compiled by
+  `make lock` (`uv pip compile --universal`, floor read from pyproject's
+  `requires-python`) from `requirements-dev.txt` and
+  `requirements-langgraph.txt`; environment markers survive, so the same file
+  serves the 3.9/3.10/3.12 matrix and pip gives each leg only what its
+  interpreter supports (langgraph and mcp on 3.10+, tomli below 3.11). Every
+  CI install step reads the lock and installs the project with `--no-deps`;
+  the separate langgraph install steps are gone. `make lock-check` (in `ci`
+  and `ci-python`) fails on a stale lock; the weekly drift job runs
+  `make lock-upgrade-check` and opens an issue when newer allowed releases
+  exist. `make audit-python` scans the lock too.
+- **ruff 0.6.9 → 0.16.5** (Dependabot #39), its own change because the newer
+  linter fired 8 findings: 5 stale `noqa` directives removed, 2 justified
+  `BLE001` sites in `write_policy.py` annotated, one implicit string
+  concatenation parenthesised. `test_deferred_rigor.py`'s measured counts
+  re-taken under 0.16.5. Also applied: pytest-mock 3.15.1 (#38), tomli 2.4.1
+  (#42), pydantic floor 2.13.5 (#41), eslint 10.9.1 (#44), @types/node
+  26.4.0 (#46), knip 6.32.3 (#43). Not applied: fastapi floor 0.141.1 (#40)
+  requires Python ≥3.10 and would break the 3.9 leg (the lock resolves
+  0.128.8 there).
+- **GitHub Actions on Node 24**: checkout v5, setup-python v6, setup-node v5,
+  setup-go v6, pnpm/action-setup v5 (each verified against the action
+  manifest); `dependabot.yml` gains the `github-actions` ecosystem.
+- **Nightly drift now runs `lint`**, so a mypy or dependency break on `main`
+  opens an issue the same night instead of waiting for the next PR.
+- `test_workflow_contracts.py` pins all of the above: lock-only installs,
+  `--no-deps`, cache keys, langgraph behind a ≥3.10 marker, no Postgres
+  checkpointer, action majors, the drift loop, the Dependabot ecosystem.
+
+### Tech-debt hardening plan, Phase 0c — landed specs reconciled
+
+Five specs whose work had shipped still showed every acceptance box open.
+Each box was re-run: 22 ticked with command evidence, the rest annotated with
+the item that still blocks them (`dependency-hygiene`, `gate-hardening`,
+`ci-enforcement-gaps`, `policy-single-source`, `remove-pong-demo`). Found on
+the way: `harness/node/scripts/run_vitest.sh` calls `verify_zero_skips.py`
+without the waiver and decision-log arguments and so fails standalone (the
+`make test-node` + `make verify-zero-skips` path is the working one).
+
+### Tech-debt hardening plan, Phase 0a — the control that keeps `main` green
+
+- **Ruleset export** at `.github/rulesets/main.json` (DEC-024): the nine
+  status checks `test_ci_gate_coverage.py` derives from the workflow, strict
+  up-to-date policy, one code-owner review, no bypass actors.
+  `test_workflow_contracts.py` pins the export's contexts to the workflow so
+  the two cannot drift. Applying it is the owner's settings action (import).
+- **"A verification claim is not evidence"** stated in `CLAUDE.md`,
+  `CONTRIBUTING.md` and the PR template, with the pinned-tool rule
+  (`python -m ruff`, never a bare binary; DEC-013). PR #60 merged with every
+  CI run on its head red under a commit message claiming `make ci` clean.
+
+### Tech-debt hardening plan, Phase 0b — `main` green again
+
+Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
+
+- **`mcp_server.py` builds `types.Tool` with `input_schema` again.** The
+  DEC-023 rename had been reverted by the orchestrator decomposition
+  (`9d38670`), which turned every `build (3.x)` leg red at mypy. Runtime
+  never noticed because `mcp>=2.0.0` accepts the `inputSchema` alias on
+  construction; the attribute read in `test_mcp_server.py` did.
+- **LangGraph runtime installed where the interpreter allows it.** New
+  `requirements-langgraph.txt` (mirrored by the `langgraph` extra, which no
+  longer pulls `langgraph-checkpoint-postgres`; lockstep-tested) is installed
+  on the 3.10/3.12/`build-full` legs and scanned by `make audit-python`. The
+  `langgraph`-marked suites had skipped on every CI leg. On 3.9, where the
+  library cannot install, a `conftest.py` hook keyed to
+  `MANGO_CI_DESELECT_LANGGRAPH=1` deselects them (visible, never a skip).
+  `test_workflow_contracts.py` (new, unprotected) pins the wiring.
+- **Three test/source drifts fixed:** the healing E2E regression test carries
+  the same `langgraph` marker and guard as its siblings; the shadow-planner
+  containment test patches `harness.shared.orchestrator.loop`, where the guard
+  has lived since the decomposition; `.gitignore`/`.dockerignore` no longer
+  name `.mcp_storage/`, a directory nothing creates (the hook warning about it
+  is gone too).
+- **One version.** `pyproject.toml` is the single source (2.4.0);
+  `README.md`, `NEXT_STEPS.md`, `Makefile`, `CHANGELOG.md`, the C4 document
+  and `harness/node/package.json` are checked against it by
+  `test_documentation_truth.py`, negative case included.
+
+## [2.4.0] - 2026-09-01
+
+### Added
+
+- `harness/shared/orchestrator/` module encompassing `dispatcher.py`, `loop.py`, and `hook_runner.py` to cleanly encapsulate the previously monolithic ReAct orchestrator loop.
+- Comprehensive LATS MCTS optimization fixes for negative reward bounds.
+- MCP Unicode logging safety in the `mcp_server.py`.
+
+### Changed
+
+- Decomposed `mango_mas_orchestrator.py` into smaller domain modules (`harness.shared.orchestrator.*`).
+- `MangoMASOrchestrator` is now a backwards-compatible facade that delegates to the new submodules.
+- Strict `mypy` typing across `harness/shared` completely stabilized for dict mappings and `MangoState` implementations.
+
+## [2.3.0] - 2026-08-31
+
+### Added
+
+- `harness/shared/autonomous_healing.py` for test-driven agent remediation.
+- `harness/shared/lats_optimizer.py` and `harness/shared/langgraph/ablation.py` for MCTS node expansion.
+- `harness/shared/mcp_server.py` Model Context Protocol (MCP) STDIO server.
+- `.mango/skills/agent-memory-manager/` skill for persistent multi-agent context.
+
+### Changed
+
+- Wired authority and budget decorators onto existing LangGraph nodes.
+- Fortified `@with_authority` and `@budgeted` decorators to fail closed on lookup errors.
+- Synchronized `policy-artifact.json` drift and updated governance policy for healing retries.
+
+
+## [v2.2.4] - 2026-08-30
+
+Full notes for this release (about 1,300 lines) live in [`docs/releases/v2.2.4.md`](docs/releases/v2.2.4.md).
+Headline items: the LangGraph StateGraph multi-agent engine overlay; the orchestrator and governance-kernel
+god-file decomposition; the agent-containment series (INV-8 on the live path, a real execution broker, the write
+policy, a fail-closed policy guard); `read_file`/`apply_patch` and the read policy; earned verifier verdicts and
+verdict logging; the dependency-audit gate and runtime/dev split; the `make specs` plan gate; two-floor coverage;
+and the v3 remediation programme.
 
 ## [2.1.9] - 2026-08-27
 
@@ -1453,3 +943,136 @@ IDs.
 - Fixed un-typed kwargs passing in `complete_chat` function invocation inside `mango_mas_orchestrator.py`.
 - Fixed missing `typing` imports in `nemotron_bridge.py` and `meta_tools.py`.
 - Ensure fail-closed governance models are strictly adhered to by properly propagating errors from the policy guard in `mango_mas_orchestrator.py`.
+
+## Harness gate-contract history (formerly `harness/CHANGELOG.md`)
+
+> Versions v2.0.0–v2.1.5 of the harness gate contract (`harness/CONTRACT.md`)
+> and its enforcement surface, folded in from `harness/CHANGELOG.md` under
+> R-TDH-24. Headings are demoted one level; the entries are otherwise
+> unchanged. Gate-contract changes after v2.1.5 are recorded in the versioned
+> sections above. This block is not a `## [x.y.z]` release section, so the
+> per-section line cap in `test_documentation_truth.py` does not apply to it.
+
+### v2.1.5 — .mango Architecture, Continuous Learning & Persona Topology
+
+- **Continuous Learning Meta-Tools (`data_agent` synthesis):**
+  - Synthesized continuous learning concepts from the `data_agent` project.
+  - Implemented `knowledge_gap_log` and `hypothesis_register` meta-tools to allow agents to persist provisional beliefs and knowledge gaps directly into `.mango/memory/` as JSON.
+  - Wired meta-tools directly into the `mango_mas_orchestrator.py` recursive ReAct loop.
+- **Persona Topology (`FORGE` synthesis):**
+  - Delegated monolithic orchestrator tasks into discrete Personas defined per-directory.
+  - Created `harness/api_server/Agent.md` (Web Presenter persona) and `harness/node/Agent.md` (Node Bridge persona).
+  - Updated `nemotron-reasoner` to automatically adopt relevant personas based on the directory context.
+- **Governance & E2E Validation (`Agents-main` synthesis):**
+  - Ported `repo-invariant-review` and `openspec-peer-review` skills from the upstream `Agents-main` repository.
+  - Created a hardened `validate_invariants.py` hook and `.mango/hooks/pre-nemotron-run.sh` to enforce constraints programmatically before agent mutations.
+  - Executed extensive cross-stack SDLC and QA code review, resolving over 600 `ruff` lint violations, fixing critical `mypy` typing drifts in `nemotron_bridge.py`, and updating cross-stack dependency graphs.
+  - Ran unmocked E2E validations with Nemotron proving correct JSON tool calling.
+- **SDLC Objective Peer Review & Code Hygiene Enhancements:**
+  - Hardened `mango_mas_orchestrator.py` by removing hardcoded timeout/model values and extracting configurable parameters.
+  - Wired `.mango/hooks` directly into the ReAct orchestrator loop, exposing generic shell environments for pre/post invocation logic.
+  - Repaired `test_validators.py` timezone drift issues that broke local test execution environments.
+  - Re-attained 85% AQA Python Test Coverage for `harness/shared` and validated zero E501/trailing-whitespace violations in `meta_tools.py` and `mango_mas_orchestrator.py`.
+
+### v2.1.4 — Python AQA Framework, Code Hygiene & CI Wiring
+
+- **Python AQA Test Engine (`harness/shared/tests/`):**
+  - Implemented full `pytest` test suite: **133 tests, 98.44% coverage** across 10 governance scripts.
+  - Achieved in-process coverage via `runpy.run_path()` executor, eliminating subprocess coverage gaps.
+  - Added `conftest.py` with reusable fixtures (`project_root`, `api_key`, `tmp_git_repo`).
+  - Test suites: `test_validators.py`, `test_remotes.py`, `test_nemotron_bridge.py`, `test_verify_zero_skips.py`, `test_pretooluse_guard.py`.
+- **Code Hygiene Remediation:**
+  - Resolved all `ruff` lint violations in test code (unused imports, duplicate import blocks, unsorted imports).
+  - Added `[tool.ruff]` and `[tool.mypy]` configuration to `pyproject.toml`.
+  - Created `__init__.py` package markers for `harness/shared` and `tests/` — resolves mypy module resolution.
+  - Fixed non-deterministic `datetime.now()` (added UTC timezone) and implicit `Optional` type hints.
+  - Governance validator scripts excluded from ruff style enforcement via `per-file-ignores` (intentionally compact).
+- **DevOps & Infrastructure:**
+  - Created root `Makefile` with parameterized targets: `lint`, `test`, `coverage`, `validate`, `ci`, `pre-pr`, `clean`.
+  - Updated `.gitignore` and `.dockerignore` with Python artifact exclusions (`.coverage`, `.pytest_cache`, etc.).
+  - Updated `.gitleaks.toml` allowlist with Python test files containing mock API keys.
+- **Documentation:**
+  - Updated C4 Architecture (Level 2) with Python AQA Engine container and `runpy` execution strategy.
+  - Updated `TEST-REPORT.md` with Python test suite metrics.
+  - Updated `NEXT_STEPS.md` — fixed deprecated model reference, added completed milestones.
+
+---
+
+### v2.1.2 — Nemotron Live Integration Smoke Tests & Model Migration
+
+- **Model Migration:**
+  - Migrated default model from deprecated `nvidia/llama-3.1-nemotron-70b-instruct` (HTTP 404) to `nvidia/llama-3.3-nemotron-super-49b-v1`.
+  - Updated TypeScript client, Python bridge, CLI help text, `.env.example`, and specification.
+- **Live Smoke Test Tier (`tests/ai/smoke/`):**
+  - Added shared test fixtures (`_fixtures.ts`) with `.env` resolution, cost-conscious client factory, and `assertNoSecretLeakage()` post-test assertion.
+  - Added `nemotron-live.test.ts`: Live API completion, streaming SSE, error sanitization, and timeout validation.
+  - Added `cli-live.test.ts`: CLI subprocess validation (`--json`, `--stream`, `--help`).
+  - Added `mango-agent-live.test.ts`: .mango agent delegation tests exercising planner, nemotron-reasoner, and verifier system prompts against the live API.
+  - Added `test_nemotron_bridge_live.py`: Python bridge live validation with wire parity contract test.
+  - All live tests gated behind `NVIDIA_API_KEY` — auto-skipped in CI.
+- **ESLint TypeScript Parser:**
+  - Configured `typescript-eslint` parser in `eslint.config.js` to fix `interface` reserved keyword errors.
+  - Updated `knip.json` schema to v6 and removed stale `ignoreDependencies`.
+- **Specification Update:**
+  - Updated nemotron spec to v1.1.0 with smoke test tier in acceptance criteria matrix.
+
+---
+
+### v2.1.1 — Mango Multi-Agent Platform Migration
+
+- **Mango Multi-Agent Migration (`.mango/`):**
+  - Rebranded `.claude` multi-agent framework into `.mango` ecosystem.
+  - Preserved all subagents (`nemotron-reasoner`, `planner`, `verifier`), skills (`nemotron-reasoner`, `harness-engineering`), and lifecycle hooks (`block_dangerous`, `loop_detection`, `pre_completion_checklist`, `session_start`).
+  - Added dual environment variable fallback (`MANGO_PROJECT_DIR` with `CLAUDE_PROJECT_DIR` fallback) for backward-compatible hook and guard execution.
+  - Updated `Dockerfile`, `.dockerignore`, `README.md`, `C4_ARCHITECTURE.md`, and test suites.
+
+---
+
+### v2.1.0 — NVIDIA Nemotron Ultra AI Integration & Pong 2026 Game Engine
+
+- **NVIDIA Nemotron Ultra Client Adapter (`src/ai/nemotron/`):**
+  - Implemented provider-agnostic `NemotronClient` with OpenAI-compatible `/chat/completions` protocol.
+  - Added native Server-Sent Events (SSE) streaming yielding async iterable chunk streams.
+  - Implemented exponential backoff with full jitter on HTTP 429/5xx and 3-state Circuit Breaker (`CLOSED`, `OPEN`, `HALF_OPEN`).
+  - Added `SecretMasker` redacting raw credentials in logs, error traces, and telemetry.
+  - Created standalone CLI runner (`npx tsx src/ai/nemotron/cli.ts`) and zero-dependency Python bridge (`nemotron_bridge.py`).
+- **Mango Agent Ecosystem (`.mango/`):**
+  - Added `nemotron-reasoner.md` subagent for deep architectural reasoning, formal constraint verification, and adversarial security audits.
+  - Added `nemotron-reasoner/SKILL.md` operational cheatsheet for CLI, Python, and programmatic execution.
+- **Pong 2026 Engine & Multi-Target Renderers (`src/pong/`):**
+  - Implemented deterministic 2D vector physics with Continuous Collision Detection (CCD) and spin dynamics.
+  - Implemented 6-state FSM (`MENU` → `GAME_OVER`), dynamic preset configuration (`classic`, `fast`, `arcade`, `tournament`), and predictive raycasting AI opponent.
+  - Implemented procedural Web Audio API synthesizer, HTML5 Canvas 2D renderer, and ANSI terminal 2D renderer.
+  - Built standalone responsive Web UI with Google Fonts typography, glassmorphism, live telemetry HUD, and on-screen touch D-Pad.
+- **7-Tier Test Pyramid Expansion:**
+  - Expanded test matrix to **80 total tests across 30 test suites** with 0 skips and 0 waivers.
+  - Verified **>95% statement and line coverage** with 100% requirement traceability (15 requirements).
+
+---
+
+### v2.0.0 Resynthesis
+
+- Reclassified CI from network-transfer prevention to repository conformance/evidence.
+- Added external root-of-trust/control-plane contract.
+- Replaced separate Node/JVM remote normalizers with one shared policy kernel.
+- `make remotes` now validates configured Git push URLs; it no longer prints the allowlist as a vacuous pass.
+- Preserved path case and significant non-default ports in remote canonicalization.
+- Rebuilt PreToolUse guard to fail closed on malformed/unmodeled dangerous commands.
+- Fixed `guard-probe` shell error handling.
+- Rebuilt Git hook installation around Git's effective hooks path and refusal to overwrite unrelated hooks.
+- Reworked JVM zero-skip: listener records evidence; a Gradle verification task performs the build-failing assertion.
+- Reworked Node zero-skip around Vitest JSON results and exact waiver registry entries.
+- Removed Vitest 4 `coverage.all`; explicit `coverage.include` retains uncovered-file coverage.
+- Repaired invalid TypeScript pseudo-comment compiler options.
+- Enabled strict Gradle dependency locking and made verification metadata absence fail closed.
+- Expanded CI conformance to remotes, projections, traceability and governance.
+- Added agent/sub-agent role, delegation, human-approval and side-effect evidence policy.
+- Added C4 context/container/component diagrams in Mermaid, draw.io/Lucid, SVG and PNG.
+- Added exact, decision-backed JVM skip waivers keyed to JUnit unique ID + display name; fabricated decision IDs fail.
+- Made `guard-probe` propagate BLOCK as a non-zero status rather than printing BLOCK and succeeding.
+- Made the JVM zero-skip Gradle task graph non-circular and wired `check` through the verifier.
+- Added project charter + governance-skill freshness validation through one shared cross-stack implementation.
+- Made strict spec validation mandatory in CI; local structural degraded mode remains explicit/noisy.
+- Added concrete human-readable contracts for all seven governed agent/sub-agent roles.
+- Changed human approval from a role-wide boolean to exact high-risk actions.
+- Added independently deployable policy/agent-policy digest verification before project-local governance is trusted.

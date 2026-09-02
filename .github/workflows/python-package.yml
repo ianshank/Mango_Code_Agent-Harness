@@ -40,22 +40,34 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -e . --no-deps
+
+      # Dependencies come from requirements-lock.txt, a universal lock whose
+      # environment markers pip evaluates per interpreter: the 3.9 leg gets no
+      # langgraph (it declares Requires-Python >=3.10) and every other leg does,
+      # so the `langgraph`-marked suites run there instead of skipping. On 3.9
+      # they are *deselected* -- visible in pytest's summary, never a skip --
+      # through the conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below,
+      # and coverage_gate.py reads the same variable (via the policy's
+      # coverage.optional_extras) to waive the per-file floor for the
+      # langgraph modules on that leg only; aggregate floors still apply
+      # (DEC-028). Pinned by test_workflow_contracts.py
+      # (tech-debt-hardening-plan R-TDH-4, R-TDH-9).
 
       - name: Run Python CI gate (make ci-python)
         # The protected-path invariant fails closed on infrastructure changes
@@ -65,45 +77,46 @@ jobs:
         # gate stays fail-closed. Never set this unconditionally.
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
+          MANGO_CI_DESELECT_LANGGRAPH: ${{ matrix.python-version == '3.9' && '1' || '' }}
         run: make ci-python
 
   build-full:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           # Primary leg: one modern interpreter runs the complete gate,
           # including the Node stack. The compat gate plus the ci-python matrix
           # covers the older interpreters.
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -e . --no-deps
 
       # pnpm must be on PATH *before* actions/setup-node runs, because
       # `cache: pnpm` resolves the pnpm store via the pnpm binary. Installing it
       # afterwards fails the "Set up Node" step with "Unable to locate
       # executable file: pnpm".
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           # Read the pinned version from `packageManager` in the Node package
           # manifest (single source of truth) rather than duplicating it here.
           package_json_file: harness/node/package.json
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # pnpm 11 (pinned via packageManager) requires Node >= 22.13.
           # Node 20 is also being deprecated on GitHub-hosted runners.
@@ -143,7 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Full history: INV-1 requires scanning past commits, not just the tree.
           fetch-depth: 0
@@ -153,7 +166,7 @@ jobs:
       # implicit dependency on the runner image: a base-image change would break
       # the scan rather than fail it loudly. Pin the toolchain explicitly.
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 'stable'
 
@@ -163,3 +176,82 @@ jobs:
 
       - name: Run secret scan gate (make secrets)
         run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
+
+  # Closes the KNOWN_GAPS["audit"] exception in test_ci_gate_coverage.py: dependency
+  # vulnerability scanning previously ran only in the per-stack adopter workflows,
+  # which GitHub never executes (see the `secrets` job's comment, above). Separate
+  # from `build`/`build-full` because, like `secrets`, it is interpreter-independent
+  # -- running it on every Python matrix leg would repeat identical work.
+  #
+  # This leg also carries the Node delegation (osv-scanner), so it stays single-run
+  # rather than joining the `audit-matrix` job below. `pip-audit` itself is pinned
+  # via `make audit-install-python` (PIP_AUDIT_VERSION in the root Makefile) so this
+  # gate cannot change or break on an unreviewed upstream release.
+  audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install pip-audit
+        run: make audit-install-python
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+
+      - name: Install pinned osv-scanner
+        run: make -C harness/node audit-install
+
+      - name: Run dependency audit gate (make audit)
+        run: PATH="$(go env GOPATH)/bin:$PATH" make audit
+
+  # `pip-audit` resolves dependency markers, `Requires-Python` and transitive
+  # constraints under the interpreter that runs it. The `audit` job above only ever
+  # resolves under 3.11, so a vulnerability that surfaces only under a transitive
+  # dependency selected on 3.9, 3.10 or 3.12 would never be caught. Matrixed like
+  # `build`; Python-only, since the Node delegation already runs once, in `audit`.
+  #
+  # The 3.9 leg is non-blocking (DEC-017): the patched releases of every vulnerable
+  # package this leg has found (starlette, click, python-dotenv) require Python
+  # >=3.10, so no version pin in requirements.txt can satisfy both "install under
+  # 3.9" and "clean under 3.9" at once. Findings still surface -- fail-fast is off
+  # and the step itself is not silenced -- this only stops them from blocking merge
+  # on a gap this PR cannot close without dropping the 3.9 floor.
+  audit-matrix:
+    name: dependency-audit (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install pip-audit
+        run: make audit-install-python
+
+      - name: Run dependency audit gate (make audit-python)
+        # See DEC-017: every currently-available fix for a 3.9-resolved finding
+        # requires Python >=3.10, so this leg cannot be made both 3.9-installable
+        # and vulnerability-clean. Non-blocking here only; 3.10 and 3.12 stay
+        # fully enforced.
+        continue-on-error: ${{ matrix.python-version == '3.9' }}
+        run: make audit-python

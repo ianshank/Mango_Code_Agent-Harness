@@ -60,6 +60,13 @@ EXECUTION_IDENTITY: typing.Mapping[str, str] = {
 TOOL_REQUIRED_ACTION: typing.Mapping[str, str] = {
     # Writes a file into the workspace: the implementer action.
     "write_file": "write",
+    # Reads a file directly. `read` is the action, and `read_policy` is what keeps
+    # that honest: a credential read is `secret_access` through `run_command`, so
+    # the direct door refuses the same files rather than grading them `read`.
+    "read_file": "read",
+    # Edits a file in place. The same action as `write_file` because it reaches
+    # the same paths -- and it runs the same `write_denial_reason` check to prove it.
+    "apply_patch": "write",
     # Runs a command. `test_execute` is the narrowest declared action that covers
     # running the repository's own gates, which is what the reasoner and verifier
     # personas are instructed to do.

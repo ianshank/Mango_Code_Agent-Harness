@@ -31,11 +31,15 @@ function coveragePolicy(): CoveragePolicy {
   };
   const coverage = raw.coverage;
   if (!coverage) {
-    throw new Error(`${POLICY_PATH} declares no "coverage" block; refusing an ungated run`);
+    throw new Error(
+      `${POLICY_PATH} declares no "coverage" block; refusing an ungated run`,
+    );
   }
   for (const key of ['lines', 'statements', 'functions', 'branches'] as const) {
     if (typeof coverage[key] !== 'number') {
-      throw new Error(`${POLICY_PATH} coverage.${key} is missing or not a number`);
+      throw new Error(
+        `${POLICY_PATH} coverage.${key} is missing or not a number`,
+      );
     }
   }
   return coverage as CoveragePolicy;

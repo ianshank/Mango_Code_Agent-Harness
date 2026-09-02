@@ -3,11 +3,12 @@ from unittest.mock import patch
 
 import pytest
 
+# Ensure fastapi is installed before importing anything from the module
 pytest.importorskip("fastapi")
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from harness.api_server.main import app  # noqa: E402
+from harness.api_server.main import app
 
 client = TestClient(app)
 
@@ -33,6 +34,7 @@ def _api_server_key(monkeypatch):
     return key
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_static_files():
     """Test that static UI files are served successfully."""
     response = client.get("/")
@@ -40,6 +42,7 @@ def test_static_files():
     assert "Mango MAS Dashboard" in response.text
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_success(_api_server_key):
     """Test successful orchestration via the API."""
     with patch("harness.api_server.main.MangoMASOrchestrator") as mock_orchestrator_class:
@@ -64,6 +67,7 @@ def test_api_orchestrate_success(_api_server_key):
 
 
 @patch("harness.api_server.main.MangoMASOrchestrator")
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     """Test orchestration failure handling — internals must not leak to clients."""
     mock_instance = mock_orchestrator_class.return_value
@@ -82,6 +86,7 @@ def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     assert detail == "Internal orchestration error"
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_api_orchestrate_unauthorized(_api_server_key):
     """Test unauthorized access."""
     response = client.post(
@@ -115,23 +120,28 @@ def _run_dev_runner(monkeypatch):
 
 
 def test_dev_runner_defaults_match_container(monkeypatch):
-    """The dev runner must default to the container port with reload off."""
+    """The dev runner must default to the container port, loopback host, reload off."""
     monkeypatch.delenv("API_SERVER_PORT", raising=False)
+    monkeypatch.delenv("API_SERVER_HOST", raising=False)
     monkeypatch.delenv("API_SERVER_RELOAD", raising=False)
     calls = _run_dev_runner(monkeypatch)
     assert calls["port"] == 8080
+    assert calls["host"] == "127.0.0.1"
     assert calls["reload"] is False
 
 
 def test_dev_runner_env_overrides(monkeypatch):
-    """Port and reload are opt-in via environment, never hard-coded."""
+    """Port, host, and reload are opt-in via environment, never hard-coded."""
     monkeypatch.setenv("API_SERVER_PORT", "9001")
+    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
     monkeypatch.setenv("API_SERVER_RELOAD", "1")
     calls = _run_dev_runner(monkeypatch)
     assert calls["port"] == 9001
+    assert calls["host"] == "0.0.0.0"
     assert calls["reload"] is True
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
     """AC-11 / R-VP-13: the verdict names the command and its exit code.
 
@@ -155,6 +165,7 @@ def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
     assert body["termination_reason"] is None
 
 
+@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_a_failing_verdict_is_reported_while_status_stays_success(monkeypatch):
     """The defect, pinned: before this change these two runs were identical."""
     from harness.shared.governance.verdict import LoopOutcome, Verdict

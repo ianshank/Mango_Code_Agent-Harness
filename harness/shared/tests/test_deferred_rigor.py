@@ -40,9 +40,11 @@ class Deferral:
     revisit_below: int
 
 
+# `measured` values re-taken under ruff 0.16.5 (2026-09-02, tech-debt-hardening-plan
+# R-TDH-10); the earlier numbers were under 0.6.9.
 DEFERRED_RUFF_RULES = (
     Deferral(
-        "T20", 30,
+        "T20", 40,
         "All 30 source hits are gate scripts printing their verdict line (`zero-skip: passed`, "
         "`projections: passed`). That stdout is the gates' CLI contract, pinned by "
         "test_gate_logging.py; converting it to logging would break the contract for no "
@@ -50,7 +52,7 @@ DEFERRED_RUFF_RULES = (
         revisit_below=5,
     ),
     Deferral(
-        "TRY400", 11,
+        "TRY400", 20,
         "Every site is a `[FAIL] <verdict>` line for an *expected* validation failure, inside "
         "an except clause that already names narrow exception types. logging.exception would "
         "replace a one-line operator-facing verdict with a traceback whose content is already "
@@ -58,45 +60,45 @@ DEFERRED_RUFF_RULES = (
         revisit_below=3,
     ),
     Deferral(
-        "TRY003", 90,
+        "TRY003", 143,
         "Long messages inside raise statements. Fixing them means inventing 90 exception "
         "subclasses; the messages are already specific and the change buys no behaviour.",
         revisit_below=20,
     ),
     Deferral(
-        "S", 1118,
+        "S", 2517,
         "Bandit. 1100+ are assert-in-test (S101), and the remaining source hits are the "
         "subprocess calls that gate scripts exist to make. Enabling it needs blanket waivers, "
         "which CLAUDE.md forbids without decision-log entries.",
         revisit_below=100,
     ),
     Deferral(
-        "PT", 134,
+        "PT", 181,
         "pytest style, entirely in tests. Large mechanical churn across a suite this programme "
         "is already reshaping; the two changes would be impossible to review separately.",
         revisit_below=30,
     ),
     Deferral(
-        "ARG", 40,
+        "ARG", 144,
         "Unused arguments. Exactly one is in source; the other 39 are pytest fixture parameters "
         "requested for their side effects, which is the idiomatic way to use a fixture.",
         revisit_below=5,
     ),
     Deferral(
-        "PLW1510", 31,
+        "PLW1510", 39,
         "subprocess.run without an explicit check=. Several sites deliberately tolerate a "
         "non-zero exit and inspect returncode themselves, so a blanket fix would change "
         "behaviour. Needs a site-by-site review, not a rule flip.",
         revisit_below=5,
     ),
     Deferral(
-        "PTH", 30,
+        "PTH", 34,
         "os.path -> pathlib. Cosmetic in a codebase that already uses pathlib for new code; "
         "three source sites, the rest tests.",
         revisit_below=5,
     ),
     Deferral(
-        "SIM", 25,
+        "SIM", 50,
         "Simplifications. Four source sites, and several 'simplifications' would fold apart "
         "branches whose separation is deliberate for readability in the gates.",
         revisit_below=5,

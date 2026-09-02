@@ -11,7 +11,8 @@ output trustworthy. Mechanical enforcement lives in the root `Makefile` and
    criteria from a spec or brief. Plans and delegates only; never edits code.
 2. **nemotron-reasoner** (`.mango/agents/nemotron-reasoner.md`) — executes the
    plan with the tool bridge. Uses `knowledge_gap_log` / `hypothesis_register`
-   (wired via `META_TOOLS_SCHEMA` in `mango_mas_orchestrator.py`) instead of
+   (defined as `META_TOOLS_SCHEMA` in `harness/shared/meta_tools.py` and composed
+   into `NEMOTRON_TOOLS` by `harness/shared/tool_schemas.py`) instead of
    hallucinating when blocked or uncertain.
 3. **verifier** (`.mango/agents/verifier.md`) — executes the validation matrix
    and reports PASS/FAIL against the acceptance criteria. Never marks PASS on
@@ -53,9 +54,22 @@ For protected-path infrastructure changes, run with `ALLOW_GITHUB_CHANGES=1`
 and record the per-change review attestation in the PR description (see
 `harness/CONTRACT.md`).
 
+**A verification claim is not evidence.** A commit message or PR body saying
+"`make ci` passed" proves nothing; the check runs on the pushed head do. PR #60
+merged with every CI run on its head red under a merge commit claiming `make ci`
+and mypy clean (DEC-024). Paste the `make ci` and `make lint-cold` tails into
+the PR's Validation section and link the `secret-scan` and `dependency-audit`
+job runs; a reviewer who cannot see the output treats the claim as absent. The
+ruleset exported at `.github/rulesets/main.json` makes the nine checks listed
+in `NEXT_STEPS.md` required on `main`. Invoke pinned tools through the
+interpreter (`python -m ruff`, `python -m mypy`) or the `make` targets, never a
+bare binary on `PATH` (DEC-013).
+
 ## Non-negotiables
 
 - No hard-coded values; thresholds come from `governance-policy.json`.
 - No test waivers or `xfail` to make a gate green without a decision-log entry.
 - No credentials in code; external model calls route through env vars.
 - Backward-compatible, modular, reusable changes only.
+- A verification claim in prose is not evidence; only the check runs on the
+  pushed head are.

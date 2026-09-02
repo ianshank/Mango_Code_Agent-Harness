@@ -90,8 +90,8 @@ class TestHandlerFailureContract:
         def boom(_args: dict[str, Any]) -> str:
             raise TimeoutError("could not acquire the register lock")
 
-        orch._tool_handlers["knowledge_gap_log"] = boom
-        orch._dispatch_tool_calls(messages, [tool_call("knowledge_gap_log", {"question": "q"})])
+        orch.dispatcher.tool_handlers["knowledge_gap_log"] = boom
+        orch.dispatcher.dispatch(messages, [tool_call("knowledge_gap_log", {"question": "q"})])
 
         results = _tool_messages(messages)
         assert len(results) == 1, "the wire protocol requires one tool message per tool call"
@@ -101,14 +101,14 @@ class TestHandlerFailureContract:
     def test_every_call_is_answered_even_when_some_fail(self, agent_workspace: Path) -> None:
         messages: list[dict[str, Any]] = []
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-        orch._tool_handlers["knowledge_gap_log"] = lambda _a: (_ for _ in ()).throw(RuntimeError("nope"))
+        orch.dispatcher.tool_handlers["knowledge_gap_log"] = lambda _a: (_ for _ in ()).throw(RuntimeError("nope"))
 
         calls = [
             tool_call("knowledge_gap_log", {"question": "q"}, call_id="c1"),
             tool_call("does_not_exist", {}, call_id="c2"),
             tool_call("write_file", {"filepath": "ok.txt", "content": "x"}, call_id="c3"),
         ]
-        orch._dispatch_tool_calls(messages, calls)
+        orch.dispatcher.dispatch(messages, calls)
 
         results = _tool_messages(messages)
         assert [m["tool_call_id"] for m in results] == ["c1", "c2", "c3"]
@@ -117,7 +117,7 @@ class TestHandlerFailureContract:
     def test_unknown_tool_is_reported_not_raised(self, agent_workspace: Path) -> None:
         messages: list[dict[str, Any]] = []
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
-        orch._dispatch_tool_calls(messages, [tool_call("no_such_tool", {})])
+        orch.dispatcher.dispatch(messages, [tool_call("no_such_tool", {})])
         assert "Unknown tool" in _tool_messages(messages)[0]["content"]
 
 

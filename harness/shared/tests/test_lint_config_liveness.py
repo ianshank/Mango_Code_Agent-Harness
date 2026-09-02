@@ -26,6 +26,8 @@ Marked ``slow``: each check shells out to ruff over the whole tree.
 from __future__ import annotations
 
 import fnmatch
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +44,8 @@ pytestmark = pytest.mark.slow
 
 PYPROJECT = REPO / "pyproject.toml"
 GITLEAKS = REPO / ".gitleaks.toml"
+ESLINT_CONFIG = REPO / "harness" / "node" / "eslint.config.js"
+SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
 
 
 def _config() -> dict:
@@ -189,4 +193,97 @@ class TestGitleaksAllowlistIsLive:
         assert not missing, (
             f"gitleaks allowlist exempts paths that no longer exist: {missing}. Remove them, "
             "or a future file at the same path is scanned by nobody."
+        )
+
+
+class TestEslintMaxLinesIsPolicySourced:
+    """The Node file-size gate must read the budget the Python gate reads.
+
+    `validate_invariants.check_size_budget` takes `limits.size_budget_lines`
+    from the governance policy; `eslint.config.js` enforces `max-lines` on the
+    Node sources under R-TDH-23. Two gates over one number are only one gate if
+    both read the same key: a literal restated in the ESLint config would drift
+    the day the policy changed, and nothing would notice because the lint would
+    still be green. These tests are textual, like the vitest.config.ts checks in
+    `test_coverage_policy_enforcement.py`, because Node is only installed on the
+    primary CI leg and this suite runs on every leg.
+    """
+
+    @staticmethod
+    def _config() -> str:
+        return ESLINT_CONFIG.read_text(encoding="utf-8")
+
+    def _max_lines_options(self) -> str:
+        """The options object of the `max-lines` rule, asserted to be at `error`.
+
+        Anchoring on the `'error'` severity is deliberate: a rule demoted to
+        `'warn'` still appears in the config but `--max-warnings=0` is the only
+        thing making a warning fatal, and a later config edit could drop that.
+        """
+        match = re.search(r"'max-lines':\s*\[\s*'error'\s*,\s*\{(.*?)\}\s*,?\s*\]", self._config(), re.S)
+        assert match is not None, (
+            "eslint.config.js declares no `'max-lines': ['error', {...}]` rule; the Node file-size "
+            "gate (R-TDH-23) is gone or has been demoted below error"
+        )
+        return match.group(1)
+
+    def test_the_max_is_an_identifier_not_a_number(self) -> None:
+        options = self._max_lines_options()
+        bound = re.search(r"\bmax:\s*([A-Za-z_$][\w$]*)\b", options)
+        assert bound is not None and not re.search(r"\bmax:\s*\d", options), (
+            f"max-lines `max` is not bound to an identifier: {options.strip()!r}. It must be read from "
+            "limits.size_budget_lines in the governance policy, never restated as a literal"
+        )
+
+    def test_the_config_reads_the_policy_key(self) -> None:
+        config = self._config()
+        assert "governance-policy.json" in config, "eslint.config.js no longer opens the governance policy"
+        assert re.search(r"\blimits\b.*?\bsize_budget_lines\b", config, re.S), (
+            "eslint.config.js does not read `limits.size_budget_lines`; the max-lines budget is sourced "
+            "from somewhere other than the policy key validate_invariants.py enforces"
+        )
+
+    def test_the_policy_value_is_not_restated_as_a_literal(self) -> None:
+        """A literal that happens to equal the policy today is tomorrow's drift."""
+        budget = json.loads(SHARED_POLICY.read_text(encoding="utf-8"))["limits"]["size_budget_lines"]
+        assert isinstance(budget, int), "the shipped policy's limits.size_budget_lines is not an integer"
+        config = self._config()
+        assert not re.search(rf"(?<![\w.]){budget}(?![\w.])", config), (
+            f"eslint.config.js contains the literal {budget}, which is the current limits.size_budget_lines; "
+            "the budget must come from the policy file so the two cannot diverge"
+        )
+
+    def test_there_is_no_fallback_for_a_missing_key(self) -> None:
+        """`size_budget_lines ?? N` or `|| N` would relax the gate on exactly the input that should stop it."""
+        config = self._config()
+        fallback = re.search(r"size_budget_lines\b[^;\n]*?(\?\?|\|\|)\s*\d", config)
+        assert fallback is None, (
+            f"eslint.config.js falls back to a numeric default for size_budget_lines: {fallback.group(0)!r}. "
+            "A malformed policy must fail the lint, not silently relax it"
+        )
+        assert re.search(r"throw new Error\((?:(?!\)\s*;).)*?size_budget_lines", config, re.S), (
+            "eslint.config.js does not throw when limits.size_budget_lines is missing or not a number; "
+            "the read must fail closed like vitest.config.ts and policy.ts do"
+        )
+        assert re.search(r"throw new Error\((?:(?!\)\s*;).)*?\"limits\"", config, re.S), (
+            "eslint.config.js does not throw when the `limits` block is absent"
+        )
+
+    def test_every_line_counts_like_the_python_gate(self) -> None:
+        """validate_invariants counts `len(text.splitlines())`; skipping blanks or comments would let the
+        two gates disagree about the same file."""
+        options = self._max_lines_options()
+        for option in ("skipBlankLines", "skipComments"):
+            assert re.search(rf"\b{option}:\s*false\b", options), (
+                f"max-lines does not set `{option}: false`; the Node count would diverge from the Python gate"
+            )
+
+    def test_the_rule_applies_to_the_sources(self) -> None:
+        block = re.search(
+            r"files:\s*\[\s*'src/\*\*/\*\.ts'\s*\]\s*,\s*rules:\s*\{(?:(?!\bfiles:).)*?'max-lines'",
+            self._config(),
+            re.S,
+        )
+        assert block is not None, (
+            "the max-lines rule is not scoped to `files: ['src/**/*.ts']`; a rule over no files enforces nothing"
         )

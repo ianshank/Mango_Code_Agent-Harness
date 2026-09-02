@@ -54,7 +54,16 @@
     "statements": 90,
     "functions": 90,
     "branches": 80,
-    "per_file": true
+    "per_file": true,
+    "optional_extras": {
+      "langgraph": {
+        "import_name": "langgraph.graph",
+        "deselect_env": "MANGO_CI_DESELECT_LANGGRAPH",
+        "path_prefixes": [
+          "harness/shared/langgraph/"
+        ]
+      }
+    }
   },
   "decision_id_pattern": "^(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\\.[0-9]+)$",
   "agent_defaults": {
@@ -101,5 +110,10 @@
   "external_root_of_trust_required": true,
   "charter_version": "2.0",
   "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
-  "skill_max_age_days": 90
+  "skill_max_age_days": 90,
+  "limits": {
+    "size_budget_lines": 500,
+    "test_size_budget_lines": 700,
+    "changelog_section_lines": 400
+  }
 }

@@ -71,17 +71,36 @@ from `governance-policy.json`" — yet the runtime violates it structurally:
 
 - [ ] AC-1: `grep -rn "max_iterations: int = 10\|api_timeout: int = 300"
   harness/shared/` returns nothing; orchestrator limits come from the policy —
-  verified by `test_policy_loader.py` / `TestPolicySourcedLimits`.
-- [ ] AC-2: A task exceeding `max_tool_calls_per_task` raises and fires the
-  `budget_exceeded` hook — verified by `make test`.
-- [ ] AC-3: `test_policy_consistency.py` passes with the new pins (five-copy
+  verified by `test_policy_loader.py` / `TestPolicySourcedLimits`. — open
+  2026-09-02: the orchestrator half is closed by tech-debt-hardening-plan
+  R-TDH-12 (`ExecutionLoop` resolves omitted budgets from the policy at
+  construction; `test_execution_loop_defaults.py`), and the grep's remaining
+  hit, `harness/shared/langgraph/policy.py:21: max_iterations: int = 10`, is
+  `GraphPolicy`'s deliberate no-config fallback (langgraph-policy-wiring
+  R-LPW-4/5), now equality-pinned to the loader fallbacks by
+  `test_policy_consistency.py::TestGraphPolicyDefaultsMirrorPolicyLoaderFallbacks`;
+  the grep as written cannot return nothing without reversing that decision, so
+  this box stays open until its owner rewords it or records a `DEC-`; previously
+  tech-debt-hardening-plan R-TDH-12
+- [x] AC-2: A task exceeding `max_tool_calls_per_task` raises and fires the
+  `budget_exceeded` hook — verified by `make test`. — verified 2026-09-02:
+  `pytest harness/shared/tests/test_tool_budget.py harness/shared/tests/test_orchestrator_agent_loop.py -k budget`:
+  15 passed
+- [x] AC-3: `test_policy_consistency.py` passes with the new pins (five-copy
   grammar lockstep against fallback literals, fallback-constant equality) —
-  verified by `make test`.
+  verified by `make test`. — verified 2026-09-02:
+  `pytest harness/shared/tests/test_policy_consistency.py`: 36 passed
 - [ ] AC-4: `ALLOW_GITHUB_CHANGES=1 make pre-pr` passes end-to-end, including
-  `digest-regen` drift check.
-- [ ] AC-5: `python harness/shared/check_projections.py --help` and per-stack
+  `digest-regen` drift check. — open 2026-09-02: `make ci`, `review` and `lint-cold` pass; `audit` and `secrets` need
+  `pip-audit`, `osv-scanner` and `gitleaks`, absent in this environment, so those two are
+  evidenced by the `dependency-audit` and `secret-scan` CI jobs (tech-debt-hardening-plan
+  C-TDH-3); no plan item
+- [x] AC-5: `python harness/shared/check_projections.py --help` and per-stack
   shim invocations behave identically to before (same flags/exit codes) —
-  verified by `make validate`.
+  verified by `make validate`. — verified 2026-09-02: `--help` exits 0 with
+  the `--config`/`--decision-log` flags; `ALLOW_GITHUB_CHANGES=1 make validate`
+  ends `All governance validators passed` (the flag covers this branch's
+  uncommitted protected-path edits, not this spec)
 
 ## Invariants touched
 

@@ -1,10 +1,10 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.2.0 (2026 Standards)
+**Version:** 2.4.0 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem** and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
 
 ---
 
@@ -27,7 +27,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 11 reusable skills; the only skill root
+│   ├── skills/                          # 13 reusable skills; the only skill root
+│   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
@@ -38,6 +39,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   ├── tech-debt-audit/             # Repeatable full-repo SDLC/SQE audit procedure
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
 │
@@ -45,7 +47,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── architecture/
 │   │   ├── c4_architecture.md           # C4 Level 1-4 Architecture & Threat Boundaries
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
-│   └── specs/                           # 11 Formal Traceable Specifications
+│   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
+│   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
+│   ├── reports/                         # Historical hygiene, peer-review and test reports
+│   └── specs/                           # 22 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
@@ -64,8 +69,22 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── tests/                       # Multi-tier Vitest matrix
 │   │   └── docs/specs/                  # Bidirectionally-traced formal specifications
 │   │
+│   ├── jvm/                             # Kotlin/Gradle governance-parity REFERENCE TEMPLATE —
+│   │                                     # not wired into root CI/Makefile (INV-2/INV-3 partial;
+│   │                                     # see harness/CONTRACT.md)
+│   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
-│   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── orchestrator/                # Decomposed MAS Orchestrator (loop, dispatch, hooks)
+│   │   ├── mango_mas_orchestrator.py    # Backwards-compatible ReAct loop facade
+│   │   ├── experimental/                # Parked, unwired capabilities (DEC-027): autonomous_healing.py, lats_optimizer.py
+│   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server
+│   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
+│   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
+│   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
+│   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
+│   │   │   ├── policy.py                # GraphExecutionPolicy configuration
+│   │   │   ├── decorators.py            # @with_authority & @budgeted runtime gates
+│   │   │   └── ablation.py              # MCTS ablation & hypothetical state channels
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
@@ -88,10 +107,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (1,687 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (2,676 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
-│   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
+│   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
+│   │       │   ├── test_cross_platform_regression.py # 34 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
 │   │       │   └── test_orchestrator_dispatch_regression.py # Dispatch edge-cases & budget handling
 │   │       ├── test_orchestrator_init.py       # Orchestrator initialization & prompt loading
@@ -99,12 +119,13 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │       ├── test_orchestrator_hooks.py      # Pre/post lifecycle hooks
 │   │       ├── test_orchestrator_agent_loop.py # ReAct execution loop & budget limits
 │   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
-│   │       ├── test_governance_broker.py       # 61 tests: INV-8/9/10, in-process PDP, ProcessBackend
+│   │       ├── test_governance_broker.py       # 68 tests: INV-8/9/10, in-process PDP, ProcessBackend
 │   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │       ├── publish_policy_artifact.py   # Versioned, digest-pinned, attestable policy artifact
-│       └── policy-artifact.json         # Committed artifact; drift-gated by the test suite
+│       ├── policy-artifact.json         # Committed artifact; drift-gated by the test suite
+│       └── tests/                       # Colocated control-plane suite (101 tests; R-TDH-26)
 │
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
@@ -112,8 +133,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ├── .dockerignore                        # Docker build context policy (excludes .mango)
 ├── Dockerfile                           # Multi-stage production container image
 ├── Makefile                             # Unified root Makefile for CI/CD targets
-├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest)
-└── requirements-dev.txt                 # Python development dependencies
+├── pyproject.toml                       # Python tool configuration (ruff, mypy, pytest) + [project.dependencies]
+├── requirements.txt                     # Python runtime dependencies (fastapi/uvicorn/pydantic/httpx)
+└── requirements-dev.txt                 # Dev/tooling deps (-r requirements.txt, plus pytest/ruff/mypy)
 ```
 
 ---
@@ -140,7 +162,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **`command_actions.py`**: classifies a command into a declared policy action. An allowlist, not a denylist: anything unmodelled resolves to an action no role holds, so an unrecognised command denies for every agent.
 - **`policy_decision.py`**: the verdict, in process. Replaces a host subprocess that ran *before* the command guard, from a path inside the agent's workspace (DEC-009).
 - **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment, which `validate_invariants` structurally cannot see (DEC-007).
-- **`agent_authority.py`**: derives each active role's tool exposure from `agent-policy.json`. The verifier holds no `write_file`, which every canonical contract it maps to already denied in prose (DEC-008).
+- **`read_policy.py`**: the read-side counterpart to `write_policy.py`. `command_actions.classify` already denies reading a credential through `run_command` (graded `secret_access`, an action no role holds); `read_policy.read_denial_reason` closes the same gap for the orchestrator's `read_file` handler, which reads the filesystem directly and so is invisible to that classifier. Both compose one shared credential-filename pattern rather than two that can drift (DEC-012).
+- **`agent_authority.py`**: derives each active role's tool exposure from `agent-policy.json`. The verifier holds no `write_file` (DEC-008) or `apply_patch` (DEC-012) — both grade as the `write` action, which every canonical contract the verifier maps to already denied in prose — but does hold `read_file`.
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
 - **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in Python 3.9 (PEP 604 unions, `datetime.UTC`, unannotated `AnnAssign`). Run via `make check-compat`.
@@ -174,12 +197,12 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **1,835 automated tests** (56 Vitest + 1,779 Pytest across 7 tiers)
+- **Total Automated Tests:** **2,882 automated tests** (97 Vitest + 2,785 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **97% total** (98.02% Lines | 95.01% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
+- **Python AQA Coverage:** **99% total** (99.64% Lines | 97.93% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
-- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 (151 files verified)
+- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
 
 ---
 
@@ -202,7 +225,7 @@ Optional environment variables for the shadow planner comparison channel
 | `MANGO_SHADOW_PLANNER`     | Exactly `1` enables the observation-only shadow plan comparison; any other value is off. |
 | `MANGO_SHADOW_MODEL`       | Alternate model for the shadow pass (defaults to the orchestrator model).                |
 | `MANGO_SHADOW_TIMEOUT_SEC` | Shadow-pass timeout; capped at the orchestrator API timeout.                             |
-| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).       |
+| `MANGO_SIGNAL_DIR`         | Overrides the signal sink directory (default `<workspace>/.mango/memory/signals/`).      |
 
 ### 4.2 Querying NVIDIA Nemotron Ultra
 
@@ -223,6 +246,8 @@ cd harness/node
 pnpm install
 cd ../..
 pip install -r requirements-dev.txt
+make install         # One-time: install the pre-push remote-allowlist hook
+make audit-install    # One-time: install pip-audit + the Node stack's pinned osv-scanner
 
 # 2. Run Node/Vitest test matrix
 cd harness/node
@@ -239,6 +264,7 @@ make test-governance # Governance-specific tests in isolation (broker, evidence,
 make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
 make validate        # Governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
+make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
 make digest-regen    # Regenerate protected-file digests after policy changes
 
 # 4. Run root adversarial harness self-tests
@@ -278,11 +304,12 @@ make test-node       # Execute TypeScript/Node engine tests
 make test-governance # Governance broker, evidence, invariant tests
 make validate        # All governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Shim drift detection
-make pre-pr          # Full pre-submission validation pipeline
+make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
+make pre-pr          # Full pre-submission validation pipeline (now includes audit)
 ```
 
 ### 5.4 Secret Sanitization & Security Scanning
 
 - **Invariant `INV-1` Enforcement:** Never output raw API tokens or credentials in logs or test assertions. Use `SecretMasker` and the native Python regex masks.
 - **Pre-Push Allowlist (`remotes.py`):** Push targets are strictly validated against `.governance/allowed-remotes.txt` to prevent code leakage to unauthorized repositories.
-- **Automated Gitleaks & OSV Scanners:** Run `gitleaks` and `osv-scanner` locally and in CI to catch hardcoded secrets or compromised third-party dependencies before code review.
+- **Automated Gitleaks, pip-audit & OSV Scanners:** `make secrets` (gitleaks; INV-1) and `make audit` (`pip-audit` against `requirements.txt` + delegated Node `osv-scanner`) run locally and in dedicated CI jobs (`secret-scan`, `dependency-audit`) to catch hardcoded secrets and compromised third-party dependencies before code review; `make pre-pr` runs both. `.github/dependabot.yml` opens weekly update PRs for the `pip` and `npm` ecosystems.

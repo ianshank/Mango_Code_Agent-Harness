@@ -120,6 +120,12 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         "api_timeout_sec": _int_value(section, "api_timeout_sec", 300, "orchestrator"),
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
         "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
+        "max_healing_retries": _int_value(section, "max_healing_retries", 3, "orchestrator"),
+        # Captured-output ceiling for the process backend (a containment control:
+        # an unbounded capture becomes a prompt, a signal-sink entry and an HTTP
+        # body). Was an unlinked 64 KiB literal in process_backend.py
+        # (tech-debt-hardening-plan R-TDH-16).
+        "max_output_bytes": _int_value(section, "max_output_bytes", 65536, "orchestrator"),
     }
 
 
@@ -137,3 +143,86 @@ def nemotron_defaults(policy_path: Path | None = None) -> dict:
 def max_tool_calls_per_task(policy_path: Path | None = None) -> int:
     """Cumulative tool-call budget per agent task; policy `agent_defaults` block."""
     return _int_value(_section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults")
+
+
+def langgraph_defaults(policy_path: Path | None = None) -> dict:
+    """LangGraph orchestration-graph tuning; policy `langgraph` block."""
+    section = _section("langgraph", policy_path)
+    return {
+        "recursion_limit": _int_value(section, "recursion_limit", 50, "langgraph"),
+        "max_concurrency": _int_value(section, "max_concurrency", 3, "langgraph"),
+        "plan_divergence_threshold": _float_value(
+            section, "plan_divergence_threshold", 0.35, "langgraph"
+        ),
+    }
+
+
+def coverage_defaults(policy_path: Path | None = None) -> dict:
+    """Coverage gate thresholds consumed outside coverage_gate.py; policy `coverage` block.
+
+    coverage_gate.py itself deliberately does not import this (policy-single-source.md's
+    standalone-stdlib decision); this accessor is for other callers, such as GraphPolicy,
+    that already depend on harness.shared and would otherwise read the section unvalidated.
+    """
+    section = _section("coverage", policy_path)
+    return {
+        "lines": _int_value(section, "lines", 90, "coverage"),
+        "branches": _int_value(section, "branches", 80, "coverage"),
+    }
+
+
+def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]:
+    """Optional extras whose tests a CI leg may deselect; policy `coverage.optional_extras`.
+
+    Each entry maps an extra's name to ``import_name`` (what a leg lacking the
+    extra cannot import), ``deselect_env`` (the variable that leg sets to "1";
+    conftest.py deselects the extra's marked tests on it and coverage_gate.py
+    waives the per-file floor for the extra's modules on it) and
+    ``path_prefixes`` (those modules). One key, three readers (DEC-028).
+    Absent block: {}. Malformed block: PolicyError.
+    """
+    extras = _section("coverage", policy_path).get("optional_extras", {})
+    if not isinstance(extras, dict):
+        raise PolicyError("policy coverage.optional_extras must be an object keyed by extra name")
+    result: dict[str, dict] = {}
+    for name, spec in extras.items():
+        if not isinstance(spec, dict):
+            raise PolicyError(f"policy coverage.optional_extras[{name!r}] must be an object")
+        import_name, deselect_env, prefixes = (
+            spec.get("import_name"), spec.get("deselect_env"), spec.get("path_prefixes")
+        )
+        if not isinstance(import_name, str) or not import_name or not isinstance(deselect_env, str) or not deselect_env:
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}] import_name and deselect_env must be non-empty strings"
+            )
+        if not isinstance(prefixes, list) or not prefixes or any(not isinstance(p, str) or not p for p in prefixes):
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}].path_prefixes must be a non-empty list of strings"
+            )
+        result[name] = {"import_name": import_name, "deselect_env": deselect_env, "path_prefixes": tuple(prefixes)}
+    return result
+
+
+def agent_defaults(policy_path: Path | None = None) -> dict:
+    """Agent delegation/parallelism limits; policy `agent_defaults` block.
+
+    Returns only the integer tuning values other modules construct from; the
+    non-numeric keys in this section (approval/evidence lists, the
+    deny_unclassified_side_effects flag) are read directly by validate_policy.py
+    and test_policy_consistency.py and have no numeric-default shape for
+    _int_value/_float_value to validate.
+    """
+    section = _section("agent_defaults", policy_path)
+    return {
+        "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
+        "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
+    }
+
+
+def lats_defaults(policy_path: Path | None = None) -> dict:
+    """LATS/MCTS search tuning; policy `lats` block."""
+    section = _section("lats", policy_path)
+    return {
+        "max_budget": _int_value(section, "max_budget", 10, "lats"),
+        "exploration_weight": _float_value(section, "exploration_weight", 1.414, "lats"),
+    }

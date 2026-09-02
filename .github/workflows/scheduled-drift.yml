@@ -28,26 +28,31 @@ jobs:
     if: github.event.schedule == '17 4 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -e . --no-deps
 
       # Drift that no single PR can cause: two PRs each green against their own
       # base can still leave main with a stale digest bundle or a duplicated
-      # shim once both have merged.
+      # shim once both have merged. `coverage-python` joins this loop for a
+      # different reason: `main` has no branch ruleset yet (NEXT_STEPS.md's
+      # own "highest-value item"), so per-PR CI is advisory, not required --
+      # a PR that dropped coverage below the policy floor could merge
+      # unnoticed until this catches it on `main` itself. Purely Python; no
+      # Node/pnpm setup needed for this job.
       - name: Check for drift on main
         id: drift
         run: |
@@ -60,7 +65,11 @@ jobs:
             echo
           } > drift.md
           failed=0
-          for target in digest-regen check-dedup validate; do
+          # `lint` joined this loop after the mypy break that turned main red
+          # went unnoticed overnight: the nightly loop measured coverage but never
+          # typechecked, so a dependency- or merge-induced mypy failure was
+          # invisible until the next PR (tech-debt-hardening-plan R-TDH-11).
+          for target in lint digest-regen check-dedup validate coverage-python; do
             if output=$(make "$target" 2>&1); then
               echo "- \`make $target\`: OK" >> drift.md
             else
@@ -103,9 +112,9 @@ jobs:
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -166,7 +175,7 @@ jobs:
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # install_hooks.sh writes .git/hooks/pre-push. If it ever selects a
       # per-stack copy instead of the shared kernel scan, the local pre-push
@@ -211,4 +220,59 @@ jobs:
             # is the whole job of this workflow.
             gh issue create --title "$title" --body-file hookdrift.md --label "governance" \
               || gh issue create --title "$title" --body-file hookdrift.md
+          fi
+
+  lock-freshness:
+    name: weekly dependency lock freshness
+    if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # The lock is what CI installs (tech-debt-hardening-plan R-TDH-9), so it
+      # only moves when someone regenerates it. This job reports how far behind
+      # the requirements files' allowed ranges it has fallen, as an issue rather
+      # than a red PR: staleness is a property of the calendar, not of any
+      # change in front of a reviewer. Whether Dependabot's pip updater also
+      # rewrites a uv-generated lock is not relied upon; this is the guaranteed
+      # path. The lock tool is the pinned one from requirements-dev.txt.
+      - name: Install the pinned lock tool
+        run: python -m pip install "$(grep -E '^uv==' requirements-dev.txt)"
+
+      - name: Compare the lock with the newest allowed releases
+        id: lock
+        run: |
+          set +e
+          {
+            echo "## Dependency lock is behind the newest allowed releases"
+            echo
+            echo "\`requirements-lock.txt\` pins older versions than the requirements files"
+            echo "permit. Regenerate with \`make lock-upgrade\`, run \`make ci\`, and open a PR."
+            echo
+            echo '```diff'
+            make lock-upgrade-check 2>&1 | tail -60
+            echo '```'
+          } > lockdrift.md
+          if make lock-upgrade-check >/dev/null 2>&1; then
+            echo "behind=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the lock freshness issue
+        if: steps.lock.outputs.behind == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Dependency lock is behind the newest allowed releases"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file lockdrift.md
+          else
+            gh issue create --title "$title" --body-file lockdrift.md --label "drift" \
+              || gh issue create --title "$title" --body-file lockdrift.md
           fi

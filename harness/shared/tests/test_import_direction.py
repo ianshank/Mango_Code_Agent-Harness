@@ -27,7 +27,9 @@ pytestmark = pytest.mark.governance
 LAYERS = {
     "harness.shared.governance.verdict": 0,
     "harness.shared.tool_budget": 0,
-    "harness.shared.tool_result_format": 0,
+    # One step above the vocabulary since R-TDH-14: it compares against
+    # `BROKER_BLOCKED` instead of restating the string, and imports nothing else.
+    "harness.shared.tool_result_format": 1,
     "harness.shared.governance.verification": 2,
     "harness.shared.mango_mas_orchestrator": 4,
     "harness.api_server.main": 5,

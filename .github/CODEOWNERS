@@ -1,0 +1,40 @@
+# CODEOWNERS — review routing for this repository.
+#
+# This file is itself listed in governance-policy.json's protected_paths
+# (as `.github/CODEOWNERS` / `**/.github/CODEOWNERS`); until now that pattern
+# matched nothing on disk, the same "silently protects nothing" failure class
+# test_protected_path_liveness.py exists to catch for other patterns. This
+# file makes it live.
+#
+# Order matters: later patterns override earlier ones, same as .gitignore.
+
+# Default: everything routes to the repository owner.
+*                                       @ianshank
+
+# Governance/enforcement layer — gates, thresholds, and CI wiring.
+# Changes here require the infra-reviewed label per harness/CONTRACT.md.
+/Makefile                              @ianshank
+/harness/*/Makefile                    @ianshank
+/pyproject.toml                        @ianshank
+/requirements*.txt                     @ianshank
+/.github/workflows/                    @ianshank
+/.gitleaks.toml                        @ianshank
+/harness/shared/governance-policy.json @ianshank
+/harness/shared/agent-policy.json      @ianshank
+/harness/shared/governance/            @ianshank
+/harness/shared/check_dedup.py         @ianshank
+/harness/shared/check_py_compat.py     @ianshank
+/harness/shared/validate_*.py          @ianshank
+/harness/shared/write_policy.py        @ianshank
+/harness/shared/read_policy.py         @ianshank
+/harness/shared/policy_loader.py       @ianshank
+/harness/control-plane/                @ianshank
+
+# Agent control surface — what an agent reads to decide what it may do.
+/CLAUDE.md                             @ianshank
+/harness/CONTRACT.md                   @ianshank
+/.mango/                               @ianshank
+/.claude/                              @ianshank
+
+# This file.
+/.github/CODEOWNERS                    @ianshank

@@ -50,12 +50,17 @@ class TestSpendDown:
         assert ToolBudget(limit=0).consume(1) is False
 
     def test_remaining_counts_down_and_floors_at_zero(self) -> None:
+        # `remaining` is deprecated (R-TDH-17); its arithmetic is still pinned
+        # here, under the warning it now emits.
         budget = ToolBudget(limit=4)
-        assert budget.remaining == 4
+        with pytest.warns(DeprecationWarning):
+            assert budget.remaining == 4
         budget.consume(3)
-        assert budget.remaining == 1
+        with pytest.warns(DeprecationWarning):
+            assert budget.remaining == 1
         budget.consume(9)
-        assert budget.remaining == 0
+        with pytest.warns(DeprecationWarning):
+            assert budget.remaining == 0
 
 
 @pytest.fixture

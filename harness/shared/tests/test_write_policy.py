@@ -10,10 +10,14 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared import write_policy
 from harness.shared.write_policy import (
-    ALWAYS_DENIED_PREFIXES,
     ALWAYS_DENIED_SEGMENTS,
     DEFAULT_POLICY_PATH,
+    _narrows,
+    merge_protected_patterns,
+    pin_key,
+    policy_digest,
     write_denial_reason,
 )
 
@@ -123,10 +127,25 @@ class TestFailsClosed:
         assert reason is not None
 
     def test_a_policy_without_protected_paths_still_denies_the_git_directory(self, tmp_path: Path) -> None:
-        empty = tmp_path / "policy.json"
+        """The property is unchanged -- an empty pattern set cannot reach the
+        git-directory denial, and does not deny ordinary work.
+
+        The supplied policy is pinned here because a policy supplied without a
+        digest record is now denied outright (R-PPP-3); before that requirement
+        an unpinned policy was simply used. Only the setup the new contract
+        demands is added; nothing this test asserted has been relaxed.
+        """
+        target = tmp_path / "target-repo"
+        target.mkdir()
+        empty = target / "policy.json"
         empty.write_text(json.dumps({"protected_paths": []}), encoding="utf-8")
-        assert write_denial_reason(".git/config", policy_path=empty) is not None
-        assert write_denial_reason("src/feature.py", policy_path=empty) is None
+        pins = tmp_path / "pins.json"
+        pins.write_text(
+            json.dumps({"pinned_policies": {pin_key(empty): policy_digest(empty.read_bytes())}}),
+            encoding="utf-8",
+        )
+        assert write_denial_reason(".git/config", policy_path=empty, pin_path=pins) is not None
+        assert write_denial_reason("src/feature.py", policy_path=empty, pin_path=pins) is None
 
 
 def test_policy_path_travels_with_the_installed_harness() -> None:
@@ -137,8 +156,8 @@ def test_policy_path_travels_with_the_installed_harness() -> None:
 
 def test_always_denied_segments_are_declared_not_inlined() -> None:
     assert ".git" in ALWAYS_DENIED_SEGMENTS
-    # The prefix form is retained for callers that imported the previous name.
-    assert ".git/" in ALWAYS_DENIED_PREFIXES
+    # The prefix form (ALWAYS_DENIED_PREFIXES) is deprecated; test_deprecation_shims.py
+    # is the only place allowed to touch it (R-TDH-17).
 
 
 class TestGitDirectoryIsMatchedBySegment:
@@ -185,3 +204,48 @@ class TestPathShapesTheCallerAlreadyRejects:
     def test_interior_dot_dot_that_resolves_back_inside_is_allowed(self) -> None:
         """`a/../b.py` is `b.py`. Denying it would deny ordinary work."""
         assert write_denial_reason("a/../b.py") is None
+
+
+class TestHarnessPolicyUnreadable:
+    """The *harness* policy, not a supplied one, failing to load (write_policy.py
+    lines 349-358). ``load_protected_patterns`` fails closed with ``sys.exit(1)``,
+    which is right for the CI gate and fatal on a tool-call path; the write gate
+    must turn either a SystemExit or an OSError into one denied write."""
+
+    @pytest.mark.parametrize("failure", [SystemExit(1), PermissionError("denied")])
+    def test_an_unreadable_harness_policy_denies_the_write(
+        self, monkeypatch: pytest.MonkeyPatch, failure: BaseException
+    ) -> None:
+        def unreadable(path: Path) -> list[str]:
+            raise failure
+
+        monkeypatch.setattr(write_policy, "load_protected_patterns", unreadable)
+        try:
+            reason = write_denial_reason("src/feature.py")
+        except SystemExit:  # pragma: no cover - the assertion below is the report
+            pytest.fail("SystemExit escaped the write gate and would end the agent run")
+        assert reason is not None and "could not be read, so the write is denied" in reason
+
+
+class TestSuppliedPolicyMergeEdges:
+    """Arcs of the union that the reporting heuristics guard (R-PPP-1)."""
+
+    def test_a_pattern_is_not_narrower_than_itself(self) -> None:
+        """``_narrows`` compares reach on probes; an identical pattern has identical
+        reach and is answered before probing. The control shows the probe-based
+        answer for a genuinely narrower pattern, so the early return is not what
+        makes every comparison False."""
+        assert _narrows("harness/shared/**", "harness/shared/**") is False
+        assert _narrows("harness/shared/governance/*", "harness/shared/**") is True
+
+    def test_re_listing_a_harness_pattern_is_deduplicated_without_a_finding(self) -> None:
+        """A supplied policy that repeats a harness pattern verbatim neither narrows
+        nor widens it: no finding is raised for it, it appears once, and the harness
+        order is kept ahead of the additions."""
+        harness_patterns = ["Makefile", "harness/shared/**"]
+        merged, findings = merge_protected_patterns(
+            harness_patterns, {"protected_paths": ["harness/shared/**", "extra/**"]}
+        )
+        assert merged == ["Makefile", "harness/shared/**", "extra/**"]
+        assert findings == []
+        assert harness_patterns == ["Makefile", "harness/shared/**"], "the harness list was mutated"

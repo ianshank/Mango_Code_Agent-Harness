@@ -1,5 +1,15 @@
 # Spec: orchestrator-tool-registry
 
+> **Status: Implemented (`6ae7eb0`, 2026-08-28).** All acceptance criteria
+> below were re-verified directly against current `main` on 2026-09-01: every
+> requirement holds in the live source, and the full targeted test suite (the
+> exact `pytest` invocation in the Validation matrix below) plus the
+> repository's ruff/mypy gates are clean. This spec had
+> sat with its checkboxes unticked since the implementing commit, which led
+> `CHANGELOG.md` and `docs/architecture/god-file-refactoring-guide.md` to later
+> describe it as unstarted — both corrected alongside this note. See
+> `harness/node/.governance/decision-log.md` for prior context on this pattern.
+>
 > PR 2 of the tech-debt reduction program: decompose the orchestrator's ReAct
 > loop, decouple tool dispatch from tool declaration, and wire the advertised
 > but unread Nemotron bridge environment variables. No protected paths are
@@ -65,16 +75,23 @@ this spec explicitly leaves `shadow_planner.py` unchanged.
 
 ## Acceptance criteria
 
-- [ ] AC-1: A test asserts every `NEMOTRON_TOOLS` function name has a handler
+- [x] AC-1: A test asserts every `NEMOTRON_TOOLS` function name has a handler
   in the registry — verified by `make test`.
-- [ ] AC-2: The full orchestrator/bridge/shadow-planner test suites pass —
+  (`test_orchestrator_tools.py::TestToolRegistry::test_every_declared_tool_has_a_handler`)
+- [x] AC-2: The full orchestrator/bridge/shadow-planner test suites pass —
   verified by `make coverage-python`.
-- [ ] AC-3: `make ci` passes end-to-end — verified by `make ci`.
-- [ ] AC-4: `grep -n 'logger\.\w*(f"' harness/shared/mango_mas_orchestrator.py
+- [x] AC-3: `make ci` passes end-to-end — verified by `make ci`.
+- [x] AC-4: `grep -n 'logger\.\w*(f"' harness/shared/mango_mas_orchestrator.py
   harness/shared/nemotron_bridge.py` returns nothing.
-- [ ] AC-5: With `NEMOTRON_MAX_RETRIES=2`, a mocked transient HTTP 503 is
+- [x] AC-5: With `NEMOTRON_MAX_RETRIES=2`, a mocked transient HTTP 503 is
   retried and succeeds on a later attempt; with the variable unset, no retry
   occurs — verified by unit tests.
+  (`test_nemotron_bridge.py::test_complete_chat_retries_transient_http_error`,
+  `::test_complete_chat_no_retry_by_default`)
+- [x] AC-6: A tool name absent from the registry fails gracefully — dispatch
+  returns the existing `Error: Unknown tool '<name>'` string to the model
+  rather than raising, and the agent loop continues.
+  (`test_orchestrator_agent_loop.py::TestExecuteAgent::test_unknown_tool`)
 
 ## Invariants touched
 
@@ -89,9 +106,16 @@ this spec explicitly leaves `shadow_planner.py` unchanged.
 - `make ci` — ruff + mypy + compat + pytest + coverage gate + vitest +
   zero-skips + specs + remotes + validate + check-dedup + digest-regen
 - coverage target: `governance-policy.json → coverage.lines` (aggregate)
-- Targeted: `pytest harness/shared/tests/test_mango_mas_orchestrator.py
+- Targeted: `pytest harness/shared/tests/test_orchestrator_init.py
+  harness/shared/tests/test_orchestrator_tools.py
+  harness/shared/tests/test_orchestrator_hooks.py
+  harness/shared/tests/test_orchestrator_agent_loop.py
   harness/shared/tests/test_nemotron_bridge.py
   harness/shared/tests/test_shadow_planner.py`
+  (`test_mango_mas_orchestrator.py` no longer exists — split into the four
+  `test_orchestrator_*.py` files above by R-GFD-6 the day after this spec's
+  implementing commit landed; `test_shadow_planner.py` added so this command
+  actually covers all three suites AC-2 names, not just two of them)
 
 ## Backward compatibility
 

@@ -28,6 +28,7 @@ from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared import shadow_planner as shadow_module
 from harness.shared.cognitive_signal import validate_signal_dict
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+from harness.shared.orchestrator import loop as loop_module
 from harness.shared.shadow_planner import (
     DEFAULT_SHADOW_TIMEOUT_SEC,
     SHADOW_MODEL_ENV,
@@ -340,15 +341,20 @@ class TestContainment:
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """The orchestrator's own except is live armor: even if the channel's
-        never-raise contract breaks, the loop result is unaffected."""
+        never-raise contract breaks, the loop result is unaffected.
+
+        The guard lives in ``harness.shared.orchestrator.loop`` since the
+        orchestrator decomposition (9d38670); patching the facade module's
+        namespace no longer reaches the name the loop actually calls.
+        """
         monkeypatch.setattr(
-            orch_module, "run_shadow_comparison", mocker.Mock(side_effect=RuntimeError("contract bug"))
+            loop_module, "run_shadow_comparison", mocker.Mock(side_effect=RuntimeError("contract bug"))
         )
-        with caplog.at_level(logging.ERROR, logger="harness.shared.mango_mas_orchestrator"):
+        with caplog.at_level(logging.ERROR, logger=loop_module.logger.name):
             out = _run_loop(_mk_workspace(tmp_path), mocker, monkeypatch, flag="1")
         assert out["result"] == "PASS"
-        orch_records = [r for r in caplog.records if r.name == "harness.shared.mango_mas_orchestrator"]
-        assert any("did not contain" in r.message for r in orch_records)
+        loop_records = [r for r in caplog.records if r.name == loop_module.logger.name]
+        assert any("guard caught a shadow planner failure" in r.message for r in loop_records)
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +381,7 @@ class TestBoundaryStatic:
             assert symbol not in source, f"shadow_planner.py must not reference {symbol}"
 
     def test_orchestrator_gates_via_shared_predicate(self, shared_dir: Path) -> None:
-        source = (shared_dir / "mango_mas_orchestrator.py").read_text(encoding="utf-8")
+        source = (shared_dir / "orchestrator" / "loop.py").read_text(encoding="utf-8")
         assert "shadow_planner_enabled()" in source
         assert f'environ.get("{SHADOW_PLANNER_ENV}")' not in source  # no inline re-encoding
 

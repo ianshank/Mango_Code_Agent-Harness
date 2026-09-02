@@ -62,17 +62,38 @@ purpose and its enforcement surface:
 
 ## Acceptance criteria
 
-- [ ] AC-1: `git ls-files scratch harness/test-results` returns nothing —
-  verified by inspection in `make pre-pr` review.
-- [ ] AC-2: `make ci` passes end-to-end (ruff, mypy, compat, pytest+coverage
+- [x] AC-1: `git ls-files scratch harness/test-results` returns nothing —
+  verified by that command's empty output in `make pre-pr` review. — verified
+  2026-09-02: the command prints nothing
+- [x] AC-2: `make ci` passes end-to-end (ruff, mypy, compat, pytest+coverage
   gate, vitest, zero-skips, specs, remotes, validate, check-dedup,
-  digest-regen) — verified by `make ci`.
+  digest-regen) — verified by `make ci`. — verified 2026-09-02: `ALLOW_GITHUB_CHANGES=1 make ci` on the Phase 1 tree: lint, lock-check,
+  coverage-python (2513 passed, 0 failed), test-node, verify-zero-skips, specs, remotes,
+  validate and check-dedup all exit 0; `digest-regen` exits 0 once the regenerated bundle
+  is committed (its `git diff --exit-code` compares against the index). The earlier mypy
+  blocker was fixed in `test_workflow_contracts.py` before this run
 - [ ] AC-3: `bash harness/node/scripts/run_vitest.sh` exits 0 from a clean
-  checkout with node_modules installed — verified by `make test-node`.
+  checkout with node_modules installed — verified by `make test-node`. — open
+  2026-09-02: the script exits 1 — vitest passes (53 passed, 11 skipped) but
+  its `verify_zero_skips.py` call passes no waivers/decision-log arguments
+  and prints `zero-skip: decision log missing/unreadable or contains no IDs;
+  refusing exemptions`, whereas `make test-node` + `make verify-zero-skips`
+  both exit 0; no plan item; needs a decision
 - [ ] AC-4: `git grep -il pong -- ':!docs/specs'` returns no hits outside this
-  spec and historical changelog entries — verified by inspection.
-- [ ] AC-5: The `Dockerfile` CMD references an existing file under
-  `harness/node/src/` — verified by inspection (container build optional).
+  spec and historical changelog entries — verified by that command's output.
+  — open 2026-09-02: besides the two changelogs the grep reports
+  `docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, `harness/TEST-REPORT.md`,
+  `harness/docs/BENCHMARK_REPORT.md` (superseded reports),
+  `harness/shared/tests/test_documentation_truth.py` (the test asserting the
+  Pong artefacts stay gone) and three files under
+  `openspec/changes/add-neurosym-governed-synthesis/`; R-TDH-24 relocates the
+  reports but strikes no mention; no plan item; needs a decision
+- [x] AC-5: The `Dockerfile` CMD references an existing file under
+  `harness/node/src/` — verified by `test -f` on the CMD path (container
+  build optional). — verified 2026-09-02: CMD is
+  `["node", "--loader", "tsx", "src/ai/nemotron/cli.ts", "--help"]` under
+  `WORKDIR /app/harness/node`; `test -f harness/node/src/ai/nemotron/cli.ts`
+  exits 0
 
 ## Invariants touched
 

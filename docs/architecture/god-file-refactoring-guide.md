@@ -47,8 +47,8 @@ The orchestrator previously mixed prompt templates, tool argument coercion, file
 | Responsibility | Extracted Target Module | Key Symbols |
 | :--- | :--- | :--- |
 | Prompt Templates | `harness/shared/agent_prompts.py` | `PLANNER_PROMPT_TEMPLATE`, `REASONER_PROMPT_TEMPLATE`, `VERIFIER_PROMPT_TEMPLATE`, `AUTONOMOUS_AGENT_GUARDRAIL`, `TASK_LOG_PREVIEW_CHARS` |
-| Tool Argument Normalization & Routing | `harness/shared/tool_dispatch.py` | `_normalize_tool_arguments`, `DEFAULT_HYPOTHESIS_CONFIDENCE`, `ToolDispatchRegistry` |
-| Local Tool Execution (Filesystem / Process) | `harness/shared/tool_executors.py` | `execute_write_file`, `execute_run_command` |
+| Tool Argument Normalization & Routing | `harness/shared/tool_dispatch.py` | `_normalize_tool_arguments`, `DEFAULT_HYPOTHESIS_CONFIDENCE` |
+| Local Tool Execution (Filesystem / Process) | `harness/shared/tool_executors.py` | `execute_write_file`, `execute_read_file`, `execute_apply_patch`, `execute_run_command` |
 | Core ReAct Loop & Lifecycle Hooks | `harness/shared/mango_mas_orchestrator.py` | `MangoMASOrchestrator`, `execute_agent`, `execute_loop`, `_run_hook` |
 
 ### 2.2 `harness/shared/governance/broker.py` (356 Lines -> ~180 Lines)
@@ -58,12 +58,19 @@ The orchestrator previously mixed prompt templates, tool argument coercion, file
 | Subprocess Execution & Stream Capping | `harness/shared/governance/process_backend.py` | `ProcessBackend`, `ExecutionResult`, `_cap` |
 | Policy Decision & Sandboxed Broker | `harness/shared/governance/broker.py` | `ExecutionBroker`, `verify_sandbox`, `execute_command` |
 
-### 2.3 `harness/shared/check_py_compat.py` (338 Lines -> ~200 Lines)
+### 2.3 `harness/shared/check_py_compat.py` (338 Lines -> 283 Lines) — Done
 
 | Responsibility | Extracted Target Module | Key Symbols |
 | :--- | :--- | :--- |
-| Pure AST Syntax Inspection | `harness/shared/ast_visitors.py` | `has_future_annotations`, `find_pep604`, `find_datetime_utc`, `find_pep604_assignments` |
-| CLI Runner & Report Generation | `harness/shared/check_py_compat.py` | `run`, `build_parser`, `main`, `CompatReport` |
+| Pure AST Syntax Inspection | `harness/shared/ast_visitors.py` (120 lines) | `has_future_annotations`, `find_pep604`, `find_datetime_utc`, `find_pep604_assignments`, `COMMON_TYPE_NAMES` |
+| CLI Runner & Report Generation | `harness/shared/check_py_compat.py` (283 lines) | `run`, `build_parser`, `main`, `CompatReport`, `resolve_min_version`, `load_skip_dirs` |
+
+`ast_visitors.py` has zero internal imports (stdlib `ast` only), matching the
+zero-circular-dependency requirement in §4.2 below. Every extracted symbol is
+re-exported from `check_py_compat.py` via `from harness.shared.ast_visitors
+import X as X`, so `test_check_py_compat.py` (which imports these through the
+`cc` alias) required no changes; `test_ast_visitors.py` adds direct unit
+coverage of the extracted module.
 
 ---
 

@@ -1,12 +1,17 @@
 """Tests for harness/shared/check_py_compat.py - legacy-runtime compatibility gate."""
 
+from __future__ import annotations
+
 import json
 import logging
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
 from harness.shared import check_py_compat as cc
+from harness.shared.tests.conftest import write_text_file
 
 WORKFLOW = """\
 name: CI
@@ -61,10 +66,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _write(root: Path, rel: str, text: str) -> Path:
-    p = root / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8")
-    return p
+    return write_text_file(root / rel, text)
 
 
 # --- minimum version resolution ---
@@ -352,3 +354,60 @@ def test_load_skip_dirs_fails_closed_on_a_non_object_policy(repo: Path):
     with pytest.raises(SystemExit) as exc:
         cc.load_skip_dirs(repo)
     assert exc.value.code == 1
+
+
+# --- branch arcs (tech-debt-hardening-plan R-TDH-25) ---
+#
+# A stand-in ``yaml`` module is installed in sys.modules for the matrix-parsing
+# tests below, so each leg is reached deterministically whether or not PyYAML is
+# installed on the leg running this suite.
+
+
+def _fake_yaml(monkeypatch: pytest.MonkeyPatch, safe_load) -> None:
+    module = types.ModuleType("yaml")
+    module.safe_load = safe_load  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yaml", module)
+
+
+def test_parse_matrix_versions_falls_back_to_regex_when_yaml_parsing_fails(monkeypatch: pytest.MonkeyPatch, caplog):
+    """A workflow PyYAML rejects (the non-ImportError leg) must not crash the gate:
+    the regex fallback still recovers the matrix, and the reason is logged. Without
+    the fallback a malformed unrelated workflow would take the whole gate down."""
+    def broken_safe_load(text: str) -> object:
+        raise ValueError("mapping values are not allowed here")
+
+    _fake_yaml(monkeypatch, broken_safe_load)
+    with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
+        assert cc._parse_matrix_versions('        python-version: ["3.9", "3.12"]\n') == [(3, 9), (3, 12)]
+    assert "falling back to regex" in caplog.text
+
+
+def test_parse_matrix_versions_skips_matrix_entries_that_are_not_versions(monkeypatch: pytest.MonkeyPatch):
+    """``pypy-3.10`` and a bare ``3`` are legal matrix entries with no major.minor
+    to compare; they are skipped, not coerced into a bogus floor, while the real
+    entries (including a YAML float) are kept."""
+    matrix = {"jobs": {"build": {"strategy": {"matrix": {"python-version": ["pypy-3.10", "3", "3.11", 3.9]}}}}}
+    _fake_yaml(monkeypatch, lambda text: matrix)
+    assert cc._parse_matrix_versions("irrelevant: the stand-in ignores the text") == [(3, 11), (3, 9)]
+
+
+def test_load_skip_dirs_ignores_a_wrongly_typed_skip_dirs(repo: Path):
+    """``isinstance(extra, list)`` guards the update: a policy author who writes a
+    bare string instead of a one-element list must degrade to the built-in set,
+    not iterate the string's characters as directory names."""
+    _write(repo, "harness/shared/governance-policy.json", json.dumps({"py_compat": {"skip_dirs": "vendor"}}))
+    skip = cc.load_skip_dirs(repo)
+    assert skip == frozenset(cc.DEFAULT_SKIP_DIRS)
+    assert "v" not in skip and "vendor" not in skip
+
+
+def test_pep604_check_does_not_depend_on_the_utc_check(repo: Path, monkeypatch: pytest.MonkeyPatch):
+    """The two legacy-construct checks are gated independently. Today every floor
+    below 3.10 is also below 3.11, so the union check never runs with the UTC check
+    off; lowering the UTC floor simulates the future matrix where it does, and pins
+    that the PEP 604 leg is not nested under the UTC one."""
+    _write(repo, "pkg/mod.py", DATETIME_UTC + PEP604_RUNTIME)
+    monkeypatch.setattr(cc, "DATETIME_UTC_MIN", (3, 9))
+    report = cc.run(repo, (3, 9))
+    assert any("PEP 604" in v for v in report.violations)
+    assert not any("3.11+" in v for v in report.violations)

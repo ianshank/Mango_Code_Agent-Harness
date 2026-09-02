@@ -171,17 +171,20 @@ class TestWaiversStayHonest:
             "silently exempt a future file with the same path"
         )
 
-    @pytest.mark.parametrize("waived", sorted(KNOWN_IMPORT_SIDE_EFFECTS))
-    def test_every_waiver_is_still_necessary(self, waived: str, poisoned_cwd: Path) -> None:
+    def test_every_waiver_is_still_necessary(self, poisoned_cwd: Path) -> None:
         """The waiver self-destructs. Once the module imports cleanly, this
         fails and the entry must be deleted -- so a declaration cannot outlive
-        the defect it describes and go on exempting a regression."""
-        result = _import_in_subprocess(REPO / waived, poisoned_cwd)
-        assert result.returncode != 0 or result.stdout != "", (
-            f"{waived} now imports cleanly. Remove its KNOWN_IMPORT_SIDE_EFFECTS entry "
-            "so the module is covered by the gate again."
-        )
+        the defect it describes and go on exempting a regression.
 
-    @pytest.mark.parametrize("waived", sorted(KNOWN_IMPORT_SIDE_EFFECTS))
-    def test_every_waiver_has_a_substantive_reason(self, waived: str) -> None:
-        assert len(KNOWN_IMPORT_SIDE_EFFECTS[waived].strip()) > 80
+        A loop rather than a parametrize: the empty registry is the healthy
+        state, and parametrizing over it skipped (R-TDH-19)."""
+        for waived in sorted(KNOWN_IMPORT_SIDE_EFFECTS):
+            result = _import_in_subprocess(REPO / waived, poisoned_cwd)
+            assert result.returncode != 0 or result.stdout != "", (
+                f"{waived} now imports cleanly. Remove its KNOWN_IMPORT_SIDE_EFFECTS entry "
+                "so the module is covered by the gate again."
+            )
+
+    def test_every_waiver_has_a_substantive_reason(self) -> None:
+        for waived, reason in sorted(KNOWN_IMPORT_SIDE_EFFECTS.items()):
+            assert len(reason.strip()) > 80, waived

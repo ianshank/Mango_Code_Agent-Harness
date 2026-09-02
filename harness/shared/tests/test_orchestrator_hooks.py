@@ -15,6 +15,7 @@ from harness.shared.mango_mas_orchestrator import (
     PRE_RUN_HOOK,
     MangoMASOrchestrator,
 )
+from harness.shared.orchestrator.hook_runner import HookRunner
 from harness.shared.tests._orchestrator_helpers import _POSIX, _resp
 
 
@@ -22,7 +23,7 @@ class TestRunHook:
     def test_hook_missing_is_noop(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         # No hook script present -> executes without raising and does nothing.
-        orch._run_hook("pre-nemotron-run", task="t", agent="a")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
         assert not (mock_workspace / ".mango" / "hooks" / "pre-nemotron-run.sh").exists()
 
     def test_hook_mocked_execution(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,7 +38,7 @@ class TestRunHook:
             return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="done")
 
         monkeypatch.setattr(subprocess, "run", mock_run)
-        orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
         assert len(executed_cmds) == 1
 
     def test_hook_mocked_called_process_error(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +52,7 @@ class TestRunHook:
 
         monkeypatch.setattr(subprocess, "run", mock_run)
         with pytest.raises(subprocess.CalledProcessError):
-            orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
 
     def test_hook_mocked_timeout_expired(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         hooks = mock_workspace / ".mango" / "hooks"
@@ -64,35 +65,35 @@ class TestRunHook:
 
         monkeypatch.setattr(subprocess, "run", mock_run)
         with pytest.raises(subprocess.TimeoutExpired):
-            orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
 
     def test_invalid_hook_name_raises(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError, match="refusing to run unrecognised hook"):
-            orch._run_hook("malicious-hook-name", task="t", agent="a")
+            orch.hook_runner.run_hook("malicious-hook-name", task="t", agent="a")
 
     def test_hook_exists_and_runs(self, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("echo ran > hook_marker.txt\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        orch._run_hook("pre-nemotron-run", task="t", agent="a")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
         assert (mock_workspace / "hook_marker.txt").exists()
 
     def test_hook_raises_propagates(self, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("exit 1\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
         with pytest.raises(subprocess.CalledProcessError):
-            orch._run_hook("pre-nemotron-run", task="t", agent="a")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
 
 
-@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows")
+@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows (DEC-026)")
 class TestHookEnvironmentIsStrippedOfCredentials:
     """`agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`
     and nothing enforced it: `_run_hook` handed every hook `os.environ.copy()`."""
@@ -145,13 +146,13 @@ class TestOnlyKnownHooksExecute:
     def test_an_unrecognised_hook_name_is_refused(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError, match="unrecognised hook"):
-            orch._run_hook("post-../../../etc/evil-run")
+            orch.hook_runner.run_hook("post-../../../etc/evil-run")
 
     def test_a_planted_hook_with_an_unlisted_name_does_not_execute(
         self, mock_workspace: Path
     ) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "post-attacker-run.sh").write_text(
@@ -159,7 +160,7 @@ class TestOnlyKnownHooksExecute:
         )
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError):
-            orch._run_hook("post-attacker-run")
+            orch.hook_runner.run_hook("post-attacker-run")
         assert not (mock_workspace / "planted_marker.txt").exists(), (
             "an unlisted hook executed; the allowlist is not reached before the spawn"
         )
@@ -167,12 +168,12 @@ class TestOnlyKnownHooksExecute:
     @pytest.mark.parametrize("name", sorted(PERMITTED_HOOK_NAMES))
     def test_every_permitted_hook_still_runs(self, name: str, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / f"{name}.sh").write_text(f"echo ran > {name}_marker.txt\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        orch._run_hook(name)
+        orch.hook_runner.run_hook(name)
         assert (mock_workspace / f"{name}_marker.txt").exists()
 
     def test_the_allowlist_covers_every_name_the_orchestrator_constructs(self) -> None:
@@ -189,3 +190,53 @@ class TestOnlyKnownHooksExecute:
             f"the orchestrator constructs hook names the allowlist refuses: "
             f"{sorted(constructed - PERMITTED_HOOK_NAMES)}"
         )
+
+
+class TestHookPathRelativeToWorkspace:
+    """hook_runner.py lines 45-48: the hook is handed to bash as a workspace-relative
+    path when it lives inside the workspace, and as its absolute path when
+    ``hooks_dir`` is elsewhere (an installed harness supplying hooks for a separate
+    checkout). ``Path.relative_to`` raises ValueError in the second case; without
+    the fallback every such deployment would fail before the hook ran."""
+
+    def _spawn_recorder(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], dict]]:
+        seen: list[tuple[list[str], dict]] = []
+
+        def record(cmd, **kwargs):
+            seen.append((cmd, kwargs))
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", record)
+        return seen
+
+    def test_a_hook_outside_the_workspace_is_invoked_by_absolute_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        hooks = tmp_path / "installed-hooks"
+        hooks.mkdir()
+        hook = hooks / "pre-nemotron-run.sh"
+        hook.write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=workspace, hooks_dir=hooks, tool_timeout=5).run_hook("pre-nemotron-run", task="t")
+
+        ((cmd, kwargs),) = seen
+        assert cmd == ["bash", hook.as_posix()]
+        assert Path(cmd[1]).is_absolute()
+        assert kwargs["cwd"] == workspace, "the hook still runs with the workspace as its cwd"
+
+    def test_a_hook_inside_the_workspace_is_invoked_by_relative_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control: the relative form is what the fallback is falling back from."""
+        hooks = tmp_path / ".mango" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "pre-nemotron-run.sh").write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks, tool_timeout=5).run_hook("pre-nemotron-run", task="t")
+
+        ((cmd, _),) = seen
+        assert cmd == ["bash", ".mango/hooks/pre-nemotron-run.sh"]

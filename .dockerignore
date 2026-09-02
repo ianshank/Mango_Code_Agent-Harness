@@ -40,8 +40,14 @@ Thumbs.db
 # includes `tests/**/*.ts` and the build stage runs `tsc --noEmit`, so dropping
 # it from the context would not fail the build -- it would quietly typecheck
 # less. It is removed in the runtime stage instead, where nothing reads it.
+#
+# `harness/shared/governance-policy.json` must NEVER be excluded: since the
+# Nemotron policy wiring (R-TDH-13) `src/ai/nemotron/policy.ts` reads it at
+# module load and throws on absence, so the image's own CMD (`cli.ts`) fails to
+# start without it. The runtime is Node-only, but it is not Python-free.
 harness/shared/tests/
 harness/api_server/tests/
+harness/control-plane/tests/
 harness/jvm/src/test/
 
 # Build & Scratch Artifacts

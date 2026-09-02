@@ -96,6 +96,23 @@ class ActiveAgentTests(unittest.TestCase):
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, text, f"reasoner role does not document meta-tool {tool}")
 
+    def test_reasoner_frontmatter_tools_list_includes_meta_tools(self):
+        """Stricter than test_reasoner_documents_meta_tools above: that test is
+        satisfied by a prose mention anywhere in the file, which is exactly
+        how this gap went unnoticed for a documented period (docs/reports/SDLC_HYGIENE_REPORT.md,
+        2026-08-26) even though the body already referenced both tools -- the
+        structured `tools:` frontmatter field itself only listed
+        `Bash, Read, Grep, Glob`. This asserts on the parsed field specifically."""
+        fields = _frontmatter(ACTIVE_AGENTS / "nemotron-reasoner.md")
+        declared_tools = {t.strip() for t in fields.get("tools", "").split(",")}
+        for tool in ("knowledge_gap_log", "hypothesis_register"):
+            self.assertIn(
+                tool,
+                declared_tools,
+                f"nemotron-reasoner.md's frontmatter `tools:` field does not list {tool}, "
+                "even though the prose body instructs using it",
+            )
+
     def test_meta_tools_are_actually_wired_into_the_orchestrator(self):
         """Documentation must match code: the schema is offered and dispatched.
 
@@ -114,7 +131,7 @@ class ActiveAgentTests(unittest.TestCase):
         tools: list[dict[str, typing.Any]] = orch.NEMOTRON_TOOLS
         offered = {t["function"]["name"] for t in tools}
         with tempfile.TemporaryDirectory() as tmp:
-            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp))._tool_handlers)
+            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp)).dispatcher.tool_handlers)
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")
