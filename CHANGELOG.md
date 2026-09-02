@@ -7,6 +7,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 0a — the control that keeps `main` green
+
+- **Ruleset export** at `.github/rulesets/main.json` (DEC-024): the nine
+  status checks `test_ci_gate_coverage.py` derives from the workflow, strict
+  up-to-date policy, one code-owner review, no bypass actors.
+  `test_workflow_contracts.py` pins the export's contexts to the workflow so
+  the two cannot drift. Applying it is the owner's settings action (import).
+- **"A verification claim is not evidence"** stated in `CLAUDE.md`,
+  `CONTRIBUTING.md` and the PR template, with the pinned-tool rule
+  (`python -m ruff`, never a bare binary; DEC-013). PR #60 merged with every
+  CI run on its head red under a commit message claiming `make ci` clean.
+
 ### Tech-debt hardening plan, Phase 0b — `main` green again
 
 Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).

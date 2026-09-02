@@ -18,6 +18,7 @@ must not depend on a transitive one.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -25,6 +26,7 @@ import pytest
 
 from harness.shared.tests._helpers import REPO
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
+from harness.shared.tests.test_ci_gate_coverage import _reported_check_names
 
 pytestmark = pytest.mark.governance
 
@@ -91,3 +93,49 @@ class TestParserIsNotVacuous:
     def test_job_sections_on_a_minimal_document(self, tmp_path: Path) -> None:
         text = "name: x\non: push\njobs:\n  one:\n    runs-on: a\n  two:\n    runs-on: b\n"
         assert job_sections(text) == {"one": "    runs-on: a", "two": "    runs-on: b\n"}
+
+
+# --- The committed ruleset export mirrors the workflow --------------------------
+#
+# `.github/rulesets/main.json` is what the owner imports to make CI a merge
+# requirement on `main` (DEC-024). Its required-check contexts must be exactly
+# the check names the workflow reports, derived the same way
+# `test_ci_gate_coverage.py` derives them for `NEXT_STEPS.md`; a stale export
+# would require a check GitHub never sends or leave a real gate unrequired.
+
+RULESET = REPO / ".github" / "rulesets" / "main.json"
+
+
+def _ruleset_rules(ruleset: dict) -> dict[str, dict]:
+    return {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
+
+
+class TestRulesetExportMirrorsTheWorkflow:
+    @pytest.fixture(scope="class")
+    def ruleset(self) -> dict:
+        assert RULESET.is_file(), f"{RULESET} is missing; DEC-024 commits the export beside the workflow"
+        return json.loads(RULESET.read_text(encoding="utf-8"))
+
+    def test_required_contexts_are_exactly_the_reported_check_names(self, ruleset: dict) -> None:
+        required = {
+            check["context"] for check in _ruleset_rules(ruleset)["required_status_checks"]["required_status_checks"]
+        }
+        reported = _reported_check_names(WORKFLOW.read_text(encoding="utf-8"))
+        assert required == reported, (
+            f"ruleset requires {sorted(required - reported)} that CI never reports and omits "
+            f"{sorted(reported - required)} that CI does report"
+        )
+
+    def test_the_ruleset_targets_the_default_branch_and_is_active(self, ruleset: dict) -> None:
+        assert ruleset["target"] == "branch"
+        assert ruleset["enforcement"] == "active"
+        assert "~DEFAULT_BRANCH" in ruleset["conditions"]["ref_name"]["include"]
+
+    def test_checks_are_strict_and_a_code_owner_review_is_required(self, ruleset: dict) -> None:
+        rules = _ruleset_rules(ruleset)
+        assert rules["required_status_checks"]["strict_required_status_checks_policy"] is True
+        assert rules["pull_request"]["require_code_owner_review"] is True
+        assert rules["pull_request"]["required_approving_review_count"] >= 1
+
+    def test_nobody_can_bypass(self, ruleset: dict) -> None:
+        assert ruleset.get("bypass_actors", []) == [], "a bypass actor is how #60 would merge again"

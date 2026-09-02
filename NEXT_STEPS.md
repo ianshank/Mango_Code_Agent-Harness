@@ -260,6 +260,11 @@ round-trip.
       `build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
       `dependency-audit (3.10)`, `dependency-audit (3.12)`.
 
+      A ruleset export carrying exactly that list plus one code-owner review is
+      committed at `.github/rulesets/main.json` (DEC-024) and pinned to the
+      workflow by `test_workflow_contracts.py`. Applying it is still the
+      settings change: Settings → Rules → Rulesets → New ruleset → Import.
+
       `build (3.x)` runs `make ci-python`; `build-full` (Python 3.11) is the
       only leg that runs `make ci`, the Node stack and the regression tier;
       `secret-scan` is a dedicated job because it is genuinely interpreter-

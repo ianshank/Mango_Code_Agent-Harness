@@ -53,9 +53,22 @@ For protected-path infrastructure changes, run with `ALLOW_GITHUB_CHANGES=1`
 and record the per-change review attestation in the PR description (see
 `harness/CONTRACT.md`).
 
+**A verification claim is not evidence.** A commit message or PR body saying
+"`make ci` passed" proves nothing; the check runs on the pushed head do. PR #60
+merged with every CI run on its head red under a merge commit claiming `make ci`
+and mypy clean (DEC-024). Paste the `make ci` and `make lint-cold` tails into
+the PR's Validation section and link the `secret-scan` and `dependency-audit`
+job runs; a reviewer who cannot see the output treats the claim as absent. The
+ruleset exported at `.github/rulesets/main.json` makes the nine checks listed
+in `NEXT_STEPS.md` required on `main`. Invoke pinned tools through the
+interpreter (`python -m ruff`, `python -m mypy`) or the `make` targets, never a
+bare binary on `PATH` (DEC-013).
+
 ## Non-negotiables
 
 - No hard-coded values; thresholds come from `governance-policy.json`.
 - No test waivers or `xfail` to make a gate green without a decision-log entry.
 - No credentials in code; external model calls route through env vars.
 - Backward-compatible, modular, reusable changes only.
+- A verification claim in prose is not evidence; only the check runs on the
+  pushed head are.
