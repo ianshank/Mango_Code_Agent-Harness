@@ -171,6 +171,30 @@ class TestDeadCodeAndSkipGatesAreWired:
             "the Python registry lives beside the suite; the root .governance/ is dormant (DEC-005)"
         )
 
+    def test_lock_freshness_gate_is_a_direct_prerequisite_of_both_pipelines(self) -> None:
+        """The lock is only a supply-chain control while something runs it.
+
+        `verify-zero-skips-python` and the `CP_TESTS` wiring are both pinned as
+        pipeline prerequisites; `lock-check` was not, so it could be dropped from
+        `ci` with the whole suite green and an unlocked dependency set would ship
+        unnoticed (R-TDH-9).
+        """
+        for pipeline in ("ci", "ci-python"):
+            assert "lock-check" in _prerequisites(pipeline), (
+                f"`make {pipeline}` no longer runs lock-check; a stale requirements-lock.txt "
+                "would reach CI with every other gate green"
+            )
+
+    def test_lock_freshness_gate_actually_recompiles_and_compares(self) -> None:
+        """Reachability is not enforcement: the recipe must still do the work."""
+        recipe = _targets().get("lock-check", "")
+        assert recipe, "Makefile has no lock-check recipe"
+        # The tool is invoked through $(UV), like every other pinned tool in this
+        # Makefile (DEC-013); accept either spelling so a variable rename is not
+        # a false failure, but require the compile step itself.
+        assert re.search(r"(?:\$\(UV\)|uv)\s+pip compile", recipe), "lock-check no longer recompiles the lock"
+        assert "diff" in recipe, "lock-check no longer compares the recompiled lock against the committed one"
+
 
 class TestControlPlaneTestsAreRun:
     """R-TDH-26 / AC-26: harness/control-plane/tests is a separate directory, so

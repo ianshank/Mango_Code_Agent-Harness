@@ -51,17 +51,14 @@ coverage.json
 *_history.json
 *_history_pretty.json
 *_loop_dump.json
-weather_cli/
-
-# IDE agent workspace customizations
-.agents/
 
 # LangGraph Studio & local state caches
 .langgraph/
 .langgraph_api/
 
-# Skip evidence written by harness/shared/tests/conftest.py for the Python
-# zero-skip gate (make verify-zero-skips-python); the directory is tracked via
-# .gitkeep so the ignore rule always has a live parent.
+# Skip evidence written by the repository-root conftest.py (logic in
+# harness/shared/tests/_session_hooks.py, DEC-030) for the Python zero-skip
+# gate (make verify-zero-skips-python); the directory is tracked via .gitkeep
+# so the ignore rule always has a live parent.
 harness/shared/tests/.artifacts/*
 !harness/shared/tests/.artifacts/.gitkeep

@@ -50,7 +50,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
 │   ├── reports/                         # Historical hygiene, peer-review and test reports
-│   └── specs/                           # 15 Formal Traceable Specifications
+│   └── specs/                           # 22 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
@@ -107,11 +107,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (2,253 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (2,676 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
-│   │       │   ├── test_cross_platform_regression.py # 20 tests: cross-platform path/env/secret invariants
+│   │       │   ├── test_cross_platform_regression.py # 34 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
 │   │       │   └── test_orchestrator_dispatch_regression.py # Dispatch edge-cases & budget handling
 │   │       ├── test_orchestrator_init.py       # Orchestrator initialization & prompt loading
@@ -119,12 +119,13 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │       ├── test_orchestrator_hooks.py      # Pre/post lifecycle hooks
 │   │       ├── test_orchestrator_agent_loop.py # ReAct execution loop & budget limits
 │   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
-│   │       ├── test_governance_broker.py       # 61 tests: INV-8/9/10, in-process PDP, ProcessBackend
+│   │       ├── test_governance_broker.py       # 68 tests: INV-8/9/10, in-process PDP, ProcessBackend
 │   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
 │       ├── publish_policy_artifact.py   # Versioned, digest-pinned, attestable policy artifact
-│       └── policy-artifact.json         # Committed artifact; drift-gated by the test suite
+│       ├── policy-artifact.json         # Committed artifact; drift-gated by the test suite
+│       └── tests/                       # Colocated control-plane suite (101 tests; R-TDH-26)
 │
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
@@ -196,9 +197,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **2,357 automated tests** (57 Vitest + 2,300 Pytest across 7 tiers)
+- **Total Automated Tests:** **2,882 automated tests** (97 Vitest + 2,785 Pytest across 7 tiers)
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **98% total** (98.17% Lines | 95.71% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
+- **Python AQA Coverage:** **99% total** (99.64% Lines | 97.93% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources

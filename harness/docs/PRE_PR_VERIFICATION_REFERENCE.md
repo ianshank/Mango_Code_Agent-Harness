@@ -15,7 +15,7 @@ truth rather than an index.
 | Invariant | Name | Description | Verification Command |
 | :--- | :--- | :--- | :--- |
 | **INV-1** | Secret Sanitization | Secret scan covers working tree and full history, failing closed when tooling is absent. | `make secrets-install && make secrets` (also a dedicated CI job) |
-| **INV-2** | Zero Unapproved Skips | Skipped tests are failures without a live, decision-backed exemption. | `make verify-zero-skips` |
+| **INV-2** | Zero Unapproved Skips | Skipped tests are failures without a live, decision-backed exemption. | `make verify-zero-skips` (Node) + `make verify-zero-skips-python` (Python, DEC-026/DEC-030 — run after `make coverage-python`, which writes the evidence) |
 | **INV-3** | Remote Allowlist | One shared remote URL normalizer gates every push target. | `make remotes` |
 | **INV-4** | Non-Destructive Hooks | Git hooks install into Git's effective hooks path and never silently overwrite. | `python harness/shared/validate_adoption.py` |
 | **INV-5** | CI Gate Coverage | CI invokes every policy-required gate by Make target; meta-tests detect omissions. | `pytest harness/shared/tests/test_ci_gate_*.py` |

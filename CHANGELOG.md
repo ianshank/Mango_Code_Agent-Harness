@@ -10,6 +10,59 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Post-implementation hygiene sweep — documentation truth, dead ignore rules, allowlist narrowing
+
+An objective review of the branch against `main` after Phases 0–5. No source
+behaviour changes; the corrections are to claims, ignore rules, and one
+security control that had drifted wider than its own description.
+
+- **The gitleaks allowlist is narrowed from 23 paths to 7.** A path there
+  exempts the whole file from every rule. Measured against the default ruleset
+  with the block removed, the tree yields exactly 8 findings across 5 files —
+  so 18 entries were suppressing nothing while permanently blinding their
+  files, under a description that called the list "strict". The 5 files with a
+  real finding are kept, plus `.*\.example.*` (adopter scaffolds) and the
+  designated leak-fixture module, both named in the config with their reason.
+  `make secrets` passes on both legs afterwards (working tree, and the
+  235-commit history scan). `nemotron-policy-wiring.test.ts` is deliberately
+  *not* listed: its fixture key is below the entropy floor, so listing it would
+  blind the file to a real key.
+- **`lock-check` is now pinned as a pipeline prerequisite.** It was the only
+  `ci` stage no test asserted, so it could have been dropped from the pipeline
+  with the whole suite green and an unlocked dependency set would have shipped.
+  `test_makefile_contracts.py` now asserts it is a direct prerequisite of both
+  `ci` and `ci-python` and that its recipe still recompiles and diffs.
+- **Two dead `.gitignore` rules removed** — `weather_cli/` (never tracked; only
+  a `tmp_path` fixture name) and `.agents/` (the directory was consolidated
+  into `.mango/skills/` and a test now fails if it returns, so ignoring it
+  would have hidden exactly that). Both sat at depth 0, where the existing
+  dead-rule gate's "parent exists" predicate cannot see them.
+- **`harness/control-plane/tests/` is excluded from the Docker context**, like
+  its two sibling test trees; `COPY harness/` had begun shipping 101 tests into
+  the runtime image. `.dockerignore` also now records that
+  `harness/shared/governance-policy.json` is load-bearing for the Node runtime
+  since R-TDH-13 — `policy.ts` reads it at module load, so the image's own
+  `CMD` fails to start without it.
+- **README figures corrected** against measured values: 2,882 automated tests
+  (97 Vitest + 2,785 Pytest, was 2,357), coverage 99.64% lines / 97.93%
+  branches (was 98.17/95.71 — the README had been contradicting the CHANGELOG
+  on the same branch), the per-module test counts, 22 specs (was 15), and the
+  `make ci` stage list. The Python skip-waiver path now names its real location
+  instead of the dormant root `.governance/`.
+- **`harness/CONTRACT.md` INV-2** described only the Node half; it now records
+  the Python half (DEC-026) and where the hooks live (DEC-030).
+- **C4 gate chain and AQA container updated** — `retry.ts`, the root
+  `conftest.py` session hooks, the control-plane suite, and the four gates the
+  branch added (`lock-check`, the Python zero-skip half, vulture, the two size
+  budgets) were all invisible in the diagrams.
+- **`NEXT_STEPS.md`** no longer lists orchestrator decomposition as pending
+  twenty lines after marking it delivered in v2.4.0, and gains the four items
+  this work opened (the 3.9 floor, the entrypoint contract, the Dependabot
+  signal, the allowlist liveness check).
+- **`CONTRIBUTING.md`** tells contributors the lock exists: `make lock` after a
+  requirements change, `make lock-upgrade` to take newer releases, never
+  hand-edit.
+
 ### Tech-debt hardening plan, Phase 5 — control-plane tests colocated, session hooks at the rootdir
 
 - **`harness/control-plane/tests/` exists and is collected** (R-TDH-26).

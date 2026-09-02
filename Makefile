@@ -135,7 +135,8 @@ verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
 		--waivers $(NODE_DIR)/.governance/skip-waivers.json
 
 # The Python half of INV-2. The pytest run under `coverage-python` writes every
-# skip it produced to PYTEST_SKIP_EVENTS (harness/shared/tests/conftest.py); this
+# skip it produced to PYTEST_SKIP_EVENTS (the repository-root conftest.py, which
+# delegates to harness/shared/tests/_session_hooks.py; DEC-030); this
 # reads that file through the same gate the Node stack uses, against a waiver
 # registry that lives beside the suite (the root .governance/ is dormant,
 # DEC-005). A skip whose reason does not carry its waiver's DEC id is unapproved.

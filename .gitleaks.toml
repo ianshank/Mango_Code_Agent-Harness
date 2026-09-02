@@ -9,29 +9,33 @@ title = "Agentic SSD Gitleaks Root Policy"
 useDefault = true
 
 [allowlist]
-description = "Strict allowlist: only explicitly reviewed non-secret fixture identifiers are permitted."
+# Strict allowlist: a path here exempts the WHOLE file from EVERY rule, so each
+# entry must be earning that. Measured against the default ruleset with this
+# block removed, the tree yields exactly 8 findings across 5 files; the list
+# below is those 5 plus 2 deliberate entries named underneath. It previously
+# carried 23 paths, 18 of which suppressed nothing while permanently blinding
+# their files -- an allowlist describing itself as strict while being mostly
+# blanket exemption. Re-add a path only when a scan actually flags it.
+#
+# The two entries with no current finding, kept on purpose:
+#   .*\.example.*                  -- adopter scaffolds (.env.example and peers)
+#                                     exist to carry placeholder credentials.
+#   .../secret-safety.test.ts      -- the designated leak-fixture module; it
+#                                     plants secret-shaped values to prove the
+#                                     masker redacts them.
+#
+# NOT listed, and must not be: harness/node/tests/ai/unit/nemotron-policy-wiring.test.ts
+# carries `nvapi-policy-wiring-test-key-1234567890` and produces zero findings
+# even with this block removed -- it is below generic-api-key's entropy floor.
+# The gate passes on it because the value does not look like a secret, not
+# because it was exempted; listing it would blind that file to a real key.
+description = "Strict allowlist: only fixture files with a measured, reviewed finding are permitted."
 paths = [
   '''.*\.example.*''',
   '''harness/node/tests/ai/unit/nemotron-client\.test\.ts''',
   '''harness/node/tests/ai/security/secret-safety\.test\.ts''',
-  '''harness/shared/tests/test_nemotron_bridge\.py''',
-  '''harness/shared/tests/test_nemotron_bridge_live\.py''',
-  '''harness/shared/tests/test_validate_invariants\.py''',
-  '''harness/shared/tests/test_evidence_manifest\.py''',
-  '''harness/shared/tests/test_governance_broker\.py''',
-  '''harness/shared/tests/test_validation_scripts_extra\.py''',
   '''harness/shared/tests/test_debug_dump\.py''',
-  '''harness/shared/tests/test_orchestrator_hooks\.py''',
-  '''harness/shared/tests/test_tool_executors\.py''',
-  '''harness/shared/tests/regression/test_orchestrator_dispatch_regression\.py''',
-  '''harness/shared/tests/regression/test_cross_platform_regression\.py''',
-  '''harness/shared/tests/regression/test_bridge_retry_regression\.py''',
-  '''harness/shared/tests/regression/test_api_server_regression\.py''',
+  '''harness/shared/tests/test_governance_broker\.py''',
   '''harness/shared/tests/regression/test_e2e_nemotron_triage_regression\.py''',
-  '''harness/shared/tests/regression/test_langgraph_regression\.py''',
-  '''harness/shared/tests/regression/test_coverage_gap_regression\.py''',
-  '''harness/shared/tests/regression/test_nemotron_api_aqa\.py''',
-  '''harness/shared/tests/test_mcp_server\.py''',
-  '''harness/shared/tests/test_lats_optimizer\.py''',
-  '''harness/shared/tests/test_ablation\.py'''
+  '''harness/shared/tests/regression/test_nemotron_api_aqa\.py'''
 ]

@@ -215,9 +215,13 @@ graph TD
             Publisher --> Artifact
         end
 
-        subgraph "Python AQA Engine - harness/shared/tests"
+        subgraph "Python AQA Engine - harness/{shared,api_server,control-plane}/tests"
+            RootConftest["conftest.py (repository root)<br/>session hooks → _session_hooks.py<br/>skip evidence TSV (INV-2 Python half) + langgraph deselection<br/>DEC-030: at the rootdir so all three suites are covered"]
             AQA["Pytest AQA Suite<br/>coverage gate per policy — lines and branches"]
+            CPTests["control-plane suite<br/>colocated with its scripts (R-TDH-26)<br/>test_control_plane_layout.py is the meta-test"]
             RunpyExec["runpy.run_path() Executor<br/>In-Process CLI Coverage"]
+            RootConftest --> AQA
+            RootConftest --> CPTests
             AQA --> RunpyExec
             RunpyExec -->|executes in-process| Validators
             RunpyExec -->|executes in-process| PyBridge
@@ -340,7 +344,7 @@ graph TD
     subgraph "Nemotron Module Components"
         Client --> Config[Config & Secret Resolver]
         Client --> Masker[SecretMasker Utility]
-        Client --> Backoff[Exponential Backoff & Jitter Engine]
+        Client --> Backoff["retry.ts<br/>executeWithRetry, isRetryableError, computeBackoffMs<br/>Exponential backoff & jitter, extracted from the client (R-TDH-23)"]
         Client --> CB[3-State Circuit Breaker]
         Client --> SSE[SSE Streaming Parser]
         Client --> Telemetry[Token & Latency Accounting]
@@ -405,9 +409,12 @@ graph TD
 
 ```mermaid
 flowchart TD
-    Commit[Pre-PR Git Commit] --> Secrets[INV-1: Full Working Tree & History Secret Scan]
-    Secrets --> ZeroSkip[INV-2: Zero-Skip Test Verification]
-    ZeroSkip --> Remotes["INV-3: Canonical Remote URL Normalizer & Allowlist<br/>(make remotes)"]
+    Commit[Pre-PR Git Commit] --> Lock["Dependency Lock Freshness<br/>(make lock-check — the universal uv lock recompiles unchanged)"]
+    Lock --> Secrets[INV-1: Full Working Tree & History Secret Scan]
+    Secrets --> ZeroSkip["INV-2: Zero-Skip Test Verification<br/>(Node: make verify-zero-skips — Vitest JSON;<br/>Python: make verify-zero-skips-python — root conftest TSV, DEC-026/DEC-030)"]
+    ZeroSkip --> DeadCode["Dead-Code Gate<br/>(vulture at confidence 80 in make lint-python, R-TDH-17)"]
+    DeadCode --> SizeBudget["Per-File Size Budgets<br/>(limits.size_budget_lines for sources, limits.test_size_budget_lines for tests;<br/>make validate, R-TDH-22)"]
+    SizeBudget --> Remotes["INV-3: Canonical Remote URL Normalizer & Allowlist<br/>(make remotes)"]
     Remotes --> Hooks[INV-4: Non-Destructive Effective Git Hook Installer]
     Hooks --> GateCov["INV-5: CI Gate Coverage<br/>(every ci_required_target reachable from make ci,<br/>or a declared gap — test_ci_gate_coverage.py)"]
     GateCov --> SpecGate["Spec Gate<br/>(make specs → bash validate_specs.sh)"]
@@ -427,7 +434,7 @@ flowchart TD
 
 #### 4.8.1 What these later gates add
 
-The first nine gates answer "is this change correct". The five added after
+The first thirteen gates answer "is this change correct". The five added after
 INV-16 answer a different question: **"is the machinery that answers the first
 question still working?"** Each exists because the corresponding failure had
 already happened silently.

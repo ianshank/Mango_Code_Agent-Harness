@@ -28,8 +28,36 @@
 
 ### 🚧 God-File Decomposition (Next Sprint)
 
-- [ ] **Orchestrator Decomposition**: Extract protocol adapters and state management out of the 24KB `mango_mas_orchestrator.py` god file.
-- [ ] **Write Policy Refactoring**: Break down the 17KB `write_policy.py` into distinct boundary and invariant validators.
+- [x] **Orchestrator Decomposition**: Delivered in v2.4.0 (`harness/shared/orchestrator/{loop,dispatcher,hook_runner}.py`); the facade is 191 lines, and Phase 3b removed its last three test-only pass-throughs (DEC-027). Recorded as done above under ✅ v2.4.0 — this line had contradicted it.
+- [ ] **Write Policy Refactoring**: Break down `write_policy.py` (381 lines — under the 500-line `limits.size_budget_lines` budget, so this is a cohesion item, not a budget violation) into distinct boundary and invariant validators.
+
+### 🚧 Tech-debt hardening plan follow-ups (opened by DEC-028 / DEC-029 / DEC-031)
+
+- [ ] **Move the Python floor off 3.9 (DEC-028).** Keeping `requires-python >=3.9`
+      now costs three explicit carve-outs, each recorded rather than hidden: a
+      per-file coverage waiver for `harness/shared/langgraph/**` on the leg that
+      cannot install the extra (`coverage.optional_extras`), a forked pytest pin
+      (`9.0.3` on ≥3.10 for PYSEC-2026-1845, `8.4.2` below), and a
+      `continue-on-error` dependency-audit leg carrying unpatchable CVEs
+      (DEC-017). fastapi ≥0.141, langgraph and mcp are all 3.10+. Moving the
+      floor retires all three at once.
+- [ ] **The entrypoint contract (DEC-029).** 31 `sys.path` bootstrap sites in
+      four styles are accepted as-is because a helper would need the bootstrap it
+      replaces and the per-stack scripts are digested root-of-trust artefacts.
+      DEC-029 defers this explicitly to "when the 3.9 floor moves"; it is a
+      follow-on of the item above, not an independent one.
+- [ ] **Gitleaks allowlist liveness.** `test_lint_config_liveness.py` asserts
+      every `.gitleaks.toml` allowlist path still *exists*; nothing asserts each
+      still *suppresses a finding*. That is how the list reached 23 paths of
+      which 18 blinded their files for nothing (narrowed to 7 in this batch).
+      The check has to run where gitleaks is installed — the `secret-scan` job,
+      as a `make secrets-allowlist-check` target, not the unit suite, which has
+      no gitleaks and must not gain a skip (INV-2).
+- [ ] **Dependabot is no longer the Python upgrade signal (DEC-031).** PRs
+      #38–#46 were closed as superseded by the universal lock, so the weekly
+      `lock-upgrade-check` job in `scheduled-drift.yml` is now the only thing
+      that notices a stale Python pin. If that job is ever disabled, Python
+      dependencies go unwatched silently.
 
 ### ✅ Full test suite coverage gap fill and AQA/regression expansion (2026-08-31)
 
