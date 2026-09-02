@@ -19,10 +19,10 @@ pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:
-    def __init__(self, *, name: str, description: str, input_schema: dict[str, Any]):
+    def __init__(self, *, name: str, description: str, inputSchema: dict[str, Any]):
         self.name = name
         self.description = description
-        self.input_schema = input_schema
+        self.inputSchema = inputSchema
 
 
 class MockTextContent:
@@ -141,10 +141,10 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     except ImportError:
         pytest.skip("mcp package not installed")
 
-    tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
+    tool = real_types.Tool(name="x", description="y", inputSchema={"type": "object"})
     assert tool.name == "x"
     assert tool.description == "y"
-    assert tool.input_schema == {"type": "object"}
+    assert tool.inputSchema == {"type": "object"}
 
 
 def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
@@ -173,7 +173,7 @@ def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) 
     tool_names = {t.name for t in tools}
     schema_names = {schema["function"]["name"] for schema in expected_schemas}
     assert tool_names == schema_names
-    assert {tool.name: tool.input_schema for tool in tools} == {
+    assert {tool.name: tool.inputSchema for tool in tools} == {
         schema["function"]["name"]: schema["function"]["parameters"] for schema in expected_schemas
     }
 
@@ -188,40 +188,81 @@ def test_mcp_server_role_unauthorized_tool_denied(tmp_path: Path, broker: Execut
     assert "not permitted for role 'verifier'" in result[0].text
 
 
-def test_mcp_server_execute_all_tools(tmp_path: Path, broker: ExecutionBroker) -> None:
-    """Test all tool execution paths through handle_call_tool."""
+@pytest.mark.parametrize(
+    "tool_name, args, expected_snippet",
+    [
+        ("write_file", {"filepath": "sample.txt", "content": "hello"}, "Wrote"),
+        ("read_file", {"filepath": "sample.txt"}, "hello"),
+        ("apply_patch", {"filepath": "sample.txt", "old_text": "hello", "new_text": "world"}, "patched"),
+        ("run_command", {"command": "echo test"}, "test stdout"),
+        ("knowledge_gap_log", {"question": "q", "what_needed": "w", "proposed_approach": "p"}, "Knowledge gap logged"),
+        ("hypothesis_register", {"claim": "c", "reasoning": "r", "confidence": 0.9}, "Hypothesis registered"),
+    ],
+)
+def test_mcp_server_execute_tool_success(
+    tmp_path: Path, broker: ExecutionBroker, tool_name: str, args: dict[str, Any], expected_snippet: str
+) -> None:
+    """Test standard success paths for each tool."""
+    if tool_name in ("read_file", "apply_patch"):
+        (tmp_path / "sample.txt").write_text("hello", encoding="utf-8")
+
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
     handler = server._call_tool_handler
     assert handler is not None
 
-    # write_file
-    res = asyncio.run(handler("write_file", {"filepath": "sample.txt", "content": "hello"}))
-    assert "Wrote" in res[0].text
+    res = asyncio.run(handler(tool_name, args))
+    assert expected_snippet in res[0].text
 
-    # read_file
-    res = asyncio.run(handler("read_file", {"filepath": "sample.txt"}))
-    assert "hello" in res[0].text
 
-    # apply_patch
-    res = asyncio.run(handler("apply_patch", {"filepath": "sample.txt", "old_text": "hello", "new_text": "world"}))
-    assert "patched" in res[0].text
+def test_mcp_server_execute_tool_broker_crash(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Test tools gracefully handle execution exceptions from the broker or executors."""
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    handler = server._call_tool_handler
+    assert handler is not None
 
-    # run_command
-    res = asyncio.run(handler("run_command", {"command": "echo test"}))
-    assert "test stdout" in res[0].text
-
-    # knowledge_gap_log
-    res = asyncio.run(handler("knowledge_gap_log", {"question": "q", "what_needed": "w", "proposed_approach": "p"}))
-    assert "Knowledge gap logged" in res[0].text
-
-    # hypothesis_register
-    res = asyncio.run(handler("hypothesis_register", {"claim": "c", "reasoning": "r", "confidence": 0.9}))
-    assert "Hypothesis registered" in res[0].text
-
-    # execution error handling
     with patch("harness.shared.mcp_server.execute_run_command", side_effect=RuntimeError("broker crash")):
         res = asyncio.run(handler("run_command", {"command": "broken"}))
         assert "Error executing tool" in res[0].text
+
+
+def test_mcp_server_read_file_lines(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Test read_file properly applies start_line and end_line bounds."""
+    target = tmp_path / "lines.txt"
+    target.write_text("one\ntwo\nthree\nfour\nfive", encoding="utf-8")
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    handler = server._call_tool_handler
+    assert handler is not None
+
+    res = asyncio.run(handler("read_file", {"filepath": "lines.txt", "start_line": 2, "end_line": 4}))
+    assert "two" in res[0].text
+    assert "four" in res[0].text
+    assert "one" not in res[0].text
+    assert "five" not in res[0].text
+
+
+def test_mcp_server_write_file_empty_path(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Test write_file handles empty filepath cleanly (falls back to executor error)."""
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    handler = server._call_tool_handler
+    assert handler is not None
+
+    # Empty string should pass through to executor which rejects it
+    res = asyncio.run(handler("write_file", {"filepath": "", "content": "test"}))
+    assert "Error" in res[0].text or "denied" in res[0].text.lower() or "missing" in res[0].text.lower()
+
+
+def test_mcp_server_apply_patch_not_found(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Test apply_patch properly handles when old_text is not found in file."""
+    target = tmp_path / "notfound.txt"
+    target.write_text("actual text", encoding="utf-8")
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    handler = server._call_tool_handler
+    assert handler is not None
+
+    res = asyncio.run(
+        handler("apply_patch", {"filepath": "notfound.txt", "old_text": "missing text", "new_text": "replacement"})
+    )
+    assert "error patching file" in res[0].text.lower() and "matched 0 times" in res[0].text.lower()
 
 
 def test_run_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,11 +1,35 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.2.5  
+**Version:** 2.4.0  
 **Status:** In Progress / Strategic Roadmap
 
 ---
 
 ## 0. Completed Milestones
+
+### ✅ v2.4.0 — God File Decomposition & E2E Stabilization (2026-09-01)
+
+- [x] **Orchestrator Decomposition (`harness/shared/orchestrator/`)**: Successfully decomposed `mango_mas_orchestrator.py` into `dispatcher.py`, `loop.py`, and `hook_runner.py` while maintaining a robust facade.
+- [x] **Strict Typing Enhancements**: Unified dictionaries to `MangoState` for strict `mypy` compliance.
+- [x] **LATS MCTS Fixes**: Adjusted optimizer functions to properly handle float('-inf') bounds for negative node expansions.
+- [x] **MCP Unicode Handling**: Hardened `mcp_server.py` logging against UTF-8 surrogate faults.
+
+### ✅ v2.3.0 — Model Context Protocol, LATS & Autonomous Healing (2026-08-31)
+
+- [x] **MCP Server (`mcp_server.py`)**: Implemented STDIO-based Model Context Protocol server.
+- [x] **LATS Optimizer (`lats_optimizer.py`)**: Integrated Language Agent Tree Search with UCB1 exploration.
+- [x] **Autonomous Healing (`autonomous_healing.py`)**: Closed loop test-driven agent remediation.
+- [x] **State Forking (`ablation.py`)**: Safe backtracking and snapshot preservation for MCTS nodes.
+
+### 🚧 Agent Prompts & Skills Integration (Next Sprint)
+
+- [ ] Update existing agent prompts to utilize MCP capabilities or synthesize `.mango/skills/mcp-server-integration`.
+- [ ] Connect the Nemotron Reasoner directly to `mcp_server.py`.
+
+### 🚧 God-File Decomposition (Next Sprint)
+
+- [ ] **Orchestrator Decomposition**: Extract protocol adapters and state management out of the 24KB `mango_mas_orchestrator.py` god file.
+- [ ] **Write Policy Refactoring**: Break down the 17KB `write_policy.py` into distinct boundary and invariant validators.
 
 ### ✅ Full test suite coverage gap fill and AQA/regression expansion (2026-08-31)
 

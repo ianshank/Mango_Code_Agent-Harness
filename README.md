@@ -1,6 +1,6 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.2.4 (2026 Standards)
+**Version:** 2.3.0 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -71,7 +71,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │                                     # see harness/CONTRACT.md)
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
-│   │   ├── mango_mas_orchestrator.py    # Multi-Agent System Orchestrator (ReAct loop)
+│   │   ├── orchestrator/                # Decomposed MAS Orchestrator (loop, dispatch, hooks)
+│   │   ├── mango_mas_orchestrator.py    # Backwards-compatible ReAct loop facade
 │   │   ├── autonomous_healing.py        # Test-driven autonomous self-healing engine
 │   │   ├── lats_optimizer.py            # Language Agent Tree Search (LATS) MCTS optimizer
 │   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server

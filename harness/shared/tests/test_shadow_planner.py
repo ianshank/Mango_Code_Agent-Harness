@@ -375,7 +375,7 @@ class TestBoundaryStatic:
             assert symbol not in source, f"shadow_planner.py must not reference {symbol}"
 
     def test_orchestrator_gates_via_shared_predicate(self, shared_dir: Path) -> None:
-        source = (shared_dir / "mango_mas_orchestrator.py").read_text(encoding="utf-8")
+        source = (shared_dir / "orchestrator" / "loop.py").read_text(encoding="utf-8")
         assert "shadow_planner_enabled()" in source
         assert f'environ.get("{SHADOW_PLANNER_ENV}")' not in source  # no inline re-encoding
 

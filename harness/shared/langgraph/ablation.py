@@ -7,7 +7,7 @@ do not mutate the primary MangoState channel.
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from harness.shared.langgraph.state import MangoState
 
@@ -26,6 +26,7 @@ class AblationNode:
         child.parent = self
         self.children.append(child)
 
+
 class AblationChannel:
     """Isolated channel for MCTS hypotheticals (INV-LG-5)."""
     def __init__(self, base_state: MangoState):
@@ -43,6 +44,6 @@ class AblationChannel:
             current = current.parent
 
         for n in reversed(path):
-            cast(dict[str, Any], hypothetical).update(copy.deepcopy(n.state_diff))
+            hypothetical.update(copy.deepcopy(n.state_diff))  # type: ignore[typeddict-item]
 
         return hypothetical

@@ -127,6 +127,14 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
 
         if orchestrator:
             reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+            test_results = state.get("test_results", [])
+            last_result = test_results[-1] if test_results else {}
+            if last_result.get("failed", 0) > 0 and last_result.get("message"):
+                reasoner_prompt += (
+                    f"\n\nPREVIOUS TEST FAILURE (Revision {revision}):\n"
+                    f"{last_result.get('message')}\n"
+                    "Please analyze the failure and fix the implementation."
+                )
             # Build a shared budget initialised from the cumulative state counter so
             # the per-task limit is enforced across all revisions, not per-revision.
             budget_limit = max_tool_calls_per_task()
@@ -228,18 +236,25 @@ def plan_gate_node(state: MangoState, config=None, **_kwargs: Any) -> dict:
 
 
 def quality_gate_node(state: MangoState) -> dict:
-    """Quality gate: composition of coverage, traceability, and zero-skips checks.
-
-    Phase 1 stub: always passes.  Real composition in Phase 4.
-    """
+    """Quality gate: evaluates latest test results, error channels, and verification status."""
     revision_count = state.get("revision_count", 0)
-    logger.info("quality_gate_node: revision_count=%d", revision_count)
+    test_results = state.get("test_results", [])
+    errors = state.get("errors", [])
+
+    if test_results:
+        latest = test_results[-1]
+        has_failed_tests = bool(isinstance(latest, dict) and latest.get("failed", 0) > 0)
+        passes = not has_failed_tests
+    else:
+        passes = not bool(errors)
+
+    logger.info("quality_gate_node: revision_count=%d passes=%s", revision_count, passes)
     return {
         "gate_status": {
             **state.get("gate_status", {}),
-            "quality_gate": "pass",
+            "quality_gate": "pass" if passes else "fail",
         },
-        "verdict": "VERIFIED",
+        "verdict": "VERIFIED" if passes else "FAILED",
     }
 
 

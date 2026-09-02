@@ -82,8 +82,9 @@ class TestExecuteAgent:
             calls.append("hyp")
             return "hyp-logged"
 
-        monkeypatch.setattr(orch_module, "knowledge_gap_log", _fake_gap)
-        monkeypatch.setattr(orch_module, "hypothesis_register", _fake_hyp)
+        from harness.shared.orchestrator import dispatcher
+        monkeypatch.setattr(dispatcher, "knowledge_gap_log", _fake_gap)
+        monkeypatch.setattr(dispatcher, "hypothesis_register", _fake_hyp)
 
         mock_complete_chat.side_effect = [
             _resp(None, tool_calls=[_tool_call(
@@ -184,20 +185,25 @@ class TestPolicySourcedLimits:
 
         limits = orchestrator_defaults()
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        assert orch.max_iterations == limits["max_iterations"]
-        assert orch.api_timeout == limits["api_timeout_sec"]
-        assert orch.tool_timeout == limits["tool_timeout_sec"]
-        assert orch.max_tool_calls_per_task == max_tool_calls_per_task()
+        assert orch.execution_loop.max_iterations == limits["max_iterations"]
+        assert orch.execution_loop.api_timeout == limits["api_timeout_sec"]
+        assert orch.execution_loop.hook_runner.tool_timeout == limits["tool_timeout_sec"]
+        assert orch.execution_loop.max_tool_calls_per_task == max_tool_calls_per_task()
 
     def test_explicit_arguments_still_override_policy(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=3, api_timeout=42, tool_timeout=7)
-        assert (orch.max_iterations, orch.api_timeout, orch.tool_timeout) == (3, 42, 7)
+        actual = (
+            orch.execution_loop.max_iterations,
+            orch.execution_loop.api_timeout,
+            orch.execution_loop.hook_runner.tool_timeout,
+        )
+        assert actual == (3, 42, 7)
 
     def test_tool_call_budget_is_enforced(self, mock_workspace: Path, mock_complete_chat) -> None:
         tc = _tool_call("write_file", {"filepath": "loop.txt", "content": "x"})
         mock_complete_chat.return_value = _resp(None, tool_calls=[tc, tc])
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=50)
-        orch.max_tool_calls_per_task = 3
+        orch.execution_loop.max_tool_calls_per_task = 3
         with pytest.raises(RuntimeError, match="tool-call budget"):
             orch.execute_agent("nemotron-reasoner", "budget")
 
@@ -220,12 +226,13 @@ class TestOrchestrateWorkflow:
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
 
-        monkeypatch.setattr(orch_module, "shadow_planner_enabled", lambda: True)
+        from harness.shared.orchestrator import loop
+        monkeypatch.setattr(loop, "shadow_planner_enabled", lambda: True)
 
         def mock_shadow_raise(ctx):
             raise RuntimeError("shadow planner failed unexpectedly")
 
-        monkeypatch.setattr(orch_module, "run_shadow_comparison", mock_shadow_raise)
+        monkeypatch.setattr(loop, "run_shadow_comparison", mock_shadow_raise)
 
         res = orch.execute_loop("Do a task")
         assert res.plan == "Plan: do work"

@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.2.5 — Root Makefile
+# Agentic SSD v2.4.0 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -91,6 +91,14 @@ test-regression: ## Run the regression/AQA tier on its own (one reproduction per
 .PHONY: test-langgraph
 test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, regression)
 	$(PYTEST) $(SHARED_TESTS)/test_langgraph_*.py $(SHARED_TESTS)/regression/test_langgraph_regression.py -m "not live" -v
+
+.PHONY: test-mcp
+test-mcp: ## Run Model Context Protocol (MCP) server tests
+	$(PYTEST) $(SHARED_TESTS)/test_mcp_server.py -m "not live" -v
+
+.PHONY: test-lats
+test-lats: ## Run LATS Optimizer and Ablation state forking tests
+	$(PYTEST) $(SHARED_TESTS)/test_lats_optimizer.py $(SHARED_TESTS)/test_ablation.py -m "not live" -v
 
 .PHONY: test-aqa
 test-aqa: ## Run AQA smoke tests and coverage-gap regression suite

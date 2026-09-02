@@ -9,28 +9,24 @@ Requirement Citations:
 - R-AI-NEMO-1: Python bridge wire protocol validation
 - C-AI-SEC-1: mask_secret redaction verification
 """
+from __future__ import annotations
 
 import json
-import sys
 import unittest
-from pathlib import Path
 
 import pytest
 
-# Add parent directory to path so we can import the bridge module
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from harness.shared.nemotron_bridge import complete_chat, mask_secret, resolve_api_key
 
-from nemotron_bridge import complete_chat, mask_secret, resolve_api_key
-
-API_KEY = resolve_api_key()
-IS_LIVE = bool(API_KEY)
-SMOKE_MAX_TOKENS = 50
+API_KEY: str = resolve_api_key()
+IS_LIVE: bool = bool(API_KEY)
+SMOKE_MAX_TOKENS: int = 50
 
 
 class TestMaskSecret(unittest.TestCase):
     """Unit tests for mask_secret — always run regardless of API key."""
 
-    def test_masks_long_key(self):
+    def test_masks_long_key(self) -> None:
         raw = "nvapi-sSeCHw0DgZGfWMEf5bhpL7H0NutynoON8H3rVPdD2y8wCAUb72j"
         masked = mask_secret(raw)
         self.assertTrue(masked.startswith("nvapi-sSeC"))
@@ -38,10 +34,10 @@ class TestMaskSecret(unittest.TestCase):
         # Should end with last 4 chars
         self.assertTrue(masked.endswith(raw[-4:]))
 
-    def test_masks_short_key(self):
+    def test_masks_short_key(self) -> None:
         self.assertEqual(mask_secret("short"), "****")
 
-    def test_masks_empty_key(self):
+    def test_masks_empty_key(self) -> None:
         self.assertEqual(mask_secret(""), "<UNSET>")
 
 
@@ -49,7 +45,7 @@ class TestResolveApiKey(unittest.TestCase):
     """Tests for API key resolution — always run."""
 
     @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured")
-    def test_resolves_key_from_environment(self):
+    def test_resolves_key_from_environment(self) -> None:
         key = resolve_api_key()
         self.assertTrue(len(key) > 0)
         self.assertTrue(key.startswith("nvapi-"))
@@ -60,7 +56,7 @@ class TestResolveApiKey(unittest.TestCase):
 class TestCompleteChatLive(unittest.TestCase):
     """Live API integration tests for complete_chat."""
 
-    def test_happy_path_completion(self):
+    def test_happy_path_completion(self) -> None:
         """Exercises the full completion path against the live API."""
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -97,7 +93,7 @@ class TestCompleteChatLive(unittest.TestCase):
         result_str = json.dumps(result)
         self.assertNotIn(API_KEY, result_str)
 
-    def test_wire_format_parity_with_typescript(self):
+    def test_wire_format_parity_with_typescript(self) -> None:
         """
         Contract test: verifies the Python bridge sends the same wire format
         as the TypeScript NemotronClient.
@@ -125,7 +121,7 @@ class TestCompleteChatLive(unittest.TestCase):
         content = result["choices"][0].get("message", {}).get("content", "")
         self.assertTrue(len(content) > 0)
 
-    def test_invalid_key_error_is_sanitized(self):
+    def test_invalid_key_error_is_sanitized(self) -> None:
         """Verifies error messages don't leak the raw API key."""
         fake_key = "nvapi-INVALID-fake-key-for-testing-1234567890abcdef"
 

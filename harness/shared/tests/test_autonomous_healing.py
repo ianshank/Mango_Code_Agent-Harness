@@ -116,6 +116,15 @@ def test_healer_max_retries_invalid_type(tmp_path) -> None:
         TestHealer(workspace=str(tmp_path), max_retries=True)
 
 
+def test_healer_max_retries_zero_exhausted_immediately(tmp_path) -> None:
+    """Test heal_until_green returns False on first failure if max_retries=0 (no healing loops)."""
+    healer = TestHealer(workspace=str(tmp_path), max_retries=0)
+    with patch.object(healer, "_run_test_suite", return_value=(False, "fail")), \
+         patch("harness.shared.autonomous_healing.MangoMASOrchestrator") as mock_orch:
+        assert healer.heal_until_green(["pytest"]) is False
+        assert not mock_orch.called
+
+
 def test_healer_broker_routes_test_execution(tmp_path) -> None:
     """When a broker is injected, _run_test_suite routes through it (INV-8)."""
     from harness.shared.governance.broker import ExecutionBroker
