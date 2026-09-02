@@ -85,7 +85,10 @@ CRITICAL_PATTERNS = {
         "from every hook environment; unprotected, an agent could widen its own disclosure"
     ),
     "harness/shared/tests/test_protected_path_liveness.py": "this gate",
-    "harness/shared/tests/test_ci_gate_coverage.py": "the CI gate-coverage gate",
+    "harness/shared/tests/*ci_gate*.py": (
+        "the CI gate-coverage gates (coverage map, pipeline shape, required checks) and "
+        "the Make/workflow parser they share; a glob since the R-TDH-22 split"
+    ),
     "harness/shared/tests/test_coverage_policy_enforcement.py": (
         "owns the coverage-threshold classification; unprotected, it could be deleted "
         "outright with every gate still green"

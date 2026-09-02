@@ -192,7 +192,7 @@ def optional_extra_waivers(
             raise _malformed_extra(policy_path, name, "path_prefixes must be a non-empty list of non-empty strings")
         if env.get(deselect_env) != "1":
             continue
-        if importlib.util.find_spec(import_name) is not None:
+        if _importable(import_name):
             logger.info(
                 "Coverage per-file: %s=1 but %r is importable; extra %r stays enforced",
                 deselect_env, import_name, name,
@@ -205,6 +205,38 @@ def optional_extra_waivers(
         )
         waived[name] = tuple(prefixes)
     return waived
+
+
+def _importable(name: str) -> bool:
+    """True when `name` resolves to a real, installed module in this interpreter.
+
+    Two things made a naive `find_spec` lie on the 3.9 leg. First, invoked as
+    `python harness/shared/coverage_gate.py`, Python puts `harness/shared/` at
+    the head of `sys.path`, where `harness/shared/langgraph/` shadows the real
+    `langgraph` distribution: the probe reported the extra importable while
+    nothing was installed, and the waiver was refused. The lookup therefore runs
+    with this script's own directory removed and any cached module of that name
+    set aside, then restores both. Second, a namespace-only hit (a directory with
+    no `__init__.py`, which a sibling distribution can leave behind) proves
+    nothing, so a spec without an origin reads as absent. Policies name a concrete
+    module (`langgraph.graph`) so a dotted lookup whose parent is missing is
+    simply absent too.
+    """
+    top = name.split(".", 1)[0]
+    own_dir = Path(__file__).resolve().parent
+    saved_path = sys.path[:]
+    set_aside = {k: sys.modules.pop(k) for k in list(sys.modules) if k == top or k.startswith(f"{top}.")}
+    sys.path[:] = [p for p in sys.path if Path(p or ".").resolve() != own_dir]
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        spec = None
+    finally:
+        sys.path[:] = saved_path
+        for key in [k for k in sys.modules if k == top or k.startswith(f"{top}.")]:
+            del sys.modules[key]  # whatever the probe imported; the gate does not use it
+        sys.modules.update(set_aside)
+    return spec is not None and spec.origin is not None
 
 
 def _waiving_extra(path: str, waived: dict[str, tuple[str, ...]]) -> str | None:

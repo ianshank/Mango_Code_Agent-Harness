@@ -18,7 +18,7 @@ truth rather than an index.
 | **INV-2** | Zero Unapproved Skips | Skipped tests are failures without a live, decision-backed exemption. | `make verify-zero-skips` |
 | **INV-3** | Remote Allowlist | One shared remote URL normalizer gates every push target. | `make remotes` |
 | **INV-4** | Non-Destructive Hooks | Git hooks install into Git's effective hooks path and never silently overwrite. | `python harness/shared/validate_adoption.py` |
-| **INV-5** | CI Gate Coverage | CI invokes every policy-required gate by Make target; meta-tests detect omissions. | `pytest harness/shared/tests/test_ci_gate_coverage.py` |
+| **INV-5** | CI Gate Coverage | CI invokes every policy-required gate by Make target; meta-tests detect omissions. | `pytest harness/shared/tests/test_ci_gate_*.py` |
 | **INV-6** | Root of Trust | The repository is not its own root of trust; policy digests are anchored externally. | `python harness/shared/validate_policy.py` |
 | **INV-7** | Bounded Delegation | Agent delegation transfers no authority; every side effect carries actor/trace/policy evidence. | `pytest -m governance` |
 | **INV-8** | Approved Execution Broker | Generated code executes only through the approved broker, **and that broker has a live caller**. | `pytest harness/shared/tests/test_invariant_liveness.py harness/shared/tests/test_governance_broker.py harness/shared/tests/regression/test_guard_reachability_regression.py` |
@@ -32,8 +32,9 @@ truth rather than an index.
 | **INV-16** | Cognitive Boundary | No `CognitiveSignal` field reaches a control path, selects a tool/model, or alters tool exposure. | `pytest -m governance` + static scan in `test_shadow_planner.py` |
 
 Two invariants enforced by `validate_invariants.py` sit outside this numbering
-and are checked on every `make validate`: the per-file **size budget**
-(`limits.size_budget_lines`, not a hard-coded 500) and the **protected-path**
+and are checked on every `make validate`: the per-file **size budgets**
+(`limits.size_budget_lines` for source modules, `limits.test_size_budget_lines`
+for test modules; neither is a hard-coded number) and the **protected-path**
 gate, whose patterns are proven live by `test_protected_path_liveness.py`.
 
 ---

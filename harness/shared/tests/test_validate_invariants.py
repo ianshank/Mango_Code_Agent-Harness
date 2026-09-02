@@ -409,3 +409,76 @@ def test_unreadable_file_does_not_abort_secret_or_size_scans(temp_repo: Path):
     (temp_repo / "binaryish.py").write_bytes(b"\xff\xfe\x00 not utf-8 \xba\xad")
     assert vi.check_hardcoded_secrets(temp_repo) is True
     assert vi.check_size_budget(temp_repo, budget=500) is True
+
+
+# --- test_size_budget_lines / check_test_size_budget (tech-debt-hardening-plan R-TDH-22) ---
+#
+# Test modules were exempt from the source budget and the exemption grew a
+# 923-line module. They now have their own budget, `limits.test_size_budget_lines`,
+# enforced by the same gate; ids contain "test_size_budget" so AC-22's
+# `-k test_size_budget` selects exactly these.
+
+
+def _write_lines(path: Path, count: int) -> None:
+    path.write_text("\n".join("x = 1" for _ in range(count)) + "\n", encoding="utf-8")
+
+
+def test_test_size_budget_lines_reads_from_policy(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(vi.TEST_SIZE_BUDGET_ENV, raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text(json.dumps({"limits": {"test_size_budget_lines": 120}}), encoding="utf-8")
+    assert vi.test_size_budget_lines(policy) == 120
+
+
+def test_test_size_budget_lines_defaults_without_a_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(vi.TEST_SIZE_BUDGET_ENV, raising=False)
+    assert vi.test_size_budget_lines(tmp_path / "absent.json") == vi.TEST_SIZE_BUDGET_LINES
+
+
+def test_test_size_budget_lines_honors_its_own_env_override(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    """The two budgets have separate overrides: MAX_FILE_LINES must not move the test budget."""
+    monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "5")
+    monkeypatch.setenv(vi.TEST_SIZE_BUDGET_ENV, "77")
+    assert vi.test_size_budget_lines(_policy_path(temp_repo)) == 77
+    assert vi.size_budget_lines(_policy_path(temp_repo)) == 5
+
+
+def test_test_size_budget_lines_fails_closed_on_a_malformed_policy(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(vi.TEST_SIZE_BUDGET_ENV, raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text(json.dumps({"limits": {"test_size_budget_lines": "many"}}), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        vi.test_size_budget_lines(policy)
+    assert exc.value.code == 1
+
+
+def test_check_test_size_budget_fails_one_line_over_and_passes_at_the_budget(temp_repo: Path, caplog):
+    """AC-22: one line over the budget fails; exactly at the budget passes."""
+    _write_lines(temp_repo / "test_wide.py", 51)
+    with caplog.at_level(logging.ERROR, logger=vi.logger.name):
+        assert vi.check_test_size_budget(temp_repo, budget=50) is False
+    assert "[FAIL] Test Size Budget: File test_wide.py exceeds 50 lines (51 lines)." in caplog.text
+    _write_lines(temp_repo / "test_wide.py", 50)
+    assert vi.check_test_size_budget(temp_repo, budget=50) is True
+
+
+def test_check_test_size_budget_ignores_source_modules(temp_repo: Path):
+    """Source files belong to the other budget; counting them here would double-report."""
+    _write_lines(temp_repo / "big_source.py", 600)
+    assert vi.check_test_size_budget(temp_repo, budget=50) is True
+    _write_lines(temp_repo / "wide_test.py", 60)  # the `_test.py` suffix counts as a test module
+    assert vi.check_test_size_budget(temp_repo, budget=50) is False
+
+
+def test_main_fails_on_an_oversized_test_module_from_policy(temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+    """End to end through main(): the budget comes from the policy, not a constant."""
+    monkeypatch.delenv(vi.TEST_SIZE_BUDGET_ENV, raising=False)
+    monkeypatch.delenv(vi.SIZE_BUDGET_ENV, raising=False)
+    policy = _policy_path(temp_repo)
+    policy.write_text(
+        json.dumps({"protected_paths": ["Makefile"], "limits": {"test_size_budget_lines": 40}}), encoding="utf-8"
+    )
+    _write_lines(temp_repo / "test_over.py", 41)
+    assert vi.main(temp_repo, policy_path=policy) == 1
+    _write_lines(temp_repo / "test_over.py", 40)
+    assert vi.main(temp_repo, policy_path=policy) == 0

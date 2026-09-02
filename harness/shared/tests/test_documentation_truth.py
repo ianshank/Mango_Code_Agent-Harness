@@ -324,3 +324,101 @@ class TestVersionIsSingleSourced:
             )
             path.write_text(mutated, encoding="utf-8")
         assert version_drift(tmp_path) == {mirror: bogus}
+
+
+# --- Changelog sections stay readable -------------------------------------------
+#
+# The v2.2.4 section of CHANGELOG.md had grown to about 1,300 lines before it was
+# moved to docs/releases/v2.2.4.md (tech-debt-hardening-plan R-TDH-24). A byte
+# budget on the whole file would have been self-defeating -- the plan's own
+# arithmetic put the file at ~49 kB *after* that move -- so the cap is per release
+# section and is read from `limits.changelog_section_lines` in the policy.
+
+CHANGELOG = REPO / "CHANGELOG.md"
+GOVERNANCE_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
+_VERSION_HEADING = re.compile(r"^## \[v?\d+\.\d+\.\d+\]")
+_ANY_H2 = re.compile(r"^## ")
+
+
+def changelog_section_cap() -> int:
+    """`limits.changelog_section_lines`, read straight from the policy file.
+
+    No default: a missing or non-numeric key fails the test rather than
+    quietly measuring against a literal that the policy never agreed to.
+    """
+    policy = json.loads(GOVERNANCE_POLICY.read_text(encoding="utf-8"))
+    value = policy.get("limits", {}).get("changelog_section_lines")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        pytest.fail(f"governance-policy.json limits.changelog_section_lines is absent or non-numeric: {value!r}")
+    return int(value)
+
+
+def changelog_sections(text: str) -> dict[str, int]:
+    """Line count of every ``## [x.y.z]`` section of a changelog, keyed by heading.
+
+    A section runs from its heading line to the line before the next ``## ``
+    heading of any kind (or the end of the file), heading included. Two parts
+    of the real file are exempt, both by construction rather than by name:
+
+    * ``## [Unreleased]`` carries no version, so it never matches the pattern.
+      It is the one section that is *meant* to grow until a release cuts it,
+      and capping it would only push entries out of the changelog.
+    * The trailing ``## Harness gate-contract history`` block is the folded
+      ``harness/CHANGELOG.md`` (v2.0.0-v2.1.5). Its entries are ``###``
+      sub-headings under one non-version ``##`` heading, so that heading ends
+      the last release section without starting a new one, and the block's
+      length is never attributed to any version.
+    """
+    sections: dict[str, int] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if _ANY_H2.match(line):
+            current = line.rstrip() if _VERSION_HEADING.match(line) else None
+            if current is not None:
+                sections[current] = 0
+        if current is not None:
+            sections[current] += 1
+    return sections
+
+
+def oversized_changelog_sections(text: str, cap: int) -> dict[str, int]:
+    """The release sections longer than ``cap`` lines, with their lengths."""
+    return {heading: count for heading, count in changelog_sections(text).items() if count > cap}
+
+
+class TestChangelogSectionCap:
+    def test_changelog_section_parser_finds_release_sections(self) -> None:
+        """Positive control: an empty parse would make the cap check pass while
+        measuring nothing, and the exemptions must be exemptions, not misses."""
+        sections = changelog_sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert len(sections) >= 3, f"parsed too few release sections out of CHANGELOG.md: {sorted(sections)}"
+        assert all(_VERSION_HEADING.match(heading) for heading in sections)
+        text = CHANGELOG.read_text(encoding="utf-8")
+        assert "## [Unreleased]" in text and "## Harness gate-contract history" in text
+
+    def test_changelog_section_cap_is_policy_sourced(self) -> None:
+        assert changelog_section_cap() > 0
+
+    def test_every_changelog_section_is_within_the_cap(self) -> None:
+        cap = changelog_section_cap()
+        over = oversized_changelog_sections(CHANGELOG.read_text(encoding="utf-8"), cap)
+        assert not over, (
+            f"CHANGELOG.md release sections longer than limits.changelog_section_lines={cap}: {over}. "
+            "Move the body to docs/releases/<version>.md and leave a pointer under the heading."
+        )
+
+    def test_changelog_section_one_line_over_the_cap_is_reported(self) -> None:
+        """The negative case: exactly the offending section, nothing else."""
+        cap = changelog_section_cap()
+        filler = "- an entry\n"
+        at_cap = "## [1.0.0] - 2026-01-01\n" + filler * (cap - 1)  # heading + (cap - 1) lines == cap
+        one_over = "## [1.1.0] - 2026-01-02\n" + filler * cap  # heading + cap lines == cap + 1
+        text = (
+            "# Changelog\n\n## [Unreleased]\n" + filler * (cap + 5)  # exempt however long
+            + one_over
+            + at_cap
+            + "## Harness gate-contract history (formerly `harness/CHANGELOG.md`)\n"
+            + "### v2.1.5 - old\n" + filler * (cap + 5)  # exempt trailing block
+        )
+        assert oversized_changelog_sections(text, cap) == {"## [1.1.0] - 2026-01-02": cap + 1}
+        assert changelog_sections(text)["## [1.0.0] - 2026-01-01"] == cap

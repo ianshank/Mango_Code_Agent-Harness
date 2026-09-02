@@ -8,6 +8,7 @@ evidence is never a pass).
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import runpy
@@ -296,11 +297,54 @@ def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, 
 
 def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
     """Liveness: the extra the 3.9 leg deselects is the one the gate waives, by the same name."""
+    from harness.shared.langgraph import LANGGRAPH_AVAILABLE
     from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
 
     repo_policy = cg.DEFAULT_REPO_ROOT / cg.POLICY_RELPATH
     extras = json.loads(repo_policy.read_text(encoding="utf-8"))["coverage"][cg.OPTIONAL_EXTRAS_KEY]
     assert extras["langgraph"]["deselect_env"] == LANGGRAPH_DESELECT_ENV
-    assert extras["langgraph"]["import_name"] == "langgraph"
+    # The gate's importability verdict must agree with the one conftest deselects on,
+    # whichever interpreter runs this: both true with the extra, both false without.
+    assert cg._importable(extras["langgraph"]["import_name"]) is LANGGRAPH_AVAILABLE
     for prefix in extras["langgraph"]["path_prefixes"]:
         assert (cg.DEFAULT_REPO_ROOT / prefix).is_dir(), prefix
+
+
+def test_a_namespace_stub_does_not_count_as_importable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A directory with no `__init__.py` is a namespace hit with nothing importable under it."""
+    (tmp_path / "nsonly").mkdir()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    assert cg._importable("nsonly") is False
+    assert cg._importable("nsonly.graph") is False
+    assert cg._importable("no_such_parent_for_tests.child") is False
+    assert cg._importable("json") is True
+    assert cg._importable("json.decoder") is True
+
+
+def test_the_gates_own_directory_cannot_shadow_the_extra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The 3.9 CI failure: `python harness/shared/coverage_gate.py` puts harness/shared/
+    first on sys.path, where harness/shared/langgraph/ shadows the real package, so the
+    probe said "importable" on a leg with nothing installed. Reproduced by pointing the
+    gate's __file__ at a directory holding a same-named package: the probe must ignore
+    that directory, and only that directory."""
+    shadow = tmp_path / "gate_dir" / "shadowextra"
+    shadow.mkdir(parents=True)
+    (shadow / "__init__.py").write_text("", encoding="utf-8")
+    (shadow / "graph.py").write_text("", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path / "gate_dir"))
+    importlib.invalidate_caches()
+    assert cg._importable("shadowextra.graph") is True, "sanity: visible when it is just another path entry"
+
+    monkeypatch.setattr(cg, "__file__", str(tmp_path / "gate_dir" / "coverage_gate.py"))
+    assert cg._importable("shadowextra.graph") is False
+    assert "shadowextra" not in sys.modules, "the probe must not leave its imports behind"
+    assert cg._importable("json.decoder") is True, "removing the own directory must not hide real modules"
+
+
+def test_the_probe_restores_a_module_it_set_aside(monkeypatch: pytest.MonkeyPatch):
+    """A caller that already imported the extra keeps its module object afterwards."""
+    import json as real_json
+
+    assert cg._importable("json") is True
+    assert sys.modules["json"] is real_json

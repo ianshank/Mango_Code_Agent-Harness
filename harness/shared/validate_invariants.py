@@ -1,4 +1,4 @@
-"""Repository invariant checks: protected paths, hardcoded secrets, and file size budget.
+"""Repository invariant checks: protected paths, hardcoded secrets, and file size budgets.
 
 These checks are intentionally deterministic and free of third-party dependencies so
 they can run as a CI gate (`make validate`), a skill step
@@ -26,34 +26,39 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
 DEFAULT_POLICY_PATH = DEFAULT_WORKSPACE_DIR / "harness" / "shared" / "governance-policy.json"
+# Adopter defaults, used only when no governance policy exists at all. In this
+# repository the numbers come from `limits.*` in governance-policy.json.
 SIZE_BUDGET_LINES = 500
+TEST_SIZE_BUDGET_LINES = 700
+SIZE_BUDGET_ENV = "MAX_FILE_LINES"
+TEST_SIZE_BUDGET_ENV = "MAX_TEST_FILE_LINES"
 SECRET_PATTERNS = ("OPENAI_API_KEY =", "ANTHROPIC_API_KEY =", "NVIDIA_API_KEY =", "API_SERVER_KEY =")
 
 # Skip directories that are not first-party source under governance.
 SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", ".git"})
 
 
-def size_budget_lines(policy_path: Path | None = None) -> int:
-    """Resolve the per-file line budget from policy, allowing `MAX_FILE_LINES` to override.
+def _policy_limit(key: str, default: int, policy_path: Path | None, env_var: str) -> int:
+    """Resolve `limits.<key>` from policy, allowing `env_var` to override.
 
     Fails closed on a *malformed* policy: an absent policy is the adopter path and
     legitimately falls back to the built-in budget, but one that exists and cannot
     be parsed is corruption, and silently substituting the default would relax the
     gate on exactly the input that should stop it.
     """
-    override = os.environ.get("MAX_FILE_LINES")
+    override = os.environ.get(env_var)
     if override:
         try:
             return int(override)
         except ValueError:
-            logger.warning("Ignoring non-integer MAX_FILE_LINES=%r; using policy default", override)
+            logger.warning("Ignoring non-integer %s=%r; using policy default", env_var, override)
     policy_path = policy_path or DEFAULT_POLICY_PATH
     try:
         raw = policy_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         # A policy that is simply absent is the adopter path; defaults apply.
-        logger.debug("No governance policy at %s; using the built-in size budget", policy_path)
-        return SIZE_BUDGET_LINES
+        logger.debug("No governance policy at %s; using the built-in %s", policy_path, key)
+        return default
     except OSError as e:
         logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
         sys.exit(1)
@@ -62,7 +67,7 @@ def size_budget_lines(policy_path: Path | None = None) -> int:
         if not isinstance(policy, dict):
             raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
         limits = policy.get("limits", {})
-        budget = limits.get("size_budget_lines", SIZE_BUDGET_LINES)
+        budget = limits.get(key, default)
         return int(budget)
     except (ValueError, TypeError) as e:
         # A policy that exists but cannot be parsed is corruption, not an adopter
@@ -70,6 +75,25 @@ def size_budget_lines(policy_path: Path | None = None) -> int:
         # silently relax the gate -- the same fail-open inversion COV_MIN had.
         logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
         sys.exit(1)
+
+
+def size_budget_lines(policy_path: Path | None = None) -> int:
+    """Per-file line budget for source modules (`limits.size_budget_lines`; `MAX_FILE_LINES` overrides)."""
+    return _policy_limit("size_budget_lines", SIZE_BUDGET_LINES, policy_path, SIZE_BUDGET_ENV)
+
+
+def test_size_budget_lines(policy_path: Path | None = None) -> int:
+    """Per-file line budget for test modules (`limits.test_size_budget_lines`; `MAX_TEST_FILE_LINES` overrides).
+
+    Tests were exempt from the source budget and the exemption grew a 923-line
+    module (tech-debt-hardening-plan R-TDH-22). They get their own, larger budget
+    rather than the source one because tabular cases legitimately run long.
+    """
+    return _policy_limit("test_size_budget_lines", TEST_SIZE_BUDGET_LINES, policy_path, TEST_SIZE_BUDGET_ENV)
+
+
+def _is_test_module(py_file: Path) -> bool:
+    return py_file.name.startswith("test_") or py_file.name.endswith("_test.py")
 
 
 def is_protected(path: str, protected_patterns: list[str]) -> bool:
@@ -186,26 +210,36 @@ def check_hardcoded_secrets(workspace_dir: Path) -> bool:
     return not failed
 
 
-def check_size_budget(workspace_dir: Path, budget: int | None = None, policy_path: Path | None = None) -> bool:
-    """Return False if any first-party non-test .py file exceeds the line budget."""
-    resolved_policy = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
-    budget = size_budget_lines(resolved_policy) if budget is None else budget
+def _check_line_budget(workspace_dir: Path, budget: int, label: str, tests: bool) -> bool:
+    """Shared scan for the two budgets: `tests` selects test modules or everything else."""
     failed = False
     for py_file in _first_party_py_files(workspace_dir):
-        if py_file.name.startswith("test_") or py_file.name.endswith("_test.py"):
+        if _is_test_module(py_file) != tests:
             continue
         try:
             line_count = len(py_file.read_text(encoding="utf-8").splitlines())
             if line_count > budget:
-                logger.error(
-                    "[FAIL] Size Budget: File %s exceeds %d lines (%d lines).", py_file.name, budget, line_count
-                )
+                logger.error("[FAIL] %s: File %s exceeds %d lines (%d lines).", label, py_file.name, budget, line_count)
                 failed = True
         except Exception as e:  # noqa: BLE001 - unreadable file must not abort the scan
             logger.debug("Skipping unreadable file %s: %s", py_file, e)
     if not failed:
-        logger.info("[PASS] Size Budget: All files under %d lines.", budget)
+        logger.info("[PASS] %s: All %s under %d lines.", label, "test modules" if tests else "files", budget)
     return not failed
+
+
+def check_size_budget(workspace_dir: Path, budget: int | None = None, policy_path: Path | None = None) -> bool:
+    """Return False if any first-party non-test .py file exceeds the line budget."""
+    resolved_policy = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
+    budget = size_budget_lines(resolved_policy) if budget is None else budget
+    return _check_line_budget(workspace_dir, budget, "Size Budget", tests=False)
+
+
+def check_test_size_budget(workspace_dir: Path, budget: int | None = None, policy_path: Path | None = None) -> bool:
+    """Return False if any first-party test module exceeds `limits.test_size_budget_lines` (R-TDH-22)."""
+    resolved_policy = policy_path or (workspace_dir / "harness" / "shared" / "governance-policy.json")
+    budget = test_size_budget_lines(resolved_policy) if budget is None else budget
+    return _check_line_budget(workspace_dir, budget, "Test Size Budget", tests=True)
 
 
 def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> int:
@@ -221,6 +255,7 @@ def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> 
         check_protected_paths(workspace_dir, protected_patterns),
         check_hardcoded_secrets(workspace_dir),
         check_size_budget(workspace_dir, policy_path=policy_path),
+        check_test_size_budget(workspace_dir, policy_path=policy_path),
     ]
 
     if all(results):

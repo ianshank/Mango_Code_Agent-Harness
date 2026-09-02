@@ -99,7 +99,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_reasoner_frontmatter_tools_list_includes_meta_tools(self):
         """Stricter than test_reasoner_documents_meta_tools above: that test is
         satisfied by a prose mention anywhere in the file, which is exactly
-        how this gap went unnoticed for a documented period (SDLC_HYGIENE_REPORT.md,
+        how this gap went unnoticed for a documented period (docs/reports/SDLC_HYGIENE_REPORT.md,
         2026-08-26) even though the body already referenced both tools -- the
         structured `tools:` frontmatter field itself only listed
         `Bash, Read, Grep, Glob`. This asserts on the parsed field specifically."""

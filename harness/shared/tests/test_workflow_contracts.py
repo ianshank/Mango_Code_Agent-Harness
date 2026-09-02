@@ -27,9 +27,9 @@ from typing import Any
 
 import pytest
 
+from harness.shared.tests._ci_gate_helpers import _reported_check_names
 from harness.shared.tests._helpers import REPO
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
-from harness.shared.tests.test_ci_gate_coverage import _reported_check_names
 
 pytestmark = pytest.mark.governance
 
