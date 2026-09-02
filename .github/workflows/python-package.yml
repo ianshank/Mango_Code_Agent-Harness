@@ -40,33 +40,31 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -e . --no-deps
 
-      # langgraph declares Requires-Python >=3.10, so the 3.9 leg cannot install
-      # it. Every other leg installs the library so the `langgraph`-marked suites
-      # run (they skipped on every leg before this step existed, so the whole
-      # StateGraph package was unmeasured in CI). On 3.9 the same suites are
-      # *deselected* -- visible in pytest's summary, never a skip -- through the
-      # conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below. Pinned by
-      # test_workflow_contracts.py; see tech-debt-hardening-plan R-TDH-4.
-      - name: Install LangGraph runtime (interpreters that support it)
-        if: matrix.python-version != '3.9'
-        run: python -m pip install -r requirements-langgraph.txt
+      # Dependencies come from requirements-lock.txt, a universal lock whose
+      # environment markers pip evaluates per interpreter: the 3.9 leg gets no
+      # langgraph (it declares Requires-Python >=3.10) and every other leg does,
+      # so the `langgraph`-marked suites run there instead of skipping. On 3.9
+      # they are *deselected* -- visible in pytest's summary, never a skip --
+      # through the conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below.
+      # Pinned by test_workflow_contracts.py (tech-debt-hardening-plan R-TDH-4,
+      # R-TDH-9).
 
       - name: Run Python CI gate (make ci-python)
         # The protected-path invariant fails closed on infrastructure changes
@@ -83,45 +81,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           # Primary leg: one modern interpreter runs the complete gate,
           # including the Node stack. The compat gate plus the ci-python matrix
           # covers the older interpreters.
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
-
-      # The primary leg runs the regression tier and the full gate with the
-      # StateGraph runtime present, so `langgraph`-marked tests are exercised
-      # rather than skipped (R-TDH-4).
-      - name: Install LangGraph runtime
-        run: python -m pip install -r requirements-langgraph.txt
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -e . --no-deps
 
       # pnpm must be on PATH *before* actions/setup-node runs, because
       # `cache: pnpm` resolves the pnpm store via the pnpm binary. Installing it
       # afterwards fails the "Set up Node" step with "Unable to locate
       # executable file: pnpm".
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           # Read the pinned version from `packageManager` in the Node package
           # manifest (single source of truth) rather than duplicating it here.
           package_json_file: harness/node/package.json
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # pnpm 11 (pinned via packageManager) requires Node >= 22.13.
           # Node 20 is also being deprecated on GitHub-hosted runners.
@@ -161,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Full history: INV-1 requires scanning past commits, not just the tree.
           fetch-depth: 0
@@ -171,7 +163,7 @@ jobs:
       # implicit dependency on the runner image: a base-image change would break
       # the scan rather than fail it loudly. Pin the toolchain explicitly.
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 'stable'
 
@@ -197,20 +189,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install pip-audit
         run: make audit-install-python
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 'stable'
 
@@ -241,14 +233,14 @@ jobs:
         python-version: ["3.9", "3.10", "3.12"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
 
       - name: Install pip-audit
         run: make audit-install-python

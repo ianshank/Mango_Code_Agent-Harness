@@ -7,6 +7,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 1 — toolchain
+
+- **One universal dependency lock.** `requirements-lock.txt` is compiled by
+  `make lock` (`uv pip compile --universal`, floor read from pyproject's
+  `requires-python`) from `requirements-dev.txt` and
+  `requirements-langgraph.txt`; environment markers survive, so the same file
+  serves the 3.9/3.10/3.12 matrix and pip gives each leg only what its
+  interpreter supports (langgraph and mcp on 3.10+, tomli below 3.11). Every
+  CI install step reads the lock and installs the project with `--no-deps`;
+  the separate langgraph install steps are gone. `make lock-check` (in `ci`
+  and `ci-python`) fails on a stale lock; the weekly drift job runs
+  `make lock-upgrade-check` and opens an issue when newer allowed releases
+  exist. `make audit-python` scans the lock too.
+- **ruff 0.6.9 → 0.16.5** (Dependabot #39), its own change because the newer
+  linter fired 8 findings: 5 stale `noqa` directives removed, 2 justified
+  `BLE001` sites in `write_policy.py` annotated, one implicit string
+  concatenation parenthesised. `test_deferred_rigor.py`'s measured counts
+  re-taken under 0.16.5. Also applied: pytest-mock 3.15.1 (#38), tomli 2.4.1
+  (#42), pydantic floor 2.13.5 (#41), eslint 10.9.1 (#44), @types/node
+  26.4.0 (#46), knip 6.32.3 (#43). Not applied: fastapi floor 0.141.1 (#40)
+  requires Python ≥3.10 and would break the 3.9 leg (the lock resolves
+  0.128.8 there).
+- **GitHub Actions on Node 24**: checkout v5, setup-python v6, setup-node v5,
+  setup-go v6, pnpm/action-setup v5 (each verified against the action
+  manifest); `dependabot.yml` gains the `github-actions` ecosystem.
+- **Nightly drift now runs `lint`**, so a mypy or dependency break on `main`
+  opens an issue the same night instead of waiting for the next PR.
+- `test_workflow_contracts.py` pins all of the above: lock-only installs,
+  `--no-deps`, cache keys, langgraph behind a ≥3.10 marker, no Postgres
+  checkpointer, action majors, the drift loop, the Dependabot ecosystem.
+
+### Tech-debt hardening plan, Phase 0c — landed specs reconciled
+
+Five specs whose work had shipped still showed every acceptance box open.
+Each box was re-run: 22 ticked with command evidence, the rest annotated with
+the item that still blocks them (`dependency-hygiene`, `gate-hardening`,
+`ci-enforcement-gaps`, `policy-single-source`, `remove-pong-demo`). Found on
+the way: `harness/node/scripts/run_vitest.sh` calls `verify_zero_skips.py`
+without the waiver and decision-log arguments and so fails standalone (the
+`make test-node` + `make verify-zero-skips` path is the working one).
+
 ### Tech-debt hardening plan, Phase 0a — the control that keeps `main` green
 
 - **Ruleset export** at `.github/rulesets/main.json` (DEC-024): the nine

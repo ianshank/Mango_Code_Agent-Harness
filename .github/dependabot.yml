@@ -9,3 +9,12 @@ updates:
     directory: "/harness/node"
     schedule:
       interval: "weekly"
+
+  # The workflow actions themselves. Every action in use ran on a Node 20
+  # runtime the runners had deprecated, with nothing to say so except a warning
+  # in each job log; this keeps the majors moving (tech-debt-hardening-plan
+  # R-TDH-10).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -161,12 +161,13 @@ Phase 0b — green `main` (1 PR).
   `langgraph` marker; the 3.9 leg MUST deselect them (a `conftest.py`
   collection hook keyed to `MANGO_CI_DESELECT_LANGGRAPH=1`, because a `-m`
   passed through `PYTEST_ADDOPTS` is overridden by the Make recipes' own
-  `-m "not live"`); the 3.10, 3.12 and `build-full` jobs MUST install the
-  `langgraph` library from `requirements-langgraph.txt` (mirrored by the
-  `[project.optional-dependencies]` `langgraph` extra, split so it no longer
-  pulls `langgraph-checkpoint-postgres`) and `audit-python` MUST scan that
-  file; the existing `LANGGRAPH_AVAILABLE` skip guards stay for local runs
-  without the library. DEC-023's note that `mcp` and `langgraph` move to
+  `-m "not live"`); the 3.10, 3.12 and `build-full` jobs MUST receive the
+  `langgraph` library, declared in `requirements-langgraph.txt` (mirrored by
+  the `[project.optional-dependencies]` `langgraph` extra, split so it no
+  longer pulls `langgraph-checkpoint-postgres`) and carried into
+  `requirements-lock.txt` behind a `>= 3.10` marker once R-TDH-9 lands, and
+  `audit-python` MUST scan that file; the existing `LANGGRAPH_AVAILABLE` skip
+  guards stay for local runs without the library. DEC-023's note that `mcp` and `langgraph` move to
   extras together applies once this lands and is recorded, not acted on here.
 - R-TDH-5: `test_orchestrator_guard_swallows_channel_bug` MUST patch
   `harness.shared.orchestrator.loop.run_shadow_comparison`.
@@ -339,9 +340,9 @@ Constraints.
       tests as deselected and zero of them as skipped; with `langgraph`
       installed `pytest -k test_state_graph_healing_loop_recovers_from_test_failure`
       passes rather than skipping; `pytest harness/shared/tests/test_workflow_contracts.py`
-      fails if the 3.10/3.12/`build-full` install steps lack
-      `requirements-langgraph.txt` or the 3.9 leg lacks the deselect variable
-      · stage: `make test-regression` (R-TDH-4)
+      fails if `requirements-lock.txt` lacks `langgraph` behind a `>= 3.10`
+      marker, carries the Postgres checkpointer, or the 3.9 leg lacks the
+      deselect variable · stage: `make test-regression` (R-TDH-4)
 - [ ] AC-5: `pytest harness/shared/tests/test_shadow_planner.py -k test_orchestrator_guard_swallows_channel_bug`
       passes · stage: `make test-python` (R-TDH-5)
 - [ ] AC-6: `pytest harness/shared/tests/test_documentation_truth.py` passes
@@ -355,10 +356,11 @@ Constraints.
       today or `[ ]` with a `(blocked by R-TDH-n)` note; a box that is `[x]`
       while its command fails is a `make specs` plan-tier failure added for
       this purpose · stage: `make specs` (R-TDH-8)
-- [ ] AC-9: `uv pip compile --universal requirements-dev.txt -o /tmp/lock.txt && diff -q /tmp/lock.txt requirements-lock.txt`
-      exits 0; `pytest harness/shared/tests/test_workflow_contracts.py -k lock`
-      fails when a workflow install step references `requirements-dev.txt`
-      instead of the lock · stage: `make test-python` (R-TDH-9)
+- [ ] AC-9: `make lock-check` exits 0 on the committed lock and exits 1 after
+      a requirement is edited without `make lock`; every `python -m pip install -r`
+      line in both workflows names `requirements-lock.txt` and every `-e .`
+      carries `--no-deps` (`pytest harness/shared/tests/test_workflow_contracts.py -k Lock`
+      fails otherwise) · stage: `make ci` (R-TDH-9)
 - [ ] AC-10: PRs #38–#46 are each merged or closed (recorded in the `DEC-`
       entry); `make lint` exits 0 with the bumped `ruff` pin;
       `pytest harness/shared/tests/test_workflow_contracts.py -k node24`

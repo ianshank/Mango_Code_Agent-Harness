@@ -171,7 +171,50 @@ audit-python: ## Dependency vulnerability scan for the Python interpreter runnin
 	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
 	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
 	@test -f requirements-langgraph.txt || { echo 'requirements-langgraph.txt missing; refusing a partial audit'; exit 1; }
-	pip-audit --requirement requirements.txt --requirement requirements-langgraph.txt
+	@test -f requirements-lock.txt || { echo 'requirements-lock.txt missing; refusing a partial audit'; exit 1; }
+	pip-audit --requirement requirements.txt --requirement requirements-langgraph.txt --requirement requirements-lock.txt
+
+# --- Dependency Lock ---
+# One universal lock serves every interpreter in the CI matrix: `uv pip compile
+# --universal` keeps environment markers instead of evaluating them for the
+# running interpreter, which is why a plain pip-compile output could not be
+# shared across 3.9/3.10/3.12 (mcp is >=3.10 only, tomli <3.11 only). The floor
+# is read from pyproject's requires-python so there is one declaration of it.
+# `lock-check` recompiles against the committed lock (uv keeps existing pins as
+# preferences, so it only changes when an input changed) and fails on any diff;
+# `lock-upgrade-check` ignores those preferences to report how far behind PyPI the
+# lock is, which the weekly drift job turns into an issue rather than a red PR.
+PYTHON_FLOOR := $(shell $(PYTHON) -c "import re,pathlib;print(re.search(r'requires-python\s*=\s*\">=([0-9.]+)\"', pathlib.Path('pyproject.toml').read_text()).group(1))")
+LOCK_INPUTS  := requirements-dev.txt requirements-langgraph.txt
+LOCK_FILE    := requirements-lock.txt
+UV           ?= $(PYTHON) -m uv
+
+.PHONY: lock
+lock: ## Regenerate requirements-lock.txt from the requirements files (universal, floor from pyproject)
+	$(UV) pip compile --universal --python-version $(PYTHON_FLOOR) -o $(LOCK_FILE) $(LOCK_INPUTS)
+
+# Both checks compare pins only (`grep -v '^#'`): uv writes the compile command,
+# output path included, into the header, so a byte comparison against a temp
+# output would always differ. The committed header is still pinned by
+# test_workflow_contracts.py (it must show `--universal`).
+.PHONY: lock-check
+lock-check: ## Fail if requirements-lock.txt is not what the requirements files compile to
+	@test -f $(LOCK_FILE) || { echo '$(LOCK_FILE) missing; run make lock'; exit 1; }
+	@tmp=$$(mktemp) && cp $(LOCK_FILE) $$tmp && \
+	  $(UV) pip compile --quiet --universal --python-version $(PYTHON_FLOOR) -o $$tmp $(LOCK_INPUTS) && \
+	  if diff -u <(grep -v '^#' $(LOCK_FILE)) <(grep -v '^#' $$tmp); then echo 'lock-check: passed'; rm -f $$tmp; \
+	  else echo 'lock-check: FAILED ($(LOCK_FILE) is stale; run make lock)'; rm -f $$tmp; exit 1; fi
+
+.PHONY: lock-upgrade-check
+lock-upgrade-check: ## Report (exit 1) when newer releases than the lock pins are available
+	@tmp=$$(mktemp) && \
+	  $(UV) pip compile --quiet --universal --upgrade --python-version $(PYTHON_FLOOR) -o $$tmp $(LOCK_INPUTS) && \
+	  if diff -u <(grep -v '^#' $(LOCK_FILE)) <(grep -v '^#' $$tmp); then echo 'lock-upgrade-check: lock is current'; rm -f $$tmp; \
+	  else echo 'lock-upgrade-check: newer releases available (run make lock-upgrade)'; rm -f $$tmp; exit 1; fi
+
+.PHONY: lock-upgrade
+lock-upgrade: ## Regenerate the lock taking the newest releases the requirements files allow
+	$(UV) pip compile --universal --upgrade --python-version $(PYTHON_FLOOR) -o $(LOCK_FILE) $(LOCK_INPUTS)
 
 .PHONY: audit
 audit: audit-python ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner
@@ -236,14 +279,14 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+ci: lint lock-check coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lock-check → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 # The Node suite's result is Python-version-independent, so the CI matrix runs
 # the full `ci` on one leg only and this Python-scoped pipeline on the others.
 # Every gate stays enforced by Make target (INV-5); nothing is skipped, the
 # Node gates just run once per PR instead of once per interpreter.
 .PHONY: ci-python
-ci-python: lint coverage specs remotes validate check-dedup digest-regen ## Python-scoped CI pipeline for secondary matrix legs (Node gates run once, on the primary leg)
+ci-python: lint lock-check coverage specs remotes validate check-dedup digest-regen ## Python-scoped CI pipeline for secondary matrix legs (Node gates run once, on the primary leg)
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)

@@ -61,8 +61,10 @@ def pytest_report_header(config: pytest.Config) -> list[str]:
     if not _langgraph_deselection_requested():
         return []
     return [
-        f"langgraph: not installed and {LANGGRAPH_DESELECT_ENV}=1; "
-        f"tests marked '{LANGGRAPH_MARKER}' are deselected on this leg"
+        (
+            f"langgraph: not installed and {LANGGRAPH_DESELECT_ENV}=1; "
+            f"tests marked '{LANGGRAPH_MARKER}' are deselected on this leg"
+        )
     ]
 
 
