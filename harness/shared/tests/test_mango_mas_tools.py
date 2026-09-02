@@ -99,7 +99,9 @@ def test_tool_max_iterations(mock_workspace):
         "function": {"name": "run_command", "arguments": json.dumps({"command": "echo 'loop'"})},
     }
 
-    mock_response_tool = {"choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [mock_tool_call]}}]}
+    mock_response_tool = {
+        "choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [mock_tool_call]}}]
+    }
 
     with patch("harness.shared.mango_mas_orchestrator.complete_chat") as mock_complete:
         mock_complete.return_value = mock_response_tool

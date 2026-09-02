@@ -192,7 +192,12 @@ class TestPolicySourcedLimits:
 
     def test_explicit_arguments_still_override_policy(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=3, api_timeout=42, tool_timeout=7)
-        assert (orch.execution_loop.max_iterations, orch.execution_loop.api_timeout, orch.execution_loop.hook_runner.tool_timeout) == (3, 42, 7)
+        actual = (
+            orch.execution_loop.max_iterations,
+            orch.execution_loop.api_timeout,
+            orch.execution_loop.hook_runner.tool_timeout,
+        )
+        assert actual == (3, 42, 7)
 
     def test_tool_call_budget_is_enforced(self, mock_workspace: Path, mock_complete_chat) -> None:
         tc = _tool_call("write_file", {"filepath": "loop.txt", "content": "x"})

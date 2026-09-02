@@ -99,13 +99,15 @@ class TestToolHandlersToleratesJsonNull:
     def test_a_null_old_text_does_not_crash_apply_patch(self, mock_workspace: Path) -> None:
         (mock_workspace / "f.py").write_text("hello\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": None, "new_text": "y"})
+        patch_fn = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]
+        result = patch_fn({"filepath": "f.py", "old_text": None, "new_text": "y"})
         assert result.startswith("Error patching file")
 
     def test_a_null_new_text_does_not_crash_apply_patch(self, mock_workspace: Path) -> None:
         (mock_workspace / "f.py").write_text("hello\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        result = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]({"filepath": "f.py", "old_text": "hello", "new_text": None})
+        patch_fn = orch.execution_loop.dispatcher.tool_handlers["apply_patch"]
+        result = patch_fn({"filepath": "f.py", "old_text": "hello", "new_text": None})
         assert result.startswith("Success:")
         assert (mock_workspace / "f.py").read_text(encoding="utf-8") == "\n"
 
