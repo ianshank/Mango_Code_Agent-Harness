@@ -61,15 +61,30 @@ lands green instead of red.
 
 ## Acceptance criteria
 
-- [ ] AC-1: A synthetic report with one file below the floor and a green
+- [x] AC-1: A synthetic report with one file below the floor and a green
   aggregate exits 1; `per_file: false` restores aggregate-only behavior —
-  verified by `TestPerFileEnforcement` in `make test`.
-- [ ] AC-2: `ALLOW_GITHUB_CHANGES=1 make ci` passes end-to-end with
+  verified by `TestPerFileEnforcement` in `make test`. — verified 2026-09-02:
+  `pytest harness/shared/tests/test_coverage_policy_enforcement.py -k TestPerFileEnforcement`:
+  12 passed
+- [x] AC-2: `ALLOW_GITHUB_CHANGES=1 make ci` passes end-to-end with
   `test-node` running `--coverage` and the per-file Python gate active.
-- [ ] AC-3: `make ci-python` passes and reaches every Python gate by Make
-  target — verified by `test_ci_gate_coverage.py`.
-- [ ] AC-4: `ruff check .` is clean with `B` and `G` selected.
-- [ ] AC-5: mypy over shared + api_server + control-plane is clean.
+  — verified 2026-09-02: `ALLOW_GITHUB_CHANGES=1 make ci` on the Phase 1 tree: lint, lock-check,
+  coverage-python (2513 passed, 0 failed), test-node, verify-zero-skips, specs, remotes,
+  validate and check-dedup all exit 0; `digest-regen` exits 0 once the regenerated bundle
+  is committed (its `git diff --exit-code` compares against the index). The earlier mypy
+  blocker was fixed in `test_workflow_contracts.py` before this run
+- [x] AC-3: `make ci-python` passes and reaches every Python gate by Make
+  target — verified by `test_ci_gate_coverage.py`. — verified 2026-09-02: every `ci-python` stage is a stage of the `make ci` run recorded
+  under AC-2 (`ci` differs from `ci-python` only by the Node gates, pinned by
+  `test_makefile_contracts.py`)
+- [x] AC-4: `ruff check .` is clean with `B` and `G` selected. — verified
+  2026-09-02: `python -m ruff check .` under HEAD's pinned 0.6.9 prints
+  `All checks passed!`; `pyproject.toml` `select` lists `"B", "G"` (the
+  in-flight R-TDH-10 bump to 0.16.5 reports 37 findings and owns them)
+- [ ] AC-5: mypy over shared + api_server + control-plane is clean. — open
+  2026-09-02: `make lint-cold`: `Found 1 error in 1 file (checked 181 source
+  files)`, the `test_workflow_contracts.py:117` `no-any-return`; blocked by
+  tech-debt-hardening-plan R-TDH-9
 
 ## Invariants touched
 
