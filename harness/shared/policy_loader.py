@@ -171,6 +171,38 @@ def coverage_defaults(policy_path: Path | None = None) -> dict:
     }
 
 
+def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]:
+    """Optional extras whose tests a CI leg may deselect; policy `coverage.optional_extras`.
+
+    Each entry maps an extra's name to ``import_name`` (what a leg lacking the
+    extra cannot import), ``deselect_env`` (the variable that leg sets to "1";
+    conftest.py deselects the extra's marked tests on it and coverage_gate.py
+    waives the per-file floor for the extra's modules on it) and
+    ``path_prefixes`` (those modules). One key, three readers (DEC-028).
+    Absent block: {}. Malformed block: PolicyError.
+    """
+    extras = _section("coverage", policy_path).get("optional_extras", {})
+    if not isinstance(extras, dict):
+        raise PolicyError("policy coverage.optional_extras must be an object keyed by extra name")
+    result: dict[str, dict] = {}
+    for name, spec in extras.items():
+        if not isinstance(spec, dict):
+            raise PolicyError(f"policy coverage.optional_extras[{name!r}] must be an object")
+        import_name, deselect_env, prefixes = (
+            spec.get("import_name"), spec.get("deselect_env"), spec.get("path_prefixes")
+        )
+        if not isinstance(import_name, str) or not import_name or not isinstance(deselect_env, str) or not deselect_env:
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}] import_name and deselect_env must be non-empty strings"
+            )
+        if not isinstance(prefixes, list) or not prefixes or any(not isinstance(p, str) or not p for p in prefixes):
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}].path_prefixes must be a non-empty list of strings"
+            )
+        result[name] = {"import_name": import_name, "deselect_env": deselect_env, "path_prefixes": tuple(prefixes)}
+    return result
+
+
 def agent_defaults(policy_path: Path | None = None) -> dict:
     """Agent delegation/parallelism limits; policy `agent_defaults` block.
 

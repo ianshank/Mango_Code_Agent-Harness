@@ -2,7 +2,13 @@
 # live in requirements.txt, included below so `pip install -r requirements-dev.txt`
 # keeps installing both, unchanged from before this split.
 -r requirements.txt
-pytest==8.4.2
+# pytest 8.4.2 carries PYSEC-2026-1845; the fix release (9.0.3) requires
+# Python >=3.10, so the pin forks on the interpreter and the universal lock
+# carries both. The 3.9 leg keeps 8.4.2 and its dependency-audit job reports
+# the advisory as a finding (that leg is continue-on-error); it goes away with
+# the 3.9 floor (DEC-028).
+pytest==9.0.3; python_version >= "3.10"
+pytest==8.4.2; python_version < "3.10"
 pytest-cov==7.1.0
 pytest-mock==3.15.1
 # Egress floor (R-EGF-1): sockets are disabled by default in addopts so an
@@ -22,4 +28,4 @@ vulture==2.16
 # environment markers a single pip-compile run would evaluate away, so one lock
 # serves every interpreter in the CI matrix (tech-debt-hardening-plan R-TDH-9).
 # Always invoked as `python -m uv`, never a bare binary on PATH (DEC-013).
-uv==0.8.17
+uv==0.11.15

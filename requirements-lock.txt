@@ -162,7 +162,13 @@ pygments==2.21.0
     # via pytest
 pyjwt==2.13.0 ; python_full_version >= '3.10'
     # via mcp
-pytest==8.4.2
+pytest==8.4.2 ; python_full_version < '3.10'
+    # via
+    #   -r requirements-dev.txt
+    #   pytest-cov
+    #   pytest-mock
+    #   pytest-socket
+pytest==9.0.3 ; python_full_version >= '3.10'
     # via
     #   -r requirements-dev.txt
     #   pytest-cov
@@ -266,7 +272,7 @@ uuid-utils==0.17.0 ; python_full_version >= '3.10'
     # via
     #   langchain-core
     #   langsmith
-uv==0.8.17
+uv==0.11.15
     # via -r requirements-dev.txt
 uvicorn==0.39.0 ; python_full_version < '3.10'
     # via -r requirements.txt

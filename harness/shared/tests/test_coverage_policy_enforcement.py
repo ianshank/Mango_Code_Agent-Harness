@@ -31,7 +31,10 @@ pytestmark = pytest.mark.governance
 
 # Thresholds the *Python* gate applies (coverage_gate.py): lines and branches in
 # aggregate, plus the lines floor per file when policy per_file is true.
-PYTHON_ENFORCED = {"lines", "branches", "per_file"}
+# `optional_extras` is not a threshold but a scoping rule the same gate reads:
+# which files the per-file floor is waived for on a leg that cannot install an
+# optional extra (DEC-028); test_coverage_gate.py pins its behaviour.
+PYTHON_ENFORCED = {"lines", "branches", "per_file", "optional_extras"}
 
 # Thresholds the *Node* gate applies: vitest.config.ts sources all of them from
 # this policy, and `make test-node` runs vitest with --coverage, so they

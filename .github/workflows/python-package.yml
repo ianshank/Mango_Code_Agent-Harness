@@ -62,9 +62,12 @@ jobs:
       # langgraph (it declares Requires-Python >=3.10) and every other leg does,
       # so the `langgraph`-marked suites run there instead of skipping. On 3.9
       # they are *deselected* -- visible in pytest's summary, never a skip --
-      # through the conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below.
-      # Pinned by test_workflow_contracts.py (tech-debt-hardening-plan R-TDH-4,
-      # R-TDH-9).
+      # through the conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below,
+      # and coverage_gate.py reads the same variable (via the policy's
+      # coverage.optional_extras) to waive the per-file floor for the
+      # langgraph modules on that leg only; aggregate floors still apply
+      # (DEC-028). Pinned by test_workflow_contracts.py
+      # (tech-debt-hardening-plan R-TDH-4, R-TDH-9).
 
       - name: Run Python CI gate (make ci-python)
         # The protected-path invariant fails closed on infrastructure changes

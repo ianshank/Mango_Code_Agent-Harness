@@ -25,6 +25,7 @@ import pytest
 
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.nemotron_bridge import resolve_api_key
+from harness.shared.policy_loader import coverage_optional_extras
 from harness.shared.tests import _skip_events
 
 # CI legs whose interpreter cannot install langgraph (it declares
@@ -34,8 +35,11 @@ from harness.shared.tests import _skip_events
 # zero-skip posture requires. Every other leg installs the library and runs
 # them; test_workflow_contracts.py pins that wiring. Local runs without the
 # library keep the skipif behaviour, so a developer sees what did not run.
-LANGGRAPH_DESELECT_ENV = "MANGO_CI_DESELECT_LANGGRAPH"
+# The variable's name comes from `coverage.optional_extras` in the governance
+# policy, which coverage_gate.py reads for the matching per-file waiver, so
+# the deselect signal and the waiver cannot drift apart (DEC-028).
 LANGGRAPH_MARKER = "langgraph"
+LANGGRAPH_DESELECT_ENV: str = coverage_optional_extras()[LANGGRAPH_MARKER]["deselect_env"]
 
 
 def _langgraph_deselection_requested() -> bool:

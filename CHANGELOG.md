@@ -7,6 +7,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan — CI repair on the pushed head (DEC-028)
+
+- **Per-file coverage is waived for optional extras a leg cannot install,
+  and nowhere else.** `governance-policy.json → coverage.optional_extras`
+  declares `langgraph` (`import_name`, `deselect_env`, `path_prefixes`).
+  `coverage_gate.py` holds files under those prefixes to the lines floor
+  unless the leg sets the env to `1` and the extra is not importable, in
+  which case each waived file is logged with its measured value; aggregate
+  floors and every other file are unchanged. `conftest.py` takes the deselect
+  variable's name from the same key. Before this the 3.9 leg failed
+  `coverage.per_file` on the three langgraph modules whose tests it
+  deselects.
+- **`pytest` forks on the interpreter**: `9.0.3` on Python ≥3.10
+  (PYSEC-2026-1845), `8.4.2` below it, since the fix release dropped 3.9.
+  `uv` moves to `0.11.15`. The lock is regenerated; `make audit` on the 3.10
+  and 3.12 legs is clean and the 3.9 audit leg reports the retained pytest
+  advisory (that leg was already continue-on-error).
+
+### Tech-debt hardening plan, Phase 2 (Node) — Nemotron client defaults from policy
+
+- **`harness/node/src/ai/nemotron/policy.ts` reads the `nemotron` block of
+  `governance-policy.json`** (child spec `docs/specs/node-policy-wiring.md`,
+  R-TDH-13). `nemotron-client.ts` and `cli.ts` take `timeoutMs`, `maxRetries`,
+  the default `temperature` and `max_tokens` from it; the literals they
+  replaced had drifted (`maxRetries: 3` against a policy of `0`). The reader
+  fails closed on a missing block or key, the same posture `vitest.config.ts`
+  takes for coverage thresholds. `DEFAULT_NEMOTRON_CONFIG` keeps its name and
+  shape; callers that pass their own values see no change. `baseUrl`, the
+  backoff window and `top_p` have no policy key yet and stay literal
+  (R-TDH-23).
+
 ### Tech-debt hardening plan, Phase 3b — unwired features parked, facade trimmed
 
 - **`autonomous_healing.py` and `lats_optimizer.py` moved to

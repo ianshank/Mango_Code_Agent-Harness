@@ -174,3 +174,133 @@ def test_main_dispatch_leg(policy_file: Path, coverage_file: Path, monkeypatch: 
     with pytest.raises(SystemExit) as exc:
         runpy.run_path(str(GATE), run_name="__main__")
     assert exc.value.code == 0
+
+
+# --- optional_extra_waivers / per-file waivers (DEC-028) ---
+#
+# A CI leg that cannot install an optional extra deselects its tests; the
+# extra's modules then have no test that could execute there. The per-file
+# floor is waived for exactly those files, on exactly that leg, and only when
+# the extra is genuinely not importable. Everything else stays enforced.
+
+_ABSENT_MODULE = "mango_no_such_extra_for_tests"
+_ENV = "MANGO_TEST_DESELECT_EXTRA"
+_PREFIX = "harness/shared/optional/"
+
+
+def _extras_policy(tmp_path: Path, import_name: str = _ABSENT_MODULE, **overrides: object) -> Path:
+    spec: dict[str, object] = {"import_name": import_name, "deselect_env": _ENV, "path_prefixes": [_PREFIX]}
+    spec.update(overrides)
+    return _write_json(
+        tmp_path / "extras.json",
+        {"coverage": {"lines": 90, "branches": 80, "per_file": True, "optional_extras": {"opt": spec}}},
+    )
+
+
+def _per_file_report(tmp_path: Path) -> Path:
+    def entry(covered: int, total: int) -> dict:
+        return {"summary": {"covered_lines": covered, "num_statements": total}}
+
+    return _write_json(
+        tmp_path / "per_file.json",
+        {
+            "totals": {"covered_lines": 95, "num_statements": 100, "covered_branches": 90, "num_branches": 100},
+            "files": {f"{_PREFIX}nodes.py": entry(2, 10), "harness/shared/core.py": entry(10, 10)},
+        },
+    )
+
+
+def test_waiver_applies_only_when_env_is_set_and_extra_is_absent(tmp_path: Path, caplog):
+    policy = _extras_policy(tmp_path)
+    assert cg.optional_extra_waivers(policy, environ={}) == {}
+    assert cg.optional_extra_waivers(policy, environ={_ENV: "yes"}) == {}
+    with caplog.at_level(logging.WARNING, logger=cg.logger.name):
+        assert cg.optional_extra_waivers(policy, environ={_ENV: "1"}) == {"opt": (_PREFIX,)}
+    assert "[WAIVED]" in caplog.text
+
+
+def test_waiver_is_refused_when_the_extra_is_importable(tmp_path: Path, caplog):
+    policy = _extras_policy(tmp_path, import_name="json")
+    with caplog.at_level(logging.INFO, logger=cg.logger.name):
+        assert cg.optional_extra_waivers(policy, environ={_ENV: "1"}) == {}
+    assert "stays enforced" in caplog.text
+
+
+def test_absent_extras_block_waives_nothing(policy_file: Path):
+    assert cg.optional_extra_waivers(policy_file, environ={_ENV: "1"}) == {}
+
+
+def test_extras_without_a_coverage_block_fail_closed(tmp_path: Path):
+    policy = _write_json(tmp_path / "no_cov.json", {"limits": {}})
+    with pytest.raises(SystemExit) as exc:
+        cg.optional_extra_waivers(policy, environ={})
+    assert exc.value.code == 1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"import_name": ""},
+        {"deselect_env": 7},
+        {"deselect_env": ""},
+        {"path_prefixes": []},
+        {"path_prefixes": ["ok/", ""]},
+        {"path_prefixes": "harness/"},
+    ],
+)
+def test_malformed_extra_fails_closed(tmp_path: Path, overrides: dict, caplog):
+    policy = _extras_policy(tmp_path, **overrides)
+    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+        cg.optional_extra_waivers(policy, environ={})
+    assert exc.value.code == 1
+    assert "coverage.optional_extras" in caplog.text
+
+
+@pytest.mark.parametrize("extras", [[1], {"opt": 3}, {"opt": {"deselect_env": _ENV}}])
+def test_malformed_extras_container_fails_closed(tmp_path: Path, extras: object):
+    policy = _write_json(
+        tmp_path / "bad.json", {"coverage": {"lines": 90, "branches": 80, "optional_extras": extras}}
+    )
+    with pytest.raises(SystemExit) as exc:
+        cg.optional_extra_waivers(policy, environ={})
+    assert exc.value.code == 1
+
+
+def test_check_per_file_reports_waived_files_and_still_enforces_the_rest(tmp_path: Path, caplog):
+    report = _per_file_report(tmp_path)
+    assert cg.check_per_file(report, 90.0) is False
+    with caplog.at_level(logging.INFO, logger=cg.logger.name):
+        assert cg.check_per_file(report, 90.0, {"opt": (_PREFIX,)}) is True
+    assert f"[WAIVED] Coverage per-file: {_PREFIX}nodes.py at 20.00% lines" in caplog.text
+    assert "(1 waived)" in caplog.text
+
+
+def test_a_waiver_does_not_rescue_a_file_outside_its_prefixes(tmp_path: Path):
+    report = _per_file_report(tmp_path)
+    assert cg.check_per_file(report, 90.0, {"opt": ("harness/shared/elsewhere/",)}) is False
+
+
+def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    policy = _extras_policy(tmp_path)
+    report = _per_file_report(tmp_path)
+    args = ["--coverage-json", str(report), "--policy", str(policy)]
+    monkeypatch.delenv(_ENV, raising=False)
+    assert cg.main(args) == 1
+    monkeypatch.setenv(_ENV, "1")
+    assert cg.main(args) == 0
+    strict_policy = json.loads(policy.read_text(encoding="utf-8"))
+    strict_policy["coverage"]["lines"] = 99
+    strict = _write_json(tmp_path / "strict.json", strict_policy)
+    assert cg.main(["--coverage-json", str(report), "--policy", str(strict)]) == 1, "aggregate floor still applies"
+
+
+def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
+    """Liveness: the extra the 3.9 leg deselects is the one the gate waives, by the same name."""
+    from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
+
+    repo_policy = cg.DEFAULT_REPO_ROOT / cg.POLICY_RELPATH
+    extras = json.loads(repo_policy.read_text(encoding="utf-8"))["coverage"][cg.OPTIONAL_EXTRAS_KEY]
+    assert extras["langgraph"]["deselect_env"] == LANGGRAPH_DESELECT_ENV
+    assert extras["langgraph"]["import_name"] == "langgraph"
+    for prefix in extras["langgraph"]["path_prefixes"]:
+        assert (cg.DEFAULT_REPO_ROOT / prefix).is_dir(), prefix
