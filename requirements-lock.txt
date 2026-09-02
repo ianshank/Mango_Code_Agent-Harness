@@ -168,7 +168,7 @@ pytest==8.4.2 ; python_full_version < '3.10'
     #   pytest-cov
     #   pytest-mock
     #   pytest-socket
-pytest==9.0.3 ; python_full_version >= '3.10'
+pytest==9.1.1 ; python_full_version >= '3.10'
     # via
     #   -r requirements-dev.txt
     #   pytest-cov
