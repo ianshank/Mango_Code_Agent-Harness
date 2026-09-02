@@ -27,7 +27,8 @@ _.orchestrate_task
 _.handle_list_tools
 _.handle_call_tool
 
-# pytest hooks in harness/shared/tests/conftest.py are looked up by name.
+# pytest hooks in the repository-root conftest.py (delegating to
+# harness/shared/tests/_session_hooks.py, DEC-030) are looked up by name.
 _.pytest_collection_modifyitems
 _.pytest_report_header
 _.pytest_runtest_logreport
