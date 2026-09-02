@@ -225,6 +225,7 @@ tomli==2.4.1 ; python_full_version <= '3.11'
     #   coverage
     #   mypy
     #   pytest
+    #   vulture
 truststore==0.10.4 ; python_full_version >= '3.10' and sys_platform != 'emscripten'
     # via
     #   httpcore2
@@ -275,6 +276,8 @@ uvicorn==0.52.4 ; python_full_version >= '3.10'
     #   mcp
 uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
     # via uvicorn
+vulture==2.16
+    # via -r requirements-dev.txt
 watchfiles==1.1.1 ; python_full_version < '3.10'
     # via uvicorn
 watchfiles==1.2.0 ; python_full_version >= '3.10'

@@ -139,7 +139,7 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     try:
         import mcp.types as real_types
     except ImportError:
-        pytest.skip("mcp package not installed")
+        pytest.skip("mcp package not installed (DEC-026)")
 
     tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
     assert tool.name == "x"

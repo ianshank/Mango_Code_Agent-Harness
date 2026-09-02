@@ -146,7 +146,7 @@ class TestGraphBuilderWithMock:
             mock_from_governance_json.assert_called_once()
 
 
-@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed")
+@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed (DEC-026)")
 class TestLiveGraphExecution:
     """Runs live graph compilation and invocation when langgraph is installed."""
 

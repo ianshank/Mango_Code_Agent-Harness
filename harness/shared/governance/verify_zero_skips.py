@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import json
 import re
 import stat
@@ -107,8 +108,16 @@ def waivers(path: str, ids: set[str]) -> list[dict]:
             raise SystemExit(f"zero-skip: unsupported waiver framework {w['framework']!r}")
         if w["framework"] == "vitest" and any(not w.get(k) for k in ("file", "test")):
             raise SystemExit("zero-skip: Vitest waiver requires exact file and test")
-        if w["framework"] == "junit" and any(not w.get(k) for k in ("unique_id", "test")):
-            raise SystemExit("zero-skip: JUnit waiver requires exact unique_id and test")
+        if w["framework"] == "junit":
+            # Exactly one addressing form: an exact unique_id, or a unique_id_glob
+            # matched against the whole id (DEC-026; the langgraph condition spans
+            # ~40 parametrised nodeids). Either way `test` is required, and a glob
+            # row is only ever honoured when the skip reason carries the decision
+            # id, which the exact form also requires -- so a glob widens the
+            # address, never the approval.
+            has_exact, has_glob = bool(w.get("unique_id")), bool(w.get("unique_id_glob"))
+            if has_exact == has_glob or not w.get("test"):
+                raise SystemExit("zero-skip: JUnit waiver requires test and exactly one of unique_id / unique_id_glob")
         if w["decision_id"] not in ids:
             raise SystemExit(f"zero-skip: waiver cites unknown decision {w['decision_id']}")
         try:
@@ -144,7 +153,9 @@ def junit(events: str, registry: list[dict]) -> None:
     p = Path(events)
     if not p.exists():
         raise SystemExit(f"zero-skip: JUnit skip evidence missing: {events}")
-    approved = {(w["unique_id"], w["test"]): w for w in registry if w["framework"] == "junit"}
+    junit_rows = [w for w in registry if w["framework"] == "junit"]
+    approved = {(w["unique_id"], w["test"]): w for w in junit_rows if w.get("unique_id")}
+    globbed = [w for w in junit_rows if w.get("unique_id_glob")]
     bad: list[str] = []
     for line in p.read_text(encoding="utf-8").splitlines():
         parts = line.split("\t", 2)
@@ -153,6 +164,15 @@ def junit(events: str, registry: list[dict]) -> None:
             continue
         unique_id, display, reason = parts
         waiver = approved.get((unique_id, display))
+        if waiver is None:
+            waiver = next(
+                (
+                    w
+                    for w in globbed
+                    if fnmatch.fnmatchcase(unique_id, w["unique_id_glob"]) and fnmatch.fnmatchcase(display, w["test"])
+                ),
+                None,
+            )
         if waiver is None or waiver["decision_id"] not in ID_RE.findall(reason):
             bad.append(f"{display} [{unique_id}] — {reason or 'no reason'}")
     if bad:

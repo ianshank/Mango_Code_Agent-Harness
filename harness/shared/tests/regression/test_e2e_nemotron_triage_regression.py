@@ -221,7 +221,7 @@ class TestMCPUnicodeAndErrorIsolationRegression:
 
 
 @pytest.mark.langgraph
-@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed")
+@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed (DEC-026)")
 class TestAutonomousHealingE2ERegression:
     """DEF-NEMO-006: Pins the autonomous self-healing loop in StateGraph."""
 

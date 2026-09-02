@@ -20,8 +20,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 from harness.shared.tests._helpers import REPO
 
 TEST_ROOTS = (
@@ -117,9 +115,11 @@ class TestSuiteHasNoUnfailableTests:
         known = {name.split("::")[-1] for path in _test_modules() for name, _ in _collected_tests(path)}
         assert not set(ASSERTION_FREE_WAIVERS) - known
 
-    @pytest.mark.parametrize("waived", sorted(ASSERTION_FREE_WAIVERS))
-    def test_each_waiver_has_a_substantive_reason(self, waived: str) -> None:
-        assert len(ASSERTION_FREE_WAIVERS[waived].strip()) > 60
+    def test_each_waiver_has_a_substantive_reason(self) -> None:
+        # A loop, not a parametrize: an empty waiver list is the healthy state,
+        # and parametrizing over it skipped (R-TDH-19).
+        for waived, reason in sorted(ASSERTION_FREE_WAIVERS.items()):
+            assert len(reason.strip()) > 60, waived
 
 
 class TestSuiteHasNoUnfailableAssertions:

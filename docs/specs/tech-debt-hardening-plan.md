@@ -245,11 +245,14 @@ Phase 2 — policy single source (3 PRs).
 Phase 3 — unused code, unwired features, skip accounting (3 PRs).
 
 - R-TDH-17: `write_policy.ALWAYS_DENIED_PREFIXES`,
-  `nemotron_bridge.RETRY_BACKOFF_BASE_SEC`, `nemotron_bridge.resolve_api_key`
-  and `ToolBudget.remaining` MUST be deprecated (a `DeprecationWarning` shim
-  for one minor release; the live-detection tests migrate off
-  `resolve_api_key`), the dead `RunnableConfig` fallback import in
-  `harness/shared/langgraph/nodes.py:23-25` removed, and `vulture` pinned in
+  `nemotron_bridge.RETRY_BACKOFF_BASE_SEC` and `ToolBudget.remaining` MUST be
+  deprecated (a `DeprecationWarning` shim for one minor release).
+  `nemotron_bridge.resolve_api_key`, listed in revision 2, is kept: the
+  suite's `api_key` fixture and the live-detection guards call it, so by the
+  tech-debt-audit skill's own rule (definition plus call sites) it is used,
+  and migrating three test modules to `resolve_environment()["api_key"]`
+  would buy no behaviour. The dead `RunnableConfig` fallback import in
+  `harness/shared/langgraph/nodes.py` is removed, and `vulture` pinned in
   `requirements-dev.txt` and run by `make lint` as
   `python -m vulture harness/shared harness/api_server harness/control-plane vulture_whitelist.py --min-confidence 80 --exclude '*/tests/*'`.
 - R-TDH-18: `harness/shared/autonomous_healing.py` and `harness/shared/lats_optimizer.py` MUST be either

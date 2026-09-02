@@ -25,6 +25,7 @@ import pytest
 
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.nemotron_bridge import resolve_api_key
+from harness.shared.tests import _skip_events
 
 # CI legs whose interpreter cannot install langgraph (it declares
 # Requires-Python >=3.10) set this to "1". The `langgraph`-marked suites are
@@ -68,11 +69,32 @@ def pytest_report_header(config: pytest.Config) -> list[str]:
     ]
 
 
+# --- Skip evidence for the Python zero-skip gate (INV-2, R-TDH-19) ----------
+#
+# Every skip this session produces is written, as `unique_id\tdisplay\treason`,
+# to the file `make verify-zero-skips-python` reads. See _skip_events.py.
+_SKIP_ROWS: list[tuple[str, str, str]] = []
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    event = _skip_events.skip_event(report)
+    if event is not None:
+        _SKIP_ROWS.append(event)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    path = _skip_events.events_path()
+    count = _skip_events.write_events(path, _SKIP_ROWS)
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None and count:
+        reporter.write_line(f"skip evidence: {count} skip(s) written to {path} for verify-zero-skips-python")
+
+
 # Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
 # These tests pass on CI (ubuntu-latest) but cannot pass on Windows.
 POSIX_ONLY = pytest.mark.skipif(
     sys.platform == "win32",
-    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows"
+    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows (DEC-026)"
 )
 
 

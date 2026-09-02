@@ -59,10 +59,18 @@ install: ## Install the pre-push remote-allowlist hook (a root-only workflow oth
 # source set, so it must not be type-unchecked.
 MYPY_TARGETS := $(SHARED_SRC) harness/api_server harness/control-plane
 
+# Dead-code gate. Tests are excluded (pytest discovers them by name), the
+# whitelist carries framework-registered symbols, and the confidence floor is
+# vulture's "certainly unused" tier so an unused import or unreferenced module
+# function fails lint without heuristic noise (tech-debt-hardening-plan R-TDH-17).
+VULTURE       ?= $(PYTHON) -m vulture
+VULTURE_MIN_CONFIDENCE ?= 80
+
 .PHONY: lint-python
-lint-python: ## Run ruff check + mypy across all first-party Python (sources, tools, and tests)
+lint-python: ## Run ruff check + mypy + vulture across all first-party Python (sources, tools, and tests)
 	$(RUFF) check .
 	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases $(MYPY_FLAGS)
+	$(VULTURE) $(MYPY_TARGETS) vulture_whitelist.py --min-confidence $(VULTURE_MIN_CONFIDENCE) --exclude '*/tests/*'
 
 .PHONY: lint-cold
 lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
@@ -124,6 +132,21 @@ verify-zero-skips: ## Verify zero unapproved test skips (Invariant INV-2)
 		--vitest-json $(NODE_DIR)/.governance/vitest-results.json \
 		--decision-log $(NODE_DIR)/.governance/decision-log.md \
 		--waivers $(NODE_DIR)/.governance/skip-waivers.json
+
+# The Python half of INV-2. The pytest run under `coverage-python` writes every
+# skip it produced to PYTEST_SKIP_EVENTS (harness/shared/tests/conftest.py); this
+# reads that file through the same gate the Node stack uses, against a waiver
+# registry that lives beside the suite (the root .governance/ is dormant,
+# DEC-005). A skip whose reason does not carry its waiver's DEC id is unapproved.
+PYTEST_SKIP_EVENTS ?= $(SHARED_TESTS)/.artifacts/pytest-skips.tsv
+
+.PHONY: verify-zero-skips-python
+verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last coverage-python run (INV-2, Python)
+	@test -f $(PYTEST_SKIP_EVENTS) || { echo 'zero-skip: $(PYTEST_SKIP_EVENTS) missing; run make coverage-python first'; exit 1; }
+	$(PYTHON) $(SHARED_SRC)/governance/verify_zero_skips.py \
+		--junit-events $(PYTEST_SKIP_EVENTS) \
+		--decision-log $(NODE_DIR)/.governance/decision-log.md \
+		--waivers $(SHARED_TESTS)/skip-waivers.json
 
 # --- Governance Validators ---
 .PHONY: validate
@@ -279,14 +302,14 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint lock-check coverage test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lock-check → coverage → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+ci: lint lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 # The Node suite's result is Python-version-independent, so the CI matrix runs
 # the full `ci` on one leg only and this Python-scoped pipeline on the others.
 # Every gate stays enforced by Make target (INV-5); nothing is skipped, the
 # Node gates just run once per PR instead of once per interpreter.
 .PHONY: ci-python
-ci-python: lint lock-check coverage specs remotes validate check-dedup digest-regen ## Python-scoped CI pipeline for secondary matrix legs (Node gates run once, on the primary leg)
+ci-python: lint lock-check coverage verify-zero-skips-python specs remotes validate check-dedup digest-regen ## Python-scoped CI pipeline for secondary matrix legs (Node gates run once, on the primary leg)
 
 .PHONY: spec
 spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec NAME=my-feature)

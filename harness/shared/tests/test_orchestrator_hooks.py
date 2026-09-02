@@ -73,7 +73,7 @@ class TestRunHook:
 
     def test_hook_exists_and_runs(self, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("echo ran > hook_marker.txt\n", encoding="utf-8")
@@ -83,7 +83,7 @@ class TestRunHook:
 
     def test_hook_raises_propagates(self, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("exit 1\n", encoding="utf-8")
@@ -92,7 +92,7 @@ class TestRunHook:
             orch._run_hook("pre-nemotron-run", task="t", agent="a")
 
 
-@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows")
+@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows (DEC-026)")
 class TestHookEnvironmentIsStrippedOfCredentials:
     """`agent-policy.json` declares `secrets_may_not_be_propagated_to_subagents`
     and nothing enforced it: `_run_hook` handed every hook `os.environ.copy()`."""
@@ -151,7 +151,7 @@ class TestOnlyKnownHooksExecute:
         self, mock_workspace: Path
     ) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "post-attacker-run.sh").write_text(
@@ -167,7 +167,7 @@ class TestOnlyKnownHooksExecute:
     @pytest.mark.parametrize("name", sorted(PERMITTED_HOOK_NAMES))
     def test_every_permitted_hook_still_runs(self, name: str, mock_workspace: Path) -> None:
         if not _POSIX:
-            pytest.skip("bash hook tests require POSIX platform")
+            pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / f"{name}.sh").write_text(f"echo ran > {name}_marker.txt\n", encoding="utf-8")

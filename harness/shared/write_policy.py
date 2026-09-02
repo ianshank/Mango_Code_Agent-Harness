@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import posixpath
+import warnings
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -92,9 +93,26 @@ _PROBE_FILLERS = (("aa", "bb"), ("cc", "dd"))
 #: prefix but are ordinary files; both are pinned by tests.
 ALWAYS_DENIED_SEGMENTS = (".git",)
 
-#: Retained so an existing caller importing the old name keeps working; the
-#: segment tuple above is what the gate evaluates.
-ALWAYS_DENIED_PREFIXES = tuple(f"{segment}/" for segment in ALWAYS_DENIED_SEGMENTS)
+#: The pre-segment-matching name. No first-party caller imports it; it is served
+#: through ``__getattr__`` below with a DeprecationWarning for one minor release
+#: (tech-debt-hardening-plan R-TDH-17, C-TDH-2) and removed after that.
+_ALWAYS_DENIED_PREFIXES = tuple(f"{segment}/" for segment in ALWAYS_DENIED_SEGMENTS)
+
+_DEPRECATED_NAMES = {
+    "ALWAYS_DENIED_PREFIXES": (
+        _ALWAYS_DENIED_PREFIXES,
+        "ALWAYS_DENIED_PREFIXES is deprecated; the gate matches ALWAYS_DENIED_SEGMENTS, use that",
+    ),
+}
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562: deprecated module names warn on first use instead of vanishing."""
+    if name in _DEPRECATED_NAMES:
+        value, message = _DEPRECATED_NAMES[name]
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _normalise(relpath: str) -> str:

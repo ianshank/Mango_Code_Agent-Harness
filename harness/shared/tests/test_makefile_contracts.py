@@ -149,3 +149,24 @@ class TestMakefileSelfConsistency:
         recipe = _targets().get("review", "")
         for skill in ("openspec-peer-review", "repo-invariant-review", "validation-runner"):
             assert skill in recipe, f"make review does not name the mandated '{skill}' skill"
+
+
+class TestDeadCodeAndSkipGatesAreWired:
+    """tech-debt-hardening-plan R-TDH-17 / R-TDH-19: the gates exist as Make
+    targets and sit on the paths CI actually runs."""
+
+    def test_lint_python_runs_vulture_against_the_whitelist(self) -> None:
+        recipe = _targets().get("lint-python", "")
+        assert "vulture" in recipe and "vulture_whitelist.py" in recipe, "lint-python must run the dead-code gate"
+        assert "--min-confidence" in recipe, "the confidence floor must be explicit, not vulture's default"
+
+    def test_python_zero_skip_gate_is_a_direct_prerequisite_of_both_pipelines(self) -> None:
+        assert "verify-zero-skips-python" in _prerequisites("ci")
+        assert "verify-zero-skips-python" in _prerequisites("ci-python")
+
+    def test_python_zero_skip_gate_reads_the_suite_local_registry(self) -> None:
+        recipe = _targets().get("verify-zero-skips-python", "")
+        assert "--junit-events" in recipe
+        assert "skip-waivers.json" in recipe and ".governance/skip-waivers.json" not in recipe, (
+            "the Python registry lives beside the suite; the root .governance/ is dormant (DEC-005)"
+        )

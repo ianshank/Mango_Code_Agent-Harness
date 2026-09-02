@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0.0",
+  "_comment": "Python half of INV-2 (tech-debt-hardening-plan R-TDH-19, DEC-026). Consumed by `make verify-zero-skips-python` through harness/shared/governance/verify_zero_skips.py --junit-events. A `unique_id_glob` waiver covers every nodeid it matches, but only when the skip reason carries the waiver's decision id; anything else is an unapproved skip. Lives beside the suite because the root .governance/ directory is deliberately dormant (DEC-005).",
+  "waivers": [
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_nemotron_bridge_live.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "Live NVIDIA NIM tests skip without NVIDIA_API_KEY; the credential is never present in public CI",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_mango_mas_live.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "Live multi-agent loop needs NVIDIA_API_KEY; marked live and normally deselected, waived for a run that selects it without the key",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_langgraph_*.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "langgraph is not installable below Python 3.10; CI deselects these on 3.9 (no skip) and installs the library elsewhere, so this waiver covers only a local run without the library",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_langgraph_regression.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "Same langgraph availability condition as the test_langgraph_* suites",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_e2e_nemotron_triage_regression.py::TestAutonomousHealingE2ERegression::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "Same langgraph availability condition; the healing E2E test builds a StateGraph",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_orchestrator_hooks.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "Bash hook tests cannot run on Windows; they run on every CI leg (ubuntu-latest)",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX_ONLY (chmod/symlink) cases cannot run on Windows; they run on every CI leg",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_mcp_server.py::test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "The real mcp package is not installable on Python 3.9 (its floor is 3.10); every other leg installs it from the lock and runs the test",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    }
+  ]
+}

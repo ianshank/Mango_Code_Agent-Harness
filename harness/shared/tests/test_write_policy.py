@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from harness.shared.write_policy import (
-    ALWAYS_DENIED_PREFIXES,
     ALWAYS_DENIED_SEGMENTS,
     DEFAULT_POLICY_PATH,
     pin_key,
@@ -154,8 +153,8 @@ def test_policy_path_travels_with_the_installed_harness() -> None:
 
 def test_always_denied_segments_are_declared_not_inlined() -> None:
     assert ".git" in ALWAYS_DENIED_SEGMENTS
-    # The prefix form is retained for callers that imported the previous name.
-    assert ".git/" in ALWAYS_DENIED_PREFIXES
+    # The prefix form (ALWAYS_DENIED_PREFIXES) is deprecated; test_deprecation_shims.py
+    # is the only place allowed to touch it (R-TDH-17).
 
 
 class TestGitDirectoryIsMatchedBySegment:

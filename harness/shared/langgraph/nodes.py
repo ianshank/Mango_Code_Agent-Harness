@@ -19,11 +19,6 @@ import logging
 import traceback
 from typing import TYPE_CHECKING, Any
 
-try:
-    from langchain_core.runnables import RunnableConfig
-except ImportError:
-    RunnableConfig = dict[str, Any]  # type: ignore[misc,assignment]
-
 if TYPE_CHECKING:
     from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 

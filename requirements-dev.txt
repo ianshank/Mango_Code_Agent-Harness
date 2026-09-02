@@ -14,6 +14,9 @@ pytest-socket==0.7.0
 tomli==2.4.1; python_version < "3.11"
 ruff==0.16.5
 mypy==1.11.2
+# Dead-code gate in `make lint-python` (tech-debt-hardening-plan R-TDH-17);
+# framework-registered symbols it cannot see are listed in vulture_whitelist.py.
+vulture==2.16
 # The lock tool. `make lock` compiles this file plus requirements-langgraph.txt
 # into requirements-lock.txt with `uv pip compile --universal`, which keeps the
 # environment markers a single pip-compile run would evaluate away, so one lock

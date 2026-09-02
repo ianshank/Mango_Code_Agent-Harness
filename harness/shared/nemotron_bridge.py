@@ -16,6 +16,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import warnings
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -73,12 +74,32 @@ def _assert_egress_permitted(url: str) -> None:
         "NEMOTRON_MODE=online to permit network egress, NEMOTRON_MODE=offline "
         "to forbid it, or inject a transport."
     )
+
+
 # Timeout and retry fallbacks now come from governance-policy.json via
 # policy_loader.nemotron_defaults(); this module no longer carries its own.
 # Backoff between retry attempts. The arithmetic (exponential growth, cap and
-# jitter) lives in retry_policy.RetryPolicy; this alias is kept because it is
-# part of the module's public surface and is referenced by the test suite.
-RETRY_BACKOFF_BASE_SEC = retry_policy.DEFAULT_BASE_SEC
+# jitter) lives in retry_policy.RetryPolicy. The old alias RETRY_BACKOFF_BASE_SEC
+# has no first-party caller left; it is served through ``__getattr__`` below
+# with a DeprecationWarning for one minor release (tech-debt-hardening-plan
+# R-TDH-17, C-TDH-2) and removed after that.
+_DEPRECATED_NAMES = {
+    "RETRY_BACKOFF_BASE_SEC": (
+        retry_policy.DEFAULT_BASE_SEC,
+        "RETRY_BACKOFF_BASE_SEC is deprecated; use retry_policy.DEFAULT_BASE_SEC",
+    ),
+}
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562: deprecated module names warn on first use instead of vanishing."""
+    if name in _DEPRECATED_NAMES:
+        value, message = _DEPRECATED_NAMES[name]
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 # Transient HTTP statuses worth retrying; everything else fails immediately.
 RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 

@@ -7,6 +7,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 3a — Python skip accounting, deprecations, dead-code gate
+
+- **INV-2 now has a Python half (DEC-026).** `conftest.py` writes every skip
+  the run produced to `harness/shared/tests/.artifacts/pytest-skips.tsv`
+  (`unique_id`, display, reason); `make verify-zero-skips-python`, in `ci`
+  and `ci-python`, feeds it to the existing `verify_zero_skips.py` gate
+  against `harness/shared/tests/skip-waivers.json`. The gate gains
+  `unique_id_glob` for JUnit-framework waivers (a glob widens the address,
+  never the approval: the skip reason must still carry the waiver's `DEC-`
+  id). Every waived skip reason now names `DEC-026`. The four
+  empty-parametrize skips became loops. Result on this tree: one skip (the
+  live NVIDIA key), waived.
+- **Three compatibility exports deprecated, not deleted** (R-TDH-17,
+  C-TDH-2): `write_policy.ALWAYS_DENIED_PREFIXES`,
+  `nemotron_bridge.RETRY_BACKOFF_BASE_SEC` (both served through PEP 562
+  `__getattr__`) and `ToolBudget.remaining` warn with `DeprecationWarning`
+  for one minor release. `test_deprecation_shims.py` is the only suite
+  allowed to touch them; `pytest -W error::DeprecationWarning -k "not
+  deprecation_shims"` passes. `resolve_api_key` was on the plan's list and
+  is kept: the suite's live-detection fixtures call it, so it is used, not
+  dead.
+- **`vulture` joins `make lint-python`** at confidence 80 with
+  `vulture_whitelist.py` for framework-registered names; the dead
+  `RunnableConfig` fallback import in `langgraph/nodes.py` is gone.
+
 ### Tech-debt hardening plan, Phase 2 — policy single-source (Python)
 
 - **`ExecutionLoop` budgets come from the policy.** The constructor defaulted

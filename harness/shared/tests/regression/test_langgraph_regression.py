@@ -42,7 +42,7 @@ from harness.shared.langgraph.state import (
 
 pytestmark = [
     pytest.mark.langgraph,
-    pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed"),
+    pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed (DEC-026)"),
 ]
 
 

@@ -76,6 +76,7 @@ GATE_TO_EVIDENCE = {
 REQUIRED_CI_STAGES = {
     "test-node": "the Node suite; without it the TypeScript stack is ungated",
     "verify-zero-skips": "INV-2 (no unapproved skips)",
+    "verify-zero-skips-python": "INV-2 (no unapproved skips), the Python half (DEC-026)",
     "check-dedup": "named non-negotiable in CLAUDE.md; detects copied governance scripts",
     "digest-regen": "the control-plane drift baseline `git diff --exit-code` compares against",
     "specs": "the spec structural, plan-defect, and strict tiers",
@@ -523,10 +524,12 @@ class TestEveryRequiredGateIsAccountedFor:
         both = sorted(set(KNOWN_GAPS) & set(GATE_TO_ROOT_TARGET))
         assert not both, f"gates declared as gaps but also mapped as covered: {both}"
 
-    @pytest.mark.parametrize("gate", sorted(KNOWN_GAPS))
-    def test_every_declared_gap_has_a_substantive_reason(self, gate):
-        reason = KNOWN_GAPS[gate].strip()
-        assert len(reason) > 40, f"KNOWN_GAPS['{gate}'] needs a real reason, not a placeholder"
+    def test_every_declared_gap_has_a_substantive_reason(self):
+        # A loop, not a parametrize: an empty KNOWN_GAPS is the healthy state,
+        # and parametrizing over it produced a "got empty parameter set" skip
+        # that the Python zero-skip gate would have to waive (R-TDH-19).
+        for gate, reason in sorted(KNOWN_GAPS.items()):
+            assert len(reason.strip()) > 40, f"KNOWN_GAPS['{gate}'] needs a real reason, not a placeholder"
 
     def test_partial_coverage_notes_describe_mapped_gates(self, required_gates):
         """Loops rather than parametrizes: an empty dict must not become a skipped test."""

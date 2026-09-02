@@ -59,3 +59,9 @@ weather_cli/
 # LangGraph Studio & local state caches
 .langgraph/
 .langgraph_api/
+
+# Skip evidence written by harness/shared/tests/conftest.py for the Python
+# zero-skip gate (make verify-zero-skips-python); the directory is tracked via
+# .gitkeep so the ignore rule always has a live parent.
+harness/shared/tests/.artifacts/*
+!harness/shared/tests/.artifacts/.gitkeep
