@@ -72,10 +72,15 @@ from `governance-policy.json`" — yet the runtime violates it structurally:
 - [ ] AC-1: `grep -rn "max_iterations: int = 10\|api_timeout: int = 300"
   harness/shared/` returns nothing; orchestrator limits come from the policy —
   verified by `test_policy_loader.py` / `TestPolicySourcedLimits`. — open
-  2026-09-02: the grep returns
-  `harness/shared/langgraph/policy.py:21: max_iterations: int = 10` (plus a
-  test helper signature in `test_shadow_planner.py:432`);
-  `test_policy_loader.py` + `TestPolicySourcedLimits`: 22 passed; blocked by
+  2026-09-02: the orchestrator half is closed by tech-debt-hardening-plan
+  R-TDH-12 (`ExecutionLoop` resolves omitted budgets from the policy at
+  construction; `test_execution_loop_defaults.py`), and the grep's remaining
+  hit, `harness/shared/langgraph/policy.py:21: max_iterations: int = 10`, is
+  `GraphPolicy`'s deliberate no-config fallback (langgraph-policy-wiring
+  R-LPW-4/5), now equality-pinned to the loader fallbacks by
+  `test_policy_consistency.py::TestGraphPolicyDefaultsMirrorPolicyLoaderFallbacks`;
+  the grep as written cannot return nothing without reversing that decision, so
+  this box stays open until its owner rewords it or records a `DEC-`; previously
   tech-debt-hardening-plan R-TDH-12
 - [x] AC-2: A task exceeding `max_tool_calls_per_task` raises and fires the
   `budget_exceeded` hook — verified by `make test`. — verified 2026-09-02:

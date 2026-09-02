@@ -7,6 +7,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 2 — policy single-source (Python)
+
+- **`ExecutionLoop` budgets come from the policy.** The constructor defaulted
+  to `15 / 30 / 50` while `governance-policy.json` said `10 / 300 / 100`; the
+  facade always passed explicit values, so the drift was live only for direct
+  constructor calls. Omitted budgets now resolve at construction time from
+  `policy_loader` (`policy_path=` accepted; malformed policy fails closed;
+  resolution logged at DEBUG). `test_execution_loop_defaults.py` proves it
+  with distinguishable temp-policy values. Closes the orchestrator half of
+  `policy-single-source.md` AC-1.
+- **`GraphPolicy()` defaults are equality-pinned** to `policy_loader`'s
+  fallbacks and to `from_governance_json()` (`test_policy_consistency.py`);
+  the pure no-config fallback that `langgraph-policy-wiring` decided is kept,
+  not re-sourced at import.
+- **Verdict and broker statuses are named once.** `governance/verdict.py`
+  exports `BROKER_SUCCESS` / `BROKER_FAILED` / `BROKER_BLOCKED`; fourteen raw
+  `"BLOCKED"`/`"FAILED"`/`"VERIFIED"`/`"SUCCESS"` literals across six modules
+  now reference the constants. `test_verdict_literals.py` is an AST scan that
+  fails on a new one (docstrings and `Literal[...]` exempt).
+  `tool_result_format` moves one layer up in `test_import_direction.py`
+  because it now imports the vocabulary instead of restating it.
+- **The quality-gate stub no longer reports `"coverage": 85.0`** (or `0.0`);
+  the value was never read by the gate. Applying real coverage floors in the
+  gate is a separate behavioural spec (plan open question 5).
+- **Constant triage (DEC-025).** `process_backend.DEFAULT_MAX_OUTPUT_BYTES`
+  becomes `orchestrator.max_output_bytes`; `retry_policy.DEFAULT_MAX_RETRIES`
+  is pinned to `nemotron.max_retries`; the retry backoff shape, the
+  shadow-planner env knob, the cognitive-signal protocol ceilings and the Node
+  client's resilience defaults are accepted with reasons.
+  `test_constant_triage.py` holds the inventory and fails on any row with
+  neither a policy key nor a `DEC-` id. `.env.example`'s
+  `NEMOTRON_MAX_RETRIES` example now equals the policy (was 3, policy 0).
+  `policy-artifact.json` regenerated (it digests the policy file).
+
 ### Tech-debt hardening plan, Phase 1 — toolchain
 
 - **One universal dependency lock.** `requirements-lock.txt` is compiled by

@@ -32,6 +32,7 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     VERIFIER_PROMPT_TEMPLATE,
 )
+from harness.shared.governance.verdict import BLOCKED, FAILED, VERIFIED
 from harness.shared.langgraph.decorators import budgeted, with_authority
 from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
@@ -192,12 +193,11 @@ def evaluation_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str,
                     "passed": passed,
                     "failed": failed,
                     "skipped": 0,
-                    "coverage": 85.0,
                     "message": verification,
                 }
             ]
         else:
-            test_results = [{"suite": "pytest", "passed": 0, "failed": 0, "skipped": 0, "coverage": 0.0}]
+            test_results = [{"suite": "pytest", "passed": 0, "failed": 0, "skipped": 0}]
 
         return {
             "test_results": test_results,
@@ -254,7 +254,7 @@ def quality_gate_node(state: MangoState) -> dict:
             **state.get("gate_status", {}),
             "quality_gate": "pass" if passes else "fail",
         },
-        "verdict": "VERIFIED" if passes else "FAILED",
+        "verdict": VERIFIED if passes else FAILED,
     }
 
 
@@ -282,7 +282,7 @@ def escalate_node(state: MangoState) -> dict:
     """
     logger.info("escalate_node: stub (no interrupt in Phase 1)")
     return {
-        "verdict": "BLOCKED",
+        "verdict": BLOCKED,
     }
 
 

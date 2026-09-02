@@ -9,14 +9,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from harness.shared.debug_dump import credential_env_names
+from harness.shared.governance.verdict import BROKER_FAILED, BROKER_SUCCESS
 from harness.shared.policy_loader import orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
-#: Captured output ceiling. An unbounded capture becomes a prompt, a signal sink
-#: entry and an HTTP response body, so the cap is a containment control rather
-#: than an ergonomic one.
-DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
+#: Captured output ceiling, from `orchestrator.max_output_bytes`. An unbounded
+#: capture becomes a prompt, a signal sink entry and an HTTP response body, so
+#: the cap is a containment control rather than an ergonomic one -- which is why
+#: it is a policy value and not the unlinked 64 KiB literal it used to be
+#: (tech-debt-hardening-plan R-TDH-16). Read once at import, like
+#: DEFAULT_TIMEOUT_SEC below, for the same reason.
+DEFAULT_MAX_OUTPUT_BYTES: int = orchestrator_defaults()["max_output_bytes"]
 
 #: Wall-clock ceiling used when a caller supplies none, from
 #: `orchestrator.tool_timeout_sec` -- previously an unlinked literal that
@@ -31,7 +35,7 @@ DEFAULT_TIMEOUT_SEC: int = orchestrator_defaults()["tool_timeout_sec"]
 class ExecutionResult:
     """The outcome of an execution attempt."""
 
-    status: str  # "SUCCESS", "FAILED", "BLOCKED"
+    status: str  # one of verdict.BROKER_SUCCESS / BROKER_FAILED / BROKER_BLOCKED
     stdout: str
     stderr: str
     exit_code: int
@@ -118,13 +122,13 @@ class ProcessBackend:
         try:
             completed = self._spawn(command, cwd, timeout)
         except subprocess.TimeoutExpired:
-            return ExecutionResult("FAILED", "", "", 1, reason=f"command timed out after {timeout}s")
+            return ExecutionResult(BROKER_FAILED, "", "", 1, reason=f"command timed out after {timeout}s")
         except Exception as exc:  # noqa: BLE001 - the backend must answer every call
-            return ExecutionResult("FAILED", "", "", 1, reason=f"command could not be started: {exc}")
+            return ExecutionResult(BROKER_FAILED, "", "", 1, reason=f"command could not be started: {exc}")
 
         stdout = _cap(completed.stdout or "", max_output_bytes)
         stderr = _cap(completed.stderr or "", max_output_bytes)
-        status = "SUCCESS" if completed.returncode == 0 else "FAILED"
+        status = BROKER_SUCCESS if completed.returncode == 0 else BROKER_FAILED
         return ExecutionResult(status, stdout, stderr, completed.returncode)
 
 

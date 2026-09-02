@@ -393,3 +393,52 @@ class TestFallbackConstantsMirrorPolicy:
             process_backend.DEFAULT_TIMEOUT_SEC
             == _load(SHARED_POLICY)["orchestrator"]["tool_timeout_sec"]
         )
+
+
+class TestGraphPolicyDefaultsMirrorPolicyLoaderFallbacks:
+    """``GraphPolicy()`` keeps built-in defaults as the pure no-config fallback
+    (docs/specs/langgraph-policy-wiring.md R-LPW-4/5); ``from_governance_json()``
+    is the policy path. The eleven defaults therefore restate the loader's own
+    fallbacks a second time, and this pins the two equal -- and both equal to
+    this repository's policy -- rather than re-sourcing the dataclass at import,
+    which would read the filesystem at class-definition time
+    (tech-debt-hardening-plan R-TDH-12)."""
+
+    def test_every_field_default_equals_the_loader_fallback(self):
+        from harness.shared import policy_loader
+        from harness.shared.langgraph.policy import GraphPolicy
+
+        missing = REPO / "does-not-exist.json"
+        orch = policy_loader.orchestrator_defaults(missing)
+        lg = policy_loader.langgraph_defaults(missing)
+        cov = policy_loader.coverage_defaults(missing)
+        agents = policy_loader.agent_defaults(missing)
+        expected = {
+            "max_iterations": orch["max_iterations"],
+            "api_timeout_sec": orch["api_timeout_sec"],
+            "tool_timeout_sec": orch["tool_timeout_sec"],
+            "max_command_bytes": orch["max_command_bytes"],
+            "coverage_floor_lines": cov["lines"],
+            "coverage_floor_branches": cov["branches"],
+            "recursion_limit": lg["recursion_limit"],
+            "max_concurrency": lg["max_concurrency"],
+            "plan_divergence_threshold": lg["plan_divergence_threshold"],
+            "max_delegation_depth": agents["max_delegation_depth"],
+            "max_parallel_subagents": agents["max_parallel_subagents"],
+        }
+        defaults = GraphPolicy()
+        actual = {name: getattr(defaults, name) for name in expected}
+        assert actual == expected, "GraphPolicy() defaults drifted from policy_loader's fallbacks"
+        # And the field set itself: a new field without a row here is unpinned.
+        assert set(expected) == set(GraphPolicy.__dataclass_fields__), (
+            "GraphPolicy gained or lost a field; add or remove its row in this pin"
+        )
+
+    def test_the_no_config_fallback_equals_the_policy_path(self):
+        """Symmetry check: the fallback object and the policy-sourced object are
+        identical in this repository, so a caller that forgets the policy path
+        cannot observe a different limit here (only an adopter with a different
+        policy can, which is the point of the two paths)."""
+        from harness.shared.langgraph.policy import GraphPolicy
+
+        assert GraphPolicy() == GraphPolicy.from_governance_json()

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from harness.shared.agent_authority import execution_identity
+from harness.shared.governance.verdict import BROKER_SUCCESS
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.state import MangoState
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
@@ -61,7 +62,7 @@ class TestHealer:
                 context={"agent_id": execution_identity("nemotron-reasoner")},
                 cwd=Path(self.workspace),
             )
-            return broker_result.status == "SUCCESS", format_execution_result(broker_result)
+            return broker_result.status == BROKER_SUCCESS, format_execution_result(broker_result)
         except Exception as e:  # noqa: BLE001
             return False, f"Failed to run test suite: {e}"
 

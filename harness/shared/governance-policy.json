@@ -85,7 +85,8 @@
     "api_timeout_sec": 300,
     "tool_timeout_sec": 30,
     "max_command_bytes": 8192,
-    "max_healing_retries": 3
+    "max_healing_retries": 3,
+    "max_output_bytes": 65536
   },
   "nemotron": {
     "temperature": 0.2,

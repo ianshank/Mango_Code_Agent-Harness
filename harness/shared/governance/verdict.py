@@ -47,11 +47,17 @@ DENIED = "verification_denied"
 FAILED_CHECK = "verification_failed"
 UNRECOGNISED = "unrecognised_status"
 
-#: Broker statuses this module models. Anything else is not a pass -- an
-#: allowlist, so a backend inventing a status cannot invent a success.
-_SUCCESS = "SUCCESS"
-_FAILED = "FAILED"
-_BLOCKED = "BLOCKED"
+#: Broker (``ExecutionResult``) statuses this module models. Anything else is
+#: not a pass -- an allowlist, so a backend inventing a status cannot invent a
+#: success. Public so the broker, the process backend and every consumer name
+#: the same strings instead of restating them (tech-debt-hardening-plan
+#: R-TDH-14; ``test_verdict_literals.py`` fails on a raw literal elsewhere).
+BROKER_SUCCESS = "SUCCESS"
+BROKER_FAILED = "FAILED"
+BROKER_BLOCKED = "BLOCKED"
+_SUCCESS = BROKER_SUCCESS
+_FAILED = BROKER_FAILED
+_BLOCKED = BROKER_BLOCKED
 
 
 class HarnessCheck(typing.NamedTuple):

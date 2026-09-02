@@ -121,6 +121,11 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
         "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
         "max_healing_retries": _int_value(section, "max_healing_retries", 3, "orchestrator"),
+        # Captured-output ceiling for the process backend (a containment control:
+        # an unbounded capture becomes a prompt, a signal-sink entry and an HTTP
+        # body). Was an unlinked 64 KiB literal in process_backend.py
+        # (tech-debt-hardening-plan R-TDH-16).
+        "max_output_bytes": _int_value(section, "max_output_bytes", 65536, "orchestrator"),
     }
 
 
