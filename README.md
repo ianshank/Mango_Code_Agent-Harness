@@ -47,6 +47,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── architecture/
 │   │   ├── c4_architecture.md           # C4 Level 1-4 Architecture & Threat Boundaries
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
+│   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
+│   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
+│   ├── reports/                         # Historical hygiene, peer-review and test reports
 │   └── specs/                           # 15 Formal Traceable Specifications
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness

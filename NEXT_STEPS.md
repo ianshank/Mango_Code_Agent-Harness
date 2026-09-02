@@ -77,11 +77,13 @@ surfaced a second, more severe bug the first draft missed. Spec:
       is now env-overridable; `process_backend.py`'s `DEFAULT_TIMEOUT_SEC`
       now reads policy instead of an unlinked duplicate literal.
 - [x] **`.mango/agents/nemotron-reasoner.md`'s `tools:` frontmatter fixed** —
-      open since `SDLC_HYGIENE_REPORT.md` (2026-08-26); the existing test
+      open since `docs/reports/SDLC_HYGIENE_REPORT.md` (2026-08-26); the existing test
       didn't catch it because it checked the whole file's text, satisfied by
       a prose mention alone. New test asserts the parsed frontmatter field.
 - [x] **Two diverged C4 docs reconciled** with a banner (not a destructive
       merge — the older doc's content is still detailed and partly unique).
+      Since merged for real into `docs/architecture/c4_architecture.md`
+      (tech-debt hardening plan R-TDH-24); the snapshot is gone.
 - [x] **Two tech-debt findings recorded as accepted debt** (DEC-019, DEC-020)
       rather than left ambiguous: the control-plane `digest()` triplication
       is intentional (root-of-trust isolation); `harness/shared/gates/`

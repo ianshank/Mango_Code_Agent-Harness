@@ -1,5 +1,8 @@
 # Peer-review remediation matrix — v2.0
 
+> Moved from `harness/PEER-REVIEW-REMEDIATION.md` (tech-debt hardening plan R-TDH-24); file names in the evidence
+> column are relative to `harness/`.
+
 | Review finding | v2 remediation | Regression evidence |
 |---|---|---|
 | `make remotes` could pass by printing an allowlist | `remotes` enumerates every configured Git push URL and validates each through one shared normalizer | golden remote vectors; fixture `make remotes` |
