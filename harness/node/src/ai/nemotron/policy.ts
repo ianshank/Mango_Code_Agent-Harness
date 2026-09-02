@@ -7,7 +7,7 @@
  * - R-NPW-2: The read fails closed. A policy file with no `nemotron` block, or
  *   one where any of the four keys is missing or not a number, throws a
  *   descriptive Error at module load rather than substituting a fallback. The
- *   Node client previously shipped `maxRetries: 3` while the policy said `0`,
+ *   Node client previously shipped a retry budget of three while the policy said `0`,
  *   and nothing detected the divergence because the literal never consulted the
  *   policy; a reader that quietly filled in a default on a malformed policy
  *   would recreate exactly that drift under a more trustworthy-looking name.

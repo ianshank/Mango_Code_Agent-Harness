@@ -406,7 +406,9 @@ Constraints.
 - [ ] AC-18: `git grep -ln "autonomous_healing\|lats_optimizer" -- harness ':!*/tests/*'`
       lists only files under `harness/shared/experimental/` (park) or a
       runtime caller gated on `synthesis.lats_enabled` (wire), per open
-      question 3; `pytest harness/shared/tests -k orchestrator` passes with
+      question 3, plus the two deprecation shims C-TDH-2 requires at the old
+      paths and the governance documents that record the move (README,
+      decision log, governance skill); `pytest harness/shared/tests -k orchestrator` passes with
       the three test-only facade pass-throughs deleted and
       `execute_sequential_thinking_loop` still present
       · stage: `make test-python` (R-TDH-18; preserves R-ORCH-4, R-VP-11)
