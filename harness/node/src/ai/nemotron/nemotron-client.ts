@@ -17,6 +17,7 @@ import {
 import { SecretMasker } from './secret-masker.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { NEMOTRON_POLICY } from './policy.js';
+import { executeWithRetry } from './retry.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -407,44 +408,15 @@ export class NemotronClient {
     }
   }
 
-  private async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
-    let attempt = 0;
-    while (true) {
-      try {
-        const result = await operation();
-        this.circuitBreaker.recordSuccess();
-        return result;
-      } catch (err: any) {
-        attempt++;
-        const isNetworkError =
-          err.name === 'AbortError' ||
-          err.name === 'TimeoutError' ||
-          err.code === 'ECONNRESET' ||
-          err.code === 'ETIMEDOUT' ||
-          err.code === 'ENOTFOUND' ||
-          err.message?.includes('aborted') ||
-          err.message?.includes('timed out') ||
-          err.message?.includes('fetch failed');
-
-        const isRetryable =
-          isNetworkError ||
-          err.statusCode === 429 ||
-          (err.statusCode >= 500 && err.statusCode < 600);
-
-        if (!isRetryable || attempt > this.config.maxRetries) {
-          this.circuitBreaker.recordFailure();
-          throw err;
-        }
-
-        // Exponential backoff with jitter
-        const jitter = Math.random() * 200;
-        const delayMs = Math.min(
-          this.config.maxBackoffMs,
-          this.config.baseBackoffMs * Math.pow(2, attempt - 1) + jitter,
-        );
-        await new Promise((res) => setTimeout(res, delayMs));
-      }
-    }
+  /**
+   * The retry decision lives in `retry.ts` (R-TDH-23); the client contributes
+   * only its budget and the circuit breaker that hears each call's verdict.
+   */
+  private executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    return executeWithRetry(operation, {
+      policy: this.config,
+      observer: this.circuitBreaker,
+    });
   }
 
   private validateApiKey(): void {
