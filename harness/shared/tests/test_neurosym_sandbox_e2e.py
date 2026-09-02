@@ -7,8 +7,15 @@ import pytest
 
 import harness.shared.mango_mas_orchestrator as mmo
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult, ProcessBackend
+from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.orchestrator.hook_runner import HookRunner
+
+# The evidence id the mock stamps on every simulated violation. It can reach the
+# model-facing history only by travelling backend -> broker ->
+# `format_execution_result`; none of the mocked model turns below ever say it,
+# so its presence is proof the critique path ran and not an echo of the script.
+VIOLATION_EVIDENCE_ID = "evd-12345"
 
 
 class MockSandboxProcessBackend(ProcessBackend):
@@ -21,10 +28,24 @@ class MockSandboxProcessBackend(ProcessBackend):
         super().__init__()
         self.simulate_network_violation = simulate_network_violation
         self.call_count = 0
+        # Every (command, result) pair handed back to the broker, in order, so a
+        # test asserts on what the backend did rather than on what the mocked
+        # model claimed afterwards. The orchestrator's own pre-flight `make -n`
+        # probe lands here too; `statuses_for` filters to one command.
+        self.calls: list[tuple[str, ExecutionResult]] = []
+
+    def statuses_for(self, command: str) -> list[str]:
+        return [result.status for issued, result in self.calls if issued == command]
 
     def run(self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int) -> ExecutionResult:
         self.call_count += 1
+        result = self._simulate_or_run(command, cwd, timeout, max_output_bytes)
+        self.calls.append((command, result))
+        return result
 
+    def _simulate_or_run(
+        self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int
+    ) -> ExecutionResult:
         # Check if the command or the file it runs contains network calls
         has_network = False
         if "curl" in command or "requests.get" in command:
@@ -34,7 +55,10 @@ class MockSandboxProcessBackend(ProcessBackend):
             parts = command.split()
             if len(parts) >= 2 and parts[0] in ("bash", "sh", "python", "pytest"):
                 if cwd and Path(cwd).exists():
-                    for file_path in Path(cwd).glob("*.py"):
+                    # rglob, not glob: the synthesised app lives in a subdirectory
+                    # of the workspace, and a top-level scan never saw it, so the
+                    # violation this mock exists to simulate was never raised.
+                    for file_path in Path(cwd).rglob("*.py"):
                         try:
                             content = file_path.read_text(encoding="utf-8")
                             if "curl" in content or "urllib" in content or "requests" in content:
@@ -47,7 +71,7 @@ class MockSandboxProcessBackend(ProcessBackend):
             sandbox_violation = {
                 "schema_version": "1.0",
                 "violation_type": "network_access_denied",
-                "evidence_id": "evd-12345",
+                "evidence_id": VIOLATION_EVIDENCE_ID,
                 "capability_profile": "network-isolated",
                 "message": "Outbound network calls are prohibited under the network-isolated capability profile.",
             }
@@ -68,7 +92,10 @@ class MockSandboxProcessBackend(ProcessBackend):
 class TestNeurosymSandboxE2E:
     """
     E2E integration tests for the code generation workflow executing inside a sandbox.
-    Verifies AC-CE-1, AC-CE-3, and INV-9.
+    Verifies INV-9 and AC-NS-3. The AC-CE-1 capability-profile violation is
+    *simulated* by ``MockSandboxProcessBackend``; the production ``ProcessBackend``
+    does not enforce capability profiles, so nothing here is a production
+    enforcement check (``docs/architecture/c4_architecture.md`` §4.6).
     """
 
     @pytest.fixture(autouse=True)
@@ -150,17 +177,24 @@ class TestNeurosymSandboxE2E:
 
     def test_sandbox_violation_triggers_critique_repair_loop(self, tmp_path):
         """
-        Verifies AC-CE-1 and AC-NS-3.
-        A network violation returns a SandboxViolation. The orchestrator should feed this
-        back to the agent to repair.
+        Verifies AC-NS-3 against a simulated AC-CE-1 violation.
+        The mock backend returns a SandboxViolation for a script that makes a network
+        call; the orchestrator should normalise it into a critique and feed it back to
+        the agent to repair. Production does not raise this violation.
         """
-        # Mock backend that blocks curl/requests
+        # Mock backend that blocks scripts making network calls
         mock_backend = MockSandboxProcessBackend(simulate_network_violation=True)
         broker = ExecutionBroker(sandbox_available=True, backend=mock_backend)
         orchestrator = MangoMASOrchestrator(workspace_dir=tmp_path, broker=broker)
 
+        # The script is run rather than a bare `curl`: the policy decision point
+        # classifies `curl` as `external_write` and denies it before the broker
+        # ever reaches the backend, so a curl-based version of this test never
+        # exercised the sandbox violation it is named for.
+        run_script = "python fetch.py"
         task = (
-            "Use your run_command tool to execute `curl http://example.com`. "
+            "Use write_file to create fetch.py, which fetches http://example.com with requests, "
+            f"then use your run_command tool to execute `{run_script}`. "
             "If it fails due to network restrictions, write 'MOCK_DATA' to a file using write_file."
         )
 
@@ -176,29 +210,50 @@ class TestNeurosymSandboxE2E:
                     "choices": [{
                         "message": {
                             "role": "assistant",
-                            "content": "Plan: 1. Run curl. 2. If fails, write mock data.",
+                            "content": "Plan: 1. Write fetch.py. 2. Run it. 3. If denied, write mock data.",
                         }
                     }]
                 }
             elif call_count == 2:
-                # Reasoner execution
+                # Reasoner writes the script that will trip the sandbox
                 return {
                     "choices": [{
                         "message": {
                             "role": "assistant",
-                            "content": "Executing curl.",
+                            "content": "Writing fetch.py.",
                             "tool_calls": [{
-                                "id": "call-net-1",
+                                "id": "call-net-0",
                                 "type": "function",
                                 "function": {
-                                    "name": "run_command",
-                                    "arguments": '{"command": "curl http://example.com"}',
+                                    "name": "write_file",
+                                    "arguments": (
+                                        '{"filepath": "fetch.py", '
+                                        '"content": "import requests\\nrequests.get(\\"http://example.com\\")"}'
+                                    ),
                                 },
                             }],
                         }
                     }]
                 }
             elif call_count == 3:
+                # Reasoner execution
+                return {
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": "Running fetch.py.",
+                            "tool_calls": [{
+                                "id": "call-net-1",
+                                "type": "function",
+                                "function": {
+                                    "name": "run_command",
+                                    "arguments": json.dumps({"command": run_script}),
+                                },
+                            }],
+                        }
+                    }]
+                }
+            elif call_count == 4:
                 # Reasoner repair
                 return {
                     "choices": [{
@@ -221,7 +276,7 @@ class TestNeurosymSandboxE2E:
                     "choices": [{
                         "message": {
                             "role": "assistant",
-                            "content": "Repaired network_access_denied in network-isolated sandbox. PASS",
+                            "content": "Repaired the denial in the isolated sandbox. PASS",
                         }
                     }]
                 }
@@ -232,17 +287,25 @@ class TestNeurosymSandboxE2E:
         finally:
             orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
-        assert mock_backend.call_count > 0
+        # The script reached the backend once, and the backend blocked it.
+        assert mock_backend.statuses_for(run_script) == [BROKER_BLOCKED]
+        # The violation was normalised into a critique and handed to the model:
+        # these strings originate in the backend payload, not in any mocked turn.
         history_str = str(orchestrator.conversation_history)
+        assert "Error: Critique received." in history_str
+        assert VIOLATION_EVIDENCE_ID in history_str
         assert "network_access_denied" in history_str
         assert "network-isolated" in history_str
-        assert "PASS" in verification_result or "FAIL" in verification_result
+        # The loop ran to the mocked final turn rather than aborting on the violation.
+        assert "PASS" in verification_result
         assert (tmp_path / "data.txt").read_text(encoding="utf-8").strip() == "MOCK_DATA"
 
     def test_sandbox_application_synthesis_with_repair(self, tmp_path):
         """
         Verifies that the orchestrator can synthesize a simple multi-file Python application
-        (a CLI script and its test) while correctly navigating a network-isolated SandboxViolation.
+        (a CLI script and its test) while correctly navigating a *simulated* network-isolated
+        SandboxViolation raised by the mock backend (AC-NS-3; AC-CE-1 is not enforced in
+        production).
         """
         # We enforce a network-isolated capability profile by mocking it
         mock_backend = MockSandboxProcessBackend(simulate_network_violation=True)
@@ -355,10 +418,10 @@ class TestNeurosymSandboxE2E:
                     "choices": [{
                         "message": {
                             "role": "assistant",
-                            "content": (
-                                "Done testing. I fixed the network_access_denied "
-                                "(network-isolated) violation using MOCK_DATA. PASS"
-                            ),
+                            # Deliberately does not name the violation: the history
+                            # assertions below must be satisfied by the backend's
+                            # critique, never by this scripted turn.
+                            "content": "Done testing. I replaced the network call with MOCK_DATA. PASS",
                         }
                     }]
                 }
@@ -370,15 +433,25 @@ class TestNeurosymSandboxE2E:
         finally:
             orchestrator.execution_loop.complete_chat_fn = original_complete_chat
 
-        # Assertions
-        assert mock_backend.call_count > 0
+        # Two brokered test runs: the first hit the simulated capability violation,
+        # the second (after the repair) reached the real backend and was not
+        # blocked. This is the evidence the repair worked; the mocked model's own
+        # "PASS" text could not distinguish a repaired run from an unrepaired one.
+        statuses = mock_backend.statuses_for("python -m pytest weather_cli/app.py")
+        assert len(statuses) == 2, statuses
+        assert statuses[0] == BROKER_BLOCKED
+        assert statuses[1] != BROKER_BLOCKED
 
-        # Ensure the SandboxViolation was triggered and passed to the agent
+        # Ensure the SandboxViolation was normalised and passed to the agent; the
+        # evidence id can only have come from the backend payload.
         history_str = str(orchestrator.conversation_history)
+        assert "Error: Critique received." in history_str
+        assert VIOLATION_EVIDENCE_ID in history_str
         assert "network_access_denied" in history_str
         assert "network-isolated" in history_str
 
-        # Ensure the test ran and the agent claimed a pass or fail
-        assert "PASS" in verification_result or "FAIL" in verification_result
+        # The loop ran to the mocked final turn, and the repaired file is what
+        # the second run executed.
+        assert "PASS" in verification_result
         assert "MOCK_DATA = 42" in (app_dir / "app.py").read_text(encoding="utf-8")
 

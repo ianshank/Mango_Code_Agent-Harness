@@ -10,6 +10,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Review follow-up — the neuro-symbolic sandbox suite (PR #33 threads left open on main)
+
+The feature itself landed as `2362d84` with three follow-up commits; these are
+the review threads those commits did not close.
+
+- **`tests/ai/e2e/nemotron-live.test.ts` used `__dirname` in an ESM package.**
+  `harness/node` declares `"type": "module"`, so the identifier is undefined at
+  module scope and the suite would fail before `describe.skipIf` could apply.
+  Now `import.meta.dirname`, as the neighbouring live suites already use.
+- **The two sandbox-violation tests never reached the violation.** Recording
+  what the mock backend actually returned showed every brokered result was
+  `FAILED`, none `BLOCKED`: the policy decision point denies `curl` as
+  `external_write` before the broker touches the backend, and the mock's
+  file scan globbed the workspace top level while the follow-up commit had
+  moved `app.py` into `weather_cli/`. The `network_access_denied` strings the
+  tests asserted on came from the scripted model turns. The repair-loop test
+  now runs a written script instead of `curl`, the mock scans recursively,
+  the scripted turns no longer name the violation, and both tests assert on
+  backend-owned evidence: the per-command status sequence (`BLOCKED`, then
+  not blocked after the repair) and the mock's evidence id reaching the
+  model-facing history through `format_execution_result`. Reverting the
+  `rglob` alone fails the synthesis test.
+- **`NEXT_STEPS.md` listed `AC-CE-1` capability profiles as verified.** The
+  production `ProcessBackend` does not enforce capability profiles
+  (`c4_architecture.md` §4.6, `governance/broker.py` docstring); the test
+  simulates the violation in a mock. The milestone now says so, and `AC-CE-1`
+  stays open in the code-execution spec.
+
 ### Post-implementation review — four gates that could pass on absent evidence (DEC-032)
 
 An objective peer review of the branch found, in the gates this branch itself

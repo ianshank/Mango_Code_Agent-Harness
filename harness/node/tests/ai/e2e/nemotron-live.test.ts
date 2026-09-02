@@ -12,7 +12,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 // Attempt to load .env from repo root to populate process.env for the test environment.
-const envPath = path.resolve(__dirname, '../../../../../.env');
+// This package is ESM (`"type": "module"`), so `__dirname` is not defined at module
+// scope; `import.meta.dirname` (Node >= 20.11) is what the neighbouring live suites use.
+const envPath = path.resolve(import.meta.dirname, '../../../../../.env');
 if (fs.existsSync(envPath)) {
   const content = fs.readFileSync(envPath, 'utf-8');
   for (const line of content.split('\n')) {
