@@ -92,7 +92,10 @@ class MockSandboxProcessBackend(ProcessBackend):
 class TestNeurosymSandboxE2E:
     """
     E2E integration tests for the code generation workflow executing inside a sandbox.
-    Verifies AC-CE-1, AC-CE-3, and INV-9.
+    Verifies INV-9 and AC-NS-3. The AC-CE-1 capability-profile violation is
+    *simulated* by ``MockSandboxProcessBackend``; the production ``ProcessBackend``
+    does not enforce capability profiles, so nothing here is a production
+    enforcement check (``docs/architecture/c4_architecture.md`` §4.6).
     """
 
     @pytest.fixture(autouse=True)
@@ -174,9 +177,10 @@ class TestNeurosymSandboxE2E:
 
     def test_sandbox_violation_triggers_critique_repair_loop(self, tmp_path):
         """
-        Verifies AC-CE-1 and AC-NS-3.
-        A network violation returns a SandboxViolation. The orchestrator should feed this
-        back to the agent to repair.
+        Verifies AC-NS-3 against a simulated AC-CE-1 violation.
+        The mock backend returns a SandboxViolation for a script that makes a network
+        call; the orchestrator should normalise it into a critique and feed it back to
+        the agent to repair. Production does not raise this violation.
         """
         # Mock backend that blocks scripts making network calls
         mock_backend = MockSandboxProcessBackend(simulate_network_violation=True)
@@ -299,7 +303,9 @@ class TestNeurosymSandboxE2E:
     def test_sandbox_application_synthesis_with_repair(self, tmp_path):
         """
         Verifies that the orchestrator can synthesize a simple multi-file Python application
-        (a CLI script and its test) while correctly navigating a network-isolated SandboxViolation.
+        (a CLI script and its test) while correctly navigating a *simulated* network-isolated
+        SandboxViolation raised by the mock backend (AC-NS-3; AC-CE-1 is not enforced in
+        production).
         """
         # We enforce a network-isolated capability profile by mocking it
         mock_backend = MockSandboxProcessBackend(simulate_network_violation=True)
