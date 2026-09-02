@@ -19,10 +19,10 @@ pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:
-    def __init__(self, *, name: str, description: str, inputSchema: dict[str, Any]):
+    def __init__(self, *, name: str, description: str, input_schema: dict[str, Any]):
         self.name = name
         self.description = description
-        self.inputSchema = inputSchema
+        self.input_schema = input_schema
 
 
 class MockTextContent:
@@ -141,10 +141,10 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     except ImportError:
         pytest.skip("mcp package not installed")
 
-    tool = real_types.Tool(name="x", description="y", inputSchema={"type": "object"})
+    tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
     assert tool.name == "x"
     assert tool.description == "y"
-    assert tool.inputSchema == {"type": "object"}
+    assert tool.input_schema == {"type": "object"}
 
 
 def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
@@ -173,7 +173,7 @@ def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) 
     tool_names = {t.name for t in tools}
     schema_names = {schema["function"]["name"] for schema in expected_schemas}
     assert tool_names == schema_names
-    assert {tool.name: tool.inputSchema for tool in tools} == {
+    assert {tool.name: tool.input_schema for tool in tools} == {
         schema["function"]["name"]: schema["function"]["parameters"] for schema in expected_schemas
     }
 

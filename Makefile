@@ -170,7 +170,8 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 audit-python: ## Dependency vulnerability scan for the Python interpreter running this invocation
 	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
 	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
-	pip-audit --requirement requirements.txt
+	@test -f requirements-langgraph.txt || { echo 'requirements-langgraph.txt missing; refusing a partial audit'; exit 1; }
+	pip-audit --requirement requirements.txt --requirement requirements-langgraph.txt
 
 .PHONY: audit
 audit: audit-python ## Dependency vulnerability scan: pip-audit (Python) + delegates to the Node stack's osv-scanner

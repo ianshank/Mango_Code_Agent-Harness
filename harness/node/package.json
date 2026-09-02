@@ -1,6 +1,6 @@
 {
   "name": "agentic-ssd-governance-node-template",
-  "version": "2.0.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.23.0",

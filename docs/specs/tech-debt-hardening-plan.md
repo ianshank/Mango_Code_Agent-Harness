@@ -158,12 +158,14 @@ Phase 0b — green `main` (1 PR).
   floor is unchanged because the field and its `inputSchema` alias exist in
   2.0.0.
 - R-TDH-4: Tests that import `langgraph` MUST carry the registered
-  `langgraph` marker; the 3.9 leg MUST deselect them via
-  `PYTEST_ADDOPTS='-m "not live and not langgraph"'`; the 3.10, 3.12 and
-  `build-full` jobs MUST install the `langgraph` library (the
-  `[project.optional-dependencies]` `langgraph` extra split so it no longer
+  `langgraph` marker; the 3.9 leg MUST deselect them (a `conftest.py`
+  collection hook keyed to `MANGO_CI_DESELECT_LANGGRAPH=1`, because a `-m`
+  passed through `PYTEST_ADDOPTS` is overridden by the Make recipes' own
+  `-m "not live"`); the 3.10, 3.12 and `build-full` jobs MUST install the
+  `langgraph` library from `requirements-langgraph.txt` (mirrored by the
+  `[project.optional-dependencies]` `langgraph` extra, split so it no longer
   pulls `langgraph-checkpoint-postgres`) and `audit-python` MUST scan that
-  pin; the existing `LANGGRAPH_AVAILABLE` skip guards stay for local runs
+  file; the existing `LANGGRAPH_AVAILABLE` skip guards stay for local runs
   without the library. DEC-023's note that `mcp` and `langgraph` move to
   extras together applies once this lands and is recorded, not acted on here.
 - R-TDH-5: `test_orchestrator_guard_swallows_channel_bug` MUST patch
@@ -332,13 +334,14 @@ Constraints.
       exits 0 with `mcp` 2.1.1 installed and
       `pytest harness/shared/tests/test_mcp_server.py -k test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes`
       passes · stage: `make lint` (R-TDH-3)
-- [ ] AC-4: `pytest harness/shared/tests -m "not live and not langgraph" --co -q`
-      collects no test whose module imports `harness.shared.langgraph`
-      (asserted by a test in `harness/shared/tests/test_test_quality.py`); with `langgraph`
+- [ ] AC-4: `MANGO_CI_DESELECT_LANGGRAPH=1 pytest harness/shared/tests --co -q`
+      on an interpreter without `langgraph` reports the `langgraph`-marked
+      tests as deselected and zero of them as skipped; with `langgraph`
       installed `pytest -k test_state_graph_healing_loop_recovers_from_test_failure`
-      passes rather than skipping; `harness/shared/tests/test_workflow_contracts.py` fails if the
-      3.10/3.12/`build-full` install steps lack the `langgraph` install or
-      the 3.9 leg lacks the deselect · stage: `make test-regression` (R-TDH-4)
+      passes rather than skipping; `pytest harness/shared/tests/test_workflow_contracts.py`
+      fails if the 3.10/3.12/`build-full` install steps lack
+      `requirements-langgraph.txt` or the 3.9 leg lacks the deselect variable
+      · stage: `make test-regression` (R-TDH-4)
 - [ ] AC-5: `pytest harness/shared/tests/test_shadow_planner.py -k test_orchestrator_guard_swallows_channel_bug`
       passes · stage: `make test-python` (R-TDH-5)
 - [ ] AC-6: `pytest harness/shared/tests/test_documentation_truth.py` passes

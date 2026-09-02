@@ -59,7 +59,3 @@ weather_cli/
 # LangGraph Studio & local state caches
 .langgraph/
 .langgraph_api/
-
-# MCP Server local storage
-.mcp_storage/
-!.mcp_storage/.gitkeep

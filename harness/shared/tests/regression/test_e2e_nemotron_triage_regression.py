@@ -20,6 +20,7 @@ from unittest.mock import patch
 import pytest
 
 from harness.shared.governance.command_actions import write_targets
+from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.nemotron_bridge import resolve_api_key
 from harness.shared.tool_executors import execute_read_file, execute_write_file
@@ -219,6 +220,8 @@ class TestMCPUnicodeAndErrorIsolationRegression:
         assert res_read == unicode_content
 
 
+@pytest.mark.langgraph
+@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed")
 class TestAutonomousHealingE2ERegression:
     """DEF-NEMO-006: Pins the autonomous self-healing loop in StateGraph."""
 

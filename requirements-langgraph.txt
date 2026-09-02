@@ -1,0 +1,7 @@
+# The LangGraph StateGraph runtime, installed by the CI legs whose interpreter
+# supports it (langgraph declares Requires-Python >=3.10) so the `langgraph`-marked
+# suites run instead of skipping, and scanned by `make audit-python` alongside
+# requirements.txt. Mirrors pyproject.toml's `langgraph` extra (single set of
+# literals; test_dependency_lockstep.py keeps both in step). The Postgres
+# checkpointer is deliberately not here: nothing under harness/ imports it.
+langgraph>=1.0.10,<2.0; python_version >= "3.10"

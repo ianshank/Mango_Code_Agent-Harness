@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
 > gate-contract versions are tracked separately in `harness/CHANGELOG.md`.
 
+## [Unreleased]
+
+### Tech-debt hardening plan, Phase 0b — `main` green again
+
+Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
+
+- **`mcp_server.py` builds `types.Tool` with `input_schema` again.** The
+  DEC-023 rename had been reverted by the orchestrator decomposition
+  (`9d38670`), which turned every `build (3.x)` leg red at mypy. Runtime
+  never noticed because `mcp>=2.0.0` accepts the `inputSchema` alias on
+  construction; the attribute read in `test_mcp_server.py` did.
+- **LangGraph runtime installed where the interpreter allows it.** New
+  `requirements-langgraph.txt` (mirrored by the `langgraph` extra, which no
+  longer pulls `langgraph-checkpoint-postgres`; lockstep-tested) is installed
+  on the 3.10/3.12/`build-full` legs and scanned by `make audit-python`. The
+  `langgraph`-marked suites had skipped on every CI leg. On 3.9, where the
+  library cannot install, a `conftest.py` hook keyed to
+  `MANGO_CI_DESELECT_LANGGRAPH=1` deselects them (visible, never a skip).
+  `test_workflow_contracts.py` (new, unprotected) pins the wiring.
+- **Three test/source drifts fixed:** the healing E2E regression test carries
+  the same `langgraph` marker and guard as its siblings; the shadow-planner
+  containment test patches `harness.shared.orchestrator.loop`, where the guard
+  has lived since the decomposition; `.gitignore`/`.dockerignore` no longer
+  name `.mcp_storage/`, a directory nothing creates (the hook warning about it
+  is gone too).
+- **One version.** `pyproject.toml` is the single source (2.4.0);
+  `README.md`, `NEXT_STEPS.md`, `Makefile`, `CHANGELOG.md`, the C4 document
+  and `harness/node/package.json` are checked against it by
+  `test_documentation_truth.py`, negative case included.
+
 ## [2.4.0] - 2026-09-01
 
 ### Added

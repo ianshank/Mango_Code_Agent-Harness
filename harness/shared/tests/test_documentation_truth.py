@@ -13,11 +13,18 @@ removed.
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 
 import pytest
 
 from harness.shared.tests._helpers import REPO
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 uses the backport
+    import tomli as tomllib  # type: ignore[no-redef]
 
 README = REPO / "README.md"
 GITIGNORE = REPO / ".gitignore"
@@ -231,3 +238,89 @@ class TestTheConfiguredModelIsTheDocumentedOne:
             f".env.example sets NEMOTRON_DEFAULT_MODEL={_configured_model()!r} "
             f"but the README documents {sorted(_documented_models())}"
         )
+
+
+# --- One version, many mirrors -------------------------------------------------
+#
+# The project version had five values at once (pyproject 2.2.5, README 2.3.0,
+# Makefile/CHANGELOG/NEXT_STEPS 2.4.0, package.json 2.0.0), a drift DEC-013 had
+# already reconciled once. `pyproject.toml`'s `[project].version` is the packaging
+# truth; every other site is a mirror and is checked here (extends R-CEG-1 in
+# docs/specs/ci-enforcement-gaps.md; tech-debt-hardening-plan R-TDH-7).
+
+_SEMVER = r"(\d+\.\d+\.\d+)"
+
+#: Mirror path (repo-relative) -> regex whose first group is the version it states.
+#: `harness/node/package.json` is handled as JSON below rather than by regex.
+VERSION_MIRRORS: dict[str, str] = {
+    "README.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "NEXT_STEPS.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "docs/architecture/c4_architecture.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "Makefile": r"^# Agentic SSD v" + _SEMVER,
+    # The first semver heading is the newest released entry; an `[Unreleased]`
+    # heading above it carries no number and is passed over.
+    "CHANGELOG.md": r"^## \[v?" + _SEMVER + r"\]",
+}
+PACKAGE_JSON = "harness/node/package.json"
+
+
+def declared_version(root: Path) -> str:
+    data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    return str(data["project"]["version"])
+
+
+def mirrored_versions(root: Path) -> dict[str, str | None]:
+    """Each mirror's stated version, or None when the site cannot be found."""
+    found: dict[str, str | None] = {}
+    for rel, pattern in VERSION_MIRRORS.items():
+        match = re.search(pattern, (root / rel).read_text(encoding="utf-8"), re.M)
+        found[rel] = match.group(1) if match else None
+    package = json.loads((root / PACKAGE_JSON).read_text(encoding="utf-8"))
+    found[PACKAGE_JSON] = package.get("version")
+    return found
+
+
+def version_drift(root: Path) -> dict[str, str | None]:
+    """Mirrors disagreeing with pyproject (missing sites count as drift)."""
+    truth = declared_version(root)
+    return {rel: seen for rel, seen in mirrored_versions(root).items() if seen != truth}
+
+
+class TestVersionIsSingleSourced:
+    def test_every_mirror_is_found(self) -> None:
+        missing = [rel for rel, seen in mirrored_versions(REPO).items() if seen is None]
+        assert not missing, f"version mirrors whose pattern no longer matches: {missing}"
+
+    def test_every_mirror_agrees_with_pyproject(self) -> None:
+        drift = version_drift(REPO)
+        assert not drift, (
+            f"pyproject.toml declares {declared_version(REPO)} but these mirrors disagree: {drift}. "
+            "pyproject is the single source; update the mirrors, never the other way round."
+        )
+
+    @pytest.mark.parametrize("mirror", sorted([*VERSION_MIRRORS, PACKAGE_JSON]))
+    def test_a_mutated_mirror_is_reported(self, mirror: str, tmp_path: Path) -> None:
+        """The negative case: the check must fail when exactly one site drifts."""
+        for rel in ["pyproject.toml", PACKAGE_JSON, *VERSION_MIRRORS]:
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+        truth = declared_version(tmp_path)
+        bogus = "0.0.1"
+        assert bogus != truth
+        path = tmp_path / mirror
+        if mirror == PACKAGE_JSON:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["version"] = bogus
+            path.write_text(json.dumps(data), encoding="utf-8")
+        else:
+            text = path.read_text(encoding="utf-8")
+            mutated = re.sub(
+                VERSION_MIRRORS[mirror],
+                lambda m: m.group(0).replace(m.group(1), bogus),
+                text,
+                count=1,
+                flags=re.M,
+            )
+            path.write_text(mutated, encoding="utf-8")
+        assert version_drift(tmp_path) == {mirror: bogus}

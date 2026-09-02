@@ -1,6 +1,6 @@
 [project]
 name = "mango-code-agent-harness"
-version = "2.2.5"
+version = "2.4.0"
 requires-python = ">=3.9"
 # Mirrors requirements.txt (single set of literals; keep both in lockstep).
 dependencies = [
@@ -11,10 +11,18 @@ dependencies = [
     "mcp>=2.0.0,<3.0; python_version >= '3.10'",
 ]
 
+# The `langgraph` extra is the library alone, mirrored by requirements-langgraph.txt
+# (single set of literals; keep both in lockstep) so CI can install and pip-audit
+# exactly what the StateGraph tests import. The Postgres checkpointer is a separate
+# extra: nothing in harness/ imports it, and folding it into `langgraph` would make
+# every CI leg install psycopg that no gate ever scans (tech-debt-hardening-plan
+# R-TDH-4).
 [project.optional-dependencies]
 langgraph = [
-    "langgraph>=1.0.10,<2.0",
-    "langgraph-checkpoint-postgres>=3.0.1,<4.0",
+    "langgraph>=1.0.10,<2.0; python_version >= '3.10'",
+]
+langgraph-postgres = [
+    "langgraph-checkpoint-postgres>=3.0.1,<4.0; python_version >= '3.10'",
 ]
 
 [tool.setuptools.packages.find]

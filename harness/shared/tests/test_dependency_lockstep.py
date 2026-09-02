@@ -97,3 +97,48 @@ class TestRequirementsTxtAndPyprojectStayInLockstep:
         # the equality check above vacuously pass -- this is the floor.
         assert len(_names_from_requirements_txt(REQUIREMENTS_TXT)) >= 4
         assert len(_names_from_pyproject_dependencies(PYPROJECT)) >= 4
+
+
+# --- The langgraph extra and requirements-langgraph.txt -------------------------
+#
+# Same shape, second pair: CI installs the StateGraph runtime from
+# requirements-langgraph.txt (a marker-carrying requirements file pip-audit can
+# scan), while `pip install -e ".[langgraph]"` reads pyproject's extra. Either
+# drifting from the other is the mcp incident again, one directory over.
+
+REQUIREMENTS_LANGGRAPH_TXT = REPO / "requirements-langgraph.txt"
+LANGGRAPH_EXTRA = "langgraph"
+
+
+def _names_from_pyproject_extra(path: Path, extra: str) -> set[str]:
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    specs = data.get("project", {}).get("optional-dependencies", {}).get(extra, [])
+    names: set[str] = set()
+    for spec in specs:
+        match = _NAME_RE.match(spec.strip())
+        if match is None:  # pragma: no cover - defensive; every real spec matches
+            continue
+        names.add(_normalize(match.group(1)))
+    return names
+
+
+class TestLanggraphExtraAndRequirementsFileStayInLockstep:
+    def test_same_package_set(self) -> None:
+        from_requirements = _names_from_requirements_txt(REQUIREMENTS_LANGGRAPH_TXT)
+        from_extra = _names_from_pyproject_extra(PYPROJECT, LANGGRAPH_EXTRA)
+        assert from_requirements == from_extra, (
+            f"requirements-langgraph.txt declares {sorted(from_requirements)} but pyproject's "
+            f"[project.optional-dependencies].{LANGGRAPH_EXTRA} declares {sorted(from_extra)}; "
+            "CI installs from the file and pip-audit scans it, so the two must agree."
+        )
+
+    def test_the_extra_is_the_library_alone(self) -> None:
+        """The Postgres checkpointer is its own extra: nothing under harness/
+        imports it, and folding it in would install psycopg on every leg that
+        no gate ever scans (tech-debt-hardening-plan R-TDH-4)."""
+        assert _names_from_pyproject_extra(PYPROJECT, LANGGRAPH_EXTRA) == {"langgraph"}
+        assert "langgraph-checkpoint-postgres" in _names_from_pyproject_extra(PYPROJECT, "langgraph-postgres")
+
+    def test_neither_side_is_accidentally_empty(self) -> None:
+        assert _names_from_requirements_txt(REQUIREMENTS_LANGGRAPH_TXT)
+        assert _names_from_pyproject_extra(PYPROJECT, LANGGRAPH_EXTRA)

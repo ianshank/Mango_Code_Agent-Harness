@@ -57,6 +57,17 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
 
+      # langgraph declares Requires-Python >=3.10, so the 3.9 leg cannot install
+      # it. Every other leg installs the library so the `langgraph`-marked suites
+      # run (they skipped on every leg before this step existed, so the whole
+      # StateGraph package was unmeasured in CI). On 3.9 the same suites are
+      # *deselected* -- visible in pytest's summary, never a skip -- through the
+      # conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below. Pinned by
+      # test_workflow_contracts.py; see tech-debt-hardening-plan R-TDH-4.
+      - name: Install LangGraph runtime (interpreters that support it)
+        if: matrix.python-version != '3.9'
+        run: python -m pip install -r requirements-langgraph.txt
+
       - name: Run Python CI gate (make ci-python)
         # The protected-path invariant fails closed on infrastructure changes
         # (Makefile, .github/**, .mango/agents/**, governance policy). A human
@@ -65,6 +76,7 @@ jobs:
         # gate stays fail-closed. Never set this unconditionally.
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
+          MANGO_CI_DESELECT_LANGGRAPH: ${{ matrix.python-version == '3.9' && '1' || '' }}
         run: make ci-python
 
   build-full:
@@ -90,6 +102,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
+
+      # The primary leg runs the regression tier and the full gate with the
+      # StateGraph runtime present, so `langgraph`-marked tests are exercised
+      # rather than skipped (R-TDH-4).
+      - name: Install LangGraph runtime
+        run: python -m pip install -r requirements-langgraph.txt
 
       # pnpm must be on PATH *before* actions/setup-node runs, because
       # `cache: pnpm` resolves the pnpm store via the pnpm binary. Installing it

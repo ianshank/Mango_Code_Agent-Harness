@@ -1,6 +1,6 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.3.0 (2026 Standards)
+**Version:** 2.4.0 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
