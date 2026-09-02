@@ -260,8 +260,11 @@ Phase 3 — unused code, unwired features, skip accounting (3 PRs).
   `orchestrator.max_healing_retries` under their own spec (INV-15 governs), or
   moved to `harness/shared/experimental/` with `harness/README.md` updated;
   the test-only facade pass-throughs (`_tool_handlers`, `_run_hook`,
-  `_dispatch_tool_calls`, `execute_sequential_thinking_loop`) get their tests
-  retargeted to `harness/shared/orchestrator/` and are deleted.
+  `_dispatch_tool_calls`) get their tests retargeted to the facade's
+  `dispatcher` and `hook_runner` and are deleted.
+  `execute_sequential_thinking_loop`, listed in revision 2, stays: it is part
+  of the public surface `orchestrator-tool-registry.md` R-ORCH-4 pins and
+  `verdict-propagation.md` R-VP-11 requires its prose return.
 - R-TDH-19: Python skips MUST be accounted for (INV-2 parity): the four
   empty-parametrize skips (`harness/shared/tests/test_ci_gate_coverage.py:526`,
   `harness/shared/tests/test_import_purity.py:174,185`, `harness/shared/tests/test_test_quality.py:120`) are fixed; a
@@ -404,7 +407,9 @@ Constraints.
       lists only files under `harness/shared/experimental/` (park) or a
       runtime caller gated on `synthesis.lats_enabled` (wire), per open
       question 3; `pytest harness/shared/tests -k orchestrator` passes with
-      the four facade pass-throughs deleted · stage: `make test-python` (R-TDH-18)
+      the three test-only facade pass-throughs deleted and
+      `execute_sequential_thinking_loop` still present
+      · stage: `make test-python` (R-TDH-18; preserves R-ORCH-4, R-VP-11)
 - [ ] AC-19: `make verify-zero-skips-python` exits 1 on a suite containing an
       unwaived `pytest.skip` (fixture) and exits 0 on the tree;
       `pytest harness/shared/tests -rs -q | grep -c "empty parameter set"`

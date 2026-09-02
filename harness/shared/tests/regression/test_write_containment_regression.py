@@ -219,7 +219,7 @@ class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
         orch._active_role = "nemotron-reasoner"
         messages: list[dict[str, object]] = []
-        orch._dispatch_tool_calls(
+        orch.dispatcher.dispatch(
             messages,
             [{
                 "id": "call_1",

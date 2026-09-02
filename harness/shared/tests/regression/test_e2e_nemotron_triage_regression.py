@@ -119,8 +119,8 @@ class TestLATSNegativeRewardRegression:
     """DEF-NEMO-002: Pins that MCTS selects the optimal branch even when all scores are negative."""
 
     def test_best_leaf_with_all_negative_scores(self) -> None:
+        from harness.shared.experimental.lats_optimizer import LATSOptimizer
         from harness.shared.langgraph.ablation import AblationNode
-        from harness.shared.lats_optimizer import LATSOptimizer
 
         optimizer = LATSOptimizer()
         root = AblationNode(state_diff={})
@@ -140,7 +140,7 @@ class TestLATSNegativeRewardRegression:
         assert best.state_diff == {"step": 2}
 
     def test_refine_plan_with_negative_evaluations(self) -> None:
-        from harness.shared.lats_optimizer import LATSOptimizer
+        from harness.shared.experimental.lats_optimizer import LATSOptimizer
 
         optimizer = LATSOptimizer(exploration_weight=0.0, max_budget=3)
         from typing import Any, cast

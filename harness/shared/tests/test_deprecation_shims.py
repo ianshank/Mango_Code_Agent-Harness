@@ -62,3 +62,40 @@ class TestToolBudget:
         budget.consume(10)
         with pytest.warns(DeprecationWarning):
             assert budget.remaining == 0
+
+
+class TestExperimentalMoves:
+    """DEC-027: the old module paths warn on use and hand back the moved classes."""
+
+    def test_autonomous_healing_old_path_warns_and_resolves(self) -> None:
+        from harness.shared import autonomous_healing as old
+        from harness.shared.experimental import autonomous_healing as new
+
+        with pytest.warns(DeprecationWarning, match="experimental.autonomous_healing"):
+            healer = old.TestHealer
+        assert healer is new.TestHealer
+        # Every access warns, not just the first: an adopter grepping their
+        # own warnings sees each call site, not one.
+        with pytest.warns(DeprecationWarning):
+            assert old.TestHealer is new.TestHealer
+
+    def test_lats_optimizer_old_path_warns_and_resolves(self) -> None:
+        from harness.shared import lats_optimizer as old
+        from harness.shared.experimental import lats_optimizer as new
+
+        with pytest.warns(DeprecationWarning, match="experimental.lats_optimizer"):
+            assert old.LATSOptimizer is new.LATSOptimizer
+
+    def test_old_paths_import_silently(self, recwarn: pytest.WarningsRecorder) -> None:
+        """Importing the shim must not warn; only using a name does (import purity)."""
+        import importlib
+
+        importlib.import_module("harness.shared.autonomous_healing")
+        importlib.import_module("harness.shared.lats_optimizer")
+        assert not [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+
+    def test_unknown_names_are_attribute_errors(self) -> None:
+        from harness.shared import autonomous_healing as old
+
+        with pytest.raises(AttributeError):
+            old.NO_SUCH_NAME  # noqa: B018 - the access is the assertion

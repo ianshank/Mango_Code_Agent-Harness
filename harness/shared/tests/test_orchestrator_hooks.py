@@ -22,7 +22,7 @@ class TestRunHook:
     def test_hook_missing_is_noop(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         # No hook script present -> executes without raising and does nothing.
-        orch._run_hook("pre-nemotron-run", task="t", agent="a")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
         assert not (mock_workspace / ".mango" / "hooks" / "pre-nemotron-run.sh").exists()
 
     def test_hook_mocked_execution(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,7 +37,7 @@ class TestRunHook:
             return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="done")
 
         monkeypatch.setattr(subprocess, "run", mock_run)
-        orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
         assert len(executed_cmds) == 1
 
     def test_hook_mocked_called_process_error(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +51,7 @@ class TestRunHook:
 
         monkeypatch.setattr(subprocess, "run", mock_run)
         with pytest.raises(subprocess.CalledProcessError):
-            orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
 
     def test_hook_mocked_timeout_expired(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         hooks = mock_workspace / ".mango" / "hooks"
@@ -64,12 +64,12 @@ class TestRunHook:
 
         monkeypatch.setattr(subprocess, "run", mock_run)
         with pytest.raises(subprocess.TimeoutExpired):
-            orch._run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="test-task", agent="nemotron-reasoner")
 
     def test_invalid_hook_name_raises(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError, match="refusing to run unrecognised hook"):
-            orch._run_hook("malicious-hook-name", task="t", agent="a")
+            orch.hook_runner.run_hook("malicious-hook-name", task="t", agent="a")
 
     def test_hook_exists_and_runs(self, mock_workspace: Path) -> None:
         if not _POSIX:
@@ -78,7 +78,7 @@ class TestRunHook:
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "pre-nemotron-run.sh").write_text("echo ran > hook_marker.txt\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        orch._run_hook("pre-nemotron-run", task="t", agent="a")
+        orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
         assert (mock_workspace / "hook_marker.txt").exists()
 
     def test_hook_raises_propagates(self, mock_workspace: Path) -> None:
@@ -89,7 +89,7 @@ class TestRunHook:
         (hooks / "pre-nemotron-run.sh").write_text("exit 1\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
         with pytest.raises(subprocess.CalledProcessError):
-            orch._run_hook("pre-nemotron-run", task="t", agent="a")
+            orch.hook_runner.run_hook("pre-nemotron-run", task="t", agent="a")
 
 
 @pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows (DEC-026)")
@@ -145,7 +145,7 @@ class TestOnlyKnownHooksExecute:
     def test_an_unrecognised_hook_name_is_refused(self, mock_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError, match="unrecognised hook"):
-            orch._run_hook("post-../../../etc/evil-run")
+            orch.hook_runner.run_hook("post-../../../etc/evil-run")
 
     def test_a_planted_hook_with_an_unlisted_name_does_not_execute(
         self, mock_workspace: Path
@@ -159,7 +159,7 @@ class TestOnlyKnownHooksExecute:
         )
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError):
-            orch._run_hook("post-attacker-run")
+            orch.hook_runner.run_hook("post-attacker-run")
         assert not (mock_workspace / "planted_marker.txt").exists(), (
             "an unlisted hook executed; the allowlist is not reached before the spawn"
         )
@@ -172,7 +172,7 @@ class TestOnlyKnownHooksExecute:
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / f"{name}.sh").write_text(f"echo ran > {name}_marker.txt\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        orch._run_hook(name)
+        orch.hook_runner.run_hook(name)
         assert (mock_workspace / f"{name}_marker.txt").exists()
 
     def test_the_allowlist_covers_every_name_the_orchestrator_constructs(self) -> None:

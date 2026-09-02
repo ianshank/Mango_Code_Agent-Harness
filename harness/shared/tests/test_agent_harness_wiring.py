@@ -131,7 +131,7 @@ class ActiveAgentTests(unittest.TestCase):
         tools: list[dict[str, typing.Any]] = orch.NEMOTRON_TOOLS
         offered = {t["function"]["name"] for t in tools}
         with tempfile.TemporaryDirectory() as tmp:
-            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp))._tool_handlers)
+            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp)).dispatcher.tool_handlers)
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")

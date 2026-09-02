@@ -8,6 +8,7 @@ import pytest
 import harness.shared.mango_mas_orchestrator as mmo
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult, ProcessBackend
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+from harness.shared.orchestrator.hook_runner import HookRunner
 
 
 class MockSandboxProcessBackend(ProcessBackend):
@@ -73,7 +74,9 @@ class TestNeurosymSandboxE2E:
     @pytest.fixture(autouse=True)
     def _mock_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ALLOW_GITHUB_CHANGES", "1")
-        monkeypatch.setattr(MangoMASOrchestrator, "_run_hook", lambda *args, **kwargs: None)
+        # Hooks live on the HookRunner the facade composes (R-TDH-18); patch the
+        # class so every orchestrator built inside a test inherits the no-op.
+        monkeypatch.setattr(HookRunner, "run_hook", lambda *args, **kwargs: None)
 
     @pytest.fixture(autouse=True)
     def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,6 +7,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 3b — unwired features parked, facade trimmed
+
+- **`autonomous_healing.py` and `lats_optimizer.py` moved to
+  `harness/shared/experimental/` (DEC-027).** Neither has ever been reachable
+  from a runtime path; `synthesis.lats_enabled` is `false` with no reader and
+  INV-15 keeps LATS off. The modules, their tests and their policy sourcing
+  are unchanged; the old import paths are deprecation shims for one minor
+  release. README, `harness/README.md` and the C4 document updated.
+- **`MangoMASOrchestrator` loses three test-only pass-throughs**
+  (`_tool_handlers`, `_run_hook`, `_dispatch_tool_calls`); the tests that
+  used them address `dispatcher` and `hook_runner` directly.
+  `execute_sequential_thinking_loop` stays (R-ORCH-4, R-VP-11).
+
 ### Tech-debt hardening plan, Phase 3a — Python skip accounting, deprecations, dead-code gate
 
 - **INV-2 now has a Python half (DEC-026).** `conftest.py` writes every skip
