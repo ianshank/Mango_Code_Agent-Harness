@@ -348,3 +348,44 @@ def test_the_probe_restores_a_module_it_set_aside(monkeypatch: pytest.MonkeyPatc
 
     assert cg._importable("json") is True
     assert sys.modules["json"] is real_json
+
+
+# --- fail-closed arcs of the per-file readers (tech-debt-hardening-plan R-TDH-25) ---
+
+
+def test_per_file_enabled_without_a_coverage_block_fails_closed(tmp_path: Path, caplog):
+    """``per_file_enabled`` decides whether a gate runs at all. A policy with no
+    coverage block cannot answer that, and answering "off" would disable
+    enforcement while the gate reported success -- so it exits 1 with the reason,
+    like every other reader in the module."""
+    policy = _write_json(tmp_path / "policy.json", {"limits": {}})
+    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+        cg.per_file_enabled(policy)
+    assert exc.value.code == 1
+    assert "no coverage block" in caplog.text
+
+
+@pytest.mark.parametrize("entry", [{"missing_lines": [1]}, "not-an-object", None])
+def test_check_per_file_entry_without_a_summary_fails_closed(tmp_path: Path, entry: object, caplog):
+    """A files entry with no summary block is evidence the report was not produced
+    the way the gate expects; per-file compliance cannot be proven from it, so the
+    gate must exit 1 rather than skip the file and pass."""
+    report = _write_json(tmp_path / "coverage.json", {"files": {"harness/shared/x.py": entry}})
+    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+        cg.check_per_file(report, 90.0)
+    assert exc.value.code == 1
+    assert "harness/shared/x.py has no summary block" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [{"covered_lines": "9", "num_statements": 10}, {"covered_lines": 9}, {"covered_lines": 9.0, "num_statements": 10}],
+)
+def test_check_per_file_entry_with_non_integer_counters_fails_closed(tmp_path: Path, summary: dict, caplog):
+    """Counters that are missing or not integers are not measured, they are guessed;
+    the gate exits 1 naming the file instead of computing a percentage from them."""
+    report = _write_json(tmp_path / "coverage.json", {"files": {"harness/shared/x.py": {"summary": summary}}})
+    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+        cg.check_per_file(report, 90.0)
+    assert exc.value.code == 1
+    assert "harness/shared/x.py lacks covered_lines/num_statements" in caplog.text

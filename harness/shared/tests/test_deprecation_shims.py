@@ -99,3 +99,17 @@ class TestExperimentalMoves:
 
         with pytest.raises(AttributeError):
             old.NO_SUCH_NAME  # noqa: B018 - the access is the assertion
+
+    def test_lats_optimizer_unknown_name_is_an_attribute_error_and_does_not_warn(
+        self, recwarn: pytest.WarningsRecorder
+    ) -> None:
+        """The lats_optimizer shim's own ``raise AttributeError`` leg (line 28): a name
+        it does not serve must fail the way a normal module attribute does -- so
+        ``hasattr`` stays truthful -- and must not emit the move warning, which is
+        reserved for names that actually resolve."""
+        from harness.shared import lats_optimizer as old
+
+        with pytest.raises(AttributeError, match="NO_SUCH_NAME"):
+            old.NO_SUCH_NAME  # noqa: B018 - the access is the assertion
+        assert hasattr(old, "NO_SUCH_NAME") is False
+        assert not [w for w in recwarn if issubclass(w.category, DeprecationWarning)]

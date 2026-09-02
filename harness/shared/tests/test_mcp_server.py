@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -278,6 +280,39 @@ def test_run_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     with patch("asyncio.run", side_effect=fake_run) as mock_run:
         run_mcp_server(tmp_path, "nemotron-reasoner")
         assert mock_run.called
+
+
+def test_run_mcp_server_awaits_the_server_on_the_stdio_streams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The body of the async runner (mcp_server.py lines 158-159): the stdio
+    transport is entered, the two streams it yields and the server's own
+    initialization options are what ``server.run`` is awaited with, and the
+    transport is exited afterwards. ``test_run_mcp_server`` above closes the
+    coroutine unawaited, so the body never ran there. No real transport is opened:
+    the stdio context manager and the server are both doubles, while
+    ``asyncio.run`` is the real one."""
+    read_stream, write_stream = object(), object()
+    transitions: list[str] = []
+
+    @contextlib.asynccontextmanager
+    async def fake_stdio_server() -> AsyncIterator[tuple[object, object]]:
+        transitions.append("enter")
+        try:
+            yield read_stream, write_stream
+        finally:
+            transitions.append("exit")
+
+    server = MagicMock()
+    server.run = AsyncMock()
+    server.create_initialization_options.return_value = {"init": "options"}
+    factory = MagicMock(return_value=server)
+    monkeypatch.setattr(mcp_mod, "stdio_server", fake_stdio_server)
+    monkeypatch.setattr(mcp_mod, "create_mcp_server", factory)
+
+    run_mcp_server(tmp_path, "verifier")
+
+    factory.assert_called_once_with(tmp_path, "verifier")
+    server.run.assert_awaited_once_with(read_stream, write_stream, {"init": "options"})
+    assert transitions == ["enter", "exit"]
 
 
 def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBroker) -> None:

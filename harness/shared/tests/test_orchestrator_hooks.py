@@ -15,6 +15,7 @@ from harness.shared.mango_mas_orchestrator import (
     PRE_RUN_HOOK,
     MangoMASOrchestrator,
 )
+from harness.shared.orchestrator.hook_runner import HookRunner
 from harness.shared.tests._orchestrator_helpers import _POSIX, _resp
 
 
@@ -189,3 +190,53 @@ class TestOnlyKnownHooksExecute:
             f"the orchestrator constructs hook names the allowlist refuses: "
             f"{sorted(constructed - PERMITTED_HOOK_NAMES)}"
         )
+
+
+class TestHookPathRelativeToWorkspace:
+    """hook_runner.py lines 45-48: the hook is handed to bash as a workspace-relative
+    path when it lives inside the workspace, and as its absolute path when
+    ``hooks_dir`` is elsewhere (an installed harness supplying hooks for a separate
+    checkout). ``Path.relative_to`` raises ValueError in the second case; without
+    the fallback every such deployment would fail before the hook ran."""
+
+    def _spawn_recorder(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], dict]]:
+        seen: list[tuple[list[str], dict]] = []
+
+        def record(cmd, **kwargs):
+            seen.append((cmd, kwargs))
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", record)
+        return seen
+
+    def test_a_hook_outside_the_workspace_is_invoked_by_absolute_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        hooks = tmp_path / "installed-hooks"
+        hooks.mkdir()
+        hook = hooks / "pre-nemotron-run.sh"
+        hook.write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=workspace, hooks_dir=hooks, tool_timeout=5).run_hook("pre-nemotron-run", task="t")
+
+        ((cmd, kwargs),) = seen
+        assert cmd == ["bash", hook.as_posix()]
+        assert Path(cmd[1]).is_absolute()
+        assert kwargs["cwd"] == workspace, "the hook still runs with the workspace as its cwd"
+
+    def test_a_hook_inside_the_workspace_is_invoked_by_relative_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control: the relative form is what the fallback is falling back from."""
+        hooks = tmp_path / ".mango" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "pre-nemotron-run.sh").write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks, tool_timeout=5).run_hook("pre-nemotron-run", task="t")
+
+        ((cmd, _),) = seen
+        assert cmd == ["bash", ".mango/hooks/pre-nemotron-run.sh"]

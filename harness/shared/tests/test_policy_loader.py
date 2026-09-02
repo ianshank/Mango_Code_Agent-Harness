@@ -145,6 +145,27 @@ class TestSectionAccessors:
             agent_defaults(p)
 
 
+class TestFloatValues:
+    """``_float_value`` (policy_loader.py line 111) guards the one float the policy
+    carries, ``nemotron.temperature``. ``bool`` is an ``int`` subclass, so without
+    the explicit check ``true`` would silently become a temperature of 1.0."""
+
+    @pytest.mark.parametrize("bad", [True, "0.2", None, [0.2]])
+    def test_a_non_number_temperature_fails_closed(self, tmp_path: Path, bad: object) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"nemotron": {"temperature": bad}}), encoding="utf-8")
+        with pytest.raises(PolicyError, match="nemotron.temperature must be a number"):
+            nemotron_defaults(p)
+
+    def test_an_integer_temperature_is_accepted_as_a_float(self, tmp_path: Path) -> None:
+        """The control: an int is a number and is normalised to float, so the
+        rejection above is about type, not about the absence of a decimal point."""
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"nemotron": {"temperature": 1}}), encoding="utf-8")
+        value = nemotron_defaults(p)["temperature"]
+        assert value == 1.0 and isinstance(value, float)
+
+
 class TestRepoPolicyIsWired:
     """In this repository the policy file exists, so the wired readers must
     surface its values — these keys previously had zero code readers."""

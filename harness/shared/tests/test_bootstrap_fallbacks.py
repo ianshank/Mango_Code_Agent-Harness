@@ -131,6 +131,54 @@ class TestCoverageGateFallback:
         assert callable(ns["resolve_log_level"])
 
 
+class TestCheckDedupFallback:
+    def test_main_dispatch_with_fallback_import_detects_drift(
+        self, hidden_harness, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        """check_dedup.py's except-ImportError leg (top-level ``governance_json`` and
+        ``json_logging``) plus its ``__main__`` dispatch, as ``python
+        harness/shared/check_dedup.py`` runs for an adopter. The fixture repo carries a
+        byte-identical stack copy, so exit 1 proves the fallback-imported gate actually
+        checked something rather than passing vacuously."""
+        for name in ("governance_json", "json_logging"):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+        logic = "def compute():\n    return 1\n"
+        for rel in ("harness/shared/thing.py", "harness/node/scripts/thing.py"):
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(logic, encoding="utf-8")
+        monkeypatch.syspath_prepend(str(SHARED))
+        monkeypatch.setattr(sys, "argv", ["check_dedup.py", "--repo-root", str(tmp_path)])
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_path(str(SHARED / "check_dedup.py"), run_name="__main__")
+        assert exc.value.code == 1
+        assert "governance_json" in sys.modules, "the fallback did not import the sibling module by bare name"
+        assert "harness.shared.governance_json" not in sys.modules, "the package import succeeded; the leg was skipped"
+
+
+class TestCheckPyCompatFallback:
+    def test_main_dispatch_with_fallback_import_flags_a_violation(
+        self, hidden_harness, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        """check_py_compat.py's except-ImportError leg (top-level ``ast_visitors`` and
+        ``json_logging``) reached the way a bare ``python harness/shared/check_py_compat.py``
+        reaches it. A PEP 604 union in the fixture repo must still be found through the
+        fallback-imported visitors: exit 1 is the proof the gate ran, not merely loaded."""
+        for name in ("ast_visitors", "json_logging"):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg" / "mod.py").write_text("def f(x: str | None = None) -> int | None:\n    return None\n")
+        monkeypatch.syspath_prepend(str(SHARED))
+        monkeypatch.setattr(
+            sys, "argv", ["check_py_compat.py", "--repo-root", str(tmp_path), "--min-version", "3.9"]
+        )
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_path(str(SHARED / "check_py_compat.py"), run_name="__main__")
+        assert exc.value.code == 1
+        assert "ast_visitors" in sys.modules, "the fallback did not import the sibling module by bare name"
+        assert "harness.shared.ast_visitors" not in sys.modules, "the package import succeeded; the leg was skipped"
+
+
 class TestValidateInvariantsMainFallback:
     def test_main_dispatch_with_fallback_import_passes(self, hidden_harness, monkeypatch: pytest.MonkeyPatch):
         """The ``__main__`` block's except-ImportError leg, plus the dispatch

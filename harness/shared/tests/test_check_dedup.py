@@ -4,6 +4,8 @@ Each test builds a throwaway repo layout so the gate is exercised against real f
 rather than mocks, and so a future refactor of the real tree cannot silently pass.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
@@ -399,3 +401,104 @@ def test_load_config_fails_closed_on_a_non_object_policy(repo: Path, caplog):
             cd.load_config(repo)
     assert excinfo.value.code == 1
     assert "Malformed governance policy" in caplog.text
+
+
+# --- classify_shim: the delegation spellings the docstring promises but no shim in
+# the tree happens to use (tech-debt-hardening-plan R-TDH-25). Each is a real way an
+# adopter can write a shim; a classifier that only recognised the two spellings the
+# repository uses today would fail their gate with "not a delegating shim".
+
+SHIM_IMPORT_STATEMENT = """\
+import harness.shared.governance.thing as _impl
+
+main = _impl.main
+"""
+
+SHIM_RUN_PATH_NAME = """\
+from pathlib import Path
+from runpy import run_path
+
+_shared = Path(__file__).resolve().parents[2] / "shared"
+run_path(str(_shared / "thing.py"), run_name="__main__")
+"""
+
+
+def test_classify_shim_accepts_an_import_statement():
+    """`import harness.shared...` (an ``ast.Import``) is the second import spelling
+    the module docstring accepts; only the ``from ... import`` form had a test."""
+    thing = Path("/x/harness/shared/governance/thing.py")
+    other = Path("/x/harness/shared/other.py")
+    assert cd.classify_shim(SHIM_IMPORT_STATEMENT) == "import"
+    assert cd.classify_shim(SHIM_IMPORT_STATEMENT, shared_module=thing) == "import"
+    assert cd.classify_shim(SHIM_IMPORT_STATEMENT, shared_module=other) is None
+
+
+def test_classify_shim_scans_every_alias_of_an_import_statement():
+    """A single ``import a, b`` names two modules. The alias whose stem is not the
+    target must not end the scan (it is skipped, not rejected), and the one that
+    matches must classify; a scan that stopped at the first alias would misreport
+    a valid shim as drift."""
+    thing = Path("/x/harness/shared/governance/thing.py")
+    text = "import harness.shared.other, harness.shared.governance.thing as _impl\n"
+    assert cd.classify_shim(text, shared_module=thing) == "import"
+    assert cd.classify_shim(text, shared_module=Path("/x/harness/shared/absent.py")) is None
+
+
+def test_classify_shim_accepts_a_bare_run_path_call():
+    """``from runpy import run_path; run_path(...)`` is an ``ast.Name`` call, not an
+    ``ast.Attribute`` one, and reaches the runpy classification through its own leg."""
+    thing = Path("/x/harness/shared/thing.py")
+    other = Path("/x/harness/shared/other.py")
+    assert cd.classify_shim(SHIM_RUN_PATH_NAME) == "runpy"
+    assert cd.classify_shim(SHIM_RUN_PATH_NAME, shared_module=thing) == "runpy"
+    assert cd.classify_shim(SHIM_RUN_PATH_NAME, shared_module=other) is None
+
+
+def test_classify_shim_ignores_run_path_of_a_non_shared_target():
+    """A ``run_path`` whose argument names no shared module is not delegation:
+    a stack script that runs a local helper must still be reported as drift."""
+    text = 'import runpy\nrunpy.run_path("tools/local_helper.py", run_name="__main__")\n'
+    assert cd.classify_shim(text) is None
+    assert cd.classify_shim(text, shared_module=Path("/x/harness/shared/local_helper.py")) is None
+
+
+def test_classify_shim_treats_an_unrenderable_run_path_argument_as_no_delegation(monkeypatch):
+    """``ast.unparse`` failing on the call argument must read as "no shared reference
+    found", never as a gate crash -- classification is not allowed to be the thing
+    that fails the dedup gate. The import spelling, which never unparses, must be
+    unaffected, proving the failure is scoped to the argument it could not render."""
+    def boom(node: object) -> str:
+        raise ValueError("unrenderable node")
+
+    monkeypatch.setattr(cd.ast, "unparse", boom)
+    assert cd.classify_shim(SHIM_RUNPY) is None
+    assert cd.classify_shim(SHIM_IMPORT) == "import"
+
+
+# --- check_script: I/O failures on either side of the comparison ---
+
+def test_check_script_reports_an_unreadable_script(repo: Path):
+    """A stack script that cannot be read is itself a failure with a reason, not a
+    traceback. A directory named like a script is a portable way to force a
+    non-missing read error (IsADirectoryError) whether or not the test runs as root
+    -- and ``scripts_dir.glob("*.py")`` really does yield such a directory."""
+    shared = _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
+    script = repo / "harness" / "node" / "scripts" / "thing.py"
+    script.mkdir(parents=True)
+    reason = cd.check_script(script, shared, cd.load_config(repo))
+    assert reason is not None and "could not read" in reason
+    assert reason.startswith("harness/node/scripts/thing.py")
+
+
+def test_check_script_still_reports_drift_when_the_byte_comparison_fails(repo: Path, caplog):
+    """The byte comparison only refines the message. If the shared side cannot be
+    read as bytes, the script is still reported as "not a delegating shim" -- the
+    verdict must not depend on a diagnostic that failed."""
+    script = _write(repo / "harness" / "node" / "scripts" / "thing.py", REAL_LOGIC)
+    shared = repo / "harness" / "shared" / "thing.py"
+    shared.mkdir(parents=True)
+    with caplog.at_level(logging.DEBUG, logger=cd.logger.name):
+        reason = cd.check_script(script, shared, cd.load_config(repo))
+    assert reason is not None and "not a delegating shim" in reason
+    assert "byte-identical" not in reason
+    assert "Could not compare bytes" in caplog.text
