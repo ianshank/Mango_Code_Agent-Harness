@@ -330,18 +330,18 @@ Constraints.
 
 ## Acceptance criteria
 
-- [ ] AC-1: the ruleset export committed as `.github/rulesets/main.json` lists
+- [x] AC-1: the ruleset export committed as `.github/rulesets/main.json` lists
       exactly the check names `pytest harness/shared/tests/test_ci_gate_coverage.py -k TestRequiredStatusChecksListIsAccurate`
       derives, asserted by a new test in `harness/shared/tests/test_workflow_contracts.py` that
       fails on any difference · stage: `make test-python` (R-TDH-1)
-- [ ] AC-2: `git grep -n "verification claim" CLAUDE.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md`
+- [x] AC-2: `git grep -n "verification claim" CLAUDE.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md`
       matches in all three files, and `make validate` fails on the `CLAUDE.md`
       edit without `ALLOW_GITHUB_CHANGES=1` · stage: `make validate` (R-TDH-2)
-- [ ] AC-3: `python -m mypy harness/shared harness/api_server harness/control-plane --explicit-package-bases --check-untyped-defs`
+- [x] AC-3: `python -m mypy harness/shared harness/api_server harness/control-plane --explicit-package-bases --check-untyped-defs`
       exits 0 with `mcp` 2.1.1 installed and
       `pytest harness/shared/tests/test_mcp_server.py -k test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes`
       passes · stage: `make lint` (R-TDH-3)
-- [ ] AC-4: `MANGO_CI_DESELECT_LANGGRAPH=1 pytest harness/shared/tests --co -q`
+- [x] AC-4: `MANGO_CI_DESELECT_LANGGRAPH=1 pytest harness/shared/tests --co -q`
       on an interpreter without `langgraph` reports the `langgraph`-marked
       tests as deselected and zero of them as skipped; with `langgraph`
       installed `pytest -k test_state_graph_healing_loop_recovers_from_test_failure`
@@ -349,33 +349,33 @@ Constraints.
       fails if `requirements-lock.txt` lacks `langgraph` behind a `>= 3.10`
       marker, carries the Postgres checkpointer, or the 3.9 leg lacks the
       deselect variable · stage: `make test-regression` (R-TDH-4)
-- [ ] AC-5: `pytest harness/shared/tests/test_shadow_planner.py -k test_orchestrator_guard_swallows_channel_bug`
+- [x] AC-5: `pytest harness/shared/tests/test_shadow_planner.py -k test_orchestrator_guard_swallows_channel_bug`
       passes · stage: `make test-python` (R-TDH-5)
-- [ ] AC-6: `pytest harness/shared/tests/test_documentation_truth.py` passes
+- [x] AC-6: `pytest harness/shared/tests/test_documentation_truth.py` passes
       and `git grep -n mcp_storage -- .gitignore .dockerignore .mango/hooks`
       returns nothing · stage: `make test-python` (R-TDH-6)
-- [ ] AC-7: `pytest harness/shared/tests/test_documentation_truth.py -k version`
+- [x] AC-7: `pytest harness/shared/tests/test_documentation_truth.py -k version`
       passes on the reconciled tree and fails on a `tmp_path` copy with one
       mutated version string (a parametrised negative case) · stage: `make test-python` (R-TDH-7, extends R-CEG-1)
-- [ ] AC-8: `make specs` passes with the five reconciled specs modified, and
+- [x] AC-8: `make specs` passes with the five reconciled specs modified, and
       each acceptance box in them is either `[x]` with its command passing
       today or `[ ]` with a `(blocked by R-TDH-n)` note; a box that is `[x]`
       while its command fails is a `make specs` plan-tier failure added for
       this purpose · stage: `make specs` (R-TDH-8)
-- [ ] AC-9: `make lock-check` exits 0 on the committed lock and exits 1 after
+- [x] AC-9: `make lock-check` exits 0 on the committed lock and exits 1 after
       a requirement is edited without `make lock`; every `python -m pip install -r`
       line in both workflows names `requirements-lock.txt` and every `-e .`
       carries `--no-deps` (`pytest harness/shared/tests/test_workflow_contracts.py -k Lock`
       fails otherwise) · stage: `make ci` (R-TDH-9)
-- [ ] AC-10: PRs #38–#46 are each merged or closed (recorded in the `DEC-`
+- [x] AC-10: PRs #38–#46 are each merged or closed (recorded in the `DEC-`
       entry); `make lint` exits 0 with the bumped `ruff` pin;
       `pytest harness/shared/tests/test_workflow_contracts.py -k node24`
       fails on any `uses:` action major that declares `runs.using: node20`;
       `.github/dependabot.yml` lists `github-actions` · stage: `make lint` (R-TDH-10)
-- [ ] AC-11: `pytest harness/shared/tests/test_workflow_contracts.py -k drift`
+- [x] AC-11: `pytest harness/shared/tests/test_workflow_contracts.py -k drift`
       fails if `.github/workflows/scheduled-drift.yml`'s `main-drift` loop omits `lint`
       · stage: `make test-python` (R-TDH-11)
-- [ ] AC-12: `pytest harness/shared/tests -k "ExecutionLoop and defaults"`
+- [x] AC-12: `pytest harness/shared/tests -k "ExecutionLoop and defaults"`
       constructs `ExecutionLoop` with no budget arguments against a
       `tmp_path` policy carrying distinguishable values (via
       `policy_path=`) and asserts they are used;
@@ -383,27 +383,27 @@ Constraints.
       fails when any `GraphPolicy` default differs from the `policy_loader`
       fallback; `policy-single-source.md` AC-1's grep returns nothing
       · stage: `make test-python` (R-TDH-12, preserves R-LPW-4)
-- [ ] AC-13: `pnpm exec vitest run tests/ai` includes a test that rewrites
+- [x] AC-13: `pnpm exec vitest run tests/ai` includes a test that rewrites
       `nemotron.max_retries` in a temp policy copy and asserts
       `DEFAULT_NEMOTRON_CONFIG.maxRetries` follows it, and that module load
       throws when the key is absent; `git grep -n "maxRetries: 3" harness/node/src`
       returns nothing · stage: `make test-node` (R-TDH-13)
-- [ ] AC-14: `pytest harness/shared/tests -k verdict_literals` fails on a raw
+- [x] AC-14: `pytest harness/shared/tests -k verdict_literals` fails on a raw
       verdict string literal outside `harness/shared/governance/verdict.py` (negative case via
       a `tmp_path` module) and passes on the migrated tree
       · stage: `make test-python` (R-TDH-14)
-- [ ] AC-15: `git grep -n '"coverage": 85.0' harness/shared/langgraph` returns
+- [x] AC-15: `git grep -n '"coverage": 85.0' harness/shared/langgraph` returns
       nothing and `pytest harness/shared/tests/test_langgraph_nodes.py`
       passes · stage: `make test-langgraph` (R-TDH-15)
-- [ ] AC-16: `pytest harness/shared/tests -k constant_triage` fails for any
+- [x] AC-16: `pytest harness/shared/tests -k constant_triage` fails for any
       listed constant with neither a resolving policy key nor a `DEC-` id in
       `harness/node/.governance/decision-log.md`, and passes on the tree
       · stage: `make test-python` (R-TDH-16)
-- [ ] AC-17: `make lint` runs `vulture` and exits 0;
+- [x] AC-17: `make lint` runs `vulture` and exits 0;
       `python -W error::DeprecationWarning -c "from harness.shared.write_policy import ALWAYS_DENIED_PREFIXES"`
       exits non-zero; `pytest harness/shared/tests -k deprecation_shims`
       asserts each of the four shims warns · stage: `make lint` (R-TDH-17)
-- [ ] AC-18: `git grep -ln "autonomous_healing\|lats_optimizer" -- harness ':!*/tests/*'`
+- [x] AC-18: `git grep -ln "autonomous_healing\|lats_optimizer" -- harness ':!*/tests/*'`
       lists only files under `harness/shared/experimental/` (park) or a
       runtime caller gated on `synthesis.lats_enabled` (wire), per open
       question 3, plus the two deprecation shims C-TDH-2 requires at the old
@@ -412,47 +412,47 @@ Constraints.
       the three test-only facade pass-throughs deleted and
       `execute_sequential_thinking_loop` still present
       · stage: `make test-python` (R-TDH-18; preserves R-ORCH-4, R-VP-11)
-- [ ] AC-19: `make verify-zero-skips-python` exits 1 on a suite containing an
+- [x] AC-19: `make verify-zero-skips-python` exits 1 on a suite containing an
       unwaived `pytest.skip` (fixture) and exits 0 on the tree;
       `pytest harness/shared/tests -rs -q | grep -c "empty parameter set"`
       prints 0; `pytest harness/shared/tests/test_makefile_contracts.py -k ci_and_ci_python`
       passes · stage: `make ci` (R-TDH-19)
-- [ ] AC-20: `git grep -n "DEC-020" docs/specs/tech-debt-hardening-plan.md harness/node/.governance/decision-log.md`
+- [x] AC-20: `git grep -n "DEC-020" docs/specs/tech-debt-hardening-plan.md harness/node/.governance/decision-log.md`
       matches, `ls harness/shared/{core,tooling,runtime}` reports no such
       directory, and `make check-dedup` passes · stage: `make check-dedup` (R-TDH-20)
-- [ ] AC-21: `ls harness/node/scripts/*.py harness/jvm/scripts/*.py | wc -l`
+- [x] AC-21: `ls harness/node/scripts/*.py harness/jvm/scripts/*.py | wc -l`
       prints 20, and either `git grep -c "sys.path.insert" -- harness/shared harness/node/scripts harness/jvm/scripts`
       reports at most two distinct implementation sites or the decision log
       carries the accepting `DEC-` entry · stage: `make check-dedup` (R-TDH-21)
-- [ ] AC-22: `python harness/shared/validate_invariants.py` fails on a
+- [x] AC-22: `python harness/shared/validate_invariants.py` fails on a
       `tmp_path` tree with a test file one line over
       `limits.test_size_budget_lines` (`pytest harness/shared/tests/test_validate_invariants.py -k test_size_budget`)
       and passes on the split tree; `pytest harness/shared/tests/test_protected_path_liveness.py`
       passes · stage: `make validate` (R-TDH-22)
-- [ ] AC-23: `python harness/shared/validate_invariants.py` passes with every
+- [x] AC-23: `python harness/shared/validate_invariants.py` passes with every
       watch-list module under `limits.size_budget_lines`;
       `pnpm exec eslint . --max-warnings=0` fails on a source file over the
       policy-sourced `max-lines` value · stage: `make lint-node` (R-TDH-23)
-- [ ] AC-24: `pytest harness/shared/tests/test_documentation_truth.py -k changelog_section`
+- [x] AC-24: `pytest harness/shared/tests/test_documentation_truth.py -k changelog_section`
       fails on a `## [x.y.z]` section longer than `limits.changelog_section_lines`
       and passes on the tree; `ls SDLC_HYGIENE_REPORT.md harness/PEER-REVIEW-REMEDIATION.md harness/TEST-REPORT.md harness/CHANGELOG.md`
       reports no such file; `ls docs/releases/v2.2.4.md` succeeds
       · stage: `make test-python` (R-TDH-24)
-- [ ] AC-25: `python harness/shared/coverage_gate.py` passes on every slice
+- [x] AC-25: `python harness/shared/coverage_gate.py` passes on every slice
       and still exits 1 on a malformed `coverage.json`; each Phase 2/3 PR's
       Validation section shows the per-file line for every file it touched at
       or above its baseline value · stage: `make coverage-python` (R-TDH-25)
-- [ ] AC-26: `pytest harness/control-plane/tests` collects at least one test
+- [x] AC-26: `pytest harness/control-plane/tests` collects at least one test
       per `harness/control-plane/*.py` (asserted by a meta-test), and
       `make test-python` exits 1 if that directory is dropped from the recipe
       (`harness/shared/tests/test_makefile_contracts.py`) · stage: `make test-python` (R-TDH-26)
-- [ ] AC-27: `git diff 2555ca0..HEAD -G'pytest\.(skip|importorskip|mark\.(skipif|xfail))' --name-only -- 'harness/*/tests'`
+- [x] AC-27: `git diff 2555ca0..HEAD -G'pytest\.(skip|importorskip|mark\.(skipif|xfail))' --name-only -- 'harness/*/tests'`
       is empty on every slice except R-TDH-19's, whose additions are waived;
       `make validate` passes · stage: `make validate` (C-TDH-1)
-- [ ] AC-28: `pytest -W error::DeprecationWarning harness/shared/tests harness/api_server/tests -k "not deprecation_shims"`
+- [x] AC-28: `pytest -W error::DeprecationWarning harness/shared/tests harness/api_server/tests -k "not deprecation_shims"`
       passes (first-party code does not import through a shim), with shim
       tests importing inside the test body · stage: `make test-python` (C-TDH-2)
-- [ ] AC-29: `make validate` exits 1 on a protected-path slice without
+- [x] AC-29: `make validate` exits 1 on a protected-path slice without
       `ALLOW_GITHUB_CHANGES=1`, and the PR template's Validation checklist
       names `make ci`, `make lint-cold` and the two job URLs
       · stage: `make validate` (C-TDH-3)

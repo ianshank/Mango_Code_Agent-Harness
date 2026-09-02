@@ -1,8 +1,10 @@
 """Branch arcs of ``harness/control-plane/regenerate_bundle_digests.py`` (R-TDH-25).
 
-Kept as a separate module on purpose: the script's colocated tests are being moved
-to ``harness/control-plane/tests/`` concurrently (R-TDH-26). Fold these into that
-module once the move lands. The script is loaded by path through
+A sibling of ``test_regenerate_bundle_digests.py`` rather than part of it: that
+module tests the script's behaviour through ``regenerate()``/``main()``, this one
+tests the bootstrap and process-boundary arcs, which need ``sys.path`` and
+``__file__`` manipulation the behavioural tests should not inherit. Colocated under
+``harness/control-plane/tests/`` (R-TDH-26). The script is loaded by path through
 ``harness.shared.tests._helpers`` because ``harness/control-plane`` is not an
 importable package name.
 

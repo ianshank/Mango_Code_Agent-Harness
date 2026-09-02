@@ -49,13 +49,17 @@ def test_each_script_has_a_colocated_test_module_that_names_it() -> None:
 
 
 def test_each_test_module_maps_to_a_script() -> None:
-    scripts = set(_scripts())
+    """`test_<script>.py` is the primary module; `test_<script>_<topic>.py` is an
+    allowed sibling (e.g. `_arcs` for bootstrap and process-boundary arcs that need
+    sys.path/__file__ manipulation the behavioural tests should not inherit)."""
+    scripts = _scripts()
     for name in _test_modules():
         if name == LAYOUT_MODULE:
             continue
         stem = re.sub(r"^test_", "", name[: -len(".py")])
-        assert stem in scripts, (
-            f"{name} maps to no control-plane script; name it test_<script>.py or move it to harness/shared/tests"
+        assert any(stem == script or stem.startswith(f"{script}_") for script in scripts), (
+            f"{name} maps to no control-plane script; name it test_<script>.py or "
+            "test_<script>_<topic>.py, or move it to harness/shared/tests"
         )
 
 

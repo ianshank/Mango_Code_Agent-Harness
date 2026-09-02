@@ -31,6 +31,20 @@ All notable changes to this project will be documented in this file.
   Python half of INV-2 now sees every suite; `test_session_hooks.py` proves it
   with a real pytest run over two sibling directories and pins that no
   directory conftest re-registers the hooks.
+- **Branch arcs closed in the Phase 2/3 files** (R-TDH-25). Behavioural
+  tests for every line and branch `coverage.json` reported missed in
+  `check_dedup`, `check_py_compat`, `nemotron_bridge`, `write_policy`,
+  `governance/verify_zero_skips`, the orchestrator facade pass-throughs,
+  `hook_runner`, `mcp_server`, `policy_loader`, `coverage_gate`, the
+  `lats_optimizer` shim and `control-plane/regenerate_bundle_digests`; all
+  twelve report zero missing lines and branches. Python coverage moves from
+  lines 98.44% / branches 96.01% to lines 99.64% / branches 97.93%; no
+  source file changed and no skip was added.
+- **Dependabot PRs #38–#46 closed as superseded** (R-TDH-10, DEC-031): the
+  universal lock and the Phase 1 toolchain bump carry every proposed version
+  at or above; #40's fastapi floor of `>=0.141.1` is not adopted because it
+  breaks the 3.9 leg. The weekly `lock-upgrade-check` job is the upgrade
+  signal from here on.
 
 ### Tech-debt hardening plan, Phase 4 — test size budget, gate test split, Node client split, structure decisions
 
