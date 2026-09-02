@@ -149,3 +149,67 @@ class TestMakefileSelfConsistency:
         recipe = _targets().get("review", "")
         for skill in ("openspec-peer-review", "repo-invariant-review", "validation-runner"):
             assert skill in recipe, f"make review does not name the mandated '{skill}' skill"
+
+
+class TestDeadCodeAndSkipGatesAreWired:
+    """tech-debt-hardening-plan R-TDH-17 / R-TDH-19: the gates exist as Make
+    targets and sit on the paths CI actually runs."""
+
+    def test_lint_python_runs_vulture_against_the_whitelist(self) -> None:
+        recipe = _targets().get("lint-python", "")
+        assert "vulture" in recipe and "vulture_whitelist.py" in recipe, "lint-python must run the dead-code gate"
+        assert "--min-confidence" in recipe, "the confidence floor must be explicit, not vulture's default"
+
+    def test_python_zero_skip_gate_is_a_direct_prerequisite_of_both_pipelines(self) -> None:
+        assert "verify-zero-skips-python" in _prerequisites("ci")
+        assert "verify-zero-skips-python" in _prerequisites("ci-python")
+
+    def test_python_zero_skip_gate_reads_the_suite_local_registry(self) -> None:
+        recipe = _targets().get("verify-zero-skips-python", "")
+        assert "--junit-events" in recipe
+        assert "skip-waivers.json" in recipe and ".governance/skip-waivers.json" not in recipe, (
+            "the Python registry lives beside the suite; the root .governance/ is dormant (DEC-005)"
+        )
+
+    def test_lock_freshness_gate_is_a_direct_prerequisite_of_both_pipelines(self) -> None:
+        """The lock is only a supply-chain control while something runs it.
+
+        `verify-zero-skips-python` and the `CP_TESTS` wiring are both pinned as
+        pipeline prerequisites; `lock-check` was not, so it could be dropped from
+        `ci` with the whole suite green and an unlocked dependency set would ship
+        unnoticed (R-TDH-9).
+        """
+        for pipeline in ("ci", "ci-python"):
+            assert "lock-check" in _prerequisites(pipeline), (
+                f"`make {pipeline}` no longer runs lock-check; a stale requirements-lock.txt "
+                "would reach CI with every other gate green"
+            )
+
+    def test_lock_freshness_gate_actually_recompiles_and_compares(self) -> None:
+        """Reachability is not enforcement: the recipe must still do the work."""
+        recipe = _targets().get("lock-check", "")
+        assert recipe, "Makefile has no lock-check recipe"
+        # The tool is invoked through $(UV), like every other pinned tool in this
+        # Makefile (DEC-013); accept either spelling so a variable rename is not
+        # a false failure, but require the compile step itself.
+        assert re.search(r"(?:\$\(UV\)|uv)\s+pip compile", recipe), "lock-check no longer recompiles the lock"
+        assert "diff" in recipe, "lock-check no longer compares the recompiled lock against the committed one"
+
+
+class TestControlPlaneTestsAreRun:
+    """R-TDH-26 / AC-26: harness/control-plane/tests is a separate directory, so
+    dropping it from a recipe would silently un-run every control-plane test
+    while `make test-python` stayed green. Both recipes must name it through the
+    same variable, and the variable must point at the real directory."""
+
+    def test_the_variable_points_at_the_colocated_directory(self) -> None:
+        match = re.search(r"^CP_TESTS\s*:=\s*(\S+)\s*$", _text(), re.M)
+        assert match, "Makefile defines no CP_TESTS variable"
+        assert (REPO / match.group(1)).is_dir(), f"CP_TESTS={match.group(1)} is not a directory"
+        assert match.group(1) == "harness/control-plane/tests"
+
+    @pytest.mark.parametrize("target", ["test-python", "coverage-python"])
+    def test_both_python_runners_collect_it(self, target: str) -> None:
+        recipe = _targets().get(target, "")
+        assert recipe, f"Makefile has no {target} recipe"
+        assert "$(CP_TESTS)/" in recipe, f"{target} no longer runs $(CP_TESTS); the control-plane tests would not run"

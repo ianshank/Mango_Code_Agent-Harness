@@ -16,6 +16,12 @@ from __future__ import annotations
 import json
 import typing
 
+# The one first-party import: the status vocabulary, which itself imports
+# nothing first-party (C-VP-2), so this module stays one step above the bottom
+# of the graph rather than restating the strings it compares against
+# (tech-debt-hardening-plan R-TDH-14).
+from harness.shared.governance.verdict import BROKER_BLOCKED
+
 
 class _Renderable(typing.Protocol):
     """The shape this needs off a broker result.
@@ -43,7 +49,7 @@ class _Renderable(typing.Protocol):
 
 def format_execution_result(result: _Renderable) -> str:
     """Render ``result`` for the model. Always returns a string."""
-    if result.status == "BLOCKED":
+    if result.status == BROKER_BLOCKED:
         if result.stderr:
             try:
                 parsed_violation = json.loads(result.stderr)

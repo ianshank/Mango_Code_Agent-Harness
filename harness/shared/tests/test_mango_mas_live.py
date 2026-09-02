@@ -13,7 +13,7 @@ _PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent.parent.parent
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
+@pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY (DEC-026)")
 class TestMangoMASLive:
     """
     E2E Adversarial Live tests testing the Mango MAS Orchestrator.

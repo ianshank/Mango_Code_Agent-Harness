@@ -32,7 +32,7 @@ import time
 import typing
 from pathlib import Path
 
-from harness.shared.governance.verdict import HarnessCheck
+from harness.shared.governance.verdict import BLOCKED, BROKER_SUCCESS, HarnessCheck
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class VerificationRunner:
         dry = self._broker.execute_command(
             self._probe_command(), {"agent_id": self._agent_id}, cwd=cwd, timeout=self._timeout
         )
-        if dry.status != "SUCCESS" or dry.exit_code != 0:
+        if dry.status != BROKER_SUCCESS or dry.exit_code != 0:
             return False, f"{self._target} is not a target of {self._makefile}"
 
         missing = self._missing_programs(dry.stdout, cwd)
@@ -149,7 +149,7 @@ class VerificationRunner:
             probe = self._broker.execute_command(
                 f"command -v {shlex.quote(program)}", {"agent_id": self._agent_id}, cwd=cwd, timeout=self._timeout
             )
-            if probe.status != "SUCCESS" or probe.exit_code != 0:
+            if probe.status != BROKER_SUCCESS or probe.exit_code != 0:
                 missing.add(program)
         return missing
 
@@ -164,7 +164,7 @@ class VerificationRunner:
             return HarnessCheck(
                 target=target,
                 command=self.command,
-                status="BLOCKED",
+                status=BLOCKED,
                 exit_code=-1,
                 reason=detail,
                 probe_ok=False,

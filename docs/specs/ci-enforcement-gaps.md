@@ -105,36 +105,53 @@ Fixed by adding `--log-opts="HEAD"` to all three targets — see R-CEG-6.
       `NEXT_STEPS.md` each contain `2.1.9` and none contains `2.2.0` or
       `2.3.0` as a version string — verified by
       `grep -c 2.1.9 README.md docs/architecture/c4_architecture.md NEXT_STEPS.md`
-      (R-CEG-1)
-- [ ] AC-2: both per-stack `ci.yml` files contain the phrase "reference
+      (R-CEG-1) — open 2026-09-02: `grep -c 2.1.9 README.md` reports 0 and
+      `NEXT_STEPS.md` still carries `2.2.0`/`2.3.0` milestone headings; the
+      tree is at `2.4.0` (`pyproject.toml`) and
+      `harness/shared/tests/test_documentation_truth.py` (30 passed) pins the
+      other files to it, so this box's literal `2.1.9` pin is stale; blocked
+      by tech-debt-hardening-plan R-TDH-7
+- [x] AC-2: both per-stack `ci.yml` files contain the phrase "reference
       adoption template" in their header comment — verified by
       `grep -l "reference adoption template" harness/node/.github/workflows/ci.yml harness/jvm/.github/workflows/ci.yml`
-      reporting both paths (R-CEG-2)
-- [ ] AC-3: `make install` runs `install_hooks.sh` and exits 0 — verified by
-      `make install` (R-CEG-3)
-- [ ] AC-4: `harness/CONTRACT.md` contains "reference adoption template" and
+      reporting both paths (R-CEG-2) — verified 2026-09-02: the grep reports
+      both paths
+- [x] AC-3: `make install` runs `install_hooks.sh` and exits 0 — verified by
+      `make install` (R-CEG-3) — verified 2026-09-02: `make install` exits 0,
+      printing `pre-push hook installed at .git/hooks/pre-push`
+- [x] AC-4: `harness/CONTRACT.md` contains "reference adoption template" and
       "DEC-005" — verified by
       `grep -c "reference adoption template" harness/CONTRACT.md` and
-      `grep -c "DEC-005" harness/CONTRACT.md` (R-CEG-4)
-- [ ] AC-5: `harness/__init__.py` and `harness/api_server/__init__.py` exist;
+      `grep -c "DEC-005" harness/CONTRACT.md` (R-CEG-4) — verified
+      2026-09-02: both greps report 1
+- [x] AC-5: `harness/__init__.py` and `harness/api_server/__init__.py` exist;
       `harness/control-plane/__init__.py` does not — verified by
       `test -f harness/__init__.py && test -f harness/api_server/__init__.py && test ! -f harness/control-plane/__init__.py`
-      (R-CEG-5)
-- [ ] AC-6: `python -m ruff check .` exits 0 with R-CEG-5's files present —
+      (R-CEG-5) — verified 2026-09-02: the `test` chain exits 0
+- [x] AC-6: `python -m ruff check .` exits 0 with R-CEG-5's files present —
       verified directly, not via a bare `ruff` invocation (C-CEG-1); this is
       the rejection case this spec exists to re-establish: a bare `ruff`
       reporting a finding here is the wrong-binary failure mode this PR
-      already hit once, not evidence the code is wrong
-- [ ] AC-7: `pytest harness/shared/tests/test_import_purity.py harness/shared/tests/ -k "import_direction or check_dedup"`
+      already hit once, not evidence the code is wrong — verified
+      2026-09-02: `python -m ruff check .` under HEAD's pinned 0.6.9 exits 0,
+      `All checks passed!` (the in-flight R-TDH-10 bump to 0.16.5 reports 37
+      findings and owns them)
+- [x] AC-7: `pytest harness/shared/tests/test_import_purity.py harness/shared/tests/ -k "import_direction or check_dedup"`
       passes with R-CEG-5's files present — verified by
       `make coverage-python` (full suite; R-CEG-5's import-mode risk was
       already checked against the full 1990-test suite, not just these two
-      files)
-- [ ] AC-8: `make lint-node`, run standalone, still fails today — verified by
+      files) — verified 2026-09-02: the selector: 3 passed, 205 deselected;
+      `make coverage-python`: 2499 passed, 5 skipped, coverage gate passed
+      (TOTAL 98% lines)
+- [x] AC-8: `make lint-node`, run standalone, still fails today — verified by
       `make lint-node` exiting non-zero; this is the rejection case: it is
       the evidence that not wiring it into `ci` in this PR was the correct
-      call, not an oversight
-- [ ] AC-9: all three `secrets` targets pass `--log-opts="HEAD"` to
+      call, not an oversight — verified 2026-09-02: `make lint-node` exits 2,
+      but the cause has moved: `eslint` now exits 0 (the `typescript-eslint`
+      incompatibility in Open questions is gone) and `prettier --check` fails
+      on `.governance/decision-log.md` and the gitignored
+      `.governance/vitest-results.json`
+- [x] AC-9: all three `secrets` targets pass `--log-opts="HEAD"` to
       `gitleaks git` — verified by
       `grep -c 'log-opts="HEAD"' Makefile harness/node/Makefile harness/jvm/Makefile`
       reporting 1 for each file (R-CEG-6); the rejection case is a from-scratch
@@ -142,7 +159,8 @@ Fixed by adding `--log-opts="HEAD"` to all three targets — see R-CEG-6.
       --log-opts="HEAD"` must report only the checked-out ref's own commit
       count and find nothing, where the same command without `--log-opts`
       finds the unrelated branch's leak (reproduced during this PR's own CI
-      failure, not re-testable in a single-branch CI checkout)
+      failure, not re-testable in a single-branch CI checkout) — verified
+      2026-09-02: the grep reports 1 for each of the three Makefiles
 
 ## Steps
 

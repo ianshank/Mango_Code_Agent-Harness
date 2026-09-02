@@ -8,10 +8,17 @@
 
 <!-- What did you run, and what did it report? `make pre-pr` is the full
      local gate (ci + review + cold mypy + audit + secrets). Paste the
-     relevant PASS/FAIL lines, not just "all green". -->
+     relevant PASS/FAIL lines, not just "all green". A verification claim
+     is not evidence; the pasted output and the check runs on the pushed
+     head are (CONTRIBUTING.md, DEC-024). -->
 
-- [ ] `make pre-pr` passes locally
+- [ ] `make ci` and `make lint-cold` tails pasted below (pinned tools: `python -m ruff` / `python -m mypy`)
+- [ ] `secret-scan` and `dependency-audit` job runs linked (or `make audit` / `make secrets` tails pasted)
 - [ ] For spec-driven work: acceptance criteria in `docs/specs/<name>.md` map to the checks above
+
+```text
+(paste the tails here)
+```
 
 ## Protected-path attestation
 

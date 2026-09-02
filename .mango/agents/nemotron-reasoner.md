@@ -35,6 +35,7 @@ You are a specialized reasoning subagent powered by NVIDIA Nemotron Ultra. Your 
 This active role implements the canonical `implementer` contract in
 `harness/shared/agents/`. The meta-tools `knowledge_gap_log` and
 `hypothesis_register` are wired into this role by the orchestrator
-(`META_TOOLS_SCHEMA` in `mango_mas_orchestrator.py`); use them instead of
+(`META_TOOLS_SCHEMA` in `harness/shared/meta_tools.py`, composed into
+`NEMOTRON_TOOLS` by `harness/shared/tool_schemas.py`); use them instead of
 hallucinating when blocked or uncertain. See `.mango/agents/README.md` for the
 authoritative mapping.

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from harness.shared.experimental.lats_optimizer import LATSOptimizer
 from harness.shared.langgraph.ablation import AblationNode
 from harness.shared.langgraph.state import MangoState
-from harness.shared.lats_optimizer import LATSOptimizer
 
 
 def test_lats_optimizer_ucb1_and_select() -> None:

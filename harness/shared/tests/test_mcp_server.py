@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,10 +21,10 @@ pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:
-    def __init__(self, *, name: str, description: str, inputSchema: dict[str, Any]):
+    def __init__(self, *, name: str, description: str, input_schema: dict[str, Any]):
         self.name = name
         self.description = description
-        self.inputSchema = inputSchema
+        self.input_schema = input_schema
 
 
 class MockTextContent:
@@ -139,12 +141,12 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     try:
         import mcp.types as real_types
     except ImportError:
-        pytest.skip("mcp package not installed")
+        pytest.skip("mcp package not installed (DEC-026)")
 
-    tool = real_types.Tool(name="x", description="y", inputSchema={"type": "object"})
+    tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
     assert tool.name == "x"
     assert tool.description == "y"
-    assert tool.inputSchema == {"type": "object"}
+    assert tool.input_schema == {"type": "object"}
 
 
 def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
@@ -173,7 +175,7 @@ def test_mcp_server_tools_sync_by_role(tmp_path: Path, broker: ExecutionBroker) 
     tool_names = {t.name for t in tools}
     schema_names = {schema["function"]["name"] for schema in expected_schemas}
     assert tool_names == schema_names
-    assert {tool.name: tool.inputSchema for tool in tools} == {
+    assert {tool.name: tool.input_schema for tool in tools} == {
         schema["function"]["name"]: schema["function"]["parameters"] for schema in expected_schemas
     }
 
@@ -278,6 +280,39 @@ def test_run_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     with patch("asyncio.run", side_effect=fake_run) as mock_run:
         run_mcp_server(tmp_path, "nemotron-reasoner")
         assert mock_run.called
+
+
+def test_run_mcp_server_awaits_the_server_on_the_stdio_streams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The body of the async runner (mcp_server.py lines 158-159): the stdio
+    transport is entered, the two streams it yields and the server's own
+    initialization options are what ``server.run`` is awaited with, and the
+    transport is exited afterwards. ``test_run_mcp_server`` above closes the
+    coroutine unawaited, so the body never ran there. No real transport is opened:
+    the stdio context manager and the server are both doubles, while
+    ``asyncio.run`` is the real one."""
+    read_stream, write_stream = object(), object()
+    transitions: list[str] = []
+
+    @contextlib.asynccontextmanager
+    async def fake_stdio_server() -> AsyncIterator[tuple[object, object]]:
+        transitions.append("enter")
+        try:
+            yield read_stream, write_stream
+        finally:
+            transitions.append("exit")
+
+    server = MagicMock()
+    server.run = AsyncMock()
+    server.create_initialization_options.return_value = {"init": "options"}
+    factory = MagicMock(return_value=server)
+    monkeypatch.setattr(mcp_mod, "stdio_server", fake_stdio_server)
+    monkeypatch.setattr(mcp_mod, "create_mcp_server", factory)
+
+    run_mcp_server(tmp_path, "verifier")
+
+    factory.assert_called_once_with(tmp_path, "verifier")
+    server.run.assert_awaited_once_with(read_stream, write_stream, {"init": "options"})
+    assert transitions == ["enter", "exit"]
 
 
 def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBroker) -> None:

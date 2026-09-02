@@ -25,11 +25,18 @@ import pytest
 
 from harness.shared.nemotron_bridge import resolve_api_key
 
+# The langgraph deselection and the skip-evidence hooks moved to the
+# repository-root conftest.py (logic in _session_hooks.py): a hook registered
+# here only sees items under harness/shared/tests, and the zero-skip gate has
+# to see every suite (R-TDH-26). The two names stay importable from here for
+# the tests that pin the wiring.
+from harness.shared.tests._session_hooks import LANGGRAPH_DESELECT_ENV, LANGGRAPH_MARKER  # noqa: F401
+
 # Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
 # These tests pass on CI (ubuntu-latest) but cannot pass on Windows.
 POSIX_ONLY = pytest.mark.skipif(
     sys.platform == "win32",
-    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows"
+    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows (DEC-026)"
 )
 
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from harness.shared.agent_authority import execution_identity
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
+from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.read_policy import read_denial_reason
 from harness.shared.tool_result_format import format_execution_result
 from harness.shared.write_policy import active_policy_path, write_denial_reason
@@ -235,7 +236,7 @@ def execute_run_command(
     if timeout is not None:
         kwargs["timeout"] = timeout
     result = broker.execute_command(command, **kwargs)
-    if result.status == "BLOCKED":
+    if result.status == BROKER_BLOCKED:
         from harness.shared.debug_dump import redact_text
         logger.warning("Broker denied command %r for role %s: %s", redact_text(command), active_role, result.reason)
     return format_execution_result(result)

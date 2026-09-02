@@ -14,6 +14,7 @@ from harness.shared.policy_loader import (
     PolicyError,
     agent_defaults,
     coverage_defaults,
+    coverage_optional_extras,
     load_policy,
     max_tool_calls_per_task,
     nemotron_defaults,
@@ -54,6 +55,7 @@ class TestSectionAccessors:
             "tool_timeout_sec": 5,
             "max_command_bytes": 4096,
             "max_healing_retries": 3,
+            "max_output_bytes": 1234,
         }
         p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
         assert orchestrator_defaults(p) == declared
@@ -98,6 +100,36 @@ class TestSectionAccessors:
         with pytest.raises(PolicyError):
             coverage_defaults(p)
 
+    def test_coverage_optional_extras_come_from_policy(self, tmp_path: Path) -> None:
+        p = tmp_path / "policy.json"
+        spec = {"import_name": "x", "deselect_env": "X_OFF", "path_prefixes": ["a/", "b/"]}
+        p.write_text(json.dumps({"coverage": {"optional_extras": {"x": spec}}}), encoding="utf-8")
+        assert coverage_optional_extras(p) == {
+            "x": {"import_name": "x", "deselect_env": "X_OFF", "path_prefixes": ("a/", "b/")}
+        }
+
+    def test_coverage_optional_extras_absent_is_empty(self, tmp_path: Path) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"coverage": {"lines": 1, "branches": 1}}), encoding="utf-8")
+        assert coverage_optional_extras(p) == {}
+
+    @pytest.mark.parametrize(
+        "extras",
+        [
+            [1],
+            {"x": 3},
+            {"x": {"import_name": "", "deselect_env": "E", "path_prefixes": ["a/"]}},
+            {"x": {"import_name": "x", "deselect_env": None, "path_prefixes": ["a/"]}},
+            {"x": {"import_name": "x", "deselect_env": "E", "path_prefixes": []}},
+            {"x": {"import_name": "x", "deselect_env": "E", "path_prefixes": ["a/", 2]}},
+        ],
+    )
+    def test_coverage_optional_extras_malformed_fail_closed(self, tmp_path: Path, extras: object) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"coverage": {"optional_extras": extras}}), encoding="utf-8")
+        with pytest.raises(PolicyError):
+            coverage_optional_extras(p)
+
     def test_agent_defaults_values_come_from_policy(self, tmp_path: Path) -> None:
         p = tmp_path / "policy.json"
         p.write_text(
@@ -111,6 +143,27 @@ class TestSectionAccessors:
         p.write_text(json.dumps({"agent_defaults": [1, 2]}), encoding="utf-8")
         with pytest.raises(PolicyError):
             agent_defaults(p)
+
+
+class TestFloatValues:
+    """``_float_value`` (policy_loader.py line 111) guards the one float the policy
+    carries, ``nemotron.temperature``. ``bool`` is an ``int`` subclass, so without
+    the explicit check ``true`` would silently become a temperature of 1.0."""
+
+    @pytest.mark.parametrize("bad", [True, "0.2", None, [0.2]])
+    def test_a_non_number_temperature_fails_closed(self, tmp_path: Path, bad: object) -> None:
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"nemotron": {"temperature": bad}}), encoding="utf-8")
+        with pytest.raises(PolicyError, match="nemotron.temperature must be a number"):
+            nemotron_defaults(p)
+
+    def test_an_integer_temperature_is_accepted_as_a_float(self, tmp_path: Path) -> None:
+        """The control: an int is a number and is normalised to float, so the
+        rejection above is about type, not about the absence of a decimal point."""
+        p = tmp_path / "policy.json"
+        p.write_text(json.dumps({"nemotron": {"temperature": 1}}), encoding="utf-8")
+        value = nemotron_defaults(p)["temperature"]
+        assert value == 1.0 and isinstance(value, float)
 
 
 class TestRepoPolicyIsWired:
@@ -134,6 +187,15 @@ class TestRepoPolicyIsWired:
         values = coverage_defaults()
         assert values["lines"] == repo_policy["coverage"]["lines"]
         assert values["branches"] == repo_policy["coverage"]["branches"]
+
+    def test_coverage_optional_extras_reads_policy_block(self) -> None:
+        repo_policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+        declared = repo_policy["coverage"]["optional_extras"]
+        extras = coverage_optional_extras()
+        assert set(extras) == set(declared)
+        for name, spec in declared.items():
+            assert extras[name]["deselect_env"] == spec["deselect_env"]
+            assert extras[name]["path_prefixes"] == tuple(spec["path_prefixes"])
 
     def test_agent_defaults_reads_policy_block(self) -> None:
         repo_policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))

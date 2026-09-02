@@ -1,5 +1,7 @@
 # Validation & Quality Assurance Report — Agentic SSD v2.1.0
 
+> Moved from `harness/TEST-REPORT.md` (tech-debt hardening plan R-TDH-24); content unchanged.
+
 **Validation Date:** 2026-08-25  
 **Version:** 2.1.0  
 **Overall Verdict:** **100% PASS** across all 7 testing tiers & governance invariant gates.

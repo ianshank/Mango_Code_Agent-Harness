@@ -1,5 +1,7 @@
 # Mango Code Agent Harness — SDLC Gap Analysis & Code Hygiene Remediation
 
+> Moved from the repository root to `docs/reports/` (tech-debt hardening plan R-TDH-24); content unchanged.
+
 **Repository:** `ianshank/Mango_Code_Agent-Harness`
 **Branch / PR:** `chore/sdlc-hygiene-gap-analysis` → [PR #4](https://github.com/ianshank/Mango_Code_Agent-Harness/pull/4)
 **Date:** 2026-08-26

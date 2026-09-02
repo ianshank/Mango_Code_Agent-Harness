@@ -13,11 +13,18 @@ removed.
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 
 import pytest
 
 from harness.shared.tests._helpers import REPO
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 uses the backport
+    import tomli as tomllib  # type: ignore[no-redef]
 
 README = REPO / "README.md"
 GITIGNORE = REPO / ".gitignore"
@@ -231,3 +238,187 @@ class TestTheConfiguredModelIsTheDocumentedOne:
             f".env.example sets NEMOTRON_DEFAULT_MODEL={_configured_model()!r} "
             f"but the README documents {sorted(_documented_models())}"
         )
+
+
+# --- One version, many mirrors -------------------------------------------------
+#
+# The project version had five values at once (pyproject 2.2.5, README 2.3.0,
+# Makefile/CHANGELOG/NEXT_STEPS 2.4.0, package.json 2.0.0), a drift DEC-013 had
+# already reconciled once. `pyproject.toml`'s `[project].version` is the packaging
+# truth; every other site is a mirror and is checked here (extends R-CEG-1 in
+# docs/specs/ci-enforcement-gaps.md; tech-debt-hardening-plan R-TDH-7).
+
+_SEMVER = r"(\d+\.\d+\.\d+)"
+
+#: Mirror path (repo-relative) -> regex whose first group is the version it states.
+#: `harness/node/package.json` is handled as JSON below rather than by regex.
+VERSION_MIRRORS: dict[str, str] = {
+    "README.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "NEXT_STEPS.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "docs/architecture/c4_architecture.md": r"^\*\*Version:\*\*\s+" + _SEMVER,
+    "Makefile": r"^# Agentic SSD v" + _SEMVER,
+    # The first semver heading is the newest released entry; an `[Unreleased]`
+    # heading above it carries no number and is passed over.
+    "CHANGELOG.md": r"^## \[v?" + _SEMVER + r"\]",
+}
+PACKAGE_JSON = "harness/node/package.json"
+
+
+def declared_version(root: Path) -> str:
+    data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    return str(data["project"]["version"])
+
+
+def mirrored_versions(root: Path) -> dict[str, str | None]:
+    """Each mirror's stated version, or None when the site cannot be found."""
+    found: dict[str, str | None] = {}
+    for rel, pattern in VERSION_MIRRORS.items():
+        match = re.search(pattern, (root / rel).read_text(encoding="utf-8"), re.M)
+        found[rel] = match.group(1) if match else None
+    package = json.loads((root / PACKAGE_JSON).read_text(encoding="utf-8"))
+    found[PACKAGE_JSON] = package.get("version")
+    return found
+
+
+def version_drift(root: Path) -> dict[str, str | None]:
+    """Mirrors disagreeing with pyproject (missing sites count as drift)."""
+    truth = declared_version(root)
+    return {rel: seen for rel, seen in mirrored_versions(root).items() if seen != truth}
+
+
+class TestVersionIsSingleSourced:
+    def test_every_mirror_is_found(self) -> None:
+        missing = [rel for rel, seen in mirrored_versions(REPO).items() if seen is None]
+        assert not missing, f"version mirrors whose pattern no longer matches: {missing}"
+
+    def test_every_mirror_agrees_with_pyproject(self) -> None:
+        drift = version_drift(REPO)
+        assert not drift, (
+            f"pyproject.toml declares {declared_version(REPO)} but these mirrors disagree: {drift}. "
+            "pyproject is the single source; update the mirrors, never the other way round."
+        )
+
+    @pytest.mark.parametrize("mirror", sorted([*VERSION_MIRRORS, PACKAGE_JSON]))
+    def test_a_mutated_mirror_is_reported(self, mirror: str, tmp_path: Path) -> None:
+        """The negative case: the check must fail when exactly one site drifts."""
+        for rel in ["pyproject.toml", PACKAGE_JSON, *VERSION_MIRRORS]:
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+        truth = declared_version(tmp_path)
+        bogus = "0.0.1"
+        assert bogus != truth
+        path = tmp_path / mirror
+        if mirror == PACKAGE_JSON:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["version"] = bogus
+            path.write_text(json.dumps(data), encoding="utf-8")
+        else:
+            text = path.read_text(encoding="utf-8")
+            mutated = re.sub(
+                VERSION_MIRRORS[mirror],
+                lambda m: m.group(0).replace(m.group(1), bogus),
+                text,
+                count=1,
+                flags=re.M,
+            )
+            path.write_text(mutated, encoding="utf-8")
+        assert version_drift(tmp_path) == {mirror: bogus}
+
+
+# --- Changelog sections stay readable -------------------------------------------
+#
+# The v2.2.4 section of CHANGELOG.md had grown to about 1,300 lines before it was
+# moved to docs/releases/v2.2.4.md (tech-debt-hardening-plan R-TDH-24). A byte
+# budget on the whole file would have been self-defeating -- the plan's own
+# arithmetic put the file at ~49 kB *after* that move -- so the cap is per release
+# section and is read from `limits.changelog_section_lines` in the policy.
+
+CHANGELOG = REPO / "CHANGELOG.md"
+GOVERNANCE_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
+_VERSION_HEADING = re.compile(r"^## \[v?\d+\.\d+\.\d+\]")
+_ANY_H2 = re.compile(r"^## ")
+
+
+def changelog_section_cap() -> int:
+    """`limits.changelog_section_lines`, read straight from the policy file.
+
+    No default: a missing or non-numeric key fails the test rather than
+    quietly measuring against a literal that the policy never agreed to.
+    """
+    policy = json.loads(GOVERNANCE_POLICY.read_text(encoding="utf-8"))
+    value = policy.get("limits", {}).get("changelog_section_lines")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        pytest.fail(f"governance-policy.json limits.changelog_section_lines is absent or non-numeric: {value!r}")
+    return int(value)
+
+
+def changelog_sections(text: str) -> dict[str, int]:
+    """Line count of every ``## [x.y.z]`` section of a changelog, keyed by heading.
+
+    A section runs from its heading line to the line before the next ``## ``
+    heading of any kind (or the end of the file), heading included. Two parts
+    of the real file are exempt, both by construction rather than by name:
+
+    * ``## [Unreleased]`` carries no version, so it never matches the pattern.
+      It is the one section that is *meant* to grow until a release cuts it,
+      and capping it would only push entries out of the changelog.
+    * The trailing ``## Harness gate-contract history`` block is the folded
+      ``harness/CHANGELOG.md`` (v2.0.0-v2.1.5). Its entries are ``###``
+      sub-headings under one non-version ``##`` heading, so that heading ends
+      the last release section without starting a new one, and the block's
+      length is never attributed to any version.
+    """
+    sections: dict[str, int] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if _ANY_H2.match(line):
+            current = line.rstrip() if _VERSION_HEADING.match(line) else None
+            if current is not None:
+                sections[current] = 0
+        if current is not None:
+            sections[current] += 1
+    return sections
+
+
+def oversized_changelog_sections(text: str, cap: int) -> dict[str, int]:
+    """The release sections longer than ``cap`` lines, with their lengths."""
+    return {heading: count for heading, count in changelog_sections(text).items() if count > cap}
+
+
+class TestChangelogSectionCap:
+    def test_changelog_section_parser_finds_release_sections(self) -> None:
+        """Positive control: an empty parse would make the cap check pass while
+        measuring nothing, and the exemptions must be exemptions, not misses."""
+        sections = changelog_sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert len(sections) >= 3, f"parsed too few release sections out of CHANGELOG.md: {sorted(sections)}"
+        assert all(_VERSION_HEADING.match(heading) for heading in sections)
+        text = CHANGELOG.read_text(encoding="utf-8")
+        assert "## [Unreleased]" in text and "## Harness gate-contract history" in text
+
+    def test_changelog_section_cap_is_policy_sourced(self) -> None:
+        assert changelog_section_cap() > 0
+
+    def test_every_changelog_section_is_within_the_cap(self) -> None:
+        cap = changelog_section_cap()
+        over = oversized_changelog_sections(CHANGELOG.read_text(encoding="utf-8"), cap)
+        assert not over, (
+            f"CHANGELOG.md release sections longer than limits.changelog_section_lines={cap}: {over}. "
+            "Move the body to docs/releases/<version>.md and leave a pointer under the heading."
+        )
+
+    def test_changelog_section_one_line_over_the_cap_is_reported(self) -> None:
+        """The negative case: exactly the offending section, nothing else."""
+        cap = changelog_section_cap()
+        filler = "- an entry\n"
+        at_cap = "## [1.0.0] - 2026-01-01\n" + filler * (cap - 1)  # heading + (cap - 1) lines == cap
+        one_over = "## [1.1.0] - 2026-01-02\n" + filler * cap  # heading + cap lines == cap + 1
+        text = (
+            "# Changelog\n\n## [Unreleased]\n" + filler * (cap + 5)  # exempt however long
+            + one_over
+            + at_cap
+            + "## Harness gate-contract history (formerly `harness/CHANGELOG.md`)\n"
+            + "### v2.1.5 - old\n" + filler * (cap + 5)  # exempt trailing block
+        )
+        assert oversized_changelog_sections(text, cap) == {"## [1.1.0] - 2026-01-02": cap + 1}
+        assert changelog_sections(text)["## [1.0.0] - 2026-01-01"] == cap

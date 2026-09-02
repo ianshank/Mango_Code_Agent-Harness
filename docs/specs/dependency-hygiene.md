@@ -69,45 +69,56 @@ substring of the failure message.
 
 ## Acceptance criteria
 
-- [ ] AC-1: `audit` appears in `GATE_TO_ROOT_TARGET`, not `KNOWN_GAPS`, in
+- [x] AC-1: `audit` appears in `GATE_TO_ROOT_TARGET`, not `KNOWN_GAPS`, in
       `test_ci_gate_coverage.py` — verified by
       `pytest harness/shared/tests/test_ci_gate_coverage.py` (R-DH-1, R-DH-2)
-- [ ] AC-2: a dedicated `audit` job in `.github/workflows/python-package.yml`
+      — verified 2026-09-02: `pytest harness/shared/tests/test_ci_gate_coverage.py`:
+      44 passed, 1 skipped (the `:526` empty parameter set, R-TDH-19);
+      `"audit": "audit"` sits in `GATE_TO_ROOT_TARGET` at line 54
+- [x] AC-2: a dedicated `audit` job in `.github/workflows/python-package.yml`
       runs `make audit` with no `if:` conditional — verified by
       `grep -A30 "^  audit:" .github/workflows/python-package.yml | grep "make audit"`
-      (R-DH-2)
-- [ ] AC-3: `pyproject.toml`'s `[project.dependencies]` and `requirements.txt`
+      (R-DH-2) — verified 2026-09-02: the grep reports
+      `run: PATH="$(go env GOPATH)/bin:$PATH" make audit`; no `if:` line in
+      the job body
+- [x] AC-3: `pyproject.toml`'s `[project.dependencies]` and `requirements.txt`
       both list `fastapi`, `uvicorn`, `pydantic`, and `httpx` — verified by
       `grep -c fastapi pyproject.toml requirements.txt` reporting at least 1
-      for each file (R-DH-3)
-- [ ] AC-4: `.github/dependabot.yml` declares both a `pip` and an `npm`
+      for each file (R-DH-3) — verified 2026-09-02: `grep -c fastapi` reports
+      1 and 1; `grep -c "uvicorn\|pydantic\|httpx"` reports 3 and 3
+- [x] AC-4: `.github/dependabot.yml` declares both a `pip` and an `npm`
       `package-ecosystem` entry — verified by
       `grep -c 'package-ecosystem: "pip"' .github/dependabot.yml` and
       `grep -c 'package-ecosystem: "npm"' .github/dependabot.yml`, each
-      reporting 1 (R-DH-4)
-- [ ] AC-5: `test_check_dedup.py` and `test_governance_broker.py` pass
+      reporting 1 (R-DH-4) — verified 2026-09-02: both greps report 1
+- [x] AC-5: `test_check_dedup.py` and `test_governance_broker.py` pass
       unchanged — verified by
       `pytest harness/shared/tests/test_check_dedup.py harness/shared/tests/test_governance_broker.py`
-      (R-DH-5)
-- [ ] AC-6: `policy_loader.py`, `coverage_gate.py`, and `validate_invariants.py`
+      (R-DH-5) — verified 2026-09-02: that selector: 112 passed;
+      `test_governance_json.py`: 8 passed
+- [x] AC-6: `policy_loader.py`, `coverage_gate.py`, and `validate_invariants.py`
       import nothing from `governance_json` — verified by
       `grep -rl governance_json harness/shared/policy_loader.py harness/shared/coverage_gate.py harness/shared/validate_invariants.py`
       returning no output (C-DH-1); this is the rejection case: the shared
       primitive must not spread to the three files this spec deliberately
-      excludes
-- [ ] AC-7: `requirements-dev.txt` still starts with `-r requirements.txt`,
+      excludes — verified 2026-09-02: the grep prints nothing and exits 1
+- [x] AC-7: `requirements-dev.txt` still starts with `-r requirements.txt`,
       so `pip install -r requirements-dev.txt` continues installing both the
       runtime and dev/tooling sets in one step — verified by
       `grep -c "^-r requirements.txt$" requirements-dev.txt` reporting 1, and
       by every existing CI job (`build`, `build-full`), which already runs
-      exactly this install command unmodified (C-DH-2)
-- [ ] AC-8: `audit-matrix` in `.github/workflows/python-package.yml` runs
+      exactly this install command unmodified (C-DH-2) — verified
+      2026-09-02: the grep reports 1
+- [x] AC-8: `audit-matrix` in `.github/workflows/python-package.yml` runs
       `make audit-python` on Python 3.9, 3.10, and 3.12; only the 3.9 leg may
       carry `continue-on-error`, and only with an inline comment naming the
       decision-log entry that justifies it — verified by
       `grep -A25 "^  audit-matrix:" .github/workflows/python-package.yml`
       showing all three versions in the matrix and `continue-on-error`
       appearing on no line but the one gated to `'3.9'` (R-DH-6, C-DH-3)
+      — verified 2026-09-02: matrix is `["3.9", "3.10", "3.12"]`; the only
+      `continue-on-error` is `${{ matrix.python-version == '3.9' }}`, under a
+      comment citing DEC-017
 
 ## Steps
 

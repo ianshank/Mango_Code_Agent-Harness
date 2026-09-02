@@ -99,7 +99,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_reasoner_frontmatter_tools_list_includes_meta_tools(self):
         """Stricter than test_reasoner_documents_meta_tools above: that test is
         satisfied by a prose mention anywhere in the file, which is exactly
-        how this gap went unnoticed for a documented period (SDLC_HYGIENE_REPORT.md,
+        how this gap went unnoticed for a documented period (docs/reports/SDLC_HYGIENE_REPORT.md,
         2026-08-26) even though the body already referenced both tools -- the
         structured `tools:` frontmatter field itself only listed
         `Bash, Read, Grep, Glob`. This asserts on the parsed field specifically."""
@@ -131,7 +131,7 @@ class ActiveAgentTests(unittest.TestCase):
         tools: list[dict[str, typing.Any]] = orch.NEMOTRON_TOOLS
         offered = {t["function"]["name"] for t in tools}
         with tempfile.TemporaryDirectory() as tmp:
-            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp))._tool_handlers)
+            dispatched = set(orch.MangoMASOrchestrator(workspace_dir=Path(tmp)).dispatcher.tool_handlers)
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")

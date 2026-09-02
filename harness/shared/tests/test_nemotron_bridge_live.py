@@ -44,7 +44,7 @@ class TestMaskSecret(unittest.TestCase):
 class TestResolveApiKey(unittest.TestCase):
     """Tests for API key resolution — always run."""
 
-    @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured")
+    @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured (DEC-026)")
     def test_resolves_key_from_environment(self) -> None:
         key = resolve_api_key()
         self.assertTrue(len(key) > 0)
@@ -52,7 +52,7 @@ class TestResolveApiKey(unittest.TestCase):
 
 
 @pytest.mark.live
-@unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured — skipping live tests")
+@unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured — skipping live tests (DEC-026)")
 class TestCompleteChatLive(unittest.TestCase):
     """Live API integration tests for complete_chat."""
 

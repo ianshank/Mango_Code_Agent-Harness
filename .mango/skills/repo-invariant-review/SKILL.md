@@ -3,7 +3,8 @@ name: repo-invariant-review
 Reviewed: 2026-08-28
 description: >
   Check a change against this repository's mechanically enforced invariants — protected
-  paths, the 500-line size budget, testing thresholds, and architectural drift.
+  paths, the policy-sourced size budgets (`limits.size_budget_lines`,
+  `limits.test_size_budget_lines`), testing thresholds, and architectural drift.
   Use before opening a PR, when reviewing someone else's change or proposal, or whenever a
   plan proposes touching core models, the orchestrator, or agent personas.
   Predicts concrete CI failures rather than offering style opinions.

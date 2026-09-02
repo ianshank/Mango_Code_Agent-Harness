@@ -10,7 +10,6 @@ logic has been decomposed into the `harness.shared.orchestrator` package.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -129,18 +128,13 @@ class MangoMASOrchestrator:
             complete_chat_fn=sys.modules[__name__].complete_chat,
         )
 
-    # Note: conversation_history and _tool_handlers exposed for compatibility with
-    # tests that inspect orchestrator state directly
+    # conversation_history is part of the public surface R-ORCH-4 pins. The
+    # private pass-throughs that used to sit here (_tool_handlers, _run_hook,
+    # _dispatch_tool_calls) existed only so tests could poke the facade; those
+    # tests now address `dispatcher` and `hook_runner` directly (R-TDH-18).
     @property
     def conversation_history(self) -> list[dict[str, Any]]:
         return self.execution_loop.conversation_history
-
-    @property
-    def _tool_handlers(self) -> dict[str, Callable[[dict[str, Any]], str]]:
-        return self.dispatcher.tool_handlers
-
-    def _run_hook(self, hook_name: str, **kwargs: Any) -> None:
-        self.hook_runner.run_hook(hook_name, **kwargs)
 
     def load_agent_prompt(self, agent_name: str) -> str:
         return self.execution_loop.load_agent_prompt(agent_name)
@@ -156,9 +150,6 @@ class MangoMASOrchestrator:
 
     def _execute_run_command(self, command: str) -> str:
         return self.dispatcher._execute_run_command(command)
-
-    def _dispatch_tool_calls(self, messages: list[dict[str, Any]], tool_calls: list[dict[str, Any]]) -> None:
-        self.dispatcher.dispatch(messages, tool_calls)
 
     def _finalize_response(self, messages: list[dict[str, Any]], content: Any) -> str:
         return self.execution_loop._finalize_response(messages, content)

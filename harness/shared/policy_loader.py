@@ -121,6 +121,11 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
         "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
         "max_healing_retries": _int_value(section, "max_healing_retries", 3, "orchestrator"),
+        # Captured-output ceiling for the process backend (a containment control:
+        # an unbounded capture becomes a prompt, a signal-sink entry and an HTTP
+        # body). Was an unlinked 64 KiB literal in process_backend.py
+        # (tech-debt-hardening-plan R-TDH-16).
+        "max_output_bytes": _int_value(section, "max_output_bytes", 65536, "orchestrator"),
     }
 
 
@@ -164,6 +169,38 @@ def coverage_defaults(policy_path: Path | None = None) -> dict:
         "lines": _int_value(section, "lines", 90, "coverage"),
         "branches": _int_value(section, "branches", 80, "coverage"),
     }
+
+
+def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]:
+    """Optional extras whose tests a CI leg may deselect; policy `coverage.optional_extras`.
+
+    Each entry maps an extra's name to ``import_name`` (what a leg lacking the
+    extra cannot import), ``deselect_env`` (the variable that leg sets to "1";
+    conftest.py deselects the extra's marked tests on it and coverage_gate.py
+    waives the per-file floor for the extra's modules on it) and
+    ``path_prefixes`` (those modules). One key, three readers (DEC-028).
+    Absent block: {}. Malformed block: PolicyError.
+    """
+    extras = _section("coverage", policy_path).get("optional_extras", {})
+    if not isinstance(extras, dict):
+        raise PolicyError("policy coverage.optional_extras must be an object keyed by extra name")
+    result: dict[str, dict] = {}
+    for name, spec in extras.items():
+        if not isinstance(spec, dict):
+            raise PolicyError(f"policy coverage.optional_extras[{name!r}] must be an object")
+        import_name, deselect_env, prefixes = (
+            spec.get("import_name"), spec.get("deselect_env"), spec.get("path_prefixes")
+        )
+        if not isinstance(import_name, str) or not import_name or not isinstance(deselect_env, str) or not deselect_env:
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}] import_name and deselect_env must be non-empty strings"
+            )
+        if not isinstance(prefixes, list) or not prefixes or any(not isinstance(p, str) or not p for p in prefixes):
+            raise PolicyError(
+                f"policy coverage.optional_extras[{name!r}].path_prefixes must be a non-empty list of strings"
+            )
+        result[name] = {"import_name": import_name, "deselect_env": deselect_env, "path_prefixes": tuple(prefixes)}
+    return result
 
 
 def agent_defaults(policy_path: Path | None = None) -> dict:

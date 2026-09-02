@@ -54,10 +54,19 @@
     "statements": 90,
     "functions": 90,
     "branches": 80,
-    "per_file": true
+    "per_file": true,
+    "optional_extras": {
+      "langgraph": {
+        "import_name": "langgraph.graph",
+        "deselect_env": "MANGO_CI_DESELECT_LANGGRAPH",
+        "path_prefixes": ["harness/shared/langgraph/"]
+      }
+    }
   },
   "limits": {
-    "size_budget_lines": 500
+    "size_budget_lines": 500,
+    "test_size_budget_lines": 700,
+    "changelog_section_lines": 400
   },
   "decision_id_pattern": "^(DEC-[0-9]+|RB-[0-9]+[a-z]?|G-[A-Z]+|S[0-9]+\\.[0-9]+)$",
   "agent_defaults": {
@@ -85,7 +94,8 @@
     "api_timeout_sec": 300,
     "tool_timeout_sec": 30,
     "max_command_bytes": 8192,
-    "max_healing_retries": 3
+    "max_healing_retries": 3,
+    "max_output_bytes": 65536
   },
   "nemotron": {
     "temperature": 0.2,
@@ -159,7 +169,7 @@
     ".claude/settings.local.json",
     ".mango/settings.local.json",
     "harness/shared/tests/test_protected_path_liveness.py",
-    "harness/shared/tests/test_ci_gate_coverage.py",
+    "harness/shared/tests/*ci_gate*.py",
     "harness/shared/tests/test_coverage_policy_enforcement.py",
     "harness/shared/langgraph/**"
   ],

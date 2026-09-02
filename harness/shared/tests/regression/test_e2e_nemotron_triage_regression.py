@@ -20,6 +20,7 @@ from unittest.mock import patch
 import pytest
 
 from harness.shared.governance.command_actions import write_targets
+from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 from harness.shared.nemotron_bridge import resolve_api_key
 from harness.shared.tool_executors import execute_read_file, execute_write_file
@@ -118,8 +119,8 @@ class TestLATSNegativeRewardRegression:
     """DEF-NEMO-002: Pins that MCTS selects the optimal branch even when all scores are negative."""
 
     def test_best_leaf_with_all_negative_scores(self) -> None:
+        from harness.shared.experimental.lats_optimizer import LATSOptimizer
         from harness.shared.langgraph.ablation import AblationNode
-        from harness.shared.lats_optimizer import LATSOptimizer
 
         optimizer = LATSOptimizer()
         root = AblationNode(state_diff={})
@@ -139,7 +140,7 @@ class TestLATSNegativeRewardRegression:
         assert best.state_diff == {"step": 2}
 
     def test_refine_plan_with_negative_evaluations(self) -> None:
-        from harness.shared.lats_optimizer import LATSOptimizer
+        from harness.shared.experimental.lats_optimizer import LATSOptimizer
 
         optimizer = LATSOptimizer(exploration_weight=0.0, max_budget=3)
         from typing import Any, cast
@@ -219,6 +220,8 @@ class TestMCPUnicodeAndErrorIsolationRegression:
         assert res_read == unicode_content
 
 
+@pytest.mark.langgraph
+@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, reason="langgraph not installed (DEC-026)")
 class TestAutonomousHealingE2ERegression:
     """DEF-NEMO-006: Pins the autonomous self-healing loop in StateGraph."""
 

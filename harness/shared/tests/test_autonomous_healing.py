@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from harness.shared.autonomous_healing import TestHealer
+from harness.shared.experimental.autonomous_healing import TestHealer
 from harness.shared.governance.broker import ExecutionResult
 
 pytestmark = pytest.mark.enable_socket
@@ -53,8 +53,8 @@ def test_heal_until_green_recovers_after_remediation(tmp_path) -> None:
         return next(calls)
 
     with patch.object(healer, "_run_test_suite", side_effect=fake_run), \
-         patch("harness.shared.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
-         patch("harness.shared.autonomous_healing.MangoMASOrchestrator") as mock_orch:
+         patch("harness.shared.experimental.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
+         patch("harness.shared.experimental.autonomous_healing.MangoMASOrchestrator") as mock_orch:
         mock_instance = MagicMock()
         mock_orch.return_value = mock_instance
         assert healer.heal_until_green(["pytest"]) is True
@@ -65,9 +65,9 @@ def test_heal_until_green_langgraph_branch(tmp_path) -> None:
     """Test heal_until_green uses LangGraph when available and passes orchestrator config."""
     healer = TestHealer(workspace=str(tmp_path), max_retries=2)
     with patch.object(healer, "_run_test_suite", side_effect=[(False, "fail"), (True, "pass")]), \
-         patch("harness.shared.autonomous_healing.LANGGRAPH_AVAILABLE", True), \
+         patch("harness.shared.experimental.autonomous_healing.LANGGRAPH_AVAILABLE", True), \
          patch("harness.shared.langgraph.graph.build_graph") as mock_build, \
-         patch("harness.shared.autonomous_healing.MangoMASOrchestrator"):
+         patch("harness.shared.experimental.autonomous_healing.MangoMASOrchestrator"):
         mock_graph = MagicMock()
         mock_build.return_value = mock_graph
         assert healer.heal_until_green(["pytest"]) is True
@@ -82,8 +82,8 @@ def test_heal_until_green_exhausted(tmp_path) -> None:
     """Test heal_until_green returns False when retries are exhausted."""
     healer = TestHealer(workspace=str(tmp_path), max_retries=2)
     with patch.object(healer, "_run_test_suite", return_value=(False, "fail")), \
-         patch("harness.shared.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
-         patch("harness.shared.autonomous_healing.MangoMASOrchestrator"):
+         patch("harness.shared.experimental.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
+         patch("harness.shared.experimental.autonomous_healing.MangoMASOrchestrator"):
         assert healer.heal_until_green(["pytest"]) is False
 
 
@@ -91,11 +91,11 @@ def test_heal_until_green_orchestrator_exception(tmp_path) -> None:
     """Test heal_until_green catches orchestrator runtime errors."""
     healer = TestHealer(workspace=str(tmp_path), max_retries=2)
     orch_patch = patch(
-        "harness.shared.autonomous_healing.MangoMASOrchestrator",
+        "harness.shared.experimental.autonomous_healing.MangoMASOrchestrator",
         side_effect=RuntimeError("orchestrator crash")
     )
     with patch.object(healer, "_run_test_suite", return_value=(False, "fail")), \
-         patch("harness.shared.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
+         patch("harness.shared.experimental.autonomous_healing.LANGGRAPH_AVAILABLE", False), \
          orch_patch:
         assert healer.heal_until_green(["pytest"]) is False
 
@@ -120,7 +120,7 @@ def test_healer_max_retries_zero_exhausted_immediately(tmp_path) -> None:
     """Test heal_until_green returns False on first failure if max_retries=0 (no healing loops)."""
     healer = TestHealer(workspace=str(tmp_path), max_retries=0)
     with patch.object(healer, "_run_test_suite", return_value=(False, "fail")), \
-         patch("harness.shared.autonomous_healing.MangoMASOrchestrator") as mock_orch:
+         patch("harness.shared.experimental.autonomous_healing.MangoMASOrchestrator") as mock_orch:
         assert healer.heal_until_green(["pytest"]) is False
         assert not mock_orch.called
 

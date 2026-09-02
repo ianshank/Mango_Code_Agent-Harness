@@ -39,6 +39,31 @@ the secret scanner. It must pass before you push. `make review` (part of
 non-trivial changes: `openspec-peer-review`, `repo-invariant-review`, and
 `validation-runner`.
 
+`audit` and `secrets` need `pip-audit`, `osv-scanner` and `gitleaks` (the last
+two via the Go toolchain, `make audit-install` / `make secrets-install`). Where
+those are not installable, run `make ci` and `make lint-cold` locally and let the
+dedicated `dependency-audit` and `secret-scan` CI jobs evidence the other two.
+
+Python dependencies are pinned by one universal lock. If you change
+`requirements.txt`, `requirements-dev.txt` or `requirements-langgraph.txt`, run
+`make lock` and commit `requirements-lock.txt` in the same change — `make ci`
+runs `lock-check`, which recompiles and fails on any difference. Do not hand-edit
+the lock; `make lock-upgrade` (not `make lock`) is what takes newer releases, and
+the weekly drift job opens an issue when the lock falls behind.
+
+**A verification claim is not evidence.** Paste the tail of `make ci` and
+`make lint-cold` (the pass/fail lines, not "all green") into the PR's
+Validation section and link the `secret-scan` and `dependency-audit` job runs.
+A reviewer who cannot see the output treats the claim as absent: this
+repository once merged a PR whose every CI run was red under a commit message
+claiming `make ci` and mypy clean (DEC-024). The ruleset exported at
+`.github/rulesets/main.json` makes the required checks a merge requirement on
+`main`, so the check runs on the pushed head are the record.
+
+Always invoke the pinned tools through the interpreter (`python -m ruff`,
+`python -m mypy`, or the `make` targets): a bare `ruff` on `PATH` can be a
+different version that disagrees with CI on real code (DEC-013).
+
 ## Protected paths
 
 Some files are gated (`Makefile`, `pyproject.toml`, `.github/workflows/**`,

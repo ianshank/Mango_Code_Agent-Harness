@@ -13,11 +13,6 @@ if [ ! -f "$VALIDATOR" ]; then
     exit 1
 fi
 
-# Verify MCP configuration layout
-if [ ! -d ".mcp_storage" ]; then
-    echo "[.mango hook] WARNING: .mcp_storage directory missing. MCP context may be unavailable."
-fi
-
 # Run the Python validator
 python3 "$VALIDATOR"
 

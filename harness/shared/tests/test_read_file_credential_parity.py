@@ -96,7 +96,7 @@ def test_read_file_is_permitted_but_still_refuses_the_credential(tmp_path: Path)
     assert tool_is_permitted("nemotron-reasoner", "read_file") is True
 
     orch = MangoMASOrchestrator(workspace_dir=tmp_path, active_role="nemotron-reasoner")
-    result = orch._tool_handlers["read_file"]({"filepath": ".env"})
+    result = orch.dispatcher.tool_handlers["read_file"]({"filepath": ".env"})
 
     assert "sk-live-secret" not in result
     assert "credential-bearing" in result

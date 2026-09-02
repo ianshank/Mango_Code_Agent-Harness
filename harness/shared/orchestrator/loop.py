@@ -22,6 +22,8 @@ from harness.shared.governance.verification import VerificationRunner
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.orchestrator.hook_runner import HookRunner
+from harness.shared.policy_loader import max_tool_calls_per_task as policy_max_tool_calls_per_task
+from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.shadow_planner import ShadowContext, run_shadow_comparison, shadow_planner_enabled
 from harness.shared.tool_budget import ToolBudget
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
@@ -42,11 +44,23 @@ class ExecutionLoop:
         verification_cwd: Path,
         api_key: str | None = None,
         model: str | None = None,
-        max_iterations: int = 15,
-        api_timeout: int = 30,
-        max_tool_calls_per_task: int = 50,
+        max_iterations: int | None = None,
+        api_timeout: int | None = None,
+        max_tool_calls_per_task: int | None = None,
         complete_chat_fn: Callable[..., Any] | None = None,
+        policy_path: Path | None = None,
     ) -> None:
+        """Budgets left as ``None`` resolve from ``governance-policy.json`` here,
+        at construction time, never at import: ``orchestrator.max_iterations``,
+        ``orchestrator.api_timeout_sec`` and
+        ``agent_defaults.max_tool_calls_per_task`` (tech-debt-hardening-plan
+        R-TDH-12, closing policy-single-source AC-1). Callers that pass explicit
+        values, as the ``MangoMASOrchestrator`` facade does, are unaffected. The
+        previous literal defaults (15 / 30 / 50) disagreed with the policy
+        (10 / 300 / 100) and were reachable by any direct constructor call.
+        ``policy_path`` points the resolution at another policy file, for tests
+        and adopters; the loader fails closed on a malformed one.
+        """
         self.workspace_dir = workspace_dir
         self.agents_dir = agents_dir
         self.dispatcher = dispatcher
@@ -55,6 +69,20 @@ class ExecutionLoop:
         self.verification_cwd = verification_cwd
         self.api_key = api_key
         self.model = model
+        if max_iterations is None or api_timeout is None:
+            limits = orchestrator_defaults(policy_path)
+            logger.debug(
+                "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s",
+                limits["max_iterations"],
+                limits["api_timeout_sec"],
+            )
+            if max_iterations is None:
+                max_iterations = limits["max_iterations"]
+            if api_timeout is None:
+                api_timeout = limits["api_timeout_sec"]
+        if max_tool_calls_per_task is None:
+            max_tool_calls_per_task = policy_max_tool_calls_per_task(policy_path)
+            logger.debug("ExecutionLoop tool-call budget resolved from policy: %s", max_tool_calls_per_task)
         self.max_iterations = max_iterations
         self.api_timeout = api_timeout
         self.max_tool_calls_per_task = max_tool_calls_per_task
