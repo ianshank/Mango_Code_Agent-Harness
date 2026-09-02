@@ -25,6 +25,7 @@ from harness.shared.tests._helpers import REPO
 TEST_ROOTS = (
     REPO / "harness" / "shared" / "tests",
     REPO / "harness" / "api_server" / "tests",
+    REPO / "harness" / "control-plane" / "tests",
 )
 
 # Names that count as making an assertion. `pytest.fail` is a real assertion

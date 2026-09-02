@@ -41,6 +41,7 @@ PIP_AUDIT_VERSION ?= 2.9.0
 SHARED_SRC   := harness/shared
 SHARED_TESTS := harness/shared/tests
 API_TESTS    := harness/api_server/tests
+CP_TESTS     := harness/control-plane/tests
 NODE_DIR     := harness/node
 
 # --- Help ---
@@ -90,7 +91,7 @@ lint: lint-python check-compat ## Run code style, static analysis, and runtime-c
 # --- Python Testing & Coverage ---
 .PHONY: test-python
 test-python: ## Run full pytest suite (excludes live tests)
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" -v
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" -v
 
 .PHONY: test-regression
 test-regression: ## Run the regression/AQA tier on its own (one reproduction per fixed defect)
@@ -114,7 +115,7 @@ test-aqa: ## Run AQA smoke tests and coverage-gap regression suite
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
+	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
 	$(PYTHON) $(SHARED_SRC)/coverage_gate.py
 
 # --- Node Testing & Zero-Skip Verification ---

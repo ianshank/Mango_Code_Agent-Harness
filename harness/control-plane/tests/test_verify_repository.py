@@ -1,11 +1,10 @@
-"""Tests for the control-plane reference CLIs (tool_broker_reference, verify_repository).
+"""Tests for the control-plane repository verifier CLI (verify_repository.py).
 
-Both scripts previously ran argparse at module scope and were unimportable;
-they are now wrapped in ``main()`` under a ``__main__`` guard with identical
-CLI behavior (same flags, same output, same exit codes). These tests pin both
-halves: importing is side-effect free, and the ``__main__`` dispatch drives
-the same allow/deny matrix as before. The modules live in a hyphenated
-directory, so they are loaded via importlib / runpy rather than ``import``.
+Same contract as its sibling tool_broker_reference test: importing is
+side-effect free and the ``__main__`` dispatch keeps the flags, output and exit
+codes it had when argparse ran at module scope. Loaded via importlib / runpy
+because the directory is hyphenated. Colocated here by
+tech-debt-hardening-plan R-TDH-26 (was test_control_plane_clis.py).
 """
 
 from __future__ import annotations
@@ -19,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-CONTROL_PLANE = Path(__file__).resolve().parent.parent.parent / "control-plane"
-BROKER = CONTROL_PLANE / "tool_broker_reference.py"
+CONTROL_PLANE = Path(__file__).resolve().parents[1]
 VERIFIER = CONTROL_PLANE / "verify_repository.py"
+SCRIPT = VERIFIER
 
 pytestmark = pytest.mark.governance
 
@@ -40,79 +39,13 @@ def _run_main(monkeypatch: pytest.MonkeyPatch, script: Path, args: list) -> None
     runpy.run_path(str(script), run_name="__main__")
 
 
-# ---------------------------------------------------------------------------
-# Import safety (the point of the restructure)
-# ---------------------------------------------------------------------------
 
-
-@pytest.mark.parametrize("script", [BROKER, VERIFIER], ids=lambda p: p.name)
-def test_import_has_no_side_effects(script: Path, capsys: pytest.CaptureFixture):
+def test_import_has_no_side_effects(capsys: pytest.CaptureFixture):
     """Importing must neither parse argv nor exit; it only defines main()."""
-    module = _load(script)
+    module = _load(SCRIPT)
     assert callable(module.main)
     out = capsys.readouterr()
     assert out.out == "" and out.err == ""
-
-
-# ---------------------------------------------------------------------------
-# tool_broker_reference: reference PDP allow/deny matrix
-# ---------------------------------------------------------------------------
-
-
-class TestToolBroker:
-    @pytest.fixture
-    def policy(self, tmp_path: Path) -> Path:
-        path = tmp_path / "agent-policy.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "agents": [
-                        {
-                            "id": "implementer",
-                            "allowed_actions": ["edit", "push"],
-                            "human_approval_required_for": ["push"],
-                        },
-                        {"id": "planner", "allowed_actions": ["plan"]},
-                    ]
-                }
-            ),
-            encoding="utf-8",
-        )
-        return path
-
-    def test_allowed_action_prints_allow(self, monkeypatch, capsys, policy: Path):
-        _run_main(monkeypatch, BROKER, ["--policy", policy, "--agent", "implementer", "--action", "edit"])
-        assert capsys.readouterr().out.strip() == "ALLOW"
-
-    def test_unknown_agent_denies(self, monkeypatch, policy: Path):
-        with pytest.raises(SystemExit, match="DENY: unknown agent identity"):
-            _run_main(monkeypatch, BROKER, ["--policy", policy, "--agent", "ghost", "--action", "edit"])
-
-    def test_ungranted_action_denies(self, monkeypatch, policy: Path):
-        with pytest.raises(SystemExit, match="DENY: action not granted to this agent"):
-            _run_main(monkeypatch, BROKER, ["--policy", policy, "--agent", "planner", "--action", "push"])
-
-    def test_high_risk_action_without_human_approval_denies(self, monkeypatch, policy: Path):
-        with pytest.raises(SystemExit, match="DENY: human approval required"):
-            _run_main(monkeypatch, BROKER, ["--policy", policy, "--agent", "implementer", "--action", "push"])
-
-    def test_high_risk_action_with_human_approval_allows(self, monkeypatch, capsys, policy: Path):
-        _run_main(
-            monkeypatch,
-            BROKER,
-            ["--policy", policy, "--agent", "implementer", "--action", "push", "--human-approved"],
-        )
-        assert capsys.readouterr().out.strip() == "ALLOW"
-
-    def test_missing_required_flag_exits_with_usage_error(self, monkeypatch, policy: Path):
-        with pytest.raises(SystemExit) as exc:
-            _run_main(monkeypatch, BROKER, ["--policy", policy, "--agent", "planner"])
-        assert exc.value.code == 2  # argparse usage error, unchanged by the restructure
-
-
-# ---------------------------------------------------------------------------
-# verify_repository: protected-digest verification matrix
-# ---------------------------------------------------------------------------
 
 
 class TestVerifyRepository:

@@ -23,76 +23,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.nemotron_bridge import resolve_api_key
-from harness.shared.policy_loader import coverage_optional_extras
-from harness.shared.tests import _skip_events
 
-# CI legs whose interpreter cannot install langgraph (it declares
-# Requires-Python >=3.10) set this to "1". The `langgraph`-marked suites are
-# then *deselected* -- reported in pytest's summary line, never counted as a
-# skip -- instead of tripping their skipif guards, which is what INV-2's
-# zero-skip posture requires. Every other leg installs the library and runs
-# them; test_workflow_contracts.py pins that wiring. Local runs without the
-# library keep the skipif behaviour, so a developer sees what did not run.
-# The variable's name comes from `coverage.optional_extras` in the governance
-# policy, which coverage_gate.py reads for the matching per-file waiver, so
-# the deselect signal and the waiver cannot drift apart (DEC-028).
-LANGGRAPH_MARKER = "langgraph"
-LANGGRAPH_DESELECT_ENV: str = coverage_optional_extras()[LANGGRAPH_MARKER]["deselect_env"]
-
-
-def _langgraph_deselection_requested() -> bool:
-    return os.environ.get(LANGGRAPH_DESELECT_ENV) == "1" and not LANGGRAPH_AVAILABLE
-
-
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Deselect ``langgraph``-marked tests on legs that opted in and lack the library."""
-    if not _langgraph_deselection_requested():
-        return
-    deselected = [item for item in items if item.get_closest_marker(LANGGRAPH_MARKER) is not None]
-    if not deselected:
-        return
-    config.hook.pytest_deselected(items=deselected)
-    items[:] = [item for item in items if item.get_closest_marker(LANGGRAPH_MARKER) is None]
-    config.stash.setdefault(_LANGGRAPH_DESELECTED_KEY, len(deselected))
-
-
-_LANGGRAPH_DESELECTED_KEY = pytest.StashKey[int]()
-
-
-def pytest_report_header(config: pytest.Config) -> list[str]:
-    """Make the deselection visible in the run header, not only in the tally."""
-    if not _langgraph_deselection_requested():
-        return []
-    return [
-        (
-            f"langgraph: not installed and {LANGGRAPH_DESELECT_ENV}=1; "
-            f"tests marked '{LANGGRAPH_MARKER}' are deselected on this leg"
-        )
-    ]
-
-
-# --- Skip evidence for the Python zero-skip gate (INV-2, R-TDH-19) ----------
-#
-# Every skip this session produces is written, as `unique_id\tdisplay\treason`,
-# to the file `make verify-zero-skips-python` reads. See _skip_events.py.
-_SKIP_ROWS: list[tuple[str, str, str]] = []
-
-
-def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    event = _skip_events.skip_event(report)
-    if event is not None:
-        _SKIP_ROWS.append(event)
-
-
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    path = _skip_events.events_path()
-    count = _skip_events.write_events(path, _SKIP_ROWS)
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-    if reporter is not None and count:
-        reporter.write_line(f"skip evidence: {count} skip(s) written to {path} for verify-zero-skips-python")
-
+# The langgraph deselection and the skip-evidence hooks moved to the
+# repository-root conftest.py (logic in _session_hooks.py): a hook registered
+# here only sees items under harness/shared/tests, and the zero-skip gate has
+# to see every suite (R-TDH-26). The two names stay importable from here for
+# the tests that pin the wiring.
+from harness.shared.tests._session_hooks import LANGGRAPH_DESELECT_ENV, LANGGRAPH_MARKER  # noqa: F401
 
 # Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
 # These tests pass on CI (ubuntu-latest) but cannot pass on Windows.

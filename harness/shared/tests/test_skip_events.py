@@ -1,6 +1,7 @@
 """`_skip_events.py`: the pytest-side producer of the Python zero-skip evidence.
 
-The hooks in `conftest.py` are three lines each and call these two functions;
+The hooks in the repository-root `conftest.py` (via `_session_hooks.py`) are one
+line each and call these two functions;
 this is where their behaviour is pinned with plain objects, no pytester run
 needed (tech-debt-hardening-plan R-TDH-19, DEC-026).
 """

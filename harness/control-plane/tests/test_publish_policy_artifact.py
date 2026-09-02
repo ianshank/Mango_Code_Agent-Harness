@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "control-plane" / "publish_policy_artifact.py"
+_MODULE_PATH = Path(__file__).resolve().parents[1] / "publish_policy_artifact.py"
 
 
 def _load_module():

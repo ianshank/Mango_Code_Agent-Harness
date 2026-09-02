@@ -170,3 +170,22 @@ class TestDeadCodeAndSkipGatesAreWired:
         assert "skip-waivers.json" in recipe and ".governance/skip-waivers.json" not in recipe, (
             "the Python registry lives beside the suite; the root .governance/ is dormant (DEC-005)"
         )
+
+
+class TestControlPlaneTestsAreRun:
+    """R-TDH-26 / AC-26: harness/control-plane/tests is a separate directory, so
+    dropping it from a recipe would silently un-run every control-plane test
+    while `make test-python` stayed green. Both recipes must name it through the
+    same variable, and the variable must point at the real directory."""
+
+    def test_the_variable_points_at_the_colocated_directory(self) -> None:
+        match = re.search(r"^CP_TESTS\s*:=\s*(\S+)\s*$", _text(), re.M)
+        assert match, "Makefile defines no CP_TESTS variable"
+        assert (REPO / match.group(1)).is_dir(), f"CP_TESTS={match.group(1)} is not a directory"
+        assert match.group(1) == "harness/control-plane/tests"
+
+    @pytest.mark.parametrize("target", ["test-python", "coverage-python"])
+    def test_both_python_runners_collect_it(self, target: str) -> None:
+        recipe = _targets().get(target, "")
+        assert recipe, f"Makefile has no {target} recipe"
+        assert "$(CP_TESTS)/" in recipe, f"{target} no longer runs $(CP_TESTS); the control-plane tests would not run"

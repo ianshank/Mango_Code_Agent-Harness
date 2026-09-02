@@ -10,6 +10,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Tech-debt hardening plan, Phase 5 — control-plane tests colocated, session hooks at the rootdir
+
+- **`harness/control-plane/tests/` exists and is collected** (R-TDH-26).
+  `test_build_policy_bundle.py`, `test_publish_policy_artifact.py` and
+  `test_regenerate_bundle_digests.py` move there from `harness/shared/tests`;
+  `test_control_plane_clis.py` splits into `test_tool_broker_reference.py`
+  and `test_verify_repository.py`. `pyproject.toml` adds the directory to
+  `testpaths` and to the coverage `omit` list; `make test-python` and
+  `make coverage-python` run it through a new `CP_TESTS` variable that
+  `test_makefile_contracts.py` pins. `test_control_plane_layout.py` is the
+  meta-test: every script has a `test_<script>.py` that names it, every test
+  module maps to a script, and the configuration collects the directory.
+- **The skip-evidence and langgraph-deselection hooks move to a
+  repository-root `conftest.py`** (logic in
+  `harness/shared/tests/_session_hooks.py`, DEC-030). pytest scopes a
+  conftest's per-item hooks to its own directory, so while the hooks lived in
+  `harness/shared/tests/conftest.py` a skip under `harness/api_server/tests`
+  was never written to the file `make verify-zero-skips-python` reads. The
+  Python half of INV-2 now sees every suite; `test_session_hooks.py` proves it
+  with a real pytest run over two sibling directories and pins that no
+  directory conftest re-registers the hooks.
+
 ### Tech-debt hardening plan, Phase 4 — test size budget, gate test split, Node client split, structure decisions
 
 - **Test modules have a line budget.** `validate_invariants.check_test_size_budget`

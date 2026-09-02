@@ -30,7 +30,7 @@ include = ["harness*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["harness/shared/tests", "harness/api_server/tests"]
+testpaths = ["harness/shared/tests", "harness/api_server/tests", "harness/control-plane/tests"]
 markers = [
     "live: requires live NVIDIA_API_KEY credentials (deselect with -m 'not live')",
     "slow: tests that take > 5s",
@@ -60,6 +60,7 @@ source = ["harness/shared", "harness/api_server", "harness/control-plane"]
 omit = [
     "harness/shared/tests/*",
     "harness/api_server/tests/*",
+    "harness/control-plane/tests/*",
     "harness/shared/__pycache__/*",
     "harness/shared/install_hooks.sh",
     "harness/shared/pre_push_scan.sh",
