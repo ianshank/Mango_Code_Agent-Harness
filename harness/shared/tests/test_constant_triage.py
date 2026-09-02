@@ -22,7 +22,6 @@ import importlib
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -59,6 +58,7 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.governance.process_backend", "DEFAULT_TIMEOUT_SEC", policy_key="orchestrator.tool_timeout_sec"),
     Row("harness.shared.retry_policy", "DEFAULT_MAX_RETRIES", policy_key="nemotron.max_retries"),
     Row("harness.shared.validate_invariants", "SIZE_BUDGET_LINES", policy_key="limits.size_budget_lines"),
+    Row("harness.shared.validate_invariants", "TEST_SIZE_BUDGET_LINES", policy_key="limits.test_size_budget_lines"),
     Row("harness.shared.check_dedup", "DEFAULT_MAX_SHIM_LINES", policy_key="dedup.max_shim_lines"),
     # accepted by decision
     Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-025"),
@@ -70,6 +70,27 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "failureThreshold", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/nemotron-client.ts", "baseBackoffMs", decision="DEC-025"),
 )
+
+
+def _module_names(module: str) -> tuple[str, ...]:
+    """Identifiers a decision-log line may legitimately use to name ``module``.
+
+    Rows carry two shapes: a dotted Python module
+    (``harness.shared.retry_policy``) and a repo-relative Node path
+    (``harness/node/src/ai/nemotron/circuit-breaker.ts``).
+
+    The previous derivation was ``Path(module).name.split(".")[0]``, which for a
+    *dotted* module has no path separator to split on and so evaluated to
+    ``"harness"`` -- a substring of essentially every line in the log. Combined
+    with `or`/`and` precedence that left only the symbol actually checked, so a
+    constant could cite a decision discussing an entirely different module, or a
+    module that does not exist, and the gate stayed green. R-TDH-16/AC-16's whole
+    enforcement rested on that line.
+    """
+    if "/" in module:
+        base = module.rsplit("/", 1)[-1]
+        return (module, base, base.rsplit(".", 1)[0])
+    return (module, module.rsplit(".", 1)[-1])
 
 
 def _lookup(policy: dict[str, Any], dotted: str) -> Any:
@@ -106,7 +127,7 @@ def check_row(row: Row, policy: dict[str, Any], decisions: dict[str, str]) -> st
     line = decisions.get(row.decision)
     if line is None:
         return f"{row.decision} is not in the decision log"
-    if row.symbol not in line or Path(row.module).name.split(".")[0] not in line and row.module not in line:
+    if row.symbol not in line or not any(name in line for name in _module_names(row.module)):
         return f"{row.decision} does not name {row.module} / {row.symbol}"
     return None
 
@@ -164,3 +185,30 @@ class TestCheckerSemantics:
     def test_parser_reads_the_log_format(self) -> None:
         text = "# Log\n\n2026-01-01 | DEC-007 | first | a\n2026-01-02 | DEC-008 | second | b\n"
         assert set(decision_entries(text)) == {"DEC-007", "DEC-008"}
+
+
+class TestDecisionLinkageIsNotVacuous:
+    """The linkage check reduced to matching the string ``harness``.
+
+    ``Path("harness.shared.retry_policy").name.split(".")[0]`` is ``"harness"``
+    — a dotted module has no path separator to split on — and that appears in
+    essentially every decision-log line. With `or`/`and` precedence only the
+    symbol was ever really checked, so a constant could cite a decision about a
+    different module, or a module that does not exist, and stay green. AC-16's
+    entire enforcement rested on that expression.
+    """
+
+    def test_a_decision_naming_a_different_module_is_rejected(self) -> None:
+        decisions = {"DEC-999": "2026-01-01 | DEC-999 | harness thing about DEFAULT_BASE_SEC elsewhere | owner"}
+        row = Row("harness.shared.cognitive_signal", "DEFAULT_BASE_SEC", decision="DEC-999")
+        assert check_row(row, {}, decisions) is not None, "a decision about another module must not satisfy the row"
+
+    def test_a_decision_naming_the_real_module_is_accepted(self) -> None:
+        decisions = {"DEC-999": "2026-01-01 | DEC-999 | retry_policy.DEFAULT_BASE_SEC is accepted because | owner"}
+        row = Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-999")
+        assert check_row(row, {}, decisions) is None
+
+    def test_a_node_path_row_matches_on_its_basename(self) -> None:
+        decisions = {"DEC-999": "2026-01-01 | DEC-999 | circuit-breaker.ts failureThreshold accepted | owner"}
+        row = Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "failureThreshold", decision="DEC-999")
+        assert check_row(row, {}, decisions) is None

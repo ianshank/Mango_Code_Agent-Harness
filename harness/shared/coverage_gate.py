@@ -240,10 +240,21 @@ def _importable(name: str) -> bool:
 
 
 def _waiving_extra(path: str, waived: dict[str, tuple[str, ...]]) -> str | None:
+    """The extra waiving ``path``, or None. Matches whole path segments only.
+
+    A raw ``str.startswith`` let a prefix written without its trailing slash --
+    ``harness/shared/langgraph`` instead of ``harness/shared/langgraph/`` -- waive
+    every sibling whose name merely starts the same way (``langgraph_helpers.py``,
+    ``langgraphX.py``). Nothing caught it: the policy check only asserts the prefix
+    names a real directory, which the slashless form does. Widening a coverage
+    waiver by deleting one character is not a change anyone would review.
+    """
     posix = PurePath(path).as_posix()
     for name, prefixes in waived.items():
-        if any(posix.startswith(prefix) for prefix in prefixes):
-            return name
+        for prefix in prefixes:
+            boundary = prefix if prefix.endswith("/") else f"{prefix}/"
+            if posix == prefix or posix.startswith(boundary):
+                return name
     return None
 
 
@@ -298,6 +309,18 @@ def check_per_file(
                 path, actual, lines_floor,
             )
             ok = False
+    if ok and measured_count == 0:
+        # Absence of evidence is never a pass (this module's own contract). A
+        # waiver set broad enough to cover every measured file -- one policy edit,
+        # e.g. path_prefixes ["harness/"] -- turned per-file enforcement off
+        # entirely while the gate still printed [PASS] with a 0 in it.
+        logger.error(
+            "[FAIL] Coverage per-file: 0 file(s) measured against the lines floor (%d waived); "
+            "the policy declares per_file enforcement, so a waiver set covering everything "
+            "is not compliance",
+            waived_count,
+        )
+        return False
     if ok:
         logger.info(
             "[PASS] Coverage per-file: %d file(s) meet the lines floor of %.2f%% (%d waived)",

@@ -389,3 +389,31 @@ def test_check_per_file_entry_with_non_integer_counters_fails_closed(tmp_path: P
         cg.check_per_file(report, 90.0)
     assert exc.value.code == 1
     assert "harness/shared/x.py lacks covered_lines/num_statements" in caplog.text
+
+
+def test_a_prefix_without_a_trailing_slash_does_not_waive_siblings(tmp_path: Path):
+    """Deleting one character from a policy prefix used to widen the waiver.
+
+    `harness/shared/langgraph` (no slash) matched `langgraph_helpers.py` and
+    `langgraphX.py` under a raw `str.startswith`. The policy check only asserts
+    the prefix names a real directory, which the slashless form does, so nothing
+    caught it — and widening a coverage waiver by one character is not a change
+    a reviewer would notice.
+    """
+    waived: dict[str, tuple[str, ...]] = {"opt": ("harness/shared/langgraph",)}
+    assert cg._waiving_extra("harness/shared/langgraph/nodes.py", waived) == "opt"
+    assert cg._waiving_extra("harness/shared/langgraph", waived) == "opt", "the directory itself still matches"
+    assert cg._waiving_extra("harness/shared/langgraph_helpers.py", waived) is None
+    assert cg._waiving_extra("harness/shared/langgraphX.py", waived) is None
+
+
+def test_a_waiver_covering_every_measured_file_is_not_a_pass(tmp_path: Path, caplog):
+    """Absence of evidence is never a pass — this module's own contract.
+
+    One policy edit (`path_prefixes: ["harness/"]`) waived every file while the
+    gate still printed `[PASS]`, with a 0 in the count nobody reads.
+    """
+    report = _per_file_report(tmp_path)
+    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+        assert cg.check_per_file(report, 90.0, {"opt": ("harness/",)}) is False
+    assert "0 file(s) measured" in caplog.text

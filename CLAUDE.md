@@ -11,7 +11,8 @@ output trustworthy. Mechanical enforcement lives in the root `Makefile` and
    criteria from a spec or brief. Plans and delegates only; never edits code.
 2. **nemotron-reasoner** (`.mango/agents/nemotron-reasoner.md`) — executes the
    plan with the tool bridge. Uses `knowledge_gap_log` / `hypothesis_register`
-   (wired via `META_TOOLS_SCHEMA` in `mango_mas_orchestrator.py`) instead of
+   (defined as `META_TOOLS_SCHEMA` in `harness/shared/meta_tools.py` and composed
+   into `NEMOTRON_TOOLS` by `harness/shared/tool_schemas.py`) instead of
    hallucinating when blocked or uncertain.
 3. **verifier** (`.mango/agents/verifier.md`) — executes the validation matrix
    and reports PASS/FAIL against the acceptance criteria. Never marks PASS on

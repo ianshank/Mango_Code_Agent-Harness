@@ -35,7 +35,24 @@ from harness.shared.tests import _skip_events
 # them; test_workflow_contracts.py pins that wiring. Local runs without the
 # library keep the skipif behaviour, so a developer sees what did not run.
 LANGGRAPH_MARKER = "langgraph"
-LANGGRAPH_DESELECT_ENV: str = coverage_optional_extras()[LANGGRAPH_MARKER]["deselect_env"]
+
+#: Used when the policy declares no ``langgraph`` optional extra. The policy is the
+#: source of truth when it speaks; an adopter fork that trims the block must still be
+#: able to *collect* a test suite, so a missing key falls back here instead of raising
+#: ``KeyError`` out of a module-level index during conftest import — which would kill
+#: the session before pytest could report a reason. Malformed still fails closed:
+#: ``coverage_optional_extras`` raises ``PolicyError`` for a block it cannot parse.
+_FALLBACK_DESELECT_ENV = "MANGO_CI_DESELECT_LANGGRAPH"
+
+
+def _resolve_deselect_env() -> str:
+    extra = coverage_optional_extras().get(LANGGRAPH_MARKER)
+    if extra is None:
+        return _FALLBACK_DESELECT_ENV
+    return str(extra["deselect_env"])
+
+
+LANGGRAPH_DESELECT_ENV: str = _resolve_deselect_env()
 
 _LANGGRAPH_DESELECTED_KEY = pytest.StashKey[int]()
 
@@ -74,6 +91,13 @@ def report_header() -> list[str]:
 
 def record_skip(report: pytest.TestReport) -> None:
     event = _skip_events.skip_event(report)
+    if event is not None:
+        SKIP_ROWS.append(event)
+
+
+def record_collect_skip(report: pytest.CollectReport) -> None:
+    """Record a skip that happened during collection (see ``collect_skip_event``)."""
+    event = _skip_events.collect_skip_event(report)
     if event is not None:
         SKIP_ROWS.append(event)
 

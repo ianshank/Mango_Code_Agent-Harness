@@ -46,6 +46,60 @@
       replaces and the per-stack scripts are digested root-of-trust artefacts.
       DEC-029 defers this explicitly to "when the 3.9 floor moves"; it is a
       follow-on of the item above, not an independent one.
+- [ ] **The regression tier gained no reproduction for any defect this branch
+      fixed.** `harness/CONTRACT.md` defines `harness/shared/tests/regression/`
+      as one reproduction per defect that reached `main`, run standalone by
+      `make test-regression`. Every defect fixed here reached `main`, and the
+      diff to that directory is +12/−9 lines of marker plumbing. The
+      reproductions exist and several are excellent — the coverage-gate
+      shadowing probe (`test_coverage_gate.py`), the session-hook `pytester`
+      run (`test_session_hooks.py`) — but they sit in the unit tier, so
+      `make test-regression` runs none of them. Either move them (each naming
+      its pre-fix commit, as `regression/test_write_containment_regression.py`
+      does) or amend the contract to stop calling that target a per-defect gate.
+      The contract currently claims a guarantee the directory does not provide.
+- [ ] **Agent-surface truth gates.** Falsification probes showed three silent
+      failures: a `SKILL.md` can name a `make` target that does not exist, a
+      persona's `tools:` frontmatter can declare `write_file` on the verifier
+      (the exact authority `agent_authority.py` exists to withhold), and the
+      3-active→7-canonical mapping table in `.mango/agents/README.md` can have
+      its rows *swapped* — all with the full suite green, because the existing
+      checks are substring-presence, not row or membership checks. Three
+      assertions in `test_agent_harness_wiring.py` / `test_agent_surface_
+      liveness.py` close all three; none needs a new file.
+- [ ] **`pre-nemotron-run.sh` is the only hook on a live product path and has
+      no test.** Deleting it leaves the suite green (`HookRunner.run_hook`
+      no-ops on a missing file, which is correct). Nothing asserts the
+      `.mango/hooks/*.sh` partition into {`PERMITTED_HOOK_NAMES`} ∪
+      {settings-registered} either, so a new script belongs to neither
+      namespace and no test says so.
+- [ ] **Nothing bounds the coverage `omit` list.** Adding a source file to
+      `[tool.coverage.run] omit` drops it from the measured set, from the
+      per-file floor, and *raises* the aggregate — a green, silent regression.
+      Assert the measured `files` set equals the on-disk first-party set. Two
+      `# pragma: no cover` sites are also unjustified: `mcp_server.py:16` (the
+      suite already exercises that arc) and `langgraph/__init__.py:52`, whose
+      pragma covers an `except ImportError: pass` that would swallow a real
+      failure to import the graph module.
+- [ ] **Skip waivers are file-wide, not condition-wide.** Seven of eight rows
+      pair `unique_id_glob: "…::*"` with `test: "*"`, so any new skip anywhere
+      in a 600-line module is auto-approved provided its reason contains
+      `(DEC-026)` — and the reusable `POSIX_ONLY` marker's reason already ends
+      that way. Narrow the two broadest globs to specific node ids.
+- [ ] **`policy_loader` has no logger.** Every threshold in the system resolves
+      through it and nothing records what was resolved or from which file, so
+      under `LOG_LEVEL=DEBUG` "which policy did this run actually read" is
+      unanswerable. `ExecutionLoop` already logs its own resolution at DEBUG —
+      that is the pattern to copy. Related: a `TypedDict` per policy block would
+      turn `limits["typo"]` into a type error at ~20 call sites and would have
+      caught the `KeyError` fixed under DEC-032.
+- [ ] **`nemotron-client.ts` still carries the duplication the extraction was
+      meant to address.** Lines 169-183 and 251-265 are a verbatim 15-line
+      request-body builder differing only in `stream:`; this branch edited both
+      copies identically three times. `top_p: 0.7` is now the only sampling
+      parameter in that literal that is not policy-sourced, and
+      `retry.ts`'s `JITTER_CEILING_MS` is a new unlinked constant with no
+      triage row (its Python counterpart has one).
 - [ ] **Gitleaks allowlist liveness.** `test_lint_config_liveness.py` asserts
       every `.gitleaks.toml` allowlist path still *exists*; nothing asserts each
       still *suppresses a finding*. That is how the list reached 23 paths of

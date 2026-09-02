@@ -74,6 +74,33 @@ def skip_event(report: Any) -> tuple[str, str, str] | None:
     return nodeid, display, skip_reason(getattr(report, "longrepr", ""))
 
 
+def collect_skip_event(report: Any) -> tuple[str, str, str] | None:
+    """``(unique_id, display, reason)`` for a skipped *collection* report, else None.
+
+    A module-level ``pytest.importorskip`` or ``pytest.skip(allow_module_level=True)``
+    skips during collection, which pytest reports as a ``CollectReport`` (``when ==
+    "collect"``) and never as the ``TestReport`` :func:`skip_event` reads. The whole
+    module — sometimes a whole directory, when it is a conftest that skips — then
+    disappears with no evidence row at all, and ``verify_zero_skips.py`` reads an
+    empty file and prints ``passed``.
+
+    That is the DEC-030 failure mode one layer up: there the hooks saw only one of
+    three suites, here they see only one of two report types. Four live sites skip
+    at collection today, including ``test_egress_floor.py`` — the suite that proves
+    the egress floor is armed, whose silent disappearance is exactly what the gate
+    exists to prevent.
+    """
+    if not getattr(report, "skipped", False):
+        return None
+    if getattr(report, "when", None) != "collect":
+        return None
+    nodeid = str(report.nodeid)
+    # A collection nodeid is a path, not a ``::``-addressed test; the basename is
+    # the useful display half, and the waiver registry matches on the full id.
+    display = nodeid.rsplit("/", 1)[-1] or nodeid
+    return nodeid, display, skip_reason(getattr(report, "longrepr", ""))
+
+
 def write_events(path: Path, rows: Iterable[tuple[str, str, str]]) -> int:
     """Write the TSV (one skip per line), creating the directory; returns the row count."""
     path.parent.mkdir(parents=True, exist_ok=True)

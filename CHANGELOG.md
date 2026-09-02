@@ -10,6 +10,69 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Post-implementation review — four gates that could pass on absent evidence (DEC-032)
+
+An objective peer review of the branch found, in the gates this branch itself
+shipped, the exact failure class DEC-024 was written about: a gate reporting
+PASS without the evidence it claims to check. Each is fixed with a test that
+fails without the fix.
+
+- **The Python zero-skip gate could not see a collection-time skip.** A
+  module-level `pytest.importorskip` is reported as a `CollectReport`, never
+  the `TestReport` the evidence hook read, so the module — sometimes a whole
+  directory, when it is a conftest that skips — vanished with no row and
+  `make verify-zero-skips-python` printed `passed`. Four live sites skip this
+  way, including `test_egress_floor.py`, whose silent disappearance would
+  remove the proof that the egress floor is armed. Added
+  `_skip_events.collect_skip_event` and a `pytest_collectreport` hook, with a
+  `pytester` reproduction. This is DEC-030's failure shape one layer up: there
+  the hooks saw one of three suites, here one of two report types.
+- **A coverage waiver widened by one character.**
+  `coverage_gate._waiving_extra` matched with a raw `str.startswith`, so a
+  policy prefix written without its trailing slash (`harness/shared/langgraph`)
+  waived every sibling that merely began the same way — `langgraph_helpers.py`,
+  `langgraphX.py`. The only policy check asserts the prefix names a real
+  directory, which the slashless form does. Now matched on whole path segments.
+- **A waiver covering everything still reported `[PASS]`.** `check_per_file`
+  printed `0 file(s) meet the lines floor` and returned success; one policy
+  edit (`path_prefixes: ["harness/"]`) disabled per-file enforcement entirely.
+  Now fails closed on zero measured files, per the module's own "absence of
+  evidence is never a pass" contract.
+- **The constant-triage decision check was vacuous.** It evaluated
+  `Path("harness.shared.retry_policy").name.split(".")[0]` — `"harness"`, a
+  substring of essentially every decision-log line — and with `or`/`and`
+  precedence only the symbol was really checked, so a constant could cite a
+  decision about a different or nonexistent module and stay green. R-TDH-16 /
+  AC-16's whole enforcement rested on that expression. Replaced with a
+  shape-aware derivation plus negative tests. `TEST_SIZE_BUDGET_LINES` — the one
+  constant this branch introduced without a triage row — is now pinned to
+  `limits.test_size_budget_lines`.
+- **A reproducible order-dependent test failure.**
+  `json_logging.configure_gate_logging(__name__)` under
+  `runpy.run_path(..., run_name="__main__")` permanently reconfigured the
+  process-global `__main__` logger. Fourteen modules across the three suites run
+  scripts that way, and `test_nemotron_bridge.py` failed whenever
+  `test_pretooluse_guard.py` collected first. The suite was green only because
+  alphabetical order happened to be favourable — reverse file order was red. An
+  autouse fixture in the repository-root conftest restores it; production
+  behaviour is untouched.
+- **A trimmed policy killed collection with a bare `KeyError`.**
+  `_session_hooks` indexed `coverage_optional_extras()` unguarded at module
+  scope, reached from the root conftest before collection, so an adopter fork
+  without the block could not run any suite and got no diagnostic. Absent now
+  falls back; malformed still fails closed with a reason.
+- **`deselect_langgraph` — the whole R-TDH-4 mechanism — had no test**, and is
+  invisible to the coverage gate because `harness/shared/tests/*` is omitted
+  from measurement. Now covered directly, including the refusal to deselect on
+  a leg that has the library and the run-header announcement.
+- Corrects the record: DEC-027 called the parked modules "byte-identical after
+  the move". `lats_optimizer.py` is; `autonomous_healing.py` is not — it carries
+  the Phase 2 `BROKER_SUCCESS` substitution.
+- `CLAUDE.md` and the reasoner persona pointed at `META_TOOLS_SCHEMA` in
+  `mango_mas_orchestrator.py`; it lives in `harness/shared/meta_tools.py` and is
+  composed by `tool_schemas.py`. The symbol has not been on that module since
+  the decomposition.
+
 ### Post-implementation hygiene sweep — documentation truth, dead ignore rules, allowlist narrowing
 
 An objective review of the branch against `main` after Phases 0–5. No source
