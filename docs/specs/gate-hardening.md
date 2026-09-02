@@ -81,10 +81,7 @@ lands green instead of red.
   2026-09-02: `python -m ruff check .` under HEAD's pinned 0.6.9 prints
   `All checks passed!`; `pyproject.toml` `select` lists `"B", "G"` (the
   in-flight R-TDH-10 bump to 0.16.5 reports 37 findings and owns them)
-- [ ] AC-5: mypy over shared + api_server + control-plane is clean. — open
-  2026-09-02: `make lint-cold`: `Found 1 error in 1 file (checked 181 source
-  files)`, the `test_workflow_contracts.py:117` `no-any-return`; blocked by
-  tech-debt-hardening-plan R-TDH-9
+- [x] AC-5: mypy over shared + api_server + control-plane is clean. — verified 2026-09-02: `make lint-cold` → `Success: no issues found in 181 source files`
 
 ## Invariants touched
 

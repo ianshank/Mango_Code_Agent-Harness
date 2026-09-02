@@ -86,12 +86,10 @@ from `governance-policy.json`" — yet the runtime violates it structurally:
   verified by `make test`. — verified 2026-09-02:
   `pytest harness/shared/tests/test_policy_consistency.py`: 36 passed
 - [ ] AC-4: `ALLOW_GITHUB_CHANGES=1 make pre-pr` passes end-to-end, including
-  `digest-regen` drift check. — open 2026-09-02: `pre-pr` fails in its first
-  prerequisite, `ci`, at `lint-python` (mypy `no-any-return`,
-  `harness/shared/tests/test_workflow_contracts.py:117`); `make digest-regen`
-  alone passes with a drift-free bundle; `audit`/`secrets` are not runnable
-  here (`pip-audit`, `gitleaks` absent); blocked by tech-debt-hardening-plan
-  R-TDH-9
+  `digest-regen` drift check. — open 2026-09-02: `make ci`, `review` and `lint-cold` pass; `audit` and `secrets` need
+  `pip-audit`, `osv-scanner` and `gitleaks`, absent in this environment, so those two are
+  evidenced by the `dependency-audit` and `secret-scan` CI jobs (tech-debt-hardening-plan
+  C-TDH-3); no plan item
 - [x] AC-5: `python harness/shared/check_projections.py --help` and per-stack
   shim invocations behave identically to before (same flags/exit codes) —
   verified by `make validate`. — verified 2026-09-02: `--help` exits 0 with

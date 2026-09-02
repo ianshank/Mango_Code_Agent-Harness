@@ -65,14 +65,13 @@ purpose and its enforcement surface:
 - [x] AC-1: `git ls-files scratch harness/test-results` returns nothing —
   verified by that command's empty output in `make pre-pr` review. — verified
   2026-09-02: the command prints nothing
-- [ ] AC-2: `make ci` passes end-to-end (ruff, mypy, compat, pytest+coverage
+- [x] AC-2: `make ci` passes end-to-end (ruff, mypy, compat, pytest+coverage
   gate, vitest, zero-skips, specs, remotes, validate, check-dedup,
-  digest-regen) — verified by `make ci`. — open 2026-09-02:
-  `ALLOW_GITHUB_CHANGES=1 make ci` exits 2 at `lint-python` (mypy
-  `no-any-return`, `harness/shared/tests/test_workflow_contracts.py:117`);
-  the later stages pass when run alone (`coverage-python` 2499 passed,
-  `test-node` 53 passed, `verify-zero-skips`, `specs`, `remotes`, `validate`,
-  `check-dedup`, `digest-regen`); blocked by tech-debt-hardening-plan R-TDH-9
+  digest-regen) — verified by `make ci`. — verified 2026-09-02: `ALLOW_GITHUB_CHANGES=1 make ci` on the Phase 1 tree: lint, lock-check,
+  coverage-python (2513 passed, 0 failed), test-node, verify-zero-skips, specs, remotes,
+  validate and check-dedup all exit 0; `digest-regen` exits 0 once the regenerated bundle
+  is committed (its `git diff --exit-code` compares against the index). The earlier mypy
+  blocker was fixed in `test_workflow_contracts.py` before this run
 - [ ] AC-3: `bash harness/node/scripts/run_vitest.sh` exits 0 from a clean
   checkout with node_modules installed — verified by `make test-node`. — open
   2026-09-02: the script exits 1 — vitest passes (53 passed, 11 skipped) but
