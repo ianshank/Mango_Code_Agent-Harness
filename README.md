@@ -197,9 +197,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **2,990 automated tests** (98 Vitest + 2,892 Pytest across 7 tiers), measured 2026-09-03 by `pnpm exec vitest run` and `pytest --collect-only`
+- **Total Automated Tests:** **3,083 automated tests** (114 Vitest + 2,969 Pytest across 7 tiers), measured 2026-09-03 by `pnpm exec vitest run` and `pytest --collect-only`
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **99% total** (99.33% Lines | 97.75% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`. Measured on a leg without the optional `langgraph` extra, whose modules are then waived per-file (`coverage.optional_extras`); the `build-full` CI leg installs it and reads 99.41% / 97.88%. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
+- **Python AQA Coverage:** **99.29% Lines | 97.80% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 76 files with all 73 gated files meeting the per-file floor and **none waived**. Measured 2026-09-03 on the `langgraph`-installed configuration — the one `build-full` runs. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
@@ -267,6 +267,8 @@ make check-dedup     # Drift gate: per-stack scripts must delegate to harness/sh
 make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
 make secrets-allowlist-check # Every .gitleaks.toml allowlist entry must still suppress a real finding (runs in secret-scan)
+make attestation     # Print the protected-path attestation table for this branch (derived, never transcribed)
+make attestation-check FILE=pr-body.md # Verify a written table against the set the gate enforces (runs in build-full)
 make digest-regen    # Regenerate protected-file digests after policy changes
 
 # 4. Run root adversarial harness self-tests
@@ -309,6 +311,8 @@ make check-dedup     # Shim drift detection
 make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
 make secrets-allowlist-check # Every .gitleaks.toml allowlist entry must still suppress a real finding (runs in secret-scan)
+make attestation     # Print the protected-path attestation table for this branch (derived, never transcribed)
+make attestation-check FILE=pr-body.md # Verify a written table against the set the gate enforces (runs in build-full)
 make pre-pr          # Full pre-submission validation pipeline (now includes audit)
 ```
 

@@ -10,6 +10,61 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The inventory that calls itself the inventory was never checked for completeness (DEC-039)
+
+`test_constant_triage.py`'s docstring says "a new constant needs a row here"
+and "the table is the inventory; the test is what stops it rotting." Every
+assertion ran in one direction: each *listed* row was checked for a valid
+policy or decision link, and nothing checked that every constant which exists
+is listed. The way to defeat the inventory was to not write the row — and seven
+live operational defaults had:
+
+| Constant | Why it was worth finding |
+|---|---|
+| `meta_tools.DEFAULT_LOCK_TIMEOUT_S`, `DEFAULT_LOCK_POLL_S`, `MIN_LOCK_POLL_S` | Three timings on the advisory lock guarding the meta-tool store, none of them registered anywhere. |
+| `debug_dump.DUMP_DIR_MODE` | `0o700`. The previous code took `0o777 & ~umask`, leaving prompt-and-tool-output history world-readable on a shared host. A security posture with no record. |
+| `debug_dump.MIN_ENV_CREDENTIAL_LENGTH` | A correctness floor: `redact_text` replaces by substring, so treating a one-character env value as a credential would rewrite every occurrence of that character. |
+| `tool_dispatch.DEFAULT_HYPOTHESIS_CONFIDENCE` | The value recorded when a model omits confidence — any other number asserts a belief the model did not express. |
+| `agent_prompts.TASK_LOG_PREVIEW_CHARS` | Log-volume bound; the mildest of the seven, and still unlinked. |
+
+`TestTheInventoryIsComplete` discovers module-level numeric constants across
+`harness/shared`, `harness/api_server` and `harness/control-plane` with `ast` —
+**parsed, not imported**, so the gate does not run the import side effects of
+the modules it judges — and requires each to be triaged or carry an `EXCLUDED`
+entry saying why it is a fact rather than a limit. Exclusions must state a
+reason, must still be discovered (a stale one is standing permission for a
+future constant of that name), and must not outnumber the triaged rows.
+Discovery is numeric-only on purpose: the shape of an operational limit is a
+number, and demanding a decision for every string identifier buries the real
+rows until the table stops being read.
+
+Eight names are recorded as facts rather than limits: the hex-width constants
+in `publish_policy_artifact` and `shadow_planner`, `pretooluse_guard`'s two
+hook-protocol exit codes, and `langgraph`'s `EXPECTED_NODE_COUNT` /
+`CHANNEL_COUNT`.
+
+### A mermaid diagram that cannot parse documents nothing
+
+`c4_architecture.md` carried `AgentMetaTools[... (Context7) [Planned]]`.
+Mermaid ends a bare-bracket label at the first `]`, so the trailing `]]` was a
+syntax error and the **entire** agent-topology diagram rendered as an error box
+on GitHub. Prose in this repository is gated for naming real paths; nothing
+checked that the pictures still draw. `TestEveryMermaidDiagramCanRender` scans
+every fenced block under `docs/`, `README.md` and `CLAUDE.md` and rejects an
+unquoted node label containing a bracket, with a positive and a negative test
+pinning the detector itself.
+
+### The attestation skill still carried a second, weaker matcher
+
+`.mango/skills/protected-path-attestation/SKILL.md` — the procedure a human
+actually follows — contained an inline script that re-derived the protected set
+with its own `fnmatch` loop, hard-coded `origin/main` twice, and enumerated
+only `merge-base...HEAD`, so it could not see the staged, unstaged or untracked
+protected files the gate *does* see. DEC-038 made the tool single-source and
+left the documented procedure diverging from it. The skill now calls
+`make attestation` and `make attestation-check`, and its output-format sample
+is labelled as an illustration of the columns rather than something to paste.
+
 ### The attestation table a reviewer signs is now derived and checked, not transcribed (DEC-038)
 
 `harness/CONTRACT.md` requires a PR touching a protected path to carry a

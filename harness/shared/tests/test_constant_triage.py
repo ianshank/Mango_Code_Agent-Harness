@@ -14,14 +14,27 @@ states are allowed and a third is not (tech-debt-hardening-plan R-TDH-16):
   policy key or a `DEC-` id.
 
 The table is the inventory; the test is what stops it rotting.
+
+Every assertion here used to run in one direction only: each *listed* row was
+checked for a valid link, and nothing checked that every constant which exists
+is listed. So the failure the docstring above warns about -- "a new constant
+needs a row here" -- had no enforcement at all: the way to defeat the inventory
+was to not write the row, and five live operational defaults had done exactly
+that, three of them lock timings on the meta-tool store. That is the same
+unbounded-scope shape DEC-032 and DEC-038 found elsewhere: a gate that judges
+the set it was handed and never asks whether that set is the set that exists.
+`TestTheInventoryIsComplete` closes it by discovering the constants from the
+source and requiring each to be triaged or explicitly excluded with a reason.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib
 import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -86,6 +99,15 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "halfOpenSuccessThreshold", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/nemotron-client.ts", "maxBackoffMs", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/retry.ts", "JITTER_CEILING_MS", decision="DEC-037"),
+    # Found by TestTheInventoryIsComplete below, which is the point of it: every
+    # one of these satisfied the old suite by being absent from it (DEC-039).
+    Row("harness.shared.meta_tools", "DEFAULT_LOCK_TIMEOUT_S", decision="DEC-039"),
+    Row("harness.shared.meta_tools", "DEFAULT_LOCK_POLL_S", decision="DEC-039"),
+    Row("harness.shared.meta_tools", "MIN_LOCK_POLL_S", decision="DEC-039"),
+    Row("harness.shared.debug_dump", "DUMP_DIR_MODE", decision="DEC-039"),
+    Row("harness.shared.debug_dump", "MIN_ENV_CREDENTIAL_LENGTH", decision="DEC-039"),
+    Row("harness.shared.tool_dispatch", "DEFAULT_HYPOTHESIS_CONFIDENCE", decision="DEC-039"),
+    Row("harness.shared.agent_prompts", "TASK_LOG_PREVIEW_CHARS", decision="DEC-039"),
 )
 
 
@@ -176,6 +198,154 @@ class TestEveryConstantIsPolicyOrDecision:
         for row in TRIAGE:
             if row.is_python:
                 assert hasattr(importlib.import_module(row.module), row.symbol), f"{row.module}.{row.symbol} is gone"
+
+
+@dataclass(frozen=True)
+class Excluded:
+    """A discovered constant that is deliberately not an operational limit.
+
+    Carries its reason for the same purpose `.gitleaks.toml`'s `# keep:` lines
+    do: the exemption is reviewed beside what it exempts, rather than being an
+    anonymous name in a set that quietly grows until the gate covers nothing.
+    """
+
+    module: str
+    symbol: str
+    reason: str
+
+
+#: Not operational limits, so not triage rows. Each is a *fact* about a format,
+#: a protocol, or a data structure -- changing one does not tune behaviour, it
+#: describes something that is already true, and a governance threshold for it
+#: would be a threshold nobody could act on.
+EXCLUDED: tuple[Excluded, ...] = (
+    Excluded("harness.control_plane.publish_policy_artifact", "POLICY_VERSION_HEX_LEN",
+             "width of a hex digest field, fixed by the format it parses"),
+    Excluded("harness.control_plane.publish_policy_artifact", "SHA256_HEX_LEN",
+             "SHA-256 is 64 hex characters; a policy could not change that"),
+    Excluded("harness.shared.shadow_planner", "POLICY_VERSION_HEX_LEN",
+             "width of a hex digest field, fixed by the format it parses"),
+    Excluded("harness.shared.shadow_planner", "TASK_ID_HEX_LEN",
+             "width of the generated task id, fixed by its own format"),
+    Excluded("harness.shared.governance.pretooluse_guard", "ALLOW_EXIT",
+             "Claude Code hook protocol exit code; the protocol defines it, not this repo"),
+    Excluded("harness.shared.governance.pretooluse_guard", "BLOCK_EXIT",
+             "Claude Code hook protocol exit code; the protocol defines it, not this repo"),
+    Excluded("harness.shared.langgraph.graph", "EXPECTED_NODE_COUNT",
+             "a structural fact about the compiled graph that a test pins; not a limit"),
+    Excluded("harness.shared.langgraph.state", "CHANNEL_COUNT",
+             "a structural fact about the state schema that a test pins; not a limit"),
+)
+
+#: First-party roots scanned for module-level constants. `harness/control-plane`
+#: is hyphenated and unimportable, so it is scanned by path like the Node rows.
+SOURCE_ROOTS = ("harness/shared", "harness/api_server", "harness/control-plane")
+
+
+def module_constants(root: Path) -> list[tuple[str, str]]:
+    """`(dotted-ish module, SYMBOL)` for every module-level numeric UPPER constant under `root`.
+
+    Numeric only, and deliberately so: the shape of an operational limit is a
+    number. A `str` constant naming a file or a `re.Pattern` is an identifier,
+    not a threshold, and demanding a decision for each would bury the real rows
+    under noise until the table stopped being read -- which is how an inventory
+    dies of over-collection rather than under-collection.
+
+    Parsed with `ast` rather than imported: importing every module to read its
+    constants runs their import side effects inside the gate that judges them.
+    """
+    found: list[tuple[str, str]] = []
+    for path in sorted(root.rglob("*.py")):
+        parts = set(path.parts)
+        if "tests" in parts or "__pycache__" in parts or path.name.startswith("test_"):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, OSError):  # pragma: no cover - a broken source fails lint first
+            continue
+        module = str(path.relative_to(REPO).with_suffix("")).replace("/", ".").replace("-", "_")
+        for node in tree.body:
+            names: list[str]
+            # `AnnAssign.value` is optional (`X: int` declares without assigning),
+            # so the union is real rather than a typing formality; the `is None`
+            # guard below is what makes the narrowing sound.
+            value: ast.expr | None
+            if isinstance(node, ast.Assign):
+                names, value = [t.id for t in node.targets if isinstance(t, ast.Name)], node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names, value = [node.target.id], node.value
+            else:
+                continue
+            if value is None:
+                continue
+            # `-1` and friends parse as UnaryOp(USub, Constant); unwrap so a
+            # negative default is discovered like any other number.
+            if isinstance(value, ast.UnaryOp) and isinstance(value.operand, ast.Constant):
+                value = value.operand
+            if not isinstance(value, ast.Constant):
+                continue
+            if isinstance(value.value, bool) or not isinstance(value.value, (int, float)):
+                continue
+            found.extend((module, name) for name in names if name.isupper() and not name.startswith("_"))
+    return found
+
+
+def discovered_constants() -> list[tuple[str, str]]:
+    """Every candidate across `SOURCE_ROOTS`, deduplicated and ordered."""
+    found: list[tuple[str, str]] = []
+    for root in SOURCE_ROOTS:
+        found.extend(module_constants(REPO / root))
+    return sorted(set(found))
+
+
+class TestTheInventoryIsComplete:
+    """The direction the original assertions never checked: does every constant have a row?
+
+    Written after finding that `TRIAGE` -- the table whose own docstring calls
+    itself the inventory -- was missing `meta_tools`' three lock timings,
+    `tool_dispatch.DEFAULT_HYPOTHESIS_CONFIDENCE`, `debug_dump`'s credential
+    floor and directory mode, and `agent_prompts.TASK_LOG_PREVIEW_CHARS`. Every
+    one satisfied the old suite by being absent from it.
+    """
+
+    def test_every_discovered_constant_is_triaged_or_excluded(self) -> None:
+        accounted = {(row.module, row.symbol) for row in TRIAGE if row.is_python}
+        accounted |= {(item.module, item.symbol) for item in EXCLUDED}
+        unaccounted = [f"{module}.{symbol}" for module, symbol in discovered_constants()
+                       if (module, symbol) not in accounted]
+        assert not unaccounted, (
+            "these module-level numeric constants are neither triaged nor excluded: "
+            f"{', '.join(unaccounted)}. Add a TRIAGE row citing a policy key or a DEC- id, "
+            "or an EXCLUDED entry saying why it is a fact rather than a limit."
+        )
+
+    def test_discovery_is_not_vacuous(self) -> None:
+        """A discovery that finds nothing would make the check above pass silently."""
+        found = discovered_constants()
+        assert len(found) >= 20, f"discovery found only {len(found)} constants; the parser is broken"
+        assert ("harness.shared.retry_policy", "DEFAULT_BASE_SEC") in found
+        assert ("harness.shared.validate_invariants", "SIZE_BUDGET_LINES") in found
+
+    def test_discovery_ignores_non_numeric_and_private_names(self) -> None:
+        found = discovered_constants()
+        assert ("harness.shared.governance.check_secret_allowlist", "CONFIG_NAME") not in found
+        assert not [name for _, name in found if name.startswith("_")]
+
+    def test_every_exclusion_states_a_reason(self) -> None:
+        for item in EXCLUDED:
+            assert item.reason.strip(), f"{item.module}.{item.symbol} is excluded with no reason"
+
+    def test_exclusions_do_not_outnumber_the_triaged_rows(self) -> None:
+        """An exclusion list larger than the inventory means the gate covers nothing."""
+        assert len(EXCLUDED) < len([row for row in TRIAGE if row.is_python])
+
+    def test_every_excluded_symbol_still_exists(self) -> None:
+        """A stale exclusion is a standing permission for a future constant of that name."""
+        discovered = set(discovered_constants())
+        for item in EXCLUDED:
+            assert (item.module, item.symbol) in discovered, (
+                f"{item.module}.{item.symbol} is excluded but no longer discovered; remove the entry"
+            )
 
 
 class TestCheckerSemantics:

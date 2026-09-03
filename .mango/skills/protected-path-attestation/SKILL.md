@@ -39,28 +39,29 @@ trains reviewers to skim the real ones.
 
 ## Procedure
 
-1. **Enumerate, do not guess.** Read the patterns from the policy and match
-   them against the actual diff — never from memory, and never from the last
-   PR's list:
+1. **Generate, do not enumerate by hand.** One command prints the rows:
 
    ```bash
-   git diff --name-only "$(git merge-base HEAD origin/main)"...HEAD
-   python - <<'PY'
-   import fnmatch, json, subprocess
-   policy = json.load(open("harness/shared/governance-policy.json"))
-   base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"],
-                         capture_output=True, text=True).stdout.strip()
-   changed = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                            capture_output=True, text=True).stdout.split()
-   for path in changed:
-       if any(fnmatch.fnmatch(path, p) for p in policy["protected_paths"]):
-           print(path)
-   PY
+   make attestation                 # markdown rows, ready to paste
+   make attestation BASE_REF=main   # only if the remote publishes no origin/HEAD
    ```
+
+   This calls `harness/shared/governance/attestation.py`, which **imports**
+   `is_protected` and `git_modified_files` from `validate_invariants.py` rather
+   than reimplementing them. That matters more than convenience. This step used
+   to be an inline script here that re-derived the match with its own `fnmatch`
+   loop, hard-coded `origin/main`, and enumerated only `merge-base...HEAD` —
+   so it could not see a staged, unstaged, or untracked protected file that the
+   gate *does* see, and it broke outright on a fork whose default branch is not
+   `main`. Two implementations of "which protected paths does this change
+   touch" is one too many; the count that reaches the reviewer must come from
+   the same code that fails the build (DEC-038).
 
    `fnmatch` is whole-string anchored. A pattern that matches nothing reports
    PASS *because nothing matched* — which is exactly how an earlier layout
-   migration left four patterns silently dead.
+   migration left four patterns silently dead. That is a reason to read the
+   validator's output rather than trust a pattern list, not a reason to write a
+   second matcher.
 
 2. **Read each diff hunk.** Not the file, the hunk. `git diff <base>...HEAD --
    <path>`.
@@ -113,7 +114,22 @@ heading:
 
 One row per protected file. No file may be omitted, and "no functional change"
 is only acceptable when the diff is genuinely comments or formatting — say
-which.
+which. The rows above are an *illustration of the columns*; never paste them.
+`make attestation` emits the real ones with the third column blank, which is
+the only column you have to write.
+
+5. **Verify before you ask anyone to sign it.**
+
+   ```bash
+   make attestation-check FILE=pr-body.md   # or any file holding the description
+   ```
+
+   This fails if a protected path has no row, **or** if a row names a path the
+   change does not touch — an over-long table asks the reviewer to attest to
+   something absent, which is the same overstatement as a missing row pointed
+   the other way. `build-full` runs the same check on every pull request,
+   before `make ci` and independent of the label, so a mismatch is caught
+   whether or not you run it locally.
 
 ## Failure modes this exists to prevent
 
