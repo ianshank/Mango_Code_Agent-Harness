@@ -346,7 +346,7 @@ def write_denial_reason(
 
     try:
         patterns = load_protected_patterns(DEFAULT_POLICY_PATH)
-    except (Exception, SystemExit) as exc:  # fail-closed boundary, see below
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 - fail-closed boundary, see below
         # An unreadable policy must deny. Falling back to a built-in list would let
         # a malformed policy widen what an agent may write, which is the failure
         # mode this module exists to prevent.
@@ -360,7 +360,7 @@ def write_denial_reason(
     if policy_path is not None and policy_path.resolve() != DEFAULT_POLICY_PATH:
         try:
             raw, supplied_policy = _load_supplied_policy(policy_path)
-        except (Exception, SystemExit) as exc:  # same fail-closed boundary as above
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - same fail-closed boundary as above
             return f"the write policy could not be read, so the write is denied: {exc}"
 
         pin_denial = pin_denial_reason(policy_path, raw, pin_path)

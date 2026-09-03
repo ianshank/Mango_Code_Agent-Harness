@@ -145,7 +145,8 @@ def execute_read_file(
         try:
             entries = sorted(p.name for p in target_path.iterdir())
             listing = "\n".join(entries)
-            return f"Error reading file {filepath}: Path is a directory. Directory contents:\n{listing}"
+            prefix = f"Error reading file {filepath}: Path is a directory. Directory contents:\n"
+            return _cap(prefix + listing, DEFAULT_MAX_OUTPUT_BYTES)
         except OSError as e:
             return f"Error reading file {filepath}: {e}"
 

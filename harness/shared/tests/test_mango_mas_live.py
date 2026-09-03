@@ -14,13 +14,21 @@ from harness.shared.nemotron_bridge import resolve_api_key  # noqa: E402
 
 # Check if LIVE test execution is enabled
 IS_LIVE = bool(resolve_api_key())
-if IS_LIVE:
-    os.environ.setdefault("NEMOTRON_MODE", "online")
 
 _TRANSIENT_NIM_ERRORS = (
     "500", "502", "503", "504", "429",
     "ResourceExhausted", "timeout", "timed out",
 )
+
+
+@pytest.fixture(autouse=True)
+def _set_nemotron_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set NEMOTRON_MODE only when a live test in this module actually runs.
+
+    Previously set at import time, which leaked into hermetic runs because
+    pytest collects (imports) live modules even when they are deselected.
+    """
+    monkeypatch.setenv("NEMOTRON_MODE", "online")
 
 
 @pytest.mark.live
