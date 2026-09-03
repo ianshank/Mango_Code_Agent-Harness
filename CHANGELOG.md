@@ -10,6 +10,168 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Gate truthfulness — eight gates that could pass on absent evidence (R-GT-1..R-GT-10)
+
+Spec: `docs/specs/gate-truthfulness.md`. Opened by
+`docs/reports/ROADMAP-PEER-REVIEW.md`. DEC-032 fixed four gates reporting PASS
+without the evidence they claim to check; the same shape survived in eight more
+places. The shared defect is that a gate's *scope* was unbounded — nothing
+asserted that the set it examined is the set that exists.
+
+- **`make lint-node` runs in CI for the first time, and the blocker on record
+  was not the real one (DEC-034).** DEC-013 and `docs/specs/ci-enforcement-gaps.md`
+  recorded a `typescript` / `typescript-eslint` incompatibility. Measured
+  against the installed workspace: ESLint passes, Knip passes, and
+  `prettier --check` fails on exactly one file —
+  `harness/node/.governance/policy.json`, over whitespace in the
+  `coverage.optional_extras.path_prefixes` array DEC-028 added. That file's bytes
+  are pinned by `.governance/root-of-trust.json`, so Prettier's formatting and
+  `validate_adoption.py` are mutually exclusive by construction and running
+  `prettier --write` is what *breaks* the digest. `harness/node/.prettierignore`
+  excludes the pinned tree; `lint-node` becomes a direct prerequisite of `ci` and
+  deliberately not of `ci-python` or the shared `lint` target, whose matrix legs
+  install no pnpm. This also brings R-TDH-23's policy-sourced ESLint `max-lines`
+  rule into a job for the first time — it was enforced nowhere.
+- **The coverage measured set is bounded.** Adding a source file to
+  `[tool.coverage.run] omit` dropped it from the per-file floor *and raised* the
+  aggregate, because its uncovered lines vanished — every number improved and no
+  gate objected. `coverage_gate.check_measured_set` compares the report's file
+  set against the on-disk first-party set and fails closed on divergence, on a
+  report with no `files` block, and on an empty expected set. Coupled to
+  `coverage.per_file`, because the bound is what lets that floor keep its promise.
+- **`mcp_server.py`'s `# pragma: no cover` is removed.** The arc is the 3.9
+  leg's real path and `test_import_failure_sets_mcp_unavailable` already executed
+  it; excluding it understated the file. 94.06% → 94.44%, and 92% against the
+  90% floor on the 3.9 leg where the `mcp` SDK is absent.
+- **`policy_loader` records what it resolved and from where.** Every threshold in
+  the system resolves through it and nothing logged either answer, so under
+  `LOG_LEVEL=DEBUG` "which policy is this run enforcing" was unanswerable.
+  DEBUG-only and silent by default. Each block is now a `TypedDict`, so an
+  undeclared key is a `mypy` error rather than the runtime `KeyError` DEC-032
+  fixed by hand — which immediately surfaced four `dict[str, Any]` annotations in
+  `langgraph/policy.py` that were discarding exactly that checking.
+- **Three agent-surface mutations now fail.** A `SKILL.md` could name a `make`
+  target that does not exist; a persona's `tools:` frontmatter could declare an
+  authority `agent_authority.py` exists to withhold (`write_file` on the
+  verifier); the 3-active→7-canonical mapping table's rows could be *swapped*
+  with every string still present in the file. All three passed the full suite
+  before, because the existing checks test substring presence rather than
+  membership or pairing.
+- **Skip waivers are node-scoped.** Seven of eight rows paired a module-wide
+  `unique_id_glob` with `test: "*"`, pre-approving any skip added to that module
+  later provided its reason mentions the decision id — which the reusable
+  `POSIX_ONLY` marker's reason already does. Two globs addressed ~135 node ids to
+  approve 4 real skips; both are narrowed to the classes that carry the
+  condition. `test_skip_waiver_scope.py` is the first test to read the shipped
+  registry.
+- **The `.mango/hooks/` namespace is partitioned and the live hook is pinned.**
+  `HookRunner.run_hook` no-ops on a missing file, so deleting or renaming
+  `pre-nemotron-run.sh` left the suite green while the pre-turn governance
+  validation silently stopped running. A rename to the dormant scripts'
+  snake_case convention is the exact silent case, and now fails.
+- **A declared version must have a changelog section.** The four version mirrors
+  agreeing with *each other* is not the same as the release existing:
+  `test_documentation_truth.py` passed while the last merge commit and an RCA
+  filename said v2.5.0, nothing in this file did, and no git tag had ever existed.
+- **The gitleaks allowlist proves it still suppresses something.** An allowlist
+  path exempts its whole file from every rule, and the existing check asserted
+  only that the path exists — which is how the list reached 23 paths of which 18
+  blinded their files for nothing. `make secrets-allowlist-check` scans with the
+  allowlist removed and fails any entry matching no finding; a scan yielding zero
+  findings is itself a failure, since it cannot be distinguished from a ruleset
+  that is not running. Runs in the `secret-scan` job, never the unit suite, which
+  has no gitleaks and must not gain a skip (INV-2).
+- **`.github/dependabot.yml` stops contradicting DEC-031 (DEC-033).** The `pip`
+  ecosystem is removed; twelve bot PRs had reopened on 2026-09-02 including an
+  unrequested `mypy` 1.11 → 2.3 major.
+
+Every assertion was mutation-tested against the defect it claims to catch. No
+test skip, `xfail` or waiver was added, and the skip count is unchanged.
+
+### Post-implementation review of the batch above — two of its own gates were weakenable (DEC-035)
+
+Probing the new gates rather than trusting them found two defects no test would
+have caught, both the shape the batch exists to close: a control an unreviewed
+edit somewhere else can widen.
+
+- **A `# keep:` comment anywhere in `.gitleaks.toml` granted an allowlist
+  exemption.** `declared_keeps` scanned the whole config, so a header comment,
+  prose after the block, or a commented-out rule could exempt an entry from the
+  liveness check that had just been added to stop exactly that kind of quiet
+  widening. Keeps are now scoped to the `[allowlist]` block, where a reviewer
+  reading the entry sees its exemption beside it.
+- **`declared_source_roots` matched nothing when `[tool.coverage.run]` was the
+  last table in `pyproject.toml`.** The lookahead required a following `[`. It
+  failed closed, so nothing was unsafe — but it reported "declares no table",
+  which is true of the regex and false of the file, and would leave an adopter
+  fork shaped that way unable to run the gate at all.
+
+Both carry regression tests that fail against the pre-fix code.
+
+### `coverage_gate.py` split along the seam its own defects drew (DEC-035)
+
+The gate reached 470 lines against a 500-line `limits.size_budget_lines` — one
+edit of headroom. The measurement-*scope* concern moves to
+`harness/shared/coverage_scope.py` (per-file floor, optional-extra waivers,
+source discovery, measured-set bound); `coverage_gate.py` keeps the
+aggregate-*threshold* concern. The seam is not the line count: every defect
+found in this area has been a scope defect rather than a threshold one — the
+`startswith` waiver prefix that covered siblings, the waiver set that covered
+everything and still printed `[PASS] 0 file(s)` (both DEC-032), and the `omit`
+entry that dropped a file from the floor while raising the aggregate.
+
+Backwards compatible by construction: every moved symbol is re-exported from
+`coverage_gate`, including the two private helpers existing tests reach
+(`_importable`, `_waiving_extra`); the standalone
+`python harness/shared/coverage_gate.py` invocation keeps its ImportError
+fallback; both modules measure 100%.
+
+The split invalidated three test-side assumptions that no assertion would have
+reported, each fixed rather than worked around:
+
+- `test_the_gates_own_directory_cannot_shadow_the_extra` patched
+  `coverage_gate.__file__`, but `_importable` now reads `coverage_scope.__file__`
+  — so the DEC-032 regression had silently stopped exercising anything.
+  Production behaviour is identical: both modules sit in `harness/shared/`, so
+  "the script's own directory" resolves to the same path.
+- Sixteen `caplog.at_level(..., logger=cg.logger.name)` sites stopped seeing
+  records now emitted under the new module's name. Anchored on the
+  `harness.shared` parent logger, which child loggers inherit, so the next move
+  cannot blind them either.
+
+
+**Deferred with its measurement, not silently.** `langgraph/__init__.py:52`'s
+pragma hides an `except ImportError: pass` that swallows a real failure to
+import `graph.py`. Removing the pragma alone leaves that arc unreachable wherever
+langgraph *is* installed — 8/10 = 80% against a 90% floor, red on 3.10 and 3.12.
+Deleting the swallow reads 7/7 there but 5/7 on a machine without the extra and
+without `MANGO_CI_DESELECT_LANGGRAPH=1`, where no waiver applies. Its failure
+mode lands on a contributor's first `make ci`, so it needs its own change with
+the extra installed. Tracked as NS-9.
+
+### Roadmap rewritten as a roadmap, its history archived
+
+- **`NEXT_STEPS.md` was 93% changelog.** 496 of 533 lines were completed-milestone
+  history duplicating this file, and eight open items were buried inside it under
+  mixed `🚧`/`✅` headings, so the forward plan could not be read in one place.
+  The record moves verbatim to `docs/releases/milestone-history.md` — the
+  treatment R-TDH-24 gave the v2.2.4 release body — with a banner marking it a
+  snapshot rather than a tracker. The rewrite is forward-looking only: every item
+  carries why-now, re-runnable evidence, a falsifiable done-when and its
+  dependency; parked items name the gate blocking them; declined work is listed
+  rather than left to be rediscovered.
+- **`docs/reports/ROADMAP-PEER-REVIEW.md`** records the four-persona review
+  (`openspec-peer-review`) behind the rewrite: eleven findings, two blockers,
+  each verified against the tree or the GitHub API rather than against the
+  roadmap's own claims, with what could not be verified logged as a knowledge gap.
+  The two blockers are `main` being unprotected (`"protected": false`) and the
+  credential DEC-014 documents, which was silenced by narrowing the scanner and
+  never rotated.
+- **Delivered items are removed from the roadmap, not left checked.** The review's
+  own F-4 finding was that the file listed already-delivered work as open;
+  shipping this batch and leaving it listed would repeat that defect. Section 6
+  states each with its evidence.
+
 ### Review follow-up — the neuro-symbolic sandbox suite (PR #33 threads left open on main)
 
 The feature itself landed as `2362d84` with three follow-up commits; these are

@@ -57,6 +57,26 @@ class TestParsing:
         keeps = gate.declared_keeps(CONFIG)
         assert keeps == {r"kept/fixture\.py": "plants secret-shaped values on purpose"}
 
+    def test_a_keep_outside_the_allowlist_block_grants_nothing(self) -> None:
+        """Found by review of this module: the first version scanned the whole
+        file, so a `# keep:` line in a header comment, in prose after the block,
+        or in a commented-out rule exempted an entry -- a control an unreviewed
+        edit elsewhere could widen, which is the shape this gate exists to close.
+        """
+        smuggled = (
+            "# keep: dead/nothing\\.py -- planted outside the allowlist\n"
+            "[extend]\nuseDefault = true\n\n"
+            "[allowlist]\npaths = [\n  '''dead/nothing\\.py'''\n]\n"
+        )
+        assert gate.declared_keeps(smuggled) == {}
+        assert gate.unearned_entries(
+            [r"dead/nothing\.py"], _findings("live/one.py"), gate.declared_keeps(smuggled)
+        ) == [r"dead/nothing\.py"], "a keep outside the allowlist block still exempted an entry"
+
+    def test_a_keep_after_the_block_also_grants_nothing(self) -> None:
+        trailing = CONFIG + "\n[other]\n# keep: dead/nothing\\.py -- planted after the block\n"
+        assert r"dead/nothing\.py" not in gate.declared_keeps(trailing)
+
     def test_the_allowlist_block_is_removed_but_the_ruleset_is_not(self) -> None:
         """Removing `[extend] useDefault` would make every entry look unearned."""
         stripped = gate.config_without_allowlist(CONFIG)

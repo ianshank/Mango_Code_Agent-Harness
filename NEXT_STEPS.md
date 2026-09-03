@@ -118,43 +118,23 @@ drift is invisible: nothing pins a *release* to a changelog entry or a tag.
 `grep -n "2\.5\.0" CHANGELOG.md` returns nothing. The four mirrors agree on
 2.4.0 and the suite is green with the RCA claiming otherwise.
 
+**The gate is now in place; the decision is not.**
+`test_documentation_truth.TestTheDeclaredVersionIsARealRelease` asserts that the
+version `pyproject.toml` declares has a matching `## [x.y.z]` section in
+`CHANGELOG.md` (R-GT-9). It passes today because 2.4.0 has one — so it constrains
+whichever answer is chosen without choosing it.
+
 **Done when.** Either the four mirrors move to 2.5.0 with a `## [2.5.0]`
 changelog section covering PR #75, or the RCA is renamed to the version it
 actually documents — and either way an annotated tag exists at the release
-commit. Add the missing gate in the same change: extend
-`test_documentation_truth.py` so the declared version must have a matching
-`## [x.y.z]` section in `CHANGELOG.md`. That is the assertion whose absence
-allowed this.
+commit. Only a person can decide which; the drift is a fact, the resolution is a
+judgement about what PR #75 was.
 
 **Depends on.** Nothing.
 
 ---
 
 ## 2. P1 — unblocked, take in any order
-
-### NS-4 · Resolve the Dependabot contradiction (DEC-031)
-
-DEC-031 closed PRs #38–#46 as superseded by the universal lock and named the
-weekly `lock-upgrade-check` job the Python upgrade signal from then on.
-`.github/dependabot.yml` still enables the `pip` ecosystem, so twelve bot PRs
-reopened on 2026-09-02 (#62–#73), including a `mypy` 1.11 → 2.3 major bump that
-no lock-driven process asked for. The config and the decision cannot both be
-right. **Done when** the `pip` ecosystem is removed from `dependabot.yml` (the
-`github-actions` and `npm` ecosystems stay — R-TDH-10 wants the action majors
-moving), the reopened pip PRs are closed citing DEC-031, and #62–#66 are merged
-as one batch. **Depends on** nothing.
-
-### NS-5 · Wire `lint-node` into `ci`
-
-The blocker DEC-013 recorded is gone: `harness/node/package.json` now pins
-`typescript` `~6.0.3` against `typescript-eslint` `8.68.0`. `lint-node` is still
-not a prerequisite of `ci`, so ESLint, Prettier and Knip run in no CI job — and
-with them the policy-sourced `max-lines` rule R-TDH-23 added to hold every file
-under `src/` to `limits.size_budget_lines`. That rule is currently enforced
-nowhere. **Done when** `lint-node` is a direct prerequisite of `ci` and never of
-`ci-python` (the matrix legs install no pnpm), and `test_makefile_contracts.py`
-pins that asymmetry. `Makefile` is a protected path: `ALLOW_GITHUB_CHANGES=1`
-plus the per-change attestation. **Depends on** nothing.
 
 ### NS-6 · Move the Python floor to 3.10 *(spec required)*
 
@@ -169,30 +149,6 @@ when** `requires-python` is `>=3.10`, the CI matrix drops the 3.9 legs, the thre
 carve-outs are deleted rather than re-homed, and the suite is green on the
 remaining legs. This is a compatibility-breaking decision for adopters: it needs
 its own spec and a decision-log entry. **Depends on** nothing (blocks NS-14).
-
-### NS-7 · Make the gitleaks allowlist prove it still suppresses something
-
-`test_lint_config_liveness.py` asserts every `.gitleaks.toml` allowlist path
-still *exists*; nothing asserts each still *suppresses a finding*. That is how
-the list reached 23 paths of which 18 blinded their files for nothing — narrowed
-to 7 in the hygiene sweep, with no gate to stop it regrowing. The check must run
-where gitleaks is installed: a `make secrets-allowlist-check` target invoked by
-the `secret-scan` job, never the unit suite, which has no gitleaks and must not
-gain a skip (INV-2). **Done when** the target exists, `secret-scan` runs it, and
-removing a load-bearing allowlist entry fails it. **Depends on** nothing; do it
-with NS-2 while the secret-scanning surface is already in hand.
-
-### NS-8 · Close the three agent-surface truth gates
-
-Falsification probes found three silent failures, all green under the full
-suite because the existing checks are substring-presence rather than row or
-membership checks: a `SKILL.md` can name a `make` target that does not exist; a
-persona's `tools:` frontmatter can declare `write_file` on the verifier — the
-exact authority `agent_authority.py` exists to withhold; and the 3-active →
-7-canonical mapping table in `.mango/agents/README.md` can have its rows
-*swapped*. **Done when** three assertions in `test_agent_harness_wiring.py` /
-`test_agent_surface_liveness.py` fail against each mutation. No new file needed.
-**Depends on** nothing.
 
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 
@@ -218,17 +174,6 @@ the extra installed. `harness/shared/langgraph/**` is a protected path, so this
 carries an attestation. **Depends on** nothing, but do not fold it into a batch:
 its failure mode lands on whoever has not installed the optional extra.
 
-### NS-10 · Give `policy_loader` a logger, and the policy blocks a `TypedDict`
-
-Every threshold in the system resolves through `policy_loader`, and nothing
-records what was resolved or from which file — so under `LOG_LEVEL=DEBUG`,
-"which policy did this run actually read" is unanswerable. `ExecutionLoop`
-already logs its own resolution at DEBUG; copy that pattern. Related and worth
-the same change: a `TypedDict` per policy block turns `limits["typo"]` into a
-type error at ~20 call sites, and would have caught the `KeyError` fixed under
-DEC-032. **Done when** a DEBUG line names the resolved key, value and source
-file, and the `limits` block is typed. **Depends on** nothing.
-
 ### NS-11 · Reconcile the regression tier with the contract it claims
 
 `harness/CONTRACT.md` defines `harness/shared/tests/regression/` as one
@@ -241,29 +186,6 @@ move (each naming its pre-fix commit, as
 `regression/test_write_containment_regression.py` does) or the contract stops
 calling that target a per-defect gate. The contract currently states a guarantee
 the directory does not provide. **Depends on** nothing.
-
-### NS-12 · Narrow the two broadest skip waivers
-
-Seven of eight rows pair `unique_id_glob: "…::*"` with `test: "*"`, so any new
-skip anywhere in a 600-line module is auto-approved provided its reason contains
-`(DEC-026)` — and the reusable `POSIX_ONLY` marker's reason already ends that
-way. A waiver that approves skips nobody has written yet is not a waiver.
-**Done when** the two broadest globs name specific node ids. **Depends on**
-nothing.
-
-### NS-13 · Partition the hook namespace, and test the one live hook
-
-`pre-nemotron-run.sh` is the only hook on a live product path and has no test:
-deleting it leaves the suite green, because `HookRunner.run_hook` no-ops on a
-missing file (correct behaviour, untested consequence). Nothing asserts the
-`.mango/hooks/*.sh` partition into {`PERMITTED_HOOK_NAMES`} ∪
-{settings-registered} either, so a new script belongs to neither namespace and
-no test says so. **Done when** deleting or renaming the hook fails a test, and
-an unpartitioned script is reported by name. **Depends on** nothing.
-
----
-
-## 3. P2 — real, but nothing breaks while they wait
 
 ### NS-14 · The entrypoint contract (DEC-029)
 
@@ -306,6 +228,57 @@ path, a skill documents it, and a test asserts the persona's declared tools
 match what the server exposes. **Depends on** nothing, but do it after the P0
 block: it changes the agent control surface, a protected path.
 
+### NS-20 · Turn the mutation-proof procedure into a skill
+
+Every gate added in the `gate-truthfulness` batch was validated the same way:
+mutate the thing the gate claims to catch, assert the gate fails, restore the
+tree, assert it passes. That loop ran **more than ten times by hand** in one
+change — delete `.prettierignore`; drop `lint-node` from `ci`; add it to
+`ci-python`; add `write_file` to the verifier persona; swap two mapping rows;
+fabricate a `make` target inside a fenced block; delete the live hook; rename it
+to snake_case; plant an orphan hook; restore the pre-narrowing waiver registry.
+It also caught two defects in the batch's *own* gates that no test would have
+found: a `[tool.coverage.run]` table as the last table in `pyproject.toml`
+matched nothing, and a `# keep:` comment anywhere in `.gitleaks.toml` granted an
+exemption.
+
+A repeated manual procedure with a mechanical shape and a history of finding
+real defects is the definition of a skill this repository already uses
+elsewhere (`tech-debt-audit` codified exactly this kind of recurring review).
+**Done when** `.mango/skills/gate-mutation-proof/SKILL.md` states the procedure,
+including the two failure modes it must warn about — a mutation that leaves the
+tree dirty (`git checkout` cannot restore an untracked file, which happened
+here), and a "proof" run against a stale artifact — and
+`test_agent_surface_liveness.py` classifies it. **Depends on** nothing.
+
+### NS-21 · The hook surface has one live hook and no loop
+
+Five of six `.mango/hooks/` scripts are dormant by DEC-003, and the sixth
+(`pre-nemotron-run.sh`) is the only hook on a live product path. NS-13 now
+asserts the partition and pins that hook, so the surface is *described*
+accurately for the first time — which makes the gap visible rather than closing
+it: three of the four names in `PERMITTED_HOOK_NAMES`
+(`post-planner-run`, `post-nemotron-reasoner-run`, `post-verifier-run`) have no
+script on disk, so `ExecutionLoop` fires them into `hook_path.exists()`'s false
+branch on every agent turn. That is by design today, and it means the loop has
+no post-turn observation point at all.
+
+Two candidates, both needing a decision rather than code first:
+
+- **A post-turn hook that records the turn's verdict and tool-call count.** The
+  data already exists in `ExecutionLoop`; nothing persists it per turn, so
+  "which turn exhausted the budget" is answerable only from logs that are not
+  kept. This is the cheapest real use of the dormant namespace.
+- **Waking the five dormant scripts** would change tool-call behaviour for every
+  session on logic that has never executed. DEC-003 declined this deliberately;
+  reversing it needs a superseding entry, not an edit to `.mango/settings.json`
+  — which is not the file Claude Code reads anyway.
+
+**Done when** either a post-turn hook exists with a test that fails when it stops
+being fired, or a decision-log entry records that the post-`*`-run namespace
+stays empty and why — so the three unfired names stop reading as an oversight.
+**Depends on** nothing.
+
 ### NS-19 · NIM multi-model routing and prompt-cache cost tracking *(spec required)*
 
 Dynamic model fallback (fast reasoning → deep synthesis) and a local prompt-cache
@@ -347,10 +320,32 @@ Recorded so a future audit does not rediscover them as findings:
 
 ---
 
-## 6. Corrected since the last revision
+## 6. Delivered, and removed from the list above
 
-Two items this file carried as open are delivered. Recording the correction
-rather than silently unchecking a box, per the convention DEC-032 set:
+An item that is done does not stay on a roadmap. The peer review's F-4 finding
+was that this file listed two already-delivered items as open, which teaches
+readers that the entries are decorative; leaving these here after shipping them
+would repeat exactly that. Each is stated with the evidence a reviewer can
+re-run, not with a checkbox.
+
+**Shipped by `docs/specs/gate-truthfulness.md` (this branch):**
+
+| Was | Now |
+|---|---|
+| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. The reopened bot PRs (#62–#73) are left for the maintainer to close. |
+| **NS-5** `lint-node` ran in no CI job | A direct prerequisite of `ci`, never of `ci-python`. The blocker on record was wrong: ESLint and Knip passed, and Prettier failed on the digest-pinned `.governance/policy.json`, whose bytes the root-of-trust pins. `harness/node/.prettierignore` resolves it (DEC-034). Confirmed green in CI on `build-full`. This puts R-TDH-23's ESLint `max-lines` rule into a job for the first time. |
+| **NS-7** The gitleaks allowlist proved only that its paths existed | `make secrets-allowlist-check` scans with the allowlist removed and fails any entry suppressing nothing. Runs in `secret-scan`, never the unit suite (no gitleaks there, and INV-2 forbids a skip). Deliberate keeps are declared in `.gitleaks.toml` beside the entry. |
+| **NS-8** Three agent-surface mutations passed silently | A `SKILL.md` naming a nonexistent `make` target, a persona declaring an authority `agent_authority.py` withholds, and swapped rows in the active→canonical table are each rejected by name. |
+| **NS-10** `policy_loader` resolved every threshold and logged nothing | DEBUG record naming key, value and source file; silent at INFO. One `TypedDict` per block, so an unknown key is a mypy error — which immediately surfaced `dict[str, Any]` annotations in `langgraph/policy.py` discarding that checking. |
+| **NS-12** Two waiver globs addressed ~135 node ids to approve 4 skips | Narrowed to the classes that carry the skip condition. `test_skip_waiver_scope.py` is the first test to read the shipped registry. |
+| **NS-13** Renaming the one live hook silently disabled it | The `.mango/hooks/*.sh` partition is asserted, and `pre-nemotron-run.sh` is pinned by name and by the validator it runs. |
+| **NS-3** (gate half) Nothing tied a declared version to a release | `TestTheDeclaredVersionIsARealRelease` requires a matching `## [x.y.z]` changelog section. The *decision* half stays open above. |
+| **NS-9** (bound half) An `omit` entry could drop a file from the floor and raise the aggregate | `coverage_gate.check_measured_set` fails closed on divergence and on an empty set. `mcp_server.py`'s pragma is gone: 94.06% → 94.44%, and 92% on the 3.9 leg where the SDK is absent. The swallow behind the *other* pragma stays open above. |
+
+Every one was mutation-tested against the defect it claims to catch. No test
+skip, `xfail` or waiver was added.
+
+**Corrected earlier, from the previous revision of this file:**
 
 - **`@with_authority` / `@budgeted` applied to real nodes.** DEC-022 correctly
   found them unwired and this file said so. They are now applied in

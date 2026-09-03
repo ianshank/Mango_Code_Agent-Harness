@@ -197,9 +197,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **2,882 automated tests** (97 Vitest + 2,785 Pytest across 7 tiers)
+- **Total Automated Tests:** **2,990 automated tests** (98 Vitest + 2,892 Pytest across 7 tiers), measured 2026-09-03 by `pnpm exec vitest run` and `pytest --collect-only`
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **99% total** (99.64% Lines | 97.93% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`
+- **Python AQA Coverage:** **99% total** (99.33% Lines | 97.75% Branches) across `harness/shared`, `harness/api_server`, and `harness/control-plane`. Measured on a leg without the optional `langgraph` extra, whose modules are then waived per-file (`coverage.optional_extras`); the `build-full` CI leg installs it and reads 99.41% / 97.88%. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
@@ -257,14 +257,16 @@ pnpm exec knip
 cd ../..
 
 # 3. Run Python AQA Engine & Governance Validators
-make ci              # Full pipeline: lint → coverage → test-node → zero-skips → specs → remotes → validate → dedup → digest-regen
+make ci              # Full pipeline: lint → lint-node → lock-check → coverage → zero-skips-python → test-node → zero-skips → specs → remotes → validate → dedup → digest-regen
 make lint            # ruff + mypy + check_py_compat (Python 3.9 compat gate)
 make test            # Full test suite (Pytest + Vitest + Zero-Skips)
 make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)
 make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
 make validate        # Governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
+make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
+make secrets-allowlist-check # Every .gitleaks.toml allowlist entry must still suppress a real finding (runs in secret-scan)
 make digest-regen    # Regenerate protected-file digests after policy changes
 
 # 4. Run root adversarial harness self-tests
@@ -304,7 +306,9 @@ make test-node       # Execute TypeScript/Node engine tests
 make test-governance # Governance broker, evidence, invariant tests
 make validate        # All governance invariants (adoption, policy, remotes, traceability)
 make check-dedup     # Shim drift detection
+make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
+make secrets-allowlist-check # Every .gitleaks.toml allowlist entry must still suppress a real finding (runs in secret-scan)
 make pre-pr          # Full pre-submission validation pipeline (now includes audit)
 ```
 

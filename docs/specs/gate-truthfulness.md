@@ -1,7 +1,7 @@
 # Spec: gate truthfulness — gates that cannot pass on absent evidence
 
 **Version:** 2.4.0
-**Status:** In implementation
+**Status:** Delivered — verified 2026-09-03 (see Validation matrix)
 **Opened by:** `docs/reports/ROADMAP-PEER-REVIEW.md` (2026-09-03), items NS-3 · NS-5 ·
 NS-7 · NS-8 · NS-9 · NS-10 · NS-12 · NS-13
 
@@ -85,53 +85,62 @@ Three findings carry direct evidence that the recorded diagnosis was wrong:
 
 ## Acceptance criteria
 
-- [ ] AC-1: `make lint-node` exits 0 with the workspace installed, and `make ci`
+- [x] AC-1: `make lint-node` exits 0 with the workspace installed, and `make ci`
       lists it as a direct prerequisite while `make ci-python` does not —
       verified by `pytest -k TestLintNodeWiring`
       · stage: `make ci` (R-GT-1)
-- [ ] AC-2: Removing the `.governance/` entry from `harness/node/.prettierignore`
+- [x] AC-2: Removing the `.governance/` entry from `harness/node/.prettierignore`
       makes `prettier --check` report `policy.json`, and reformatting that file
       makes `validate_adoption.py` fail on the root-of-trust digest — the two
       outcomes this exclusion exists to keep apart — verified by
       `pytest -k test_governance_tree_is_excluded_from_prettier`
       · stage: `make ci` (R-GT-2, C-GT-2)
-- [ ] AC-3: Adding any first-party source file to the coverage `omit` list makes
+- [x] AC-3: Adding any first-party source file to the coverage `omit` list makes
       the gate exit 1 naming that file, and a run measuring zero files also
       exits 1 rather than reporting a vacuous pass — verified by
       `pytest -k TestMeasuredSetIsBounded`
       · stage: `make coverage-python` (R-GT-3, C-GT-1)
-- [ ] AC-4: With `LOG_LEVEL=DEBUG`, resolving any threshold emits a record
+- [x] AC-4: With `LOG_LEVEL=DEBUG`, resolving any threshold emits a record
       naming the key, the value and the source path; at default level it emits
       nothing — verified by `pytest -k TestPolicyResolutionLogging`
       · stage: `make ci` (R-GT-4)
-- [ ] AC-5: Reading an undeclared key from the typed `limits` block is reported
+- [x] AC-5: Reading an undeclared key from the typed `limits` block is reported
       by `python -m mypy`, and every declared key still resolves at runtime —
       verified by `pytest -k TestLimitsAreTyped`
       · stage: `make lint` (R-GT-5)
-- [ ] AC-6: Each of the three agent-surface mutations is rejected by name — a
+- [x] AC-6: Each of the three agent-surface mutations is rejected by name — a
       `SKILL.md` naming `make no-such-target`, a `verifier` persona declaring
       `write_file`, and a mapping table with two rows swapped — verified by
       `pytest -k TestAgentSurfaceTruth`
       · stage: `make ci` (R-GT-6)
-- [ ] AC-7: A skip added to an already-waived module is reported as unapproved
+- [x] AC-7: A skip added to an already-waived module is reported as unapproved
       by `make verify-zero-skips-python`, while every skip present today stays
       approved — verified by `pytest -k TestWaiversAreNodeScoped`
       · stage: `make ci` (R-GT-7)
-- [ ] AC-8: Deleting or renaming `pre-nemotron-run.sh` fails a test, and a
+- [x] AC-8: Deleting or renaming `pre-nemotron-run.sh` fails a test, and a
       script in `.mango/hooks/` belonging to neither namespace is reported by
       name — verified by `pytest -k TestHookNamespacePartition`
       · stage: `make ci` (R-GT-8)
-- [ ] AC-9: A declared version with no matching `## [x.y.z]` changelog section
+- [x] AC-9: A declared version with no matching `## [x.y.z]` changelog section
       fails the documentation-truth suite, proved against a synthetic tree —
       verified by `pytest -k test_declared_version_has_a_changelog_section`
       · stage: `make ci` (R-GT-9)
-- [ ] AC-10: `make secrets-allowlist-check` exits 1 naming any allowlist entry
+- [x] AC-10: `make secrets-allowlist-check` exits 1 naming any allowlist entry
       that suppresses no finding, and exits 0 on the current tree — verified by
       `make secrets-allowlist-check` · stage: `secret-scan` (R-GT-10)
-- [ ] AC-11: The full suite runs with no new skip and no waiver added: the skip
+- [x] AC-11: The full suite runs with no new skip and no waiver added: the skip
       count reported by `make verify-zero-skips-python` is unchanged from the
-      pre-change baseline — verified by `pytest -k test_no_new_waivers`
+      pre-change baseline (38 on a leg without the langgraph extra, 1 on
+      `build-full` which installs it) — verified by `make verify-zero-skips-python`
+      and `pytest -k TestTheShippedRegistryIsParseable`
       · stage: `make ci` (C-GT-2, C-GT-3)
+
+Verified 2026-09-03: `make ci` exit 0 locally with pinned tools, real gitleaks
+and the pnpm workspace installed; `make lint-node` confirmed green in CI on
+`build-full`, which is the first time the Node lint tier has executed in this
+repository's CI. Each acceptance criterion above was additionally
+mutation-tested — the mutation it names was applied, the test observed failing,
+and the tree restored.
 
 ## Steps
 
@@ -157,7 +166,9 @@ Three findings carry direct evidence that the recorded diagnosis was wrong:
 - `harness/node/.prettierignore` (new)
 - `Makefile` — **protected path**, needs the `infra-reviewed` attestation
 - `.github/workflows/python-package.yml` — **protected path**, same attestation
-- `harness/shared/coverage_gate.py`, `harness/shared/policy_loader.py`
+- `harness/shared/coverage_gate.py`, `harness/shared/coverage_scope.py` (new —
+  the scope half, split out at 470/500 lines; see DEC-035),
+  `harness/shared/policy_loader.py`
 - `harness/shared/tests/` — the new and amended gate tests
 - `harness/shared/tests/skip-waivers.json`
 - `.github/dependabot.yml`, `harness/node/.governance/decision-log.md`

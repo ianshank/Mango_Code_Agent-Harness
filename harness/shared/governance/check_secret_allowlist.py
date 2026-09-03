@@ -69,10 +69,24 @@ def allowlist_paths(config_text: str) -> list[str]:
     ]
 
 
+def allowlist_block(config_text: str) -> str:
+    """Just the `[allowlist]` block, so a declaration outside it cannot count."""
+    match = re.search(r"^\[allowlist\].*?(?=^\[|\Z)", config_text, re.M | re.S)
+    return match.group(0) if match else ""
+
+
 def declared_keeps(config_text: str) -> dict[str, str]:
-    """Entries the config declares as deliberately kept, mapped to their reason."""
+    """Entries the allowlist block declares as deliberately kept, and why.
+
+    Scoped to that block on purpose. Scanning the whole file let a `# keep:`
+    line anywhere -- a header comment, prose after the block, a commented-out
+    rule -- exempt an entry from this check. That is the same shape as the
+    gates this module was written to close: a control that an unreviewed edit
+    somewhere else can silently widen. A keep must sit beside the entry it
+    exempts, where a reviewer reading the allowlist sees both.
+    """
     keeps: dict[str, str] = {}
-    for line in config_text.splitlines():
+    for line in allowlist_block(config_text).splitlines():
         match = KEEP_MARKER.search(line)
         if match:
             keeps[match.group("entry")] = match.group("reason")
