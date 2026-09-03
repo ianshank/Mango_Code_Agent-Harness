@@ -66,6 +66,8 @@ Legitimate infrastructure modernization (CI, Makefile, governance scripts) neces
 
 Untracked files in protected paths are also caught (fail-closed) — `validate_invariants` enumerates staged, tracked-modified, and untracked non-ignored files.
 
+The per-file attestation table that accompanies such a change MUST match the set the gate enforces, and is machine-checked rather than asserted: `harness/shared/governance/attestation.py` derives the table from `validate_invariants`' own matcher and file discovery, and `make attestation-check FILE=<pr-body>` fails closed on a missing attestation section, a section with no table, or any row-to-path mismatch in either direction. `build-full` runs it on every pull request, deliberately **before** and independent of the label that sets `ALLOW_GITHUB_CHANGES` — a reviewer has to be able to read a verified table before attesting to it. A hand-transcribed table had already overstated its own coverage (DEC-038).
+
 ## Coverage gate
 
 Coverage thresholds are read dynamically from `governance-policy.json` by `harness/shared/coverage_gate.py`, so the gate and the policy cannot silently drift, and the gate **fails closed**: an unreadable or malformed policy or report aborts `coverage-python` rather than falling back to a weaker literal. (The predecessor `COV_MIN` mechanism degraded to 80 while the policy declared 90 — a gate that lowers itself when it cannot read its own policy.) `pyproject.toml` deliberately declares no competing `fail_under`, and `[tool.coverage.run] branch = true` keeps branch arcs measured — which is also why the gate applies `coverage.lines` and `coverage.branches` as two separate floors instead of gating pytest-cov's blended total.

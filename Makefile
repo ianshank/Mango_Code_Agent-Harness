@@ -181,6 +181,22 @@ secrets-allowlist-check: ## Every .gitleaks.toml allowlist entry must still supp
 	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
 	$(PYTHON) harness/shared/governance/check_secret_allowlist.py --gitleaks $(GITLEAKS)
 
+# --- Protected-path attestation (harness/CONTRACT.md) ---
+# The per-file table a PR description must carry was transcribed by hand from a
+# CI log, and drifted (DEC-038). These targets derive it from the same matcher
+# and the same file discovery `validate_invariants.py` uses, so the table a
+# reviewer reads and the set the gate enforces cannot disagree. BASE_REF is
+# resolved by the script from the remote's published default when unset, so an
+# adopter fork whose default branch is not `main` needs no edit here.
+.PHONY: attestation
+attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... to override)
+	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),)
+
+.PHONY: attestation-check
+attestation-check: ## Verify a written attestation table against the real protected set (FILE=pr-body.md)
+	@test -n "$(FILE)" || { echo 'usage: make attestation-check FILE=<pr-body.md>'; exit 1; }
+	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),)
+
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)

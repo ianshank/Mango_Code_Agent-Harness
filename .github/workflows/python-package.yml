@@ -145,6 +145,23 @@ jobs:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci
 
+      # The `infra-reviewed` label attests to the table in the PR description, so
+      # a table that does not list what the change actually touches makes the
+      # attestation cover less than the label claims. That table was transcribed
+      # by hand and drifted (DEC-038); this step compares it to the same set
+      # `validate_invariants.py` enforces. Deliberately NOT gated on the label:
+      # the reviewer must be able to read a verified table *before* deciding.
+      # The body reaches the script through a file written from an env var, never
+      # interpolated into the shell, so its content cannot become a command.
+      - name: Verify the protected-path attestation table
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          make attestation-check FILE="$RUNNER_TEMP/pr-body.md"
+
   # INV-1 (secret scan over working tree AND full history) had no live enforcement:
   # the gitleaks steps live in harness/{node,jvm}/.github/workflows/ci.yml, which are
   # adopter templates GitHub never runs — it only reads workflows from the repository

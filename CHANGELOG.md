@@ -10,6 +10,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The attestation table a reviewer signs is now derived and checked, not transcribed (DEC-038)
+
+`harness/CONTRACT.md` requires a PR touching a protected path to carry a
+per-file table, because applying `infra-reviewed` is the human attestation the
+`check_protected_paths` gate stands on. Nothing derived that table — it was
+copied out of a CI log, and on this branch's own PR a comment claimed thirteen
+attested rows where the validator's set was ten. An inflated count reads as
+thoroughness, which makes it the more dangerous direction of the DEC-024 failure
+class, reproduced inside the control written to prevent it.
+
+- **`harness/shared/governance/attestation.py`** prints the table for a change
+  and, with `--check`, verifies a written description against it. It imports
+  `is_protected`, `git_modified_files` and `load_protected_patterns` from
+  `validate_invariants` rather than reimplementing them; the test asserts
+  **symbol identity**, not agreement on today's tree, so the printed table and
+  the enforced set cannot diverge the way a second implementation would.
+- **Fails closed three ways**: no attestation section, a section with no table,
+  or any row-to-path mismatch in either direction — a row naming a path the
+  change does not touch is reported too, since it invites the reviewer to attest
+  to something absent.
+- **Nothing is hard-coded.** The base branch resolves from `--base-ref`, then
+  `GITHUB_BASE_REF`, then the remote's published `origin/HEAD`, so an adopter
+  fork whose default branch is not `main` needs no edit; the section heading is a
+  `--section` pattern; a header row is found by the separator beneath it rather
+  than by position, so a table introduced by a paragraph parses correctly.
+- **Wired**: `make attestation` / `make attestation-check`, and a `build-full`
+  step that runs on every pull request and is deliberately *not* gated on the
+  label — the reviewer must be able to read a verified table before deciding.
+  The description reaches the script through a file written from an environment
+  variable, never interpolated into a shell command.
+- The module sits under `harness/shared/governance/` so the existing
+  `harness/shared/governance/**` pattern protects it. A gate anything unreviewed
+  can weaken is the defect this branch exists to close; that placement costs it
+  one row in its own table.
+
 ### Cross-stack sampling parity, and the constant inventory that had drifted from its own decision (DEC-036, DEC-037)
 
 A hard-coded-value pass over the branch. The headline finding is a divergence
