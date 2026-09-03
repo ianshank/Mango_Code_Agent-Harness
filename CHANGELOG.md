@@ -10,6 +10,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### A 700-line budget that was silent until it failed, and the module sixteen lines from it (DEC-041)
+
+`test_verify_zero_skips.py` stood at **684 of 700** — the suite for INV-2, the
+invariant most likely to gain a test, since every new waiver shape lands there.
+Nothing surfaced that: the per-file size budget reported only breaches, so the
+first signal a contributor would get was a red gate mid-PR.
+
+- **Split at the section banner the module had already drawn.** The
+  `unique_id_glob` cases move to `test_verify_zero_skips_glob_waivers.py`. The
+  trigger was mechanical; the seam is not. Per DEC-035, split where the defects
+  fall: a glob waiver widens *which node ids a waiver addresses* while leaving
+  *what it approves* untouched, and that distinction is what DEC-026 and the
+  later waiver narrowing both turned on.
+- **`run_script` and the fixture move to `_zero_skip_harness.py`**, imported by
+  both halves rather than copied — a duplicated runner is how the two would come
+  to disagree about what "run the gate" means. Imported by name rather than put
+  in the directory `conftest.py`, where `test_files` would be visible to every
+  module in `harness/shared/tests/`; DEC-030 records what conftest-scoping
+  errors cost here already.
+- **The test-function set is unchanged**, verified by diffing the sorted
+  `def test_` names before and after. The only difference is the fixture that
+  moved.
+- **`test_junit_missing_fields` renamed.** It read as a test about JUnit
+  evidence while passing `--vitest-json` with no JUnit events involved; its
+  actual subject is a waiver declaring `framework: junit` without the fields
+  naming which node id it addresses.
+- **The budget now reports headroom.** `_check_line_budget` logs the closest
+  file and its remaining lines on a passing run — INFO-only, unable to change
+  the verdict, suppressed on a failing run so the failure leads. It reports the
+  measurement the check already performs rather than adding a second threshold
+  to keep in step with the first.
+
+
 ### The attestation check judged a snapshot, and could not be cleared (DEC-040)
 
 DEC-038 read the PR description from `github.event.pull_request.body`. That

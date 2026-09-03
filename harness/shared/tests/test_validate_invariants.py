@@ -462,6 +462,29 @@ def test_check_test_size_budget_fails_one_line_over_and_passes_at_the_budget(tem
     assert vi.check_test_size_budget(temp_repo, budget=50) is True
 
 
+def test_a_passing_budget_reports_the_closest_file_and_its_headroom(temp_repo: Path, caplog):
+    """The budget was a cliff: silent until it failed, so the first signal was a red gate.
+
+    `test_verify_zero_skips.py` reached 684 of 700 with nothing surfacing it.
+    The gauge is INFO-only and cannot change the verdict, so this asserts the
+    measurement is reported, not that it gates anything.
+    """
+    _write_lines(temp_repo / "test_near.py", 48)
+    _write_lines(temp_repo / "test_small.py", 5)
+    with caplog.at_level(logging.INFO, logger="harness.shared"):
+        assert vi.check_test_size_budget(temp_repo, budget=50) is True
+    assert "closest is test_near.py at 48 lines (2 to spare)" in caplog.text
+    assert "test_small.py" not in caplog.text, "only the closest file is worth a line"
+
+
+def test_no_headroom_line_when_the_budget_is_breached(temp_repo: Path, caplog):
+    """A failing run must lead with the failure, not bury it under a gauge for the runners-up."""
+    _write_lines(temp_repo / "test_wide.py", 51)
+    with caplog.at_level(logging.INFO, logger="harness.shared"):
+        assert vi.check_test_size_budget(temp_repo, budget=50) is False
+    assert "to spare" not in caplog.text
+
+
 def test_check_test_size_budget_ignores_source_modules(temp_repo: Path):
     """Source files belong to the other budget; counting them here would double-report."""
     _write_lines(temp_repo / "big_source.py", 600)

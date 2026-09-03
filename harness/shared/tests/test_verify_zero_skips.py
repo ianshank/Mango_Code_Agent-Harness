@@ -1,88 +1,21 @@
+"""The INV-2 zero-skip gate: evidence handling and waiver semantics.
+
+The `unique_id_glob` cases moved to `test_verify_zero_skips_glob_waivers.py`
+when this module reached 684 lines against a 700-line budget — sixteen from a
+red gate on the next test added, in the suite for the invariant most likely to
+gain one. The runner and fixture both halves share live in `_zero_skip_harness`.
+"""
+
 from __future__ import annotations
 
-import contextlib
 import json
-import runpy
-import subprocess
-import sys
-from io import StringIO
 from pathlib import Path
 
-import pytest
+from harness.shared.tests._zero_skip_harness import run_script, test_files
 
-
-def run_script(project_root: Path, args: list[str]) -> subprocess.CompletedProcess:
-    """Execute verify_zero_skips.py in-process via runpy for coverage tracking."""
-    old_argv = sys.argv
-    try:
-        sys.argv = ["verify_zero_skips.py"] + (args or [])
-        script = project_root / "harness" / "shared" / "verify_zero_skips.py"
-
-        stdout = StringIO()
-        stderr = StringIO()
-        returncode = 0
-
-        try:
-            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                runpy.run_path(str(script), run_name="__main__")
-        except SystemExit as e:
-            if isinstance(e.code, int):
-                returncode = e.code
-            elif e.code is None:
-                returncode = 0
-            else:
-                returncode = 1
-                stderr.write(str(e.code))
-        except Exception as e:  # noqa: BLE001 — intentional catch-all for arbitrary script failures
-            returncode = 1
-            stderr.write(str(e))
-
-        return subprocess.CompletedProcess(
-            args=sys.argv,
-            returncode=returncode,
-            stdout=stdout.getvalue(),
-            stderr=stderr.getvalue(),
-        )
-    finally:
-        sys.argv = old_argv
-
-
-@pytest.fixture
-def test_files(tmp_path: Path):
-    d_log = tmp_path / "decision-log.md"
-    d_log.write_text("Decision DEC-123\n")
-
-    waivers = tmp_path / "waivers.json"
-    waivers.write_text(
-        json.dumps(
-            {
-                "waivers": [
-                    {
-                        "framework": "vitest",
-                        "file": "some.test.ts",
-                        "test": "My test",
-                        "decision_id": "DEC-123",
-                        "reason": "Wait for API",
-                        "owner": "test",
-                        "expires": "2099-12-31",
-                    }
-                ]
-            }
-        )
-    )
-
-    v_json = tmp_path / "vitest.json"
-    v_json.write_text(json.dumps({"testResults": []}))
-
-    j_events = tmp_path / "junit.events"
-    j_events.write_text("")
-
-    return {
-        "log": str(d_log),
-        "waivers": str(waivers),
-        "v_json": str(v_json),
-        "j_events": str(j_events),
-    }
+# `test_files` is imported for pytest to resolve as a fixture in this module, not
+# called directly; ruff cannot see that use, hence the explicit re-export.
+__all__ = ["run_script", "test_files"]
 
 
 def test_all_passed_returns_zero(tmp_path, test_files):
@@ -401,7 +334,14 @@ def test_vitest_missing_file_test(test_files):
     assert "Vitest waiver requires exact file and test" in res.stderr
 
 
-def test_junit_missing_fields(test_files):
+def test_a_junit_waiver_missing_its_address_is_rejected_before_any_evidence_is_read(test_files):
+    """The registry is validated on load, so a malformed waiver fails whatever evidence runs.
+
+    Named for what it asserts. It was `test_junit_missing_fields`, which read as a test about
+    JUnit evidence — and it passes `--vitest-json`, with no JUnit events involved at all. The
+    subject is a *waiver* declaring `framework: junit` without the fields that say which node
+    id it addresses; rejecting that at load time is why the evidence format is irrelevant.
+    """
     Path(test_files["waivers"]).write_text(
         json.dumps(
             {
@@ -596,89 +536,3 @@ def test_junit_unapproved_skip(test_files):
     assert "unapproved JUnit skip" in res.stderr
 
 
-# --- unique_id_glob waivers (DEC-026, tech-debt-hardening-plan R-TDH-19) ------
-
-
-def _glob_registry(test_files, glob: str = "harness/shared/tests/test_langgraph_*.py::*", test: str = "*") -> None:
-    Path(test_files["waivers"]).write_text(
-        json.dumps(
-            {
-                "waivers": [
-                    {
-                        "framework": "junit",
-                        "unique_id_glob": glob,
-                        "test": test,
-                        "decision_id": "DEC-123",
-                        "reason": "langgraph not installable below 3.10",
-                        "owner": "a",
-                        "expires": "2099-12-31",
-                    }
-                ],
-            }
-        )
-    )
-
-
-def _run_junit(test_files):
-    args = ["--decision-log", test_files["log"], "--waivers", test_files["waivers"]]
-    return run_script(Path("."), [*args, "--junit-events", test_files["j_events"]])
-
-
-def test_junit_glob_waiver_covers_every_matching_nodeid(test_files):
-    _glob_registry(test_files)
-    reason = "langgraph not installed (DEC-123)"
-    Path(test_files["j_events"]).write_text(
-        f"harness/shared/tests/test_langgraph_graph.py::TestLive::test_a[x]\ttest_a[x]\t{reason}\n"
-        f"harness/shared/tests/test_langgraph_state.py::test_b\ttest_b\t{reason}\n"
-    )
-    assert _run_junit(test_files).returncode == 0
-
-
-def test_junit_glob_waiver_still_requires_the_decision_id_in_the_reason(test_files):
-    _glob_registry(test_files)
-    Path(test_files["j_events"]).write_text(
-        "harness/shared/tests/test_langgraph_graph.py::test_a\ttest_a\tlanggraph not installed\n"
-    )
-    res = _run_junit(test_files)
-    assert res.returncode != 0 and "unapproved JUnit skip" in res.stderr
-
-
-def test_junit_glob_waiver_does_not_reach_other_paths(test_files):
-    _glob_registry(test_files)
-    Path(test_files["j_events"]).write_text("harness/shared/tests/test_other.py::test_c\ttest_c\tskip (DEC-123)\n")
-    res = _run_junit(test_files)
-    assert res.returncode != 0 and "test_other.py" in res.stderr
-
-
-def test_junit_glob_waiver_can_pin_the_test_name(test_files):
-    _glob_registry(test_files, glob="harness/shared/tests/test_mcp_server.py::*", test="test_real_*")
-    Path(test_files["j_events"]).write_text(
-        "harness/shared/tests/test_mcp_server.py::test_real_tool\ttest_real_tool\tmcp absent (DEC-123)\n"
-        "harness/shared/tests/test_mcp_server.py::test_other\ttest_other\tmcp absent (DEC-123)\n"
-    )
-    res = _run_junit(test_files)
-    assert res.returncode != 0 and "test_other" in res.stderr
-
-
-def test_junit_waiver_with_both_exact_and_glob_is_malformed(test_files):
-    Path(test_files["waivers"]).write_text(
-        json.dumps(
-            {
-                "waivers": [
-                    {
-                        "framework": "junit",
-                        "unique_id": "id1",
-                        "unique_id_glob": "id*",
-                        "test": "t",
-                        "decision_id": "DEC-123",
-                        "reason": "a",
-                        "owner": "a",
-                        "expires": "2099-12-31",
-                    }
-                ],
-            }
-        )
-    )
-    Path(test_files["j_events"]).write_text("")
-    res = _run_junit(test_files)
-    assert res.returncode != 0 and "exactly one of unique_id / unique_id_glob" in res.stderr
