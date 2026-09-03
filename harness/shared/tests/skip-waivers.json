@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "_comment": "Python half of INV-2 (tech-debt-hardening-plan R-TDH-19, DEC-026). Consumed by `make verify-zero-skips-python` through harness/shared/governance/verify_zero_skips.py --junit-events. A `unique_id_glob` waiver covers every nodeid it matches, but only when the skip reason carries the waiver's decision id; anything else is an unapproved skip. Lives beside the suite because the root .governance/ directory is deliberately dormant (DEC-005).",
+  "_comment": "Python half of INV-2 (tech-debt-hardening-plan R-TDH-19, DEC-026). Consumed by `make verify-zero-skips-python` through harness/shared/governance/verify_zero_skips.py --junit-events. A `unique_id_glob` waiver covers every nodeid it matches, but only when the skip reason carries the waiver's decision id; anything else is an unapproved skip. Lives beside the suite because the root .governance/ directory is deliberately dormant (DEC-005). Each glob must be scoped to the class or nodeid that actually carries the skip condition, never to a whole module (gate-truthfulness R-GT-7): a module-wide glob pre-approves skips nobody has written yet, and the decision-id half of the check is satisfied by any reason mentioning the id -- which the reusable POSIX_ONLY marker's reason already does.",
   "waivers": [
     {
       "framework": "junit",
@@ -22,10 +22,10 @@
     },
     {
       "framework": "junit",
-      "unique_id_glob": "harness/shared/tests/test_langgraph_*.py::*",
+      "unique_id_glob": "harness/shared/tests/test_langgraph_graph.py::TestLiveGraphExecution::*",
       "test": "*",
       "decision_id": "DEC-026",
-      "reason": "langgraph is not installable below Python 3.10; CI deselects these on 3.9 (no skip) and installs the library elsewhere, so this waiver covers only a local run without the library",
+      "reason": "langgraph is not installable below Python 3.10; CI deselects these on 3.9 (no skip) and installs the library elsewhere, so this waiver covers only a local run without the library. Scoped to the one class carrying the skipif (R-GT-7): the sibling test_langgraph_* modules declare no skip condition and were covered for free.",
       "owner": "governance-maintainers",
       "expires": "2027-09-02"
     },
@@ -58,10 +58,46 @@
     },
     {
       "framework": "junit",
-      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::*",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::TestDisabledByteIdentity::*",
       "test": "*",
       "decision_id": "DEC-026",
-      "reason": "POSIX_ONLY (chmod/symlink) cases cannot run on Windows; they run on every CI leg",
+      "reason": "POSIX_ONLY (chmod/symlink) cases in TestDisabledByteIdentity cannot run on Windows; they run on every CI leg. Scoped to the decorated class (R-GT-7): the module's other classes carry no skip condition.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::TestEnabled::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX_ONLY (chmod/symlink) cases in TestEnabled cannot run on Windows; they run on every CI leg. Scoped to the decorated class (R-GT-7): the module's other classes carry no skip condition.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::TestEnvelopeInvariance::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX_ONLY (chmod/symlink) cases in TestEnvelopeInvariance cannot run on Windows; they run on every CI leg. Scoped to the decorated class (R-GT-7): the module's other classes carry no skip condition.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::TestContainment::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX_ONLY (chmod/symlink) cases in TestContainment cannot run on Windows; they run on every CI leg. Scoped to the decorated class (R-GT-7): the module's other classes carry no skip condition.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_shadow_planner.py::TestExtractShadowPlanText::*",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX_ONLY (chmod/symlink) cases in TestExtractShadowPlanText cannot run on Windows; they run on every CI leg. Scoped to the decorated class (R-GT-7): the module's other classes carry no skip condition.",
       "owner": "governance-maintainers",
       "expires": "2027-09-02"
     },

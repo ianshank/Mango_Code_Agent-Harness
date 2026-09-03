@@ -99,7 +99,7 @@ class TestCompositeTargetsStayInStep:
         if not ci_python:
             pytest.skip("ci-python does not exist on this branch yet")
         difference = set(_prerequisites("ci")) - set(ci_python)
-        assert difference == {"test-node", "verify-zero-skips"}, (
+        assert difference == {"lint-node", "test-node", "verify-zero-skips"}, (
             f"ci and ci-python differ by {sorted(difference)}; the only legitimate difference "
             "is the Node-dependent gates, which run once on the primary leg"
         )
@@ -213,3 +213,42 @@ class TestControlPlaneTestsAreRun:
         recipe = _targets().get(target, "")
         assert recipe, f"Makefile has no {target} recipe"
         assert "$(CP_TESTS)/" in recipe, f"{target} no longer runs $(CP_TESTS); the control-plane tests would not run"
+
+
+class TestLintNodeWiring:
+    """R-GT-1: the Node lint tier runs in `ci`, and only there.
+
+    DEC-013 deferred this wiring behind a `typescript` / `typescript-eslint`
+    incompatibility. Measured against the installed workspace on 2026-09-03 that
+    blocker is gone -- ESLint and Knip both pass -- and the real one was
+    Prettier reformatting a digest-pinned file (see
+    `TestPrettierLeavesPinnedArtefactsAlone` in `test_lint_config_liveness.py`).
+    With both resolved the tier is wired, which also brings R-TDH-23's
+    policy-sourced ESLint `max-lines` rule into a CI job for the first time: it
+    was enforced nowhere before.
+
+    The asymmetry is the point. `ci-python` is what the secondary matrix legs
+    run, and those legs install no pnpm, so making `lint-node` a prerequisite of
+    the shared `lint` target -- or of `ci-python` -- turns three green legs red.
+    """
+
+    def test_lint_node_is_a_direct_prerequisite_of_ci(self) -> None:
+        assert "lint-node" in _prerequisites("ci"), (
+            "`make ci` no longer runs lint-node; ESLint, Prettier and Knip would run in no CI "
+            "job, taking R-TDH-23's policy-sourced max-lines rule with them"
+        )
+
+    @pytest.mark.parametrize("target", ["ci-python", "lint"])
+    def test_the_pnpm_free_targets_do_not_require_it(self, target: str) -> None:
+        """The secondary matrix legs install no Node toolchain."""
+        assert "lint-node" not in _prerequisites(target), (
+            f"`{target}` requires lint-node, but the matrix legs that run it install no pnpm; "
+            "every secondary leg would fail on a missing binary"
+        )
+
+    def test_the_recipe_still_runs_all_three_node_gates(self) -> None:
+        """Reachability is not enforcement (the `lock-check` lesson)."""
+        recipe = _targets().get("lint-node", "")
+        assert recipe, "Makefile has no lint-node recipe"
+        for tool in ("eslint", "prettier", "knip"):
+            assert tool in recipe, f"lint-node no longer runs {tool}"

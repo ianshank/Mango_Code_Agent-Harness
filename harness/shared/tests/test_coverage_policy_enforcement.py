@@ -263,6 +263,25 @@ class TestPerFileEnforcement:
         report.write_text(json.dumps(payload), encoding="utf-8")
         return report
 
+    def _root_matching(self, tmp_path, report):
+        """A repo root whose first-party sources are exactly the report's files.
+
+        `main` bounds the measured set whenever per-file enforcement is on
+        (gate-truthfulness R-GT-3), so a synthetic per-file report needs a
+        synthetic tree to be judged against. Without one these tests compare an
+        invented report to this repository's real layout and fail for a reason
+        that has nothing to do with the floors they exist to check.
+        """
+        root = tmp_path / "root"
+        for relative in json.loads(report.read_text(encoding="utf-8"))["files"]:
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x = 1\n", encoding="utf-8")
+        (root / "pyproject.toml").write_text(
+            '[tool.coverage.run]\nsource = ["."]\n\n[tool.z]\nk = 1\n', encoding="utf-8"
+        )
+        return root
+
     def _policy(self, tmp_path, per_file=True):
         policy = tmp_path / "policy.json"
         policy.write_text(
@@ -275,13 +294,15 @@ class TestPerFileEnforcement:
         from harness.shared import coverage_gate as cg
 
         report = self._report(tmp_path, {"big.py": (960, 1000), "thin.py": (10, 20)})
-        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path))]) == 1
+        args = ["--repo-root", str(self._root_matching(tmp_path, report))]
+        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path)), *args]) == 1
 
     def test_all_files_at_floor_pass(self, tmp_path):
         from harness.shared import coverage_gate as cg
 
         report = self._report(tmp_path, {"a.py": (95, 100), "b.py": (90, 100), "empty_init.py": (0, 0)})
-        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path))]) == 0
+        args = ["--repo-root", str(self._root_matching(tmp_path, report))]
+        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path)), *args]) == 0
 
     def test_missing_files_block_fails_closed_when_per_file_declared(self, tmp_path):
         from harness.shared import coverage_gate as cg

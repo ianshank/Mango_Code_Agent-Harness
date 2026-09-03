@@ -281,10 +281,30 @@ def test_a_waiver_does_not_rescue_a_file_outside_its_prefixes(tmp_path: Path):
     assert cg.check_per_file(report, 90.0, {"opt": ("harness/shared/elsewhere/",)}) is False
 
 
+def _synthetic_root_for(tmp_path: Path, report: Path) -> Path:
+    """A repo root whose first-party sources are exactly the report's files.
+
+    `main` bounds the measured set whenever per-file enforcement is on, so a
+    per-file test must supply a tree the report can be compared against --
+    otherwise it measures this repository's real layout against a synthetic
+    report and fails for a reason unrelated to what it is testing.
+    """
+    root = tmp_path / "synthetic-root"
+    for relative in json.loads(report.read_text(encoding="utf-8"))["files"]:
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x = 1\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[tool.coverage.run]\nsource = ["harness/shared"]\n\n[tool.z]\nk = 1\n', encoding="utf-8"
+    )
+    return root
+
+
 def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     policy = _extras_policy(tmp_path)
     report = _per_file_report(tmp_path)
-    args = ["--coverage-json", str(report), "--policy", str(policy)]
+    root = _synthetic_root_for(tmp_path, report)
+    args = ["--coverage-json", str(report), "--policy", str(policy), "--repo-root", str(root)]
     monkeypatch.delenv(_ENV, raising=False)
     assert cg.main(args) == 1
     monkeypatch.setenv(_ENV, "1")
@@ -292,7 +312,9 @@ def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, 
     strict_policy = json.loads(policy.read_text(encoding="utf-8"))
     strict_policy["coverage"]["lines"] = 99
     strict = _write_json(tmp_path / "strict.json", strict_policy)
-    assert cg.main(["--coverage-json", str(report), "--policy", str(strict)]) == 1, "aggregate floor still applies"
+    assert cg.main(
+        ["--coverage-json", str(report), "--policy", str(strict), "--repo-root", str(root)]
+    ) == 1, "aggregate floor still applies"
 
 
 def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
@@ -417,3 +439,114 @@ def test_a_waiver_covering_every_measured_file_is_not_a_pass(tmp_path: Path, cap
     with caplog.at_level(logging.ERROR, logger=cg.logger.name):
         assert cg.check_per_file(report, 90.0, {"opt": ("harness/",)}) is False
     assert "0 file(s) measured" in caplog.text
+
+
+class TestMeasuredSetIsBounded:
+    """R-GT-3: the omit list cannot silently shrink what the floors judge.
+
+    `check_per_file` iterates whatever `coverage.json`'s `files` block holds, so
+    adding a source file to `[tool.coverage.run] omit` drops it from the per-file
+    floor *and* raises the aggregate, because the uncovered lines it contributed
+    disappear. Every number improves and no gate objects. Its only emptiness
+    guard fires when a waiver swallows the whole set, which is a different and
+    much larger mistake.
+    """
+
+    def _tree(self, tmp_path: Path, measured: list[str]) -> tuple[Path, Path]:
+        """A miniature repository: two source roots, a test tree, a report."""
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg" / "tests").mkdir()
+        (tmp_path / "pkg" / "alpha.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pkg" / "beta.py").write_text("y = 2\n", encoding="utf-8")
+        (tmp_path / "pkg" / "tests" / "test_alpha.py").write_text("z = 3\n", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.coverage.run]\nbranch = true\nsource = ["pkg"]\nomit = []\n\n[tool.other]\nk = 1\n',
+            encoding="utf-8",
+        )
+        report = _write_json(
+            tmp_path / "coverage.json",
+            {"files": {path: {"summary": {"covered_lines": 1, "num_statements": 1}} for path in measured}},
+        )
+        return report, tmp_path / "pyproject.toml"
+
+    def test_the_full_first_party_set_passes(self, tmp_path: Path) -> None:
+        report, pyproject = self._tree(tmp_path, ["pkg/alpha.py", "pkg/beta.py"])
+        assert cg.check_measured_set(report, tmp_path, pyproject) is True
+
+    def test_a_source_file_dropped_from_the_report_fails_by_name(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The omit-list mutation: beta.py stops being measured."""
+        report, pyproject = self._tree(tmp_path, ["pkg/alpha.py"])
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+        assert "pkg/beta.py" in caplog.text
+
+    def test_a_test_file_counted_as_source_fails(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The inverse drift: test code measured as source inflates every number."""
+        report, pyproject = self._tree(
+            tmp_path, ["pkg/alpha.py", "pkg/beta.py", "pkg/tests/test_alpha.py"]
+        )
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+        assert "pkg/tests/test_alpha.py" in caplog.text
+
+    def test_no_first_party_sources_fails_closed(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Absence of evidence is never a pass -- this module's own contract."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.coverage.run]\nsource = ["absent"]\n\n[tool.other]\nk = 1\n', encoding="utf-8"
+        )
+        report = _write_json(tmp_path / "coverage.json", {"files": {}})
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, tmp_path / "pyproject.toml") is False
+        assert "vacuously" in caplog.text
+
+    def test_a_report_without_a_files_block_fails(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        report, pyproject = self._tree(tmp_path, [])
+        _write_json(report, {"totals": {}})
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+
+    def test_the_source_roots_are_read_from_the_coverage_table_only(self, tmp_path: Path) -> None:
+        """An unscoped parse would take the first `source = [` in the file."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.something]\nsource = ["wrong"]\n\n[tool.coverage.run]\nsource = ["right"]\n\n[tool.z]\nk = 1\n',
+            encoding="utf-8",
+        )
+        assert cg.declared_source_roots(pyproject) == ["right"]
+
+    @pytest.mark.parametrize(
+        ("content", "why"),
+        [
+            ('[tool.other]\nk = 1\n\n[tool.z]\nj = 2\n', "no [tool.coverage.run] table"),
+            ('[tool.coverage.run]\nbranch = true\n\n[tool.z]\nk = 1\n', "no source roots"),
+        ],
+    )
+    def test_an_unusable_pyproject_exits_rather_than_defaulting(
+        self, tmp_path: Path, content: str, why: str
+    ) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(content, encoding="utf-8")
+        with pytest.raises(SystemExit):
+            cg.declared_source_roots(pyproject)
+
+    def test_an_unreadable_pyproject_exits(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit):
+            cg.declared_source_roots(tmp_path / "does-not-exist.toml")
+
+    def test_caches_and_test_trees_are_not_first_party(self, tmp_path: Path) -> None:
+        (tmp_path / "pkg" / "__pycache__").mkdir(parents=True)
+        (tmp_path / "pkg" / "__pycache__" / "cached.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pkg" / "real.py").write_text("x = 1\n", encoding="utf-8")
+        assert cg.first_party_sources(tmp_path, ["pkg"]) == {"pkg/real.py"}
+
+    def test_a_declared_root_that_does_not_exist_contributes_nothing(self, tmp_path: Path) -> None:
+        """Adopter forks declare roots they may not ship; that is not a failure here."""
+        assert cg.first_party_sources(tmp_path, ["absent"]) == set()

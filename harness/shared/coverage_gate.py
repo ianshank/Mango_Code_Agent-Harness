@@ -27,6 +27,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path, PurePath
 
@@ -46,6 +47,15 @@ ENFORCED_METRICS = {
     "lines": ("covered_lines", "num_statements"),
     "branches": ("covered_branches", "num_branches"),
 }
+
+
+def _read_text(path: Path, what: str) -> str:
+    """Fail-closed read: an unreadable input exits 1 with a reason, never a default."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as e:
+        logger.error("[FAIL] Could not read %s from %s: %s", what, path, e)
+        raise SystemExit(1) from e
 
 
 def _load_json_object(path: Path, what: str) -> dict:
@@ -342,15 +352,114 @@ def check(thresholds: dict[str, float], measured: dict[str, float]) -> bool:
     return ok
 
 
+def declared_source_roots(pyproject: Path) -> list[str]:
+    """The `[tool.coverage.run] source` roots, as declared.
+
+    Parsed with a scoped regex rather than a TOML library on purpose: this gate
+    is standalone-stdlib by decision (policy-single-source.md), it runs on the
+    3.9 leg where `tomllib` does not exist, and adding `tomli` would make the
+    gate depend on a package the run it is gating might not have installed. The
+    table scoping mirrors `test_ci_gate_pipeline_shape.py`'s parse of the same
+    block: an unscoped search takes the first `source = [` in the file, which
+    any other `[tool.*]` table could silently become.
+    """
+    text = _read_text(pyproject, "pyproject")
+    table = re.search(r"^\[tool\.coverage\.run\]\s*$(.*?)(?=^\[)", text, re.M | re.S)
+    if table is None:
+        logger.error("[FAIL] %s declares no [tool.coverage.run] table", pyproject)
+        raise SystemExit(1)
+    block = re.search(r"^source\s*=\s*\[(.*?)\]", table.group(1), re.M | re.S)
+    if block is None:
+        logger.error("[FAIL] %s declares no [tool.coverage.run] source roots", pyproject)
+        raise SystemExit(1)
+    return re.findall(r'"([^"]+)"', block.group(1))
+
+
+def first_party_sources(repo_root: Path, roots: list[str]) -> set[str]:
+    """Every first-party module under the declared roots, as posix paths.
+
+    "First party" is every ``.py`` under a declared source root that is not part
+    of a test tree. That is exactly what the `omit` list expresses today, which
+    is the point: stating the rule independently is what lets the two be
+    compared. Caches are excluded because they are not source.
+    """
+    found: set[str] = set()
+    for root in roots:
+        base = repo_root / root
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.py"):
+            relative = PurePath(path.relative_to(repo_root)).as_posix()
+            parts = relative.split("/")
+            if "tests" in parts or "__pycache__" in parts:
+                continue
+            found.add(relative)
+    return found
+
+
+def check_measured_set(coverage_json: Path, repo_root: Path, pyproject: Path) -> bool:
+    """Fail when the measured file set diverges from the first-party source set.
+
+    The per-file floor only judges files the report contains. Adding a source
+    file to `[tool.coverage.run] omit` removes it from that set, removes it from
+    the floor, and *raises* the aggregate, because the uncovered lines it
+    contributed are gone -- a regression that makes every number look better.
+    Nothing detected it: `check_per_file` iterates whatever `files` holds, and
+    its only emptiness guard fires when a waiver swallows everything.
+
+    Fails closed on an empty expected set, per this module's own contract that
+    absence of evidence is never a pass (C-GT-1).
+    """
+    report = _load_json_object(coverage_json, "coverage report")
+    files = report.get("files")
+    if not isinstance(files, dict):
+        logger.error("[FAIL] Coverage report %s has no files block to bound", coverage_json)
+        return False
+    expected = first_party_sources(repo_root, declared_source_roots(pyproject))
+    if not expected:
+        logger.error(
+            "[FAIL] Coverage measured-set: no first-party sources found under the declared "
+            "roots; the comparison would pass vacuously"
+        )
+        return False
+    measured = {PurePath(path).as_posix() for path in files}
+    unmeasured = sorted(expected - measured)
+    unexpected = sorted(measured - expected)
+    if unmeasured:
+        logger.error(
+            "[FAIL] Coverage measured-set: %d first-party source file(s) are not measured, so "
+            "they face no per-file floor and their uncovered lines raise the aggregate: %s",
+            len(unmeasured),
+            ", ".join(unmeasured),
+        )
+    if unexpected:
+        logger.error(
+            "[FAIL] Coverage measured-set: %d measured file(s) are not first-party sources; "
+            "test code counted as source inflates every number: %s",
+            len(unexpected),
+            ", ".join(unexpected),
+        )
+    if not unmeasured and not unexpected:
+        logger.info("[PASS] Coverage measured-set: %d first-party source file(s) measured", len(expected))
+    return not unmeasured and not unexpected
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--coverage-json", type=Path, default=COVERAGE_JSON)
     parser.add_argument("--policy", type=Path, default=DEFAULT_REPO_ROOT / POLICY_RELPATH)
+    parser.add_argument("--repo-root", type=Path, default=DEFAULT_REPO_ROOT)
     args = parser.parse_args(argv)
     thresholds = load_thresholds(args.policy)
     measured = measure(args.coverage_json)
     ok = check(thresholds, measured)
     if per_file_enabled(args.policy):
+        # Bound the measured set before judging it. The two are one control: the
+        # per-file floor is a promise about every first-party file, and it can
+        # only keep that promise if the report contains every first-party file.
+        # A policy that has not opted into per-file enforcement is making no
+        # such promise, so there is nothing here to bound.
+        ok = check_measured_set(args.coverage_json, args.repo_root, args.repo_root / "pyproject.toml") and ok
         waived = optional_extra_waivers(args.policy)
         ok = check_per_file(args.coverage_json, thresholds["lines"], waived) and ok
     return 0 if ok else 1

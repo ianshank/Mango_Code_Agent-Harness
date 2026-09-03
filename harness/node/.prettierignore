@@ -1,0 +1,3 @@
+# Digest-pinned governance artefacts: byte formatting is fixed by
+# .governance/root-of-trust.json, so Prettier must not reformat them.
+.governance/

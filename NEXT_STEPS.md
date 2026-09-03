@@ -194,17 +194,29 @@ exact authority `agent_authority.py` exists to withhold; and the 3-active →
 `test_agent_surface_liveness.py` fail against each mutation. No new file needed.
 **Depends on** nothing.
 
-### NS-9 · Bound the coverage `omit` list, and justify or delete two pragmas
+### NS-9 · Justify the last pragma, and stop the swallow behind it
 
-Adding a source file to `[tool.coverage.run] omit` drops it from the measured
-set, drops it from the per-file floor, and *raises* the aggregate — a green,
-silent regression with no gate against it. Assert that the measured `files` set
-equals the on-disk first-party set. Two `# pragma: no cover` sites are also
-unjustified: `mcp_server.py:16` (the suite already exercises that arc) and
-`langgraph/__init__.py:52`, whose pragma covers an `except ImportError: pass`
-that would swallow a real failure to import the graph module. **Done when** the
-set-equality assertion exists and both pragmas are removed or carry a reason.
-**Depends on** nothing.
+**Mostly delivered** by `docs/specs/gate-truthfulness.md` (R-GT-3). The
+measured-set bound is live: `coverage_gate.check_measured_set` fails closed when
+the report's file set diverges from the on-disk first-party set, so an added
+`omit` entry can no longer drop a file from the per-file floor while raising the
+aggregate. `mcp_server.py:16`'s pragma is gone; the file measured 94.06% before
+and 94.44% after.
+
+What remains is `langgraph/__init__.py:52`, and it is not a one-line change.
+Removing the pragma alone leaves the `except ImportError: pass` arc unreachable
+wherever langgraph *is* installed, taking the file to 80% against a 90% floor —
+red on the 3.10 and 3.12 legs. The defect worth fixing is the swallow itself: a
+real failure to import `graph.py` currently degrades silently to "`build_graph`
+just isn't exported". Deleting the `try`/`except` fixes that and reads 7/7 where
+langgraph is installed, but 5/7 on a local run without the extra and without
+`MANGO_CI_DESELECT_LANGGRAPH=1` — no waiver applies there, so it would be a red
+gate on a contributor's first `make ci`.
+
+**Done when** the swallow is gone and both cases are measured on a machine with
+the extra installed. `harness/shared/langgraph/**` is a protected path, so this
+carries an attestation. **Depends on** nothing, but do not fold it into a batch:
+its failure mode lands on whoever has not installed the optional extra.
 
 ### NS-10 · Give `policy_loader` a logger, and the policy blocks a `TypedDict`
 

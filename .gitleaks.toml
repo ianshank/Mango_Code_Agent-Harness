@@ -17,12 +17,15 @@ useDefault = true
 # their files -- an allowlist describing itself as strict while being mostly
 # blanket exemption. Re-add a path only when a scan actually flags it.
 #
-# The two entries with no current finding, kept on purpose:
-#   .*\.example.*                  -- adopter scaffolds (.env.example and peers)
-#                                     exist to carry placeholder credentials.
-#   .../secret-safety.test.ts      -- the designated leak-fixture module; it
-#                                     plants secret-shaped values to prove the
-#                                     masker redacts them.
+# The two entries with no current finding are kept on purpose, and declared
+# below in the machine-readable form `make secrets-allowlist-check` reads
+# (harness/shared/governance/check_secret_allowlist.py). That check scans the
+# tree with this `paths` array emptied and fails any entry that suppresses
+# nothing and is not declared here -- so an entry cannot quietly stop earning
+# its place the way eighteen of the previous twenty-three did.
+#
+# keep: .*\.example.* -- adopter scaffolds (.env.example and peers) exist to carry placeholder credentials
+# keep: harness/node/tests/ai/security/secret-safety\.test\.ts -- the designated leak-fixture module; it plants secret-shaped values to prove the masker redacts them
 #
 # NOT listed, and must not be: harness/node/tests/ai/unit/nemotron-policy-wiring.test.ts
 # carries `nvapi-policy-wiring-test-key-1234567890` and produces zero findings

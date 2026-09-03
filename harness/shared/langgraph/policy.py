@@ -78,9 +78,13 @@ class GraphPolicy:
             orchestrator_defaults,
         )
 
-        orch: dict[str, Any] = orchestrator_defaults()
-        lg: dict[str, Any] = langgraph_defaults()
-        cov: dict[str, Any] = coverage_defaults()
+        # Annotations omitted deliberately: policy_loader now returns a
+        # TypedDict per block, and re-declaring these as `dict[str, Any]`
+        # discarded exactly the key-name checking that typing them was for
+        # (gate-truthfulness R-GT-5).
+        orch = orchestrator_defaults()
+        lg = langgraph_defaults()
+        cov = coverage_defaults()
         agents: dict[str, Any] = agent_defaults()
 
         return cls(

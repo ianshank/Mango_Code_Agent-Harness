@@ -176,6 +176,11 @@ secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if g
 	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
 	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner --log-opts="HEAD"
 
+.PHONY: secrets-allowlist-check
+secrets-allowlist-check: ## Every .gitleaks.toml allowlist entry must still suppress a real finding (INV-1)
+	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
+	$(PYTHON) harness/shared/governance/check_secret_allowlist.py --gitleaks $(GITLEAKS)
+
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
@@ -304,7 +309,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+ci: lint lint-node lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lint-node → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 # The Node suite's result is Python-version-independent, so the CI matrix runs
 # the full `ci` on one leg only and this Python-scoped pipeline on the others.

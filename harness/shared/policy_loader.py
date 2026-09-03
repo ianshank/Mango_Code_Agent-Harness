@@ -17,10 +17,83 @@ Spec: docs/specs/policy-single-source.md.
 from __future__ import annotations
 
 import json
+import logging
 import stat
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TypedDict
 
 POLICY_PATH = Path(__file__).resolve().parent / "governance-policy.json"
+
+logger = logging.getLogger(__name__)
+
+
+class OrchestratorLimits(TypedDict):
+    """The `orchestrator` block, typed so an unknown key is a static error.
+
+    Every threshold in the system resolves through this module, and the
+    accessors used to return a bare ``dict`` -- so ``limits["max_iteration"]``
+    was a runtime ``KeyError`` in whatever code path happened to reach it
+    first. DEC-032 fixed one instance of exactly that shape by hand, in
+    ``_session_hooks``. A ``TypedDict`` is a plain ``dict`` at runtime, so no
+    caller changes and adopters reading the block dynamically are unaffected;
+    what changes is that ``python -m mypy`` now reports the typo (R-GT-5).
+    """
+
+    max_iterations: int
+    api_timeout_sec: int
+    tool_timeout_sec: int
+    max_command_bytes: int
+    max_healing_retries: int
+    max_output_bytes: int
+
+
+class NemotronDefaults(TypedDict):
+    """The `nemotron` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    temperature: float
+    max_tokens: int
+    timeout_ms: int
+    max_retries: int
+
+
+class LangGraphDefaults(TypedDict):
+    """The `langgraph` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    recursion_limit: int
+    max_concurrency: int
+    plan_divergence_threshold: float
+
+
+class CoverageThresholds(TypedDict):
+    """The `coverage` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    lines: int
+    branches: int
+
+
+def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
+    """Record what a policy block resolved to, and which file it came from.
+
+    Nothing recorded which policy a run actually read, so under
+    ``LOG_LEVEL=DEBUG`` the question "which thresholds is this run enforcing,
+    and from where" had no answer -- while every gate in the repository depends
+    on the answer. ``ExecutionLoop`` already logs its own resolution this way;
+    this is the same pattern applied at the source (R-GT-4).
+
+    Guarded on ``isEnabledFor`` so the formatting cost is not paid on the
+    default path, and emitted at DEBUG so nothing changes for existing callers.
+    """
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    resolved = policy_path or POLICY_PATH
+    origin = resolved if resolved.exists() else f"{resolved} (absent; built-in defaults)"
+    logger.debug(
+        "policy %s resolved from %s: %s",
+        block,
+        origin,
+        ", ".join(f"{key}={value!r}" for key, value in sorted(values.items())),
+    )
 
 
 class PolicyError(ValueError):
@@ -112,10 +185,10 @@ def _float_value(section: dict, key: str, default: float, section_name: str) -> 
     return float(value)
 
 
-def orchestrator_defaults(policy_path: Path | None = None) -> dict:
+def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:
     """Operational limits for MangoMASOrchestrator; policy `orchestrator` block."""
     section = _section("orchestrator", policy_path)
-    return {
+    resolved: OrchestratorLimits = {
         "max_iterations": _int_value(section, "max_iterations", 10, "orchestrator"),
         "api_timeout_sec": _int_value(section, "api_timeout_sec", 300, "orchestrator"),
         "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
@@ -127,37 +200,47 @@ def orchestrator_defaults(policy_path: Path | None = None) -> dict:
         # (tech-debt-hardening-plan R-TDH-16).
         "max_output_bytes": _int_value(section, "max_output_bytes", 65536, "orchestrator"),
     }
+    _log_resolution("orchestrator", resolved, policy_path)
+    return resolved
 
 
-def nemotron_defaults(policy_path: Path | None = None) -> dict:
+def nemotron_defaults(policy_path: Path | None = None) -> NemotronDefaults:
     """Request defaults for the Nemotron bridge; policy `nemotron` block."""
     section = _section("nemotron", policy_path)
-    return {
+    resolved: NemotronDefaults = {
         "temperature": _float_value(section, "temperature", 0.2, "nemotron"),
         "max_tokens": _int_value(section, "max_tokens", 4096, "nemotron"),
         "timeout_ms": _int_value(section, "timeout_ms", 30000, "nemotron"),
         "max_retries": _int_value(section, "max_retries", 0, "nemotron"),
     }
+    _log_resolution("nemotron", resolved, policy_path)
+    return resolved
 
 
 def max_tool_calls_per_task(policy_path: Path | None = None) -> int:
     """Cumulative tool-call budget per agent task; policy `agent_defaults` block."""
-    return _int_value(_section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults")
+    resolved = _int_value(
+        _section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults"
+    )
+    _log_resolution("agent_defaults", {"max_tool_calls_per_task": resolved}, policy_path)
+    return resolved
 
 
-def langgraph_defaults(policy_path: Path | None = None) -> dict:
+def langgraph_defaults(policy_path: Path | None = None) -> LangGraphDefaults:
     """LangGraph orchestration-graph tuning; policy `langgraph` block."""
     section = _section("langgraph", policy_path)
-    return {
+    resolved: LangGraphDefaults = {
         "recursion_limit": _int_value(section, "recursion_limit", 50, "langgraph"),
         "max_concurrency": _int_value(section, "max_concurrency", 3, "langgraph"),
         "plan_divergence_threshold": _float_value(
             section, "plan_divergence_threshold", 0.35, "langgraph"
         ),
     }
+    _log_resolution("langgraph", resolved, policy_path)
+    return resolved
 
 
-def coverage_defaults(policy_path: Path | None = None) -> dict:
+def coverage_defaults(policy_path: Path | None = None) -> CoverageThresholds:
     """Coverage gate thresholds consumed outside coverage_gate.py; policy `coverage` block.
 
     coverage_gate.py itself deliberately does not import this (policy-single-source.md's
@@ -165,10 +248,12 @@ def coverage_defaults(policy_path: Path | None = None) -> dict:
     that already depend on harness.shared and would otherwise read the section unvalidated.
     """
     section = _section("coverage", policy_path)
-    return {
+    resolved: CoverageThresholds = {
         "lines": _int_value(section, "lines", 90, "coverage"),
         "branches": _int_value(section, "branches", 80, "coverage"),
     }
+    _log_resolution("coverage", resolved, policy_path)
+    return resolved
 
 
 def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]:

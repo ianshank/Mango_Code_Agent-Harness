@@ -177,6 +177,13 @@ jobs:
       - name: Run secret scan gate (make secrets)
         run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
 
+      # An allowlist path exempts its whole file from every rule, so an entry
+      # that has stopped suppressing anything is a permanent blind spot. This
+      # runs here, not in the unit suite: it needs gitleaks, the unit suite has
+      # none, and INV-2 forbids adding a skip to paper over that.
+      - name: Check the gitleaks allowlist still earns its entries
+        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets-allowlist-check
+
   # Closes the KNOWN_GAPS["audit"] exception in test_ci_gate_coverage.py: dependency
   # vulnerability scanning previously ran only in the per-stack adopter workflows,
   # which GitHub never executes (see the `secrets` job's comment, above). Separate

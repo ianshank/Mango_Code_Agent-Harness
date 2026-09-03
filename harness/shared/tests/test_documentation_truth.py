@@ -422,3 +422,49 @@ class TestChangelogSectionCap:
         )
         assert oversized_changelog_sections(text, cap) == {"## [1.1.0] - 2026-01-02": cap + 1}
         assert changelog_sections(text)["## [1.0.0] - 2026-01-01"] == cap
+
+
+class TestTheDeclaredVersionIsARealRelease:
+    """R-GT-9: the mirrors agreeing with each other is not the same as the
+    release existing.
+
+    `TestVersionIsSingleSourced` pins the four mirrors to `pyproject.toml` and
+    passes -- it passed on 2026-09-03 while the most recently merged work was
+    described in a commit message and an RCA filename as v2.5.0, with no
+    `## [2.5.0]` section anywhere in the changelog and no git tag in the
+    repository's history. Nothing connected a declared version to a released
+    one, so the whole set of mirrors could be internally consistent and
+    collectively wrong.
+    """
+
+    @staticmethod
+    def _sections(text: str) -> set[str]:
+        return set(re.findall(r"^## \[v?(\d+\.\d+\.\d+)\]", text, re.M))
+
+    def test_the_parser_finds_the_release_sections(self) -> None:
+        """Guards the check: no sections found would make it vacuous."""
+        sections = self._sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert len(sections) > 1, f"only found {sections} in CHANGELOG.md; the parser has stopped matching"
+
+    def test_declared_version_has_a_changelog_section(self) -> None:
+        declared = declared_version(REPO)
+        sections = self._sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert declared in sections, (
+            f"pyproject.toml declares {declared} but CHANGELOG.md has no `## [{declared}]` section. "
+            f"Sections present: {sorted(sections)}. Either the version was bumped without writing "
+            "the release, or the release was written under a different number -- both leave the "
+            "repository disagreeing with itself about what it currently is."
+        )
+
+    def test_a_version_with_no_section_is_reported(self, tmp_path: Path) -> None:
+        """The negative case, so this cannot pass by matching everything."""
+        for rel in ["pyproject.toml", "CHANGELOG.md"]:
+            target = tmp_path / rel
+            target.write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+        pyproject = tmp_path / "pyproject.toml"
+        bumped = re.sub(
+            r'^(version\s*=\s*)"[^"]+"', r'\1"9.9.9"', pyproject.read_text(encoding="utf-8"), count=1, flags=re.M
+        )
+        pyproject.write_text(bumped, encoding="utf-8")
+        assert declared_version(tmp_path) == "9.9.9"
+        assert "9.9.9" not in self._sections((tmp_path / "CHANGELOG.md").read_text(encoding="utf-8"))
