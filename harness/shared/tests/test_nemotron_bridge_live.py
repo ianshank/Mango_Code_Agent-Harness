@@ -22,6 +22,22 @@ API_KEY: str = resolve_api_key()
 IS_LIVE: bool = bool(API_KEY)
 SMOKE_MAX_TOKENS: int = 50
 
+_TRANSIENT_NIM_ERRORS = (
+    "500", "502", "503", "504", "429",
+    "ResourceExhausted", "timeout", "timed out",
+)
+
+
+@pytest.fixture(autouse=True)
+def _set_nemotron_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set NEMOTRON_MODE only when a live test in this module actually runs.
+
+    Previously set at import time, which leaked into hermetic runs because
+    pytest collects (imports) live modules even when they are deselected.
+    """
+    if IS_LIVE:
+        monkeypatch.setenv("NEMOTRON_MODE", "online")
+
 
 class TestMaskSecret(unittest.TestCase):
     """Unit tests for mask_secret — always run regardless of API key."""
@@ -52,6 +68,7 @@ class TestResolveApiKey(unittest.TestCase):
 
 
 @pytest.mark.live
+@pytest.mark.enable_socket
 @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured — skipping live tests (DEC-026)")
 class TestCompleteChatLive(unittest.TestCase):
     """Live API integration tests for complete_chat."""
@@ -63,12 +80,18 @@ class TestCompleteChatLive(unittest.TestCase):
             {"role": "user", "content": "Reply with exactly: BRIDGE OK"},
         ]
 
-        result = complete_chat(
-            messages,
-            temperature=0.0,
-            max_tokens=SMOKE_MAX_TOKENS,
-            timeout_sec=30,
-        )
+        try:
+            result = complete_chat(
+                messages,
+                temperature=0.0,
+                max_tokens=SMOKE_MAX_TOKENS,
+                timeout_sec=30,
+            )
+        except Exception as e:
+            err_msg = str(e)
+            if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
+                self.skipTest(f"Live NIM transient failure: {err_msg}")
+            raise
 
         # Structural assertions
         self.assertIn("choices", result)
@@ -109,12 +132,18 @@ class TestCompleteChatLive(unittest.TestCase):
             {"role": "user", "content": "Reply with exactly: PARITY OK"},
         ]
 
-        result = complete_chat(
-            messages,
-            temperature=0.1,
-            max_tokens=SMOKE_MAX_TOKENS,
-            timeout_sec=30,
-        )
+        try:
+            result = complete_chat(
+                messages,
+                temperature=0.1,
+                max_tokens=SMOKE_MAX_TOKENS,
+                timeout_sec=30,
+            )
+        except Exception as e:
+            err_msg = str(e)
+            if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
+                self.skipTest(f"Live NIM transient failure: {err_msg}")
+            raise
 
         # If we got a valid response, the wire format was accepted by the API
         self.assertIn("choices", result)
@@ -143,3 +172,4 @@ class TestCompleteChatLive(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

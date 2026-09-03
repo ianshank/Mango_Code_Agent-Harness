@@ -116,13 +116,24 @@ def create_mcp_server(
         tools = []
         for schema in allowed_schemas:
             func = cast(dict[str, Any], schema["function"])
-            tools.append(
-                types.Tool(
-                    name=func["name"],
-                    description=func["description"],
-                    input_schema=func["parameters"],
-                )
-            )
+            tool_kwargs: dict[str, Any] = {
+                "name": func["name"],
+                "description": func["description"],
+            }
+            if hasattr(types.Tool, "model_fields") and "inputSchema" in types.Tool.model_fields:
+                tool_kwargs["inputSchema"] = func["parameters"]
+            else:
+                tool_kwargs["input_schema"] = func["parameters"]
+            try:
+                tools.append(types.Tool(**tool_kwargs))
+            except (TypeError, ValueError):
+                alt_field = "input_schema" if "inputSchema" in tool_kwargs else "inputSchema"
+                alt_kwargs = {
+                    "name": func["name"],
+                    "description": func["description"],
+                    alt_field: func["parameters"],
+                }
+                tools.append(types.Tool(**alt_kwargs))
         return tools
 
     @server.call_tool()

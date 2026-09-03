@@ -207,7 +207,8 @@ export class NemotronClient {
 
     const latencyMs = Date.now() - startTime;
     const choice = data.choices?.[0];
-    const content = choice?.message?.content || '';
+    const content =
+      choice?.message?.content || choice?.message?.reasoning_content || '';
 
     return {
       id: data.id || `nemo-${Date.now()}`,
@@ -217,7 +218,7 @@ export class NemotronClient {
         index: c.index ?? 0,
         message: {
           role: c.message?.role || 'assistant',
-          content: c.message?.content || '',
+          content: c.message?.content || c.message?.reasoning_content || '',
         },
         finishReason: c.finish_reason ?? null,
       })),
@@ -310,8 +311,19 @@ export class NemotronClient {
           const jsonStr = trimmed.slice(6);
           try {
             const parsed = JSON.parse(jsonStr);
+            if (parsed.error) {
+              const errMsg =
+                parsed.error.message ||
+                (typeof parsed.error === 'string'
+                  ? parsed.error
+                  : JSON.stringify(parsed.error));
+              const err = new Error(`Nemotron API Stream Error: ${errMsg}`);
+              (err as any).statusCode = parsed.error.code || 500;
+              throw err;
+            }
             const choice = parsed.choices?.[0];
-            const delta = choice?.delta?.content || '';
+            const delta =
+              choice?.delta?.content || choice?.delta?.reasoning_content || '';
             const finishReason = choice?.finish_reason ?? null;
 
             yield {
@@ -320,7 +332,13 @@ export class NemotronClient {
               delta,
               finishReason,
             };
-          } catch (_) {
+          } catch (e) {
+            if (
+              e instanceof Error &&
+              e.message.startsWith('Nemotron API Stream Error')
+            ) {
+              throw e;
+            }
             // Ignore incomplete or unparseable SSE frame
           }
         }

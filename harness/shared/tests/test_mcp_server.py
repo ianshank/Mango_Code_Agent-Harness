@@ -21,10 +21,19 @@ pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:
-    def __init__(self, *, name: str, description: str, input_schema: dict[str, Any]):
+    def __init__(
+        self,
+        *,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any] | None = None,
+        inputSchema: dict[str, Any] | None = None,
+    ):
         self.name = name
         self.description = description
-        self.input_schema = input_schema
+        schema = inputSchema if inputSchema is not None else (input_schema or {})
+        self.input_schema = schema
+        self.inputSchema = schema
 
 
 class MockTextContent:
@@ -143,10 +152,21 @@ def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     except ImportError:
         pytest.skip("mcp package not installed (DEC-026)")
 
-    tool = real_types.Tool(name="x", description="y", input_schema={"type": "object"})
+    schema = {"type": "object"}
+    schema_key = (
+        "inputSchema"
+        if hasattr(real_types.Tool, "model_fields") and "inputSchema" in real_types.Tool.model_fields
+        else "input_schema"
+    )
+    tool_kwargs: dict[str, Any] = {
+        "name": "x",
+        "description": "y",
+        schema_key: schema,
+    }
+    tool = real_types.Tool(**tool_kwargs)
     assert tool.name == "x"
     assert tool.description == "y"
-    assert tool.input_schema == {"type": "object"}
+    assert getattr(tool, "inputSchema", getattr(tool, "input_schema", None)) == schema
 
 
 def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
