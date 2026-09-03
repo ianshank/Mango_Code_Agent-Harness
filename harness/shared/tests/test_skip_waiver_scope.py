@@ -50,6 +50,28 @@ def _decision_ids() -> set[str]:
     return {row["decision_id"] for row in _registry()["waivers"]}
 
 
+def _sole_decision_id() -> str:
+    """The one decision id the shipped registry cites, asserted rather than assumed.
+
+    The probes below build a skip reason carrying a valid decision id, because
+    the gate requires one before it will even consider a waiver. Picking
+    `sorted(...)[0]` read whichever id happened to sort first, so a second
+    decision entering the registry would silently re-point every probe at an id
+    it was not written for -- and they would keep passing. Raised by review.
+
+    If the registry legitimately grows a second decision, this fails loudly and
+    the probes should be parametrized over the ids rather than this guard
+    relaxed: each probe is about a specific waiver row, not about ids in general.
+    """
+    decisions = _decision_ids()
+    assert len(decisions) == 1, (
+        f"the shipped registry now cites {sorted(decisions)}; these probes were written for a "
+        "single decision id and would silently test the wrong one. Parametrize them over the "
+        "ids, naming the row each case belongs to."
+    )
+    return decisions.pop()
+
+
 def _verify(events: Path) -> subprocess.CompletedProcess:
     """Run the real gate against the real registry and a supplied evidence file."""
     return subprocess.run(
@@ -107,7 +129,7 @@ class TestWaiversAreNodeScoped:
         reason bearing the registry's own decision id -- which is all the
         pre-narrowing rows required.
         """
-        decision = sorted(_decision_ids())[0]
+        decision = _sole_decision_id()
         events = tmp_path / "skips.tsv"
         events.write_text(
             f"{node_id}\ttest_a_new_skip\tconvenient reason ({decision})\n",
@@ -122,7 +144,7 @@ class TestWaiversAreNodeScoped:
 
     def test_a_skip_where_the_condition_lives_is_still_approved(self, tmp_path: Path) -> None:
         """The converse, so the narrowing cannot have simply broken the gate."""
-        decision = sorted(_decision_ids())[0]
+        decision = _sole_decision_id()
         events = tmp_path / "skips.tsv"
         events.write_text(
             "harness/shared/tests/test_shadow_planner.py::TestContainment::test_x\t"

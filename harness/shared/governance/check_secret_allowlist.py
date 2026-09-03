@@ -56,9 +56,24 @@ CONFIG_NAME = ".gitleaks.toml"
 KEEP_MARKER = re.compile(r"#\s*keep:\s*(?P<entry>\S+)\s*--\s*(?P<reason>.+?)\s*$")
 
 
+def allowlist_block(config_text: str) -> str:
+    """Just the `[allowlist]` block, so a declaration outside it cannot count."""
+    match = re.search(r"^\[allowlist\].*?(?=^\[|\Z)", config_text, re.M | re.S)
+    return match.group(0) if match else ""
+
+
 def allowlist_paths(config_text: str) -> list[str]:
-    """The `paths = [...]` entries of the allowlist block, in declaration order."""
-    block = re.search(r"^\s*paths\s*=\s*\[(.*?)\]", config_text, re.M | re.S)
+    """The `paths = [...]` entries of the allowlist block, in declaration order.
+
+    Scoped to the block for the same reason `declared_keeps` is: an unscoped
+    search takes the *first* `paths = [` anywhere in the file. gitleaks configs
+    legitimately carry `paths` in other tables -- a `[[rules]]` entry's own
+    `[rules.allowlist]` is the obvious one -- and reading that array instead
+    would either miss real entries or invent failures for entries that are not
+    there. Raised by review of this module, which had already scoped
+    `declared_keeps` and left its sibling above it unscoped.
+    """
+    block = re.search(r"^\s*paths\s*=\s*\[(.*?)\]", allowlist_block(config_text), re.M | re.S)
     if block is None:
         return []
     # Triple-quoted first: gitleaks configs use ''' for regexes so backslashes
@@ -67,12 +82,6 @@ def allowlist_paths(config_text: str) -> list[str]:
         next(group for group in match if group)
         for match in re.findall(r"'''(.*?)'''|\"([^\"]*)\"|'([^']*)'", block.group(1), re.S)
     ]
-
-
-def allowlist_block(config_text: str) -> str:
-    """Just the `[allowlist]` block, so a declaration outside it cannot count."""
-    match = re.search(r"^\[allowlist\].*?(?=^\[|\Z)", config_text, re.M | re.S)
-    return match.group(0) if match else ""
 
 
 def declared_keeps(config_text: str) -> dict[str, str]:

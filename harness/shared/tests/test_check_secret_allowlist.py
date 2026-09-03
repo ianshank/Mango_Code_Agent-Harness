@@ -38,6 +38,29 @@ paths = [
 """
 
 
+#: A config whose FIRST `paths = [` and first `# keep:` both belong to a rule's
+#: own allowlist, not to the top-level one. Both parsers must ignore them.
+CONFIG_WITH_RULE_ALLOWLIST = r"""title = "Test policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "custom-rule"
+
+[rules.allowlist]
+# keep: decoy/other\.py -- planted inside a rule's own allowlist
+paths = [
+  '''decoy/other\.py'''
+]
+
+[allowlist]
+paths = [
+  '''live/one\.py'''
+]
+"""
+
+
 def _findings(*paths: str) -> list[dict]:
     return [{"File": path, "RuleID": "generic-api-key"} for path in paths]
 
@@ -52,6 +75,24 @@ class TestParsing:
 
     def test_a_config_without_an_allowlist_yields_no_entries(self) -> None:
         assert gate.allowlist_paths("[extend]\nuseDefault = true\n") == []
+
+    def test_paths_in_another_table_are_not_read_as_allowlist_entries(self) -> None:
+        """Raised by review: an unscoped search takes the FIRST `paths = [`.
+
+        A gitleaks config may legitimately carry `paths` elsewhere -- a
+        `[[rules]]` entry's own `[rules.allowlist]` is the obvious case. Reading
+        that array instead reports the wrong entries entirely: it would claim
+        the allowlist exempts the decoy and miss the real entry, so a dead entry
+        goes unreported and a live one is called dead. `declared_keeps` was
+        already scoped to the block; this sibling was not.
+        """
+        assert gate.allowlist_paths(CONFIG_WITH_RULE_ALLOWLIST) == [r"live/one\.py"], (
+            "the parser read a `paths` array from a table that is not the allowlist"
+        )
+
+    def test_a_keep_in_another_tables_allowlist_grants_nothing(self) -> None:
+        """The same scoping, for the other parser that reads the block."""
+        assert gate.declared_keeps(CONFIG_WITH_RULE_ALLOWLIST) == {}
 
     def test_keep_declarations_carry_their_reason(self) -> None:
         keeps = gate.declared_keeps(CONFIG)
