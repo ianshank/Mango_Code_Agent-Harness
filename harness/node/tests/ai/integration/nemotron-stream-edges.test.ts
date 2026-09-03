@@ -104,4 +104,27 @@ describe('Nemotron Streaming Edge Cases (R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3)',
 
     await expect(consume()).rejects.toThrow(/Circuit breaker is OPEN/);
   });
+
+  it('throws Nemotron API Stream Error when an error frame arrives in the stream', async () => {
+    const ssePayload = [
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}',
+      'data: {"error":{"message":"ResourceExhausted: Worker local total request limit reached","code":503}}',
+      '',
+    ].join('\n');
+
+    const mockFetch: typeof fetch = async () => sseResponse(ssePayload);
+    const client = makeClient(mockFetch);
+
+    const consume = async (): Promise<void> => {
+      for await (const chunk of client.stream({
+        messages: [{ role: 'user', content: 'test stream error frame' }],
+      })) {
+        void chunk;
+      }
+    };
+
+    await expect(consume()).rejects.toThrow(
+      /Nemotron API Stream Error.*ResourceExhausted/,
+    );
+  });
 });

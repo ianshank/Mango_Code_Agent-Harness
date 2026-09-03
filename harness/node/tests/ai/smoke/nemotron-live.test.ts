@@ -22,6 +22,7 @@ import {
   LIVE_TEST_TIMEOUT_MS,
   createLiveClient,
   assertNoSecretLeakage,
+  isTransientError,
 } from './_fixtures.js';
 
 describe.skipIf(!IS_LIVE)(
@@ -35,20 +36,14 @@ describe.skipIf(!IS_LIVE)(
         let response;
         try {
           response = await client.complete({
-            messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-            temperature: 0.0,
+            messages: [
+              { role: 'user', content: 'Say "hello" and nothing else.' },
+            ],
+            temperature: 0.1,
             max_tokens: SMOKE_MAX_TOKENS,
           });
         } catch (err: any) {
-          if (
-            err.message?.includes('404') ||
-            err.message?.includes('410') ||
-            err.message?.includes('429') ||
-            err.name === 'AbortError' ||
-            err.name === 'TimeoutError' ||
-            err.message?.includes('timed out') ||
-            err.message?.includes('timeout')
-          ) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }
@@ -75,8 +70,8 @@ describe.skipIf(!IS_LIVE)(
           response.usage.promptTokens + response.usage.completionTokens,
         );
 
-        // Latency SLA
-        expect(response.latencyMs).toBeGreaterThanOrEqual(0);
+        // Latency telemetry
+        expect(response.latencyMs).toBeGreaterThan(0);
         expect(response.latencyMs).toBeLessThan(LATENCY_CEILING_MS);
 
         // Choices structure
@@ -86,6 +81,7 @@ describe.skipIf(!IS_LIVE)(
         expect(firstChoice.message.content).toBeTruthy();
 
         // Secret leakage check
+        assertNoSecretLeakage(response.content);
         assertNoSecretLeakage(JSON.stringify(response));
       },
       LIVE_TEST_TIMEOUT_MS,
@@ -95,15 +91,14 @@ describe.skipIf(!IS_LIVE)(
       'streams SSE chunks from the live API and accumulates non-empty content',
       async (ctx) => {
         const client = createLiveClient();
+
         const chunks: string[] = [];
         let lastFinishReason: string | null = null;
 
         try {
           for await (const chunk of client.stream({
-            messages: [
-              { role: 'user', content: 'Reply with exactly: STREAM OK' },
-            ],
-            temperature: 0.0,
+            messages: [{ role: 'user', content: 'Count from 1 to 3.' }],
+            temperature: 0.1,
             max_tokens: SMOKE_MAX_TOKENS,
           })) {
             chunks.push(chunk.delta);
@@ -117,15 +112,7 @@ describe.skipIf(!IS_LIVE)(
             assertNoSecretLeakage(chunk.delta);
           }
         } catch (err: any) {
-          if (
-            err.message?.includes('404') ||
-            err.message?.includes('410') ||
-            err.message?.includes('429') ||
-            err.name === 'AbortError' ||
-            err.name === 'TimeoutError' ||
-            err.message?.includes('timed out') ||
-            err.message?.includes('timeout')
-          ) {
+          if (isTransientError(err)) {
             ctx.skip();
             return;
           }

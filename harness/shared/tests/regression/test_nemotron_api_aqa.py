@@ -122,3 +122,100 @@ class TestEgressFloor:
         from pytest_socket import SocketBlockedError
         with pytest.raises(SocketBlockedError):
             socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+
+class TestRetryAndEgressPolicyAQA:
+    """AQA: Retry and egress policy enforcement without network calls."""
+
+    def test_egress_refused_when_transport_mode_undeclared(self) -> None:
+        """Egress floor fails closed when NEMOTRON_MODE is not online/allow."""
+        from harness.shared.nemotron_bridge import NemotronEgressRefused, _assert_egress_permitted
+
+        with patch.dict(os.environ, {"NEMOTRON_MODE": ""}, clear=False):
+            with pytest.raises(NemotronEgressRefused) as exc_info:
+                _assert_egress_permitted("https://integrate.api.nvidia.com/v1/chat/completions")
+            assert "no transport mode declared" in str(exc_info.value)
+
+    def test_egress_permitted_when_mode_online(self) -> None:
+        """Egress permitted when NEMOTRON_MODE=online."""
+        from harness.shared.nemotron_bridge import _assert_egress_permitted
+
+        with patch.dict(os.environ, {"NEMOTRON_MODE": "online"}):
+            _assert_egress_permitted("https://integrate.api.nvidia.com/v1/chat/completions")
+            assert os.environ.get("NEMOTRON_MODE") == "online"
+
+    def test_non_retriable_http_401_fails_immediately(self) -> None:
+        """401 Unauthorized must raise immediately without exhausting retries."""
+        import urllib.error
+
+        from harness.shared.nemotron_bridge import complete_chat
+
+        mock_err = urllib.error.HTTPError(
+            url="https://integrate.api.nvidia.com/v1/chat/completions",
+            code=401,
+            msg="Unauthorized",
+            hdrs=MagicMock(),
+            fp=MagicMock(read=MagicMock(return_value=b'{"error": "Invalid API key"}')),
+        )
+
+        with patch.dict(os.environ, {"NEMOTRON_MODE": "online", "NEMOTRON_DEFAULT_MODEL": "test-model"}):
+            with patch("urllib.request.urlopen", side_effect=mock_err) as mock_open:
+                with pytest.raises(RuntimeError) as exc_info:
+                    complete_chat([{"role": "user", "content": "hi"}], api_key="nvapi-invalid", max_retries=3)
+                assert "HTTP 401" in str(exc_info.value)
+                # Only 1 attempt, no retries on 401
+                assert mock_open.call_count == 1
+
+    def test_retriable_http_503_retries_and_succeeds(self) -> None:
+        """503 Service Unavailable triggers exponential retry and succeeds if recovered."""
+        import urllib.error
+
+        from harness.shared.nemotron_bridge import complete_chat
+
+        mock_err = urllib.error.HTTPError(
+            url="https://integrate.api.nvidia.com/v1/chat/completions",
+            code=503,
+            msg="Service Unavailable",
+            hdrs=MagicMock(get=MagicMock(return_value=None)),
+            fp=MagicMock(read=MagicMock(return_value=b'{"error": "ResourceExhausted"}')),
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({
+            "choices": [{"message": {"content": "recovered"}}],
+            "usage": {"total_tokens": 10},
+        }).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch.dict(os.environ, {"NEMOTRON_MODE": "online", "NEMOTRON_DEFAULT_MODEL": "test-model"}):
+            with patch("urllib.request.urlopen", side_effect=[mock_err, mock_resp]) as mock_open:
+                with patch("time.sleep"):  # do not delay tests
+                    result = complete_chat([{"role": "user", "content": "hi"}], api_key="nvapi-test", max_retries=2)
+                assert result["choices"][0]["message"]["content"] == "recovered"
+                assert mock_open.call_count == 2
+
+
+class TestToolExecutorsAQA:
+    """AQA: Tool executor robustness on filesystem edge cases."""
+
+    def test_read_file_directory_returns_clean_listing(self, tmp_path) -> None:
+        """read_file on a directory path returns clean listing instead of PermissionError."""
+        from harness.shared.tool_executors import execute_read_file
+
+        (tmp_path / "file1.txt").write_text("hello", encoding="utf-8")
+        (tmp_path / "file2.txt").write_text("world", encoding="utf-8")
+
+        result = execute_read_file(tmp_path, ".")
+        assert result.startswith("Error reading file .")
+        assert "file1.txt" in result
+        assert "file2.txt" in result
+
+    def test_read_file_missing_path_returns_actionable_message(self, tmp_path) -> None:
+        """read_file on nonexistent path returns actionable message instead of traceback."""
+        from harness.shared.tool_executors import execute_read_file
+
+        result = execute_read_file(tmp_path, "missing_file.py")
+        assert "File does not exist" in result
+        assert "write_file" in result
+

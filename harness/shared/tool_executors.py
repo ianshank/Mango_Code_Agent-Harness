@@ -141,8 +141,19 @@ def execute_read_file(
         logger.warning("Denied read with bad bounds: %s (%s)", filepath, denial)
         return f"Error reading file {filepath}: {denial}"
 
+    if target_path.is_dir():
+        try:
+            entries = sorted(p.name for p in target_path.iterdir())
+            listing = "\n".join(entries)
+            return f"Error reading file {filepath}: Path is a directory. Directory contents:\n{listing}"
+        except OSError as e:
+            return f"Error reading file {filepath}: {e}"
+
     try:
         content = _read_preserving_newlines(target_path)
+    except FileNotFoundError:
+        logger.info("File does not exist: %s", filepath)
+        return f"Error reading file {filepath}: File does not exist. You can create it with write_file."
     except Exception as e:
         logger.exception("Failed reading %s", filepath)
         return f"Error reading file {filepath}: {str(e)}"

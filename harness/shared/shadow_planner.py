@@ -95,7 +95,7 @@ def _policy_identity(workspace_dir: Path) -> tuple[str, str]:
         digest = hashlib.sha256(raw).hexdigest()[:POLICY_VERSION_HEX_LEN]
         policy_id = raw_id if isinstance(raw_id, str) and raw_id else UNKNOWN_POLICY_IDENTITY
         return policy_id, digest
-    except Exception:
+    except Exception:  # noqa: BLE001 - containment boundary, read failure must not break run
         # read it must never break the run that was going to happen anyway.
         logger.warning(
             "shadow_planner: could not read policy identity from %s", policy_path, exc_info=True
@@ -128,7 +128,7 @@ def run_shadow_comparison(
     """
     try:
         _run(context, environ=environ)
-    except Exception:
+    except Exception:  # noqa: BLE001 - channel containment layer (C-MMI-5)
         # the shadow channel must never be able to affect the primary path, so
         # every failure class is absorbed here by design.
         logger.warning(
@@ -231,7 +231,7 @@ def _run(
                     parent_signal_id=incumbent.signal_id,
                 )
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - best-effort signal recording
             # path; the original failure is re-raised below and must not be masked
             # by a failure to record it.
             logger.warning("shadow_planner: run %s could not record shadow_error signal", run_id, exc_info=True)

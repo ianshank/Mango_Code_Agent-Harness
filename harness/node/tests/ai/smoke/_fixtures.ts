@@ -77,11 +77,11 @@ export const IS_LIVE: boolean =
 // denied. `??=` so an explicitly-set mode in the environment always wins.
 if (IS_LIVE) process.env['NEMOTRON_MODE'] ??= 'online';
 
-/** Default token budget for smoke tests — minimizes cost. */
-export const SMOKE_MAX_TOKENS = 50;
+/** Default token budget for smoke tests — minimizes cost while allowing complete responses. */
+export const SMOKE_MAX_TOKENS = 128;
 
-/** Token budget for agent delegation tests — needs more room for structured responses. */
-export const AGENT_MAX_TOKENS = 128;
+/** Token budget for agent delegation tests — needs room for reasoning traces & structured responses. */
+export const AGENT_MAX_TOKENS = 512;
 
 /** Maximum acceptable latency in milliseconds for a single API call in smoke tests. */
 export const LATENCY_CEILING_MS = 25_000;
@@ -159,24 +159,35 @@ export function loadAgentSystemPrompt(agentFilePath: string): string {
  * Checks if an error represents a transient NIM error covered by DEC-001 (e.g. rate limit, unavailable).
  */
 export function isTransientError(err: any): boolean {
-  const code = err.statusCode;
-  const msg = err.message || '';
+  if (!err) return false;
+  const code = err.statusCode || (err as any).code;
+  const msg = err.message || (typeof err === 'string' ? err : '');
+  const name = err.name || '';
   if (
     code === 404 ||
     code === 410 ||
     code === 429 ||
+    code === 500 ||
     code === 502 ||
     code === 503 ||
     code === 504
-  )
+  ) {
     return true;
+  }
   if (
     msg.includes('404') ||
     msg.includes('410') ||
     msg.includes('429') ||
+    msg.includes('500') ||
     msg.includes('502') ||
     msg.includes('503') ||
-    msg.includes('504')
+    msg.includes('504') ||
+    msg.includes('ResourceExhausted') ||
+    msg.includes('empty completion') ||
+    msg.includes('empty response') ||
+    msg.includes('timed out') ||
+    name === 'AbortError' ||
+    name === 'TimeoutError'
   ) {
     return true;
   }
