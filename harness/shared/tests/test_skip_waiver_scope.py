@@ -8,9 +8,17 @@ skip anyone adds to that module later, provided the reason mentions the decision
 id. The reusable `POSIX_ONLY` marker's reason ends in `(DEC-026)`, so that
 condition was already satisfied by construction.
 
-These tests bound the registry from both sides: every skip the suite really
-produces stays approved, and a skip added where no skip condition exists is
-refused (gate-truthfulness R-GT-7).
+These tests bound the registry from the side nothing else covers: a skip added
+where no skip condition exists is refused (gate-truthfulness R-GT-7).
+
+The other side -- that every skip the suite really produces stays approved --
+is deliberately NOT asserted here. `make verify-zero-skips-python` already does
+exactly that, and does it in the only order that is honest: the evidence file
+is gitignored and written at session finish, so a test reading it mid-session
+sees either nothing (a fresh clone, where the assertion would fail for a reason
+unrelated to the registry) or the previous run's file (where it would pass on
+stale evidence). A gate that can pass on last run's output is the failure this
+file exists to prevent, so the pipeline stage keeps that job.
 """
 
 from __future__ import annotations
@@ -28,7 +36,6 @@ pytestmark = pytest.mark.governance
 
 WAIVERS = REPO / "harness" / "shared" / "tests" / "skip-waivers.json"
 DECISION_LOG = REPO / "harness" / "node" / ".governance" / "decision-log.md"
-SKIP_EVIDENCE = REPO / "harness" / "shared" / "tests" / ".artifacts" / "pytest-skips.tsv"
 VERIFIER = REPO / "harness" / "shared" / "governance" / "verify_zero_skips.py"
 
 #: The decision every row in the shipped registry cites. Read from the registry
@@ -125,26 +132,5 @@ class TestWaiversAreNodeScoped:
         result = _verify(events)
         assert result.returncode == 0, (
             "the narrowing dropped a class that really does carry a POSIX_ONLY skip: "
-            f"{result.stdout}{result.stderr}"
-        )
-
-
-class TestEverySkipTheSuiteProducesStaysApproved:
-    """The regression guard for the narrowing itself.
-
-    Skipped rather than asserted-around when the evidence file is absent would
-    be exactly the vacuous pass this repository keeps finding, so the file's
-    presence is asserted: `make verify-zero-skips-python` writes it, and a run
-    that produced no evidence has not proved the registry covers anything.
-    """
-
-    def test_the_evidence_file_exists_and_the_real_gate_accepts_it(self) -> None:
-        assert SKIP_EVIDENCE.is_file(), (
-            f"{SKIP_EVIDENCE.relative_to(REPO)} does not exist; run the suite before the gate, "
-            "or the zero-skip check is passing on absent evidence"
-        )
-        result = _verify(SKIP_EVIDENCE)
-        assert result.returncode == 0, (
-            "the narrowed registry no longer approves a skip the suite really produces:\n"
             f"{result.stdout}{result.stderr}"
         )
