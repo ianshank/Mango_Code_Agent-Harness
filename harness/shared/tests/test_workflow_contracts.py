@@ -252,3 +252,40 @@ class TestParserIsNotVacuous:
     def test_uses_lines_reads_both_list_and_mapping_forms(self) -> None:
         text = "      - uses: actions/checkout@v5\n      - name: x\n        uses: actions/setup-go@v6\n"
         assert uses_lines(text) == [("actions/checkout", 5), ("actions/setup-go", 6)]
+
+
+class TestTheAttestationCheckRunsWhereItCanBeRead:
+    """DEC-038: a verified table has to reach the reviewer *before* they attest.
+
+    The step was first written after `make ci`, which was wrong in a way no
+    assertion would have reported: `make ci` ends at the protected-path gate on
+    any PR lacking `infra-reviewed`, which is every PR this check exists for, so
+    the step would never have executed on one. Green CI would have meant the
+    table was unchecked. Both halves of the placement are pinned here.
+    """
+
+    def test_it_precedes_the_gate_that_stops_without_the_label(self, jobs: dict[str, str]) -> None:
+        job = jobs["build-full"]
+        check = job.find("make attestation-check")
+        gate = job.find("run: make ci")
+        assert check != -1, "build-full must verify the attestation table"
+        assert gate != -1, "build-full must still run the unified gate"
+        assert check < gate, (
+            "the attestation check must run before `make ci`: that target ends at the "
+            "protected-path gate whenever `infra-reviewed` is absent, so a step after it "
+            "never runs on the PRs the check is for"
+        )
+
+    def test_it_is_not_gated_on_the_attestation_it_verifies(self, jobs: dict[str, str]) -> None:
+        step = jobs["build-full"].split("make attestation-check")[0].rsplit("- name:", 1)[-1]
+        assert "ALLOW_GITHUB_CHANGES" not in step, (
+            "deriving the step's own condition from the label would make it verify the table "
+            "only once the reviewer had already trusted it"
+        )
+
+    def test_the_description_reaches_the_script_as_data(self, jobs: dict[str, str]) -> None:
+        """A PR body is author-controlled text; it must never be interpolated into a shell."""
+        job = jobs["build-full"]
+        assert "PR_BODY: ${{ github.event.pull_request.body }}" in job
+        assert 'printf \'%s\' "$PR_BODY"' in job
+        assert "${{ github.event.pull_request.body }}" not in job.split("env:")[-1].split("run:")[-1]
