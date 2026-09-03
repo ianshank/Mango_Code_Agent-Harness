@@ -24,9 +24,11 @@ Defects covered:
    way that silently drops the flag; a nonexistent ref proves it arrived.
 
 These run through `make` against *this* repository, because the Makefile lives
-here and its recipes address `harness/shared/...` relatively. The base ref used
-is the branch's own name, so the derived protected set is empty on a clean
-tree -- the "ordinary PR" case that defect 1 is about.
+here and its recipes address `harness/shared/...` relatively. The base ref is a
+temporary remote-tracking ref written at HEAD by the `base_ref` fixture, so the
+derived protected set is empty on a clean tree -- the "ordinary PR" case that
+defect 1 is about -- and it is empty on a detached HEAD too, which is what
+`actions/checkout` gives every CI leg.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ import os
 import stat
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -73,32 +76,46 @@ def _make(*args: str, env: dict[str, str] | None = None) -> subprocess.Completed
     )
 
 
-def _own_branch() -> str:
-    """This branch's name: `origin/<name>...HEAD` is an empty diff on a clean tree."""
-    return subprocess.check_output(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO, encoding="utf-8"
-    ).strip()
-
-
 @pytest.fixture(scope="module")
-def base_ref() -> str:
-    """Skipping is not an option (INV-2), so the premise is asserted instead.
+def base_ref() -> Iterator[str]:
+    """A base ref against which this checkout is an empty diff, whatever HEAD is.
 
-    An empty derived set is what makes the "ordinary PR" cases below meaningful.
-    A modified *protected* file in the working tree would put a row in the set
-    and turn those cases into a different test; say so rather than fail obscurely.
+    `git_modified_files` diffs `origin/<base>...HEAD`, so the base has to be a
+    remote-tracking ref. The first version of this fixture used the branch's
+    own name -- and every CI leg failed, because `actions/checkout` leaves the
+    runner on a detached HEAD: `git rev-parse --abbrev-ref HEAD` returned the
+    literal `HEAD`, and `origin/HEAD` does not exist there. A fork checked out
+    at a tag or a commit would have failed the same way.
+
+    So the fixture writes a temporary remote-tracking ref at HEAD and removes it
+    afterwards. This is the one place the suite touches the real repository's
+    refs: the tests must run against *this* repository because the Makefile and
+    its relative recipe paths live here, so a fixture clone is not an option.
+    The ref is namespaced by pid, never listed by `git branch`, and deleted in
+    `finally`, so a crash leaves at most one stray `refs/remotes/origin/zz-e2e-*`
+    that `git update-ref -d` removes.
+
+    Skipping is not an option (INV-2), so the premise is asserted instead: an
+    empty derived set is what makes the "ordinary PR" cases meaningful, and a
+    modified *protected* file in the working tree would put a row in the set.
+    Say so rather than fail obscurely.
     """
-    branch = _own_branch()
-    listed = _make("attestation", f"BASE_REF={branch}")
-    assert listed.returncode == 0, listed.stderr
-    # Rows are the only thing the recipe prints to stdout (`@` silences the
-    # command echo); the `[PASS]` line for an empty set goes to stderr via logging.
-    rows = [line for line in listed.stdout.splitlines() if line.startswith("|")]
-    assert not rows, (
-        "these cases need an empty protected set; the working tree has modified protected "
-        f"files:\n{listed.stdout}"
-    )
-    return branch
+    name = f"zz-e2e-base-{os.getpid()}"
+    ref = f"refs/remotes/origin/{name}"
+    subprocess.check_call(["git", "update-ref", ref, "HEAD"], cwd=REPO)
+    try:
+        listed = _make("attestation", f"BASE_REF={name}")
+        assert listed.returncode == 0, listed.stderr
+        # Rows are the only thing the recipe prints to stdout (`@` silences the
+        # command echo); the `[PASS]` line for an empty set goes to stderr via logging.
+        rows = [line for line in listed.stdout.splitlines() if line.startswith("|")]
+        assert not rows, (
+            "these cases need an empty protected set; the working tree has modified protected "
+            f"files:\n{listed.stdout}"
+        )
+        yield name
+    finally:
+        subprocess.call(["git", "update-ref", "-d", ref], cwd=REPO)
 
 
 class TestMakeAttestationTargets:
