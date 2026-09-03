@@ -10,6 +10,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The attestation check judged a snapshot, and could not be cleared (DEC-040)
+
+DEC-038 read the PR description from `github.event.pull_request.body`. That
+field is captured when the run is queued, and the mechanism failed three ways
+on its second real run:
+
+1. **Stale.** The description was corrected minutes after the push that queued
+   the run, so the check reported a missing row against a table that already
+   had one.
+2. **Unclearable** — the serious one. `edited` was not a trigger type, and
+   "Re-run failed jobs" replays the *original* payload, so a stale description
+   could never be cleared. The only way past the gate would have been an
+   otherwise pointless commit, and a gate whose only escape is a no-op commit
+   teaches people to make no-op commits.
+3. **Disclosed.** Passing the body through an environment variable printed the
+   entire description into the step-setup group of the CI log.
+
+The step now fetches the pull request with the job token, writes `.body` to a
+file, and passes only the path — the description still never reaches the shell
+as code. `set -euo pipefail` is explicit, because the runner's default
+`bash -e` does not set pipefail and a failed fetch would otherwise leave an
+empty file that the gate reports as a *missing table*: a true failure for a
+false reason. `pull-requests: read` is declared on `build-full` alone, so every
+other job keeps `contents: read` and nothing more. `edited` joins the trigger
+types for the same reason `labeled` is already there.
+
+The first version of the `edited` assertion searched the trigger section for
+that string and passed on the *comment* explaining why `edited` is there —
+deleting the type left it green. Found by mutating the workflow, not by reading
+the test; it now asserts against the parsed `types:` list.
+
 ### The inventory that calls itself the inventory was never checked for completeness (DEC-039)
 
 `test_constant_triage.py`'s docstring says "a new constant needs a row here"

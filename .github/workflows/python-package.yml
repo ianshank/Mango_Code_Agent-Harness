@@ -13,7 +13,12 @@ on:
     # the label cannot re-run CI -- "Re-run all jobs" replays the original,
     # unlabelled event payload -- so a protected-path PR could only be unblocked
     # by pushing another commit or closing and reopening it.
-    types: [opened, synchronize, reopened, labeled]
+    # `edited` is here for the same reason as `labeled`: the attestation check in
+    # `build-full` judges the PR description, and without this a corrected
+    # description could not re-run it -- "Re-run failed jobs" replays the original
+    # event, so the only way to clear the check would be an otherwise pointless
+    # commit. It does fire on title edits too, which is the accepted cost.
+    types: [opened, synchronize, reopened, labeled, edited]
     # Stacked/phase branches must also be gated, otherwise a PR targeting an
     # integration branch merges without ever running `make ci`. `claude/**` is
     # the agent branch namespace and was missing here: a PR stacked onto one got
@@ -82,6 +87,13 @@ jobs:
 
   build-full:
     runs-on: ubuntu-latest
+    # Declared at the job level, so the other jobs keep the workflow-wide
+    # `contents: read` and nothing else. `pull-requests: read` is needed by the
+    # attestation step alone, which reads the PR description from the API rather
+    # than from the event payload; see the note on that step for why.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -142,15 +154,36 @@ jobs:
       # PRs that need it, and the reviewer must be able to read a verified table
       # *before* deciding whether to attest. Needs only Python and git.
       #
-      # The body reaches the script through a file written from an env var, never
-      # interpolated into the shell, so its content cannot become a command.
+      # The description is fetched from the API, NOT taken from
+      # `github.event.pull_request.body`. That field is a snapshot of the moment
+      # the run was queued, which broke this check three ways on its second real
+      # run: a description corrected after the push was judged as it had been
+      # before the correction; "Re-run failed jobs" replays the original payload,
+      # so the stale text would fail forever and the gate could not be cleared
+      # without a new commit; and passing the body through an env var printed the
+      # whole description into the log's step-setup group. Reading it live fixes
+      # all three, and `edited` in the trigger types above re-runs the check when
+      # someone fixes the table.
+      #
+      # The description never touches the shell: curl writes it to a file, and
+      # only the path is passed on. `set -o pipefail` is explicit because the
+      # default `bash -e` would otherwise let a failed fetch produce an empty file
+      # and report a missing table rather than a broken request.
       - name: Verify the protected-path attestation table
         if: github.event_name == 'pull_request'
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
         run: |
-          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          set -euo pipefail
+          curl -sSf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            > "$RUNNER_TEMP/pr.json"
+          python -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1]))["body"] or "")' \
+            "$RUNNER_TEMP/pr.json" > "$RUNNER_TEMP/pr-body.md"
           make attestation-check FILE="$RUNNER_TEMP/pr-body.md"
 
       # Run the regression tier on its own, before the full gate. These tests
