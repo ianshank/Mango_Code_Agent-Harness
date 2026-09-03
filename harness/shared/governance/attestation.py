@@ -207,22 +207,40 @@ def _check(expected: list[str], body_path: Path, section: str = DEFAULT_SECTION)
     except OSError as exc:
         logger.error("[FAIL] could not read %s: %s", body_path, exc)
         return 1
+    # A change touching no protected path owes no attestation, so an absent
+    # section and an empty table are both correct for it. Demanding one anyway
+    # would fail every ordinary PR in the repository -- the check runs on all of
+    # them -- and would train contributors to paste an empty table to get past a
+    # gate, which is the opposite of what the table is for. Raised in review of
+    # this module: `main()` had the empty-set early return *after* the `--check`
+    # branch, so it guarded only the printing path, and the tests covered the
+    # empty case for that path alone.
+    #
+    # Over-attestation is still a failure and is handled below: with nothing
+    # expected, every written row is a row naming a path the change does not
+    # touch.
     attested = section_body(body, section)
     if attested is None:
+        if not expected:
+            logger.info("[PASS] this change touches no protected path; no attestation is required")
+            return 0
         logger.error(
             "[FAIL] %s has no heading matching %r, so nothing is attested. %d protected path(s) need a table: %s",
             body_path,
             section,
             len(expected),
-            ", ".join(expected) or "(none)",
+            ", ".join(expected),
         )
         return 1
     if not table_paths(attested):
+        if not expected:
+            logger.info("[PASS] this change touches no protected path; the empty section is correct")
+            return 0
         logger.error(
             "[FAIL] %s contains no attestation table. %d protected path(s) need one: %s",
             body_path,
             len(expected),
-            ", ".join(expected) or "(none)",
+            ", ".join(expected),
         )
         return 1
     missing, unexpected = compare(expected, attested)

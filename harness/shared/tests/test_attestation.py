@@ -270,6 +270,44 @@ class TestCheck:
             assert attestation._check(["Makefile"], body) == 1
         assert "contains no attestation table" in caplog.text
 
+    def test_a_change_touching_nothing_protected_needs_no_table(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The ordinary PR. Failing it would break every normal contribution.
+
+        The check runs on every pull request, so demanding a table from a change
+        that touches no protected path fails the common case — and teaches
+        contributors to paste an empty table to get past a gate, which is the
+        opposite of what the table is for. Missed because `main()`'s empty-set
+        early return sat *after* the `--check` branch and the tests covered the
+        empty case only for the printing path; raised in review.
+        """
+        body = tmp_path / "body.md"
+        body.write_text("## Summary\n\nA change touching nothing protected.\n", encoding="utf-8")
+        with caplog.at_level(logging.INFO, logger="harness.shared"):
+            assert attestation._check([], body) == 0
+        assert "no attestation is required" in caplog.text
+
+    def test_an_empty_attestation_section_is_correct_when_nothing_is_protected(self, tmp_path: Path) -> None:
+        body = tmp_path / "body.md"
+        body.write_text("## Protected-path attestation\n\nNothing protected in this change.\n", encoding="utf-8")
+        assert attestation._check([], body) == 0
+
+    def test_attesting_to_paths_the_change_does_not_touch_still_fails(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Relaxing the empty case must not make over-attestation free.
+
+        A table on a change that touches nothing protected asks a reviewer to
+        attest to something absent — the same overstatement as a missing row,
+        pointed the other way.
+        """
+        body = tmp_path / "body.md"
+        body.write_text(attested(["Makefile"]), encoding="utf-8")
+        with caplog.at_level(logging.ERROR, logger="harness.shared"):
+            assert attestation._check([], body) == 1
+        assert "names no protected path" in caplog.text
+
     def test_an_unreadable_body_fails_closed(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.ERROR, logger="harness.shared"):
             assert attestation._check([], tmp_path / "absent.md") == 1
