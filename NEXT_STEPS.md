@@ -200,16 +200,6 @@ moves". **Depends on NS-6** — it is a follow-on, not an independent item.
 cohesion item, not a budget violation, and it should be scheduled as one. Split
 into distinct boundary and invariant validators. **Depends on** nothing.
 
-### NS-16 · Retire the duplication `retry.ts` was extracted to address
-
-`nemotron-client.ts` lines 169–183 and 251–265 are a verbatim 15-line
-request-body builder differing only in `stream:`; one branch edited both copies
-identically three times. `top_p` is now the only sampling parameter in that
-literal that is not policy-sourced, and `retry.ts`'s `JITTER_CEILING_MS` is a
-new unlinked constant with no triage row, where its Python counterpart has one.
-**Done when** one builder feeds both call sites, `top_p` is policy-sourced, and
-`JITTER_CEILING_MS` has a triage row. **Depends on** nothing.
-
 ### NS-17 · Retention policy for the agent memory directory
 
 Persistent storage for knowledge-gap logs exists via the `agent-memory-manager`
@@ -339,6 +329,7 @@ re-run, not with a checkbox.
 | **NS-10** `policy_loader` resolved every threshold and logged nothing | DEBUG record naming key, value and source file; silent at INFO. One `TypedDict` per block, so an unknown key is a mypy error — which immediately surfaced `dict[str, Any]` annotations in `langgraph/policy.py` discarding that checking. |
 | **NS-12** Two waiver globs addressed ~135 node ids to approve 4 skips | Narrowed to the classes that carry the skip condition. `test_skip_waiver_scope.py` is the first test to read the shipped registry. |
 | **NS-13** Renaming the one live hook silently disabled it | The `.mango/hooks/*.sh` partition is asserted, and `pre-nemotron-run.sh` is pinned by name and by the validator it runs. |
+| **NS-16** `complete()` and `stream()` each carried a verbatim copy of the request body, and `top_p` was a literal `0.7` | One `buildChatRequestBody` feeds both call sites, and `top_p` is policy-sourced. Wiring it surfaced the real defect NS-16 understated: the **Python bridge never sent `top_p` at all**, so the two stacks sampled differently against the same endpoint. Both now read `nemotron.top_p` (DEC-036). |
 | **NS-3** (gate half) Nothing tied a declared version to a release | `TestTheDeclaredVersionIsARealRelease` requires a matching `## [x.y.z]` changelog section. The *decision* half stays open above. |
 | **NS-9** (bound half) An `omit` entry could drop a file from the floor and raise the aggregate | `coverage_gate.check_measured_set` fails closed on divergence and on an empty set. `mcp_server.py`'s pragma is gone: 94.06% → 94.44%, and 92% on the 3.9 leg where the SDK is absent. The swallow behind the *other* pragma stays open above. |
 

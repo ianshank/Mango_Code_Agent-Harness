@@ -60,6 +60,15 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.validate_invariants", "SIZE_BUDGET_LINES", policy_key="limits.size_budget_lines"),
     Row("harness.shared.validate_invariants", "TEST_SIZE_BUDGET_LINES", policy_key="limits.test_size_budget_lines"),
     Row("harness.shared.check_dedup", "DEFAULT_MAX_SHIM_LINES", policy_key="dedup.max_shim_lines"),
+    # The adopter fallback for the destination-check timeout duplicated
+    # `orchestrator.tool_timeout_sec` with nothing holding the two equal: they
+    # agree today at 30 by coincidence, and the only test asserted `> 0`. This
+    # is the pattern the docstring calls state (a), applied where it was missing.
+    Row(
+        "harness.shared.governance.pretooluse_guard",
+        "FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC",
+        policy_key="orchestrator.tool_timeout_sec",
+    ),
     # accepted by decision
     Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-025"),
     Row("harness.shared.retry_policy", "DEFAULT_MAX_SEC", decision="DEC-025"),
@@ -69,6 +78,14 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.cognitive_signal", "MAX_SINK_BYTES", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "failureThreshold", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/nemotron-client.ts", "baseBackoffMs", decision="DEC-025"),
+    # DEC-025 accepts five Node resilience constants by name; the inventory
+    # registered two. The table is the inventory (see the module docstring), so
+    # the other three were unlinked in practice while a reader of the decision
+    # would assume otherwise. No decision-log change: DEC-025 already names them.
+    Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "resetTimeoutMs", decision="DEC-025"),
+    Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "halfOpenSuccessThreshold", decision="DEC-025"),
+    Row("harness/node/src/ai/nemotron/nemotron-client.ts", "maxBackoffMs", decision="DEC-025"),
+    Row("harness/node/src/ai/nemotron/retry.ts", "JITTER_CEILING_MS", decision="DEC-037"),
 )
 
 

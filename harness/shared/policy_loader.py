@@ -52,6 +52,7 @@ class NemotronDefaults(TypedDict):
     """The `nemotron` block. See :class:`OrchestratorLimits` for the rationale."""
 
     temperature: float
+    top_p: float
     max_tokens: int
     timeout_ms: int
     max_retries: int
@@ -209,6 +210,10 @@ def nemotron_defaults(policy_path: Path | None = None) -> NemotronDefaults:
     section = _section("nemotron", policy_path)
     resolved: NemotronDefaults = {
         "temperature": _float_value(section, "temperature", 0.2, "nemotron"),
+        # Was a literal 0.7 in the Node client and absent from the Python
+        # payload entirely -- the two stacks sampled differently against the
+        # same endpoint. One key, both readers (NEXT_STEPS.md NS-16).
+        "top_p": _float_value(section, "top_p", 0.7, "nemotron"),
         "max_tokens": _int_value(section, "max_tokens", 4096, "nemotron"),
         "timeout_ms": _int_value(section, "timeout_ms", 30000, "nemotron"),
         "max_retries": _int_value(section, "max_retries", 0, "nemotron"),

@@ -99,6 +99,7 @@
   },
   "nemotron": {
     "temperature": 0.2,
+    "top_p": 0.7,
     "max_tokens": 4096,
     "timeout_ms": 30000,
     "max_retries": 0

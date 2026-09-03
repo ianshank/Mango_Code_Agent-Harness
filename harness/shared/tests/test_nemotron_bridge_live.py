@@ -125,8 +125,14 @@ class TestCompleteChatLive(unittest.TestCase):
         - model: string
         - messages: array of {role, content}
         - temperature: clamped float
+        - top_p: clamped float
         - max_tokens: int
         - stream: false
+
+        Note the standing gap: this asserts the request succeeds, not that the
+        two payloads match field by field. It was written from the Python
+        payload, which is how `top_p` stayed absent here while the Node client
+        always sent it (NS-16). A real parity test would compare the two bodies.
         """
         messages = [
             {"role": "user", "content": "Reply with exactly: PARITY OK"},

@@ -18,11 +18,17 @@ import { SecretMasker } from './secret-masker.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { NEMOTRON_POLICY } from './policy.js';
 import { executeWithRetry } from './retry.js';
+import { buildChatRequestBody } from './request-body.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// Timeout and retry budget come from the governance policy (R-NPW-1); the
-// backoff window and endpoint have no policy key yet and stay as they are.
+// Timeout, retry budget and the sampling defaults come from the governance
+// policy (R-NPW-1, DEC-036). The backoff window is accepted as a client-local
+// resilience default by DEC-025, which names each constant. The endpoint is
+// neither: it has no policy key and no decision, and stays here because it is
+// the provider's address rather than a tunable -- overridable per instance and
+// via NVIDIA_BASE_URL. Stated precisely because the previous wording implied
+// DEC-025 covered it, which it does not.
 export const DEFAULT_NEMOTRON_CONFIG: NemotronConfig = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
   timeoutMs: NEMOTRON_POLICY.timeout_ms,
@@ -160,27 +166,8 @@ export class NemotronClient {
       );
     }
 
-    const model = options.model || this.config.defaultModel;
-    if (!model) {
-      throw new Error(
-        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
-      );
-    }
-    const body = {
-      model,
-      messages: options.messages,
-      temperature:
-        options.temperature !== undefined
-          ? Math.max(0, Math.min(2.0, options.temperature))
-          : NEMOTRON_POLICY.temperature,
-      top_p:
-        options.top_p !== undefined
-          ? Math.max(0, Math.min(1.0, options.top_p))
-          : 0.7,
-      max_tokens: options.max_tokens ?? NEMOTRON_POLICY.max_tokens,
-      stream: false,
-      ...(options.stop ? { stop: options.stop } : {}),
-    };
+    const model = this.resolveModel(options);
+    const body = buildChatRequestBody(options, model, false, NEMOTRON_POLICY);
 
     const startTime = Date.now();
     const data: any = await this.executeWithRetry(async () => {
@@ -243,27 +230,8 @@ export class NemotronClient {
       );
     }
 
-    const model = options.model || this.config.defaultModel;
-    if (!model) {
-      throw new Error(
-        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
-      );
-    }
-    const body = {
-      model,
-      messages: options.messages,
-      temperature:
-        options.temperature !== undefined
-          ? Math.max(0, Math.min(2.0, options.temperature))
-          : NEMOTRON_POLICY.temperature,
-      top_p:
-        options.top_p !== undefined
-          ? Math.max(0, Math.min(1.0, options.top_p))
-          : 0.7,
-      max_tokens: options.max_tokens ?? NEMOTRON_POLICY.max_tokens,
-      stream: true,
-      ...(options.stop ? { stop: options.stop } : {}),
-    };
+    const model = this.resolveModel(options);
+    const body = buildChatRequestBody(options, model, true, NEMOTRON_POLICY);
 
     const response = await this.executeWithRetry(async () => {
       const resp = await this.doFetch('/chat/completions', {
@@ -344,6 +312,23 @@ export class NemotronClient {
         }
       }
     }
+  }
+
+  /**
+   * The model for this call: explicit option first, then configured default.
+   *
+   * Extracted from the two call sites that resolved it identically. It stays a
+   * method rather than joining `buildChatRequestBody` because it reads client
+   * config, which that pure function deliberately does not take.
+   */
+  private resolveModel(options: ChatCompletionOptions): string {
+    const model = options.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error(
+        'NemotronClient: Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or provide it in options.',
+      );
+    }
+    return model;
   }
 
   private buildHeaders(): Record<string, string> {

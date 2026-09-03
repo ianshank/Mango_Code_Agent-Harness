@@ -10,6 +10,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Cross-stack sampling parity, and the constant inventory that had drifted from its own decision (DEC-036, DEC-037)
+
+A hard-coded-value pass over the branch. The headline finding is a divergence
+neither stack could see:
+
+- **`nemotron.top_p` becomes a policy key read by both stacks.** The Node client
+  hard-coded `top_p: 0.7`; the Python bridge omitted `top_p` from its payload
+  entirely. The two stacks had therefore been sending different sampling
+  parameters to the same endpoint. `test_wire_format_parity_with_typescript`
+  exists to prevent exactly this and could not detect it: it asserts the request
+  succeeds rather than comparing the two bodies, and its docstring enumerated
+  the fields from the Python payload alone — which is why `top_p` was missing
+  from the list too. The docstring now says what the test does and does not
+  prove.
+- **The two duplicated request-body literals collapse into one builder.**
+  `complete()` and `stream()` each carried a verbatim 15-line copy differing
+  only in `stream:`; one branch edited both identically three times.
+  `buildChatRequestBody` takes the policy as an argument, so a test can prove
+  the body follows the policy it is given rather than one that happens to agree
+  with the shipped file. Sixteen new tests, two of them mutation-proven: making
+  the bodies diverge, and reverting `top_p` to the literal, each fail.
+  `SAMPLING_BOUNDS` stays out of policy deliberately — the clamp ranges are the
+  provider's accepted input domain, and a policy widening them would describe a
+  request the endpoint rejects.
+- **Five constants were unlinked in practice.** `test_constant_triage.py`'s
+  table *is* the inventory, so a constant absent from it is untriaged however
+  well a decision reads. DEC-025 accepts five Node resilience constants by name;
+  the table registered two. `resetTimeoutMs`, `halfOpenSuccessThreshold` and
+  `maxBackoffMs` are now registered against the decision that already justified
+  them. `pretooluse_guard.FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC` duplicated
+  `orchestrator.tool_timeout_sec` with nothing holding them equal — they agreed
+  at 30 by coincidence, and the only test asserted `> 0`; it is now policy-linked.
+- **`JITTER_CEILING_MS` needed a decision, not a table row.** DEC-025 names
+  neither it nor `retry.ts`, so a row citing DEC-025 fails the linkage check —
+  `NEXT_STEPS.md` NS-16 had called this "a triage row", implying a table edit.
+  DEC-037 records why it is a true constant: Python jitters proportionally, Node
+  adds an absolute millisecond ceiling, so they are not one knob in two
+  languages.
+- **Two comments asserted things the code contradicts.** `types.ts` documented
+  `maxRetries` as "default: 3" while the policy declares 0 — the drift
+  `policy.ts` was written about, surviving in prose; it now names the policy key
+  instead of restating a number. The client's header comment implied DEC-025
+  covered the endpoint, which it does not.
+
+Adding the policy key required `policy_loader` (exact-equality pinned by
+`test_policy_consistency.py`) and a rebuilt `policy-artifact.json`, which
+digests the shared policy — `publish_policy_artifact.py build`, not
+`make digest-regen`: the per-stack mirrors carry no `nemotron` block, so their
+root-of-trust digests are untouched.
+
+Behaviour change, intended and stated: the Python bridge now sends `top_p`
+where it previously let the provider default apply. The Node value is unchanged.
+
+
 ### Gate truthfulness — eight gates that could pass on absent evidence (R-GT-1..R-GT-10)
 
 Spec: `docs/specs/gate-truthfulness.md`. Opened by
