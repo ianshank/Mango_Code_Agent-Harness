@@ -10,6 +10,50 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### End-to-end tests for the wiring no unit test reached
+
+Every gate this branch added ran the real thing in its unit tests — real git
+repositories, `runpy` of the scripts. None of them exercised the *wiring*: no
+test in the repository invoked `make` as a subprocess, so the `$(if
+$(BASE_REF),…)` conditional, the `FILE=` usage guard and the `command -v`
+fail-closed guard had zero coverage, and three of this branch's own defects
+lived in exactly that layer.
+
+- **`regression/test_gate_truthfulness_e2e.py`** runs the recipes a
+  contributor types: `make attestation-check` without `FILE=` prints usage and
+  fails; an ordinary PR passes the check with no table *through the recipe CI
+  runs* (the `5261568` defect, reproduced where it would have bitten);
+  over-attestation still fails; a nonexistent `BASE_REF` surfaces as a git
+  error, proving the flag reached the script; `make secrets-allowlist-check`
+  fails closed without gitleaks rather than reporting a pass.
+- **The workflow's own shell, executed.** The attestation step's `run:` block
+  is read from the YAML — not copied, so the test and the workflow cannot
+  drift the way the skill and the tool did (DEC-038) — and run under `bash`
+  with `curl` stubbed. A fetched description flows through to the check; a
+  failed fetch stops at the fetch and says nothing about tables. That second
+  claim was the reason `set -euo pipefail` is there (DEC-040), and it had only
+  ever been asserted as text.
+- **`harness/node/tests/ai/e2e/sampling-parity.test.ts`** is the end-to-end
+  the live parity test admits it cannot be: the real `complete_chat` in a
+  subprocess with `urlopen` patched to capture the request, against the real
+  `buildChatRequestBody`, both reading the shipped policy. Field-by-field
+  equality, key-set equality (a field added to one stack and not the other is
+  the shape of the DEC-036 defect), and the values pinned to the policy.
+  Reverting the `top_p` line fails four of nine.
+
+  It lives in the Node suite deliberately. `pnpm`/`tsx` exist only on
+  `build-full`, while the Python regression tier also runs on the three matrix
+  legs — a Python-side version would have to skip there, and INV-2 forbids it.
+  `python` is present wherever this suite runs.
+- **A limit, stated.** The E2E tests use this repository's own Makefile with
+  the branch as its own base ref, so their premise is an empty protected set.
+  Mutating a protected file in place — the workflow, `attestation.py` — breaks
+  that premise before the case under test runs; the fixture says so rather
+  than failing obscurely. Those two proofs were run by feeding the harness a
+  mutated shell string and at the unit level respectively, not by editing
+  protected files.
+
+
 ### A 700-line budget that was silent until it failed, and the module sixteen lines from it (DEC-041)
 
 `test_verify_zero_skips.py` stood at **684 of 700** — the suite for INV-2, the
