@@ -174,8 +174,16 @@ class ExecutionBroker:
                 # '.pem' and can expand to 'key.pem'"). Four rounds of bypass
                 # fixes on this classifier make "why did it grade that?" the
                 # question most likely to be asked of these logs.
+                # `why` is redacted for the same reason the command below it is:
+                # a classifier reason quotes the fragment it is about, so an
+                # unredacted one puts a model-supplied token into the log at
+                # WARNING -- a level that ships by default, unlike the DEBUG
+                # line in `command_actions`. The agent still receives the
+                # unredacted reason in `ExecutionResult.reason`; it sent the
+                # command, so nothing is disclosed there that it did not have.
                 logger.warning(
-                    "Policy denied execution: agent=%s action=%s: %s", agent_id, required, why
+                    "Policy denied execution: agent=%s action=%s: %s",
+                    agent_id, required, redact_text(why),
                 )
                 reason = f"BLOCKED: {verdict.reason} (classified as {required}: {why})"
                 return ExecutionResult(

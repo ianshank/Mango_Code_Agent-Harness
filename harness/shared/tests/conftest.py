@@ -177,3 +177,54 @@ def mock_subprocess_success(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicM
     mock.return_value = sp.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
     with patch.object(sp, "run", mock):
         yield mock
+
+
+# --- shared by test_validate_invariants*.py -------------------------------
+#
+# These live here rather than in one of those modules because both need them.
+# A fixture imported across test modules works but reads as a redefinition to
+# ruff (F811) at every use site, and the import direction then encodes which
+# module came first -- which is not a fact about the tests. `conftest.py` is
+# the mechanism pytest provides for exactly this.
+
+
+@pytest.fixture
+def invariants_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An isolated git repo with a governance policy, for invariant testing."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True, capture_output=True)
+    shared = repo / "harness" / "shared"
+    shared.mkdir(parents=True)
+    policy = shared / "governance-policy.json"
+    policy.write_text(
+        # `limits` is stated, not omitted. Since R-CQ-8 a *present* policy that
+        # does not declare a budget fails closed rather than substituting the
+        # built-in, so a fixture without this block would exercise the
+        # fail-closed path in every test that uses it instead of the behaviour
+        # each one is about. The numbers match this repository's own policy.
+        json.dumps(
+            {
+                "protected_paths": [".github/workflows/**", "Makefile"],
+                "limits": {"size_budget_lines": 500, "test_size_budget_lines": 700},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Baseline commit so git diff has a HEAD to compare against.
+    (shared / ".gitkeep").write_text("", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)
+    monkeypatch.setenv("GITHUB_BASE_REF", "")
+    monkeypatch.delenv("ALLOW_GITHUB_CHANGES", raising=False)
+    return repo
+
+
+def invariants_policy_path(repo: Path) -> Path:
+    return repo / "harness" / "shared" / "governance-policy.json"
+
+
+def _write_lines(path: Path, count: int) -> None:
+    path.write_text("\n".join("x = 1" for _ in range(count)) + "\n", encoding="utf-8")

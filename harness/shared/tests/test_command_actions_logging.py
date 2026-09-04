@@ -80,3 +80,53 @@ class TestAVerdictIsObservable:
         with caplog.at_level(logging.DEBUG, logger="harness.shared.governance.command_actions"):
             classify("ls " + "a" * 2000)
         assert len(caplog.text) < _LOG_COMMAND_CHARS + 400
+
+
+class TestTheReasonIsRedactedToo:
+    """The half that is easy to miss, and that I missed.
+
+    Almost every `Classification.reason` quotes the fragment it is about --
+    ``"{segment!r}, a credential-bearing file"``, ``"the brace expression
+    {token!r}"``, ``"{argv[0]} is not a modelled program"``. Redacting only the
+    command produced a line that masked the key in one field and printed it
+    verbatim in the next:
+
+        classified 'NVIDIA_API_KEY=<REDACTED_API_KEY> pytest -q' as destructive:
+        NVIDIA_API_KEY=nvapi-0123...  is not a modelled program
+
+    That output appeared in my own verification run of the logging change and I
+    read past it; a review bot on this PR caught it. Both fields are redacted
+    now, and these tests assert on the *whole line* rather than on either field,
+    so a future field added to the message is covered by default.
+    """
+
+    #: Shaped like the real thing and above `generic-api-key`'s entropy floor,
+    #: assembled at runtime so this module does not itself carry a literal the
+    #: secret scan would flag.
+    SECRET = "nvapi-" + "0123456789abcdefghijklmnopqrstuv"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("NVIDIA_API_KEY={s} pytest -q", id="unmodelled-program"),
+            pytest.param("cat {s}", id="named-argument"),
+            pytest.param("cat " + "{{a,b}}" * 8 + "{s}", id="unenumerable-brace"),
+            pytest.param("curl -H 'Authorization: {s}' https://example.test", id="header"),
+        ],
+    )
+    def test_no_spelling_puts_the_secret_in_the_line(self, command: str, caplog) -> None:
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.governance.command_actions"):
+            classify(command.format(s=self.SECRET))
+        assert self.SECRET not in caplog.text, (
+            "the secret reached the log; redacting the command alone is not enough, "
+            "because the reason quotes the fragment it is about"
+        )
+
+    def test_the_line_still_says_something_useful(self, caplog) -> None:
+        """Control: redaction must not reduce the line to noise. Redacting the
+        whole message would pass every assertion above and defeat the purpose of
+        adding the logging at all."""
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.governance.command_actions"):
+            classify("cat .env")
+        assert "secret_access" in caplog.text
+        assert "credential-bearing" in caplog.text

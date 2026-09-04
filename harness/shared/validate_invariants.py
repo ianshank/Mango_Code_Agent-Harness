@@ -83,7 +83,21 @@ def _policy_limit(key: str, default: int, policy_path: Path | None, env_var: str
                     f"built-in {default}, which would let this gate pass against a budget the "
                     "policy no longer declares"
                 )
-            budget = int(limits[key])
+            stated = limits[key]
+            # Type-checked, not coerced. `int(stated)` accepted `"9999"` and
+            # `True` (which is 1), so a policy could state a budget as a string
+            # and this gate would enforce it while `policy_loader._Section.int`
+            # -- the strict reader this change added everywhere else -- would
+            # refuse the same value. Two readers of one policy disagreeing about
+            # what is valid is the drift this branch exists to remove. `bool` is
+            # excluded explicitly because it is a subclass of `int`.
+            # Reported by a review bot on this PR.
+            if isinstance(stated, bool) or not isinstance(stated, int):
+                raise TypeError(
+                    f"limits.{key} must be an integer, got {stated!r}; a coerced value would "
+                    "let this gate enforce a budget the strict policy reader would reject"
+                )
+            budget = stated
         except (ValueError, TypeError) as e:
             # A policy that exists but cannot be parsed is corruption, not an adopter
             # default. Returning the built-in budget here let a malformed policy
@@ -157,7 +171,19 @@ def load_protected_patterns(policy_path: Path) -> list[str]:
                 "policy states no protected_paths; refusing to fall back to a one-pattern "
                 "default that would report PASS while protecting almost nothing"
             )
-        patterns = list(policy["protected_paths"])
+        # Type-checked before `list()`, because `list("Makefile")` is
+        # `['M','a','k',...]` -- eleven single-character patterns that match no
+        # path at all, so a policy stating `"protected_paths": "Makefile"`
+        # produced a gate that reported PASS while protecting nothing. That is
+        # the same fail-open as the `[".github/**"]` default removed above,
+        # reached by a different mistake. Reported by a review bot on this PR.
+        stated = policy["protected_paths"]
+        if not isinstance(stated, list) or any(not isinstance(p, str) for p in stated):
+            raise TypeError(
+                f"protected_paths must be a list of strings, got {stated!r}; a string would "
+                "be iterated character by character into patterns that match nothing"
+            )
+        patterns = list(stated)
         logger.debug("Loaded %d protected path patterns from %s", len(patterns), policy_path)
         return patterns
     except Exception as e:  # noqa: BLE001 - governance must fail closed with a reason

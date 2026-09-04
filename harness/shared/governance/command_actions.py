@@ -263,15 +263,26 @@ def classify(command: str) -> Classification:
     """
     verdict = _classify(command)
     if logger.isEnabledFor(logging.DEBUG):
-        # Redacted, because a command is model-supplied text that may carry a
-        # token -- `run_command` is exactly where one would appear. Guarded on
-        # `isEnabledFor` so neither the redaction nor the formatting is paid for
-        # on the default path; `policy_loader._log_resolution` does the same.
+        # BOTH halves are redacted, and the reason is the half that is easy to
+        # miss. A command is model-supplied text that may carry a token --
+        # `run_command` is exactly where one would appear -- but so is the
+        # *reason*, because almost every reason quotes the fragment it is about:
+        # "{segment!r}, a credential-bearing file", "the brace expression
+        # {token!r}", "{argv[0]} is not a modelled program". Redacting only the
+        # command produced a line that masked the key in one field and printed
+        # it verbatim in the next:
+        #
+        #   classified 'NVIDIA_API_KEY=<REDACTED_API_KEY> pytest -q' as
+        #   destructive: NVIDIA_API_KEY=nvapi-0123...  is not a modelled program
+        #
+        # Found by a review bot on this PR. Guarded on `isEnabledFor` so neither
+        # redaction is paid for on the default path, as
+        # `policy_loader._log_resolution` does.
         logger.debug(
             "classified %r as %s: %s",
             redact_text(command)[:_LOG_COMMAND_CHARS],
             verdict.action,
-            verdict.reason,
+            redact_text(verdict.reason)[:_LOG_COMMAND_CHARS],
         )
     return verdict
 
