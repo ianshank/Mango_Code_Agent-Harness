@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
+import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Callable
@@ -12,9 +14,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import harness.shared.mcp_server as mcp_mod
-from harness.shared.agent_authority import tools_for_role
+from harness.shared.agent_authority import execution_identity, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker, ExecutionResult
 from harness.shared.mcp_server import create_mcp_server, run_mcp_server
+from harness.shared.orchestrator.dispatcher import ToolDispatcher
+from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 pytestmark = pytest.mark.enable_socket
@@ -247,7 +251,9 @@ def test_mcp_server_execute_tool_broker_crash(tmp_path: Path, broker: ExecutionB
     handler = server._call_tool_handler
     assert handler is not None
 
-    with patch("harness.shared.mcp_server.execute_run_command", side_effect=RuntimeError("broker crash")):
+    # The executor is reached through the dispatcher's registry now, so the seam
+    # is the dispatcher module's import of it, not a name in mcp_server.
+    with patch("harness.shared.orchestrator.dispatcher.execute_run_command", side_effect=RuntimeError("broker crash")):
         res = asyncio.run(handler("run_command", {"command": "broken"}))
         assert "Error executing tool" in res[0].text
 
@@ -395,3 +401,179 @@ def test_mcp_server_policy_lookup_failure_denies(tmp_path: Path, broker: Executi
         result = asyncio.run(server._call_tool_handler("write_file", {"filepath": "x.py", "content": ""}))
     assert len(result) == 1
     assert "denied" in result[0].text.lower()
+
+
+# --- One registry, two transports (audit M8) ---------------------------------
+
+
+def _assert_registry_parity(mcp_names: set[str], dispatcher_names: set[str]) -> None:
+    """The check the parity tests below share, so the negative variant can prove
+    the check itself bites rather than re-deriving it with a different shape."""
+    assert mcp_names == dispatcher_names, (
+        f"mcp-only: {mcp_names - dispatcher_names}; dispatcher-only: {dispatcher_names - mcp_names}"
+    )
+
+
+def test_mcp_handler_names_equal_dispatcher_handler_names(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """A tool added to (or dropped from) ``ToolDispatcher.tool_handlers`` appears
+    in (or leaves) the MCP registry in the same commit -- the two are one table."""
+    dispatcher = ToolDispatcher(workspace_dir=tmp_path, broker=broker)
+    mcp_names = set(mcp_mod._build_tool_handlers(tmp_path, broker, "nemotron-reasoner"))
+    _assert_registry_parity(mcp_names, set(dispatcher.tool_handlers))
+
+
+def test_registry_parity_check_fails_when_a_name_is_dropped(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Negative variant: the parity assertion is not vacuous. Removing one name
+    from either side must make it raise."""
+    dispatcher_names = set(ToolDispatcher(workspace_dir=tmp_path, broker=broker).tool_handlers)
+    mcp_names = set(mcp_mod._build_tool_handlers(tmp_path, broker, "nemotron-reasoner"))
+    dropped = mcp_names - {"run_command"}
+    assert "run_command" in mcp_names, "precondition: the dropped name was registered"
+    with pytest.raises(AssertionError, match="dispatcher-only: \\{'run_command'\\}"):
+        _assert_registry_parity(dropped, dispatcher_names)
+
+
+def test_mcp_registry_is_the_dispatcher_table_not_a_copy(
+    tmp_path: Path, broker: ExecutionBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refactor's actual guarantee: mcp_server *derives* its table from the
+    dispatcher rather than mirroring it by hand. A dispatcher that stops
+    serving a tool must take that tool away from the MCP transport too.
+    A hand-mirrored registry (the previous implementation) keeps serving it and
+    fails here."""
+
+    class DispatcherWithoutRunCommand(ToolDispatcher):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            del self.tool_handlers["run_command"]
+
+    monkeypatch.setattr(mcp_mod, "ToolDispatcher", DispatcherWithoutRunCommand)
+    handlers = mcp_mod._build_tool_handlers(tmp_path, broker, "nemotron-reasoner")
+    assert "run_command" not in handlers
+    assert set(handlers) == set(ToolDispatcher(workspace_dir=tmp_path, broker=broker).tool_handlers) - {"run_command"}
+
+
+def test_shared_registry_carries_the_acting_role(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """Role scoping must survive the shared registry: the dispatcher's handlers
+    read ``active_role`` at call time, so the MCP transport has to set it
+    before serving the table. A verifier reaching the shared ``write_file``
+    handler is refused by the same PDP question ``ToolDispatcher`` asks."""
+    broker.authorize_action.return_value = "action 'write' is not granted to verifier"  # type: ignore[attr-defined]
+    handlers = mcp_mod._build_tool_handlers(tmp_path, broker, "verifier")
+    assert handlers["write_file"]({"filepath": "x.py", "content": ""}).startswith("Denied:")
+    # The PDP is asked under the role's execution identity, the same mapping
+    # `ToolDispatcher` uses -- not under the transport-facing role name.
+    broker.authorize_action.assert_called_with(execution_identity("verifier"), "write")  # type: ignore[attr-defined]
+    assert not (tmp_path / "x.py").exists()
+
+
+# --- The handler leaves the event loop free (audit M9) ------------------------
+
+
+def test_call_tool_runs_the_handler_off_the_event_loop_thread(
+    tmp_path: Path, broker: ExecutionBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Handlers are synchronous and ``run_command`` blocks on ``subprocess.run``;
+    run inline they froze the transport. The handler must execute on a worker
+    thread, never on the thread that owns the loop."""
+    seen: dict[str, Any] = {}
+
+    def probe(_args: dict[str, Any]) -> str:
+        seen["thread"] = threading.current_thread()
+        return "probed"
+
+    monkeypatch.setattr(mcp_mod, "_build_tool_handlers", lambda *_a, **_k: {"read_file": probe})
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+
+    async def call() -> Any:
+        seen["loop_thread"] = threading.current_thread()
+        return await server._call_tool_handler("read_file", {"filepath": "x"})
+
+    res = asyncio.run(call())
+    assert res[0].text == "probed"
+    assert seen["thread"] is not seen["loop_thread"], "handler ran on the event-loop thread"
+
+
+def test_two_concurrent_tool_calls_overlap(
+    tmp_path: Path, broker: ExecutionBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two calls whose handlers each wait for the *other* to arrive can only
+    both finish if the loop keeps scheduling while one of them blocks. Inline
+    execution makes the first handler wait out the barrier alone, and the
+    result carries the ``BrokenBarrierError`` instead of the payload. The
+    barrier's give-up time is the policy's tool timeout, not a literal."""
+    barrier = threading.Barrier(2, timeout=orchestrator_defaults()["tool_timeout_sec"])
+
+    def rendezvous(_args: dict[str, Any]) -> str:
+        barrier.wait()
+        return "met"
+
+    monkeypatch.setattr(mcp_mod, "_build_tool_handlers", lambda *_a, **_k: {"read_file": rendezvous})
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+
+    async def both() -> Any:
+        return await asyncio.gather(
+            server._call_tool_handler("read_file", {"filepath": "a"}),
+            server._call_tool_handler("read_file", {"filepath": "b"}),
+        )
+
+    first, second = asyncio.run(both())
+    assert (first[0].text, second[0].text) == ("met", "met")
+
+
+# --- Structured per-call logging ----------------------------------------------
+
+
+def _tool_call_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.name == mcp_mod.__name__ and r.getMessage().startswith("mcp_tool_call ")]
+
+
+def test_permitted_call_logs_at_debug_with_keys_only(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret = "hunter2-do-not-log"
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        asyncio.run(server._call_tool_handler("write_file", {"filepath": "note.txt", "content": secret}))
+
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    record = records[0]
+    message = record.getMessage()
+    assert record.levelno == logging.DEBUG
+    assert "tool=write_file" in message
+    assert "role=nemotron-reasoner" in message
+    assert "permitted=True" in message
+    assert "duration_ms=" in message
+    assert "argument_keys=['content', 'filepath']" in message
+    assert secret not in message, "argument values leaked into the log"
+    assert secret not in caplog.text
+
+
+def test_denied_call_logs_at_warning(tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture) -> None:
+    server = create_mcp_server(tmp_path, role="verifier", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        asyncio.run(server._call_tool_handler("write_file", {"filepath": "x.py", "content": "print(1)"}))
+
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    message = records[0].getMessage()
+    assert "tool=write_file" in message and "role=verifier" in message and "permitted=False" in message
+    assert "print(1)" not in caplog.text
+
+
+def test_policy_lookup_failure_logs_the_call_as_denied(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__), patch(
+        "harness.shared.mcp_server.tool_is_permitted", side_effect=RuntimeError("policy read failure")
+    ):
+        asyncio.run(server._call_tool_handler("write_file", None))
+
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert "permitted=False" in records[0].getMessage()
+    assert "argument_keys=[]" in records[0].getMessage()

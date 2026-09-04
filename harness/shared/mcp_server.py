@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, cast
 
@@ -26,15 +27,9 @@ except ImportError:
 
 from harness.shared.agent_authority import tool_is_permitted, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
-from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
-from harness.shared.tool_dispatch import DEFAULT_HYPOTHESIS_CONFIDENCE, _normalize_tool_arguments
-from harness.shared.tool_executors import (
-    authorize_write,
-    execute_apply_patch,
-    execute_read_file,
-    execute_run_command,
-    execute_write_file,
-)
+from harness.shared.orchestrator.dispatcher import ToolDispatcher
+from harness.shared.tool_dispatch import _normalize_tool_arguments
+from harness.shared.tool_executors import authorize_write
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -50,54 +45,45 @@ _broker_authorize_write = authorize_write
 def _build_tool_handlers(
     workspace_dir: Path, broker: ExecutionBroker, role: str
 ) -> dict[str, Callable[[dict[str, Any]], str]]:
-    """Tool dispatch registry: every function name declared in NEMOTRON_TOOLS
-    must have an entry here (pinned by test_every_declared_tool_has_a_handler,
-    mirroring mango_mas_orchestrator.py's identical registry so the two
-    dispatch tables -- same six tools, same tool_executors call sites -- can't
-    silently drift apart the way an if/elif chain re-authored by hand could).
+    """Tool dispatch registry for the MCP transport.
 
-    ``args.get(key) or ""`` rather than ``args.get(key, "")``: a *present* key
-    whose value is JSON ``null`` returns ``None`` from ``.get(key, default)``,
-    since the default only applies to a *missing* key -- ``or ""`` normalises
-    both to the empty string every executor already treats as "nothing
-    supplied". Not applied to ``confidence`` (``0.0`` is a legitimate value
-    ``or DEFAULT`` would silently discard).
+    This used to be a hand-written mirror of ``ToolDispatcher.tool_handlers``:
+    the same six tools, the same ``tool_executors`` call sites, the same
+    ``args.get(key) or ""`` null-normalisation, re-authored here so that the two
+    transports could -- and did (R-CQ-5) -- drift apart. There is now one
+    registry. The MCP transport instantiates the orchestrator's dispatcher with
+    the acting role and serves *its* table, so a tool added to, removed from, or
+    re-authorized in the dispatcher is added to, removed from, or re-authorized
+    in the MCP server in the same commit (audit M8).
+
+    The signature is unchanged: every caller that reached this function before
+    (the credential-containment and Nemotron-triage regressions, the
+    one-write-authorization-path test) reaches the same names through it now.
+    ``tool_timeout`` is left at the dispatcher's default, which is what this
+    transport passed to ``execute_run_command`` before the registry was shared.
     """
+    dispatcher = ToolDispatcher(workspace_dir=workspace_dir, broker=broker)
+    dispatcher.set_active_role(role)
+    return dispatcher.tool_handlers
 
-    def _write_file(args: dict[str, Any]) -> str:
-        filepath = args.get("filepath") or ""
-        denial_reason = _broker_authorize_write(broker, role, filepath)
-        if denial_reason is not None:
-            return f"Denied: {denial_reason}"
-        return execute_write_file(workspace_dir, filepath, args.get("content") or "")
 
-    def _apply_patch(args: dict[str, Any]) -> str:
-        filepath = args.get("filepath") or ""
-        denial_reason = _broker_authorize_write(broker, role, filepath)
-        if denial_reason is not None:
-            return f"Denied: {denial_reason}"
-        return execute_apply_patch(
-            workspace_dir, filepath, args.get("old_text") or "", args.get("new_text") or ""
-        )
+def _log_tool_call(
+    *, name: str, role: str, permitted: bool, duration_ms: float, argument_keys: list[str]
+) -> None:
+    """One structured line per call, sink-agnostic (``json_logging`` wraps the
+    root handler; this only chooses the fields and the level).
 
-    return {
-        "write_file": _write_file,
-        "read_file": lambda args: execute_read_file(
-            workspace_dir, args.get("filepath") or "", args.get("start_line"), args.get("end_line")
-        ),
-        "apply_patch": _apply_patch,
-        "run_command": lambda args: execute_run_command(
-            broker, role, workspace_dir, args.get("command") or ""
-        ),
-        "knowledge_gap_log": lambda args: knowledge_gap_log(
-            args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
-        ),
-        "hypothesis_register": lambda args: hypothesis_register(
-            args.get("claim") or "",
-            args.get("reasoning") or "",
-            args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
-        ),
-    }
+    Argument *names* are logged; argument *values* never are. ``write_file``'s
+    ``content`` and ``run_command``'s ``command`` are exactly the kind of
+    payload that carries credentials, and a log line is the one place a
+    credential-containment gate does not look.
+    """
+    level = logging.DEBUG if permitted else logging.WARNING
+    logger.log(
+        level,
+        "mcp_tool_call tool=%s role=%s permitted=%s duration_ms=%.3f argument_keys=%s",
+        name, role, permitted, duration_ms, argument_keys,
+    )
 
 
 def create_mcp_server(
@@ -141,11 +127,21 @@ def create_mcp_server(
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
+        started = time.perf_counter()
+        argument_keys = sorted(arguments) if isinstance(arguments, dict) else []
         try:
             if not tool_is_permitted(role, name):
+                _log_tool_call(
+                    name=name, role=role, permitted=False,
+                    duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                )
                 return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
         except Exception as e:  # noqa: BLE001
             logger.error("Policy lookup failed for tool '%s': %s", name, e)
+            _log_tool_call(
+                name=name, role=role, permitted=False,
+                duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+            )
             return [types.TextContent(type="text", text=f"Tool '{name}' denied: policy lookup failed.")]
 
         args = _normalize_tool_arguments(arguments, name)
@@ -154,11 +150,19 @@ def create_mcp_server(
             handler = tool_handlers.get(name)
             if handler is None:
                 raise ValueError(f"Unknown tool: {name}")
-            result = handler(args)
+            # Every handler is synchronous and `run_command` blocks on
+            # `subprocess.run`; awaited inline, one long command froze the
+            # transport for every other request on the loop (audit M9). The
+            # default executor keeps the loop free to serve them.
+            result = await asyncio.to_thread(handler, args)
         except Exception as e:
             logger.exception("Error executing tool %s", name)
             result = f"Error executing tool '{name}': {e}"
 
+        _log_tool_call(
+            name=name, role=role, permitted=True,
+            duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+        )
         return [types.TextContent(type="text", text=str(result))]
 
     return server
