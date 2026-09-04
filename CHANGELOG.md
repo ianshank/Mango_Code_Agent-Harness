@@ -10,6 +10,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### A ticked acceptance criterion must name a selector that collects something
+
+Peer review of the closed program plan found three ticked criteria whose
+`pytest … -k` selectors collected zero tests: the code had landed, the tests
+existed under other names, and the boxes were ticked on commands that could not
+fail. `harness/shared/tests/test_spec_selectors_collect.py` now parses every
+ticked `AC-*` bullet in `docs/specs/`, evaluates its `-k` expression with
+pytest's own grammar against the test names the cited files declare, and fails
+on a zero match. Its first run found four more in two landed specs
+(`tech-debt-hardening-plan.md` AC-1/AC-9, `gate-truthfulness.md` AC-2/AC-6),
+corrected in place with the selector that collects the real test.
+
+### The 2026 standards audit, its plan, and the roadmap that points at it
+
+`docs/reports/2026-STANDARDS-AUDIT.md` (revision 2, after an adversarial
+falsification pass executed every Blocker and High) answers "does this repository
+meet 2026 standards" with the gates run on `71223f1` and four deciding facts:
+`main` is unprotected, the harness verdict is forgeable by scripting a rewrite of
+the protected `Makefile`, the API server 500s on every tool-using run, and the
+Python floor is a year past end-of-life. `docs/specs/2026-standards-remediation-plan.md`
+supersedes the open remainder of `code-quality-tech-debt-plan.md` (closed at
+revision 2) and owns every finding in six phases; the four in-or-out decisions
+(JVM, LangGraph, `openspec/`, per-stack mirroring) are recorded from their
+memos. `NEXT_STEPS.md` is rewritten to point at the plan instead of restating
+it, with every item carrying a Done-when bound to a stage and a failure it can
+report. The audit procedure is a skill, `.mango/skills/standards-audit/`,
+composing `tech-debt-audit`, `validation-runner` and `gate-mutation-proof`.
+
 ### Every tool-using run returned 500 at the API server (audit B3)
 
 `TaskResponse.history` was `list[dict[str, str]]`, a type that admits the
