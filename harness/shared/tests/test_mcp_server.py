@@ -420,6 +420,10 @@ def test_mcp_handler_names_equal_dispatcher_handler_names(tmp_path: Path, broker
     dispatcher = ToolDispatcher(workspace_dir=tmp_path, broker=broker)
     mcp_names = set(mcp_mod._build_tool_handlers(tmp_path, broker, "nemotron-reasoner"))
     _assert_registry_parity(mcp_names, set(dispatcher.tool_handlers))
+    # The helper raises on divergence; the equality is restated here so the test
+    # carries its own assertion (test_test_quality's no-assertion-free-tests rule).
+    assert mcp_names == set(dispatcher.tool_handlers)
+    assert mcp_names, "an empty registry would satisfy parity vacuously"
 
 
 def test_registry_parity_check_fails_when_a_name_is_dropped(tmp_path: Path, broker: ExecutionBroker) -> None:
