@@ -231,3 +231,49 @@ class TestWriteFileIsUnchanged:
 
     def test_path_escapes_workspace(self, mock_workspace: Path) -> None:
         assert "path escapes workspace" in execute_write_file(mock_workspace, "../../etc/passwd", "pwned")
+
+
+class TestApplyPatchConsultsTheReadPolicy:
+    """A patch reads before it writes (code-quality-tech-debt-plan R-CQ-4).
+
+    `execute_apply_patch` reported `matched 0 times` or `matched 1 times`, which
+    answers a question about the file's contents. Over a file the read policy
+    refuses, that is a substring oracle: an attacker recovers `.env` a character
+    at a time without ever calling `read_file`.
+    """
+
+    def test_patching_a_credential_file_is_refused(self, mock_workspace: Path) -> None:
+        (mock_workspace / ".env").write_text("NVIDIA_API_KEY=nvapi-secret\n", encoding="utf-8")
+        result = execute_apply_patch(mock_workspace, ".env", "nvapi-s", "x")
+        assert "credential-bearing" in result
+        assert "matched" not in result
+
+    def test_the_oracle_answers_identically_for_present_and_absent_text(
+        self, mock_workspace: Path
+    ) -> None:
+        """The refusal must not depend on the file's contents, or the denial
+        itself becomes the oracle it replaced."""
+        (mock_workspace / ".env").write_text("NVIDIA_API_KEY=nvapi-secret\n", encoding="utf-8")
+        present = execute_apply_patch(mock_workspace, ".env", "nvapi-s", "x")
+        absent = execute_apply_patch(mock_workspace, ".env", "nvapi-ZZZZ", "x")
+        assert present == absent
+
+    def test_the_credential_file_is_not_modified(self, mock_workspace: Path) -> None:
+        target = mock_workspace / ".env"
+        original = "NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+        target.write_text(original, encoding="utf-8")
+        execute_apply_patch(mock_workspace, ".env", "https://integrate.api.nvidia.com/v1", "http://evil")
+        assert target.read_text(encoding="utf-8") == original
+
+    def test_a_git_directory_file_is_refused_by_the_read_gate(self, mock_workspace: Path) -> None:
+        (mock_workspace / ".git").mkdir(exist_ok=True)
+        (mock_workspace / ".git" / "config").write_text("[remote]\n", encoding="utf-8")
+        assert "no agent read may target" in execute_apply_patch(
+            mock_workspace, ".git/config", "[remote]", "[x]"
+        )
+
+    def test_an_ordinary_file_still_patches(self, mock_workspace: Path) -> None:
+        """Control: the added gate must not close the tool it guards."""
+        (mock_workspace / "notes.md").write_text("hello world\n", encoding="utf-8")
+        assert "Success" in execute_apply_patch(mock_workspace, "notes.md", "world", "there")
+        assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello there\n"

@@ -42,6 +42,14 @@ CONTROL_SURFACE = [
     "harness/shared/mango_mas_orchestrator.py",
     "harness/shared/write_policy.py",
     "harness/control-plane/tool_broker_reference.py",
+    # The runtime enforcement layer, protected by code-quality-tech-debt-plan
+    # R-CQ-6. `nemotron_bridge.py` moved here from ORDINARY_WORK below: it
+    # resolves the API credential and the endpoint that credential is sent to,
+    # which is control surface by any reading, and it was writable.
+    "harness/shared/nemotron_bridge.py",
+    "harness/shared/tool_executors.py",
+    "harness/shared/orchestrator/loop.py",
+    "conftest.py",
 ]
 
 #: Ordinary agent output. A gate that denies these has stopped being a gate and
@@ -51,7 +59,7 @@ ORDINARY_WORK = [
     "tests/test_feature.py",
     "docs/notes.md",
     "README.md",
-    "harness/shared/nemotron_bridge.py",
+    "harness/shared/cognitive_signal.py",
 ]
 
 
@@ -249,3 +257,66 @@ class TestSuppliedPolicyMergeEdges:
         assert merged == ["Makefile", "harness/shared/**", "extra/**"]
         assert findings == []
         assert harness_patterns == ["Makefile", "harness/shared/**"], "the harness list was mutated"
+
+
+# ── Credential files (code-quality-tech-debt-plan R-CQ-4) ────────────────────
+#
+# `read_policy` has refused to read `.env` since it shipped; this side did not
+# refuse to write one. `protected_paths` names control-surface files and `.env`
+# is deliberately untracked, so it matched nothing and `write_denial_reason`
+# returned None. That is a key-exfiltration path, not an untidiness:
+# `nemotron_bridge.resolve_environment` reads `NVIDIA_BASE_URL` from the
+# repository-root `.env` when the process environment does not supply it.
+
+
+class TestCredentialFilesAreDeniedOnTheWriteSide:
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            pytest.param(".env", id="dotenv"),
+            pytest.param(".env.local", id="dotenv-suffixed"),
+            pytest.param(".netrc", id="netrc"),
+            pytest.param(".npmrc", id="npmrc"),
+            pytest.param(".pypirc", id="pypirc"),
+            pytest.param("secrets/id_rsa", id="ssh-key-nested"),
+            pytest.param("id_dsa", id="ssh-key"),
+            pytest.param("certs/server.pem", id="certificate"),
+            pytest.param(".ENV", id="case-insensitive"),
+            pytest.param("secrets/.env/note", id="credential-named-directory"),
+        ],
+    )
+    def test_writing_a_credential_file_is_denied(self, relpath: str) -> None:
+        reason = write_denial_reason(relpath)
+        assert reason is not None, f"{relpath} was writable"
+        assert "credential-bearing" in reason and "secret_access" in reason
+
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            pytest.param("README.md", id="ordinary-file"),
+            pytest.param("src/app.py", id="source"),
+            pytest.param("prod.pem.txt", id="pem-is-not-the-last-segment-part"),
+            pytest.param("notenv", id="shares-a-substring"),
+            pytest.param(".gitignore", id="dotfile-that-is-not-a-credential"),
+        ],
+    )
+    def test_ordinary_files_stay_writable(self, relpath: str) -> None:
+        assert write_denial_reason(relpath) is None
+
+    def test_both_doors_refuse_the_same_names(self) -> None:
+        """The two policies share one alternation, so a name class added to it
+        cannot be denied on one side and allowed on the other -- which is exactly
+        the state this test was written to end."""
+        from harness.shared.read_policy import read_denial_reason
+
+        for relpath in (".env", ".netrc", "id_rsa", "certs/x.pem", ".npmrc"):
+            assert read_denial_reason(relpath) is not None
+            assert write_denial_reason(relpath) is not None
+
+    def test_the_alternation_has_one_definition(self) -> None:
+        """`read_policy` re-exports rather than restating: two spellings of one
+        control are two controls that drift."""
+        from harness.shared import read_policy
+
+        assert read_policy.CREDENTIAL_FILENAME_ALTERNATION is write_policy.CREDENTIAL_FILENAME_ALTERNATION
+        assert read_policy.CREDENTIAL_FILENAME_PATTERN is write_policy.CREDENTIAL_FILENAME_PATTERN

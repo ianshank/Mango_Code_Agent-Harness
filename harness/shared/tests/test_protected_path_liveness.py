@@ -138,6 +138,21 @@ CONTROL_SURFACE = {
     "pyproject.toml": "lint, type and coverage gates can be weakened here",
     "harness/control-plane/publish_policy_artifact.py": "computes the policy drift baseline",
     "harness/control-plane/policy-artifact.json": "the committed drift baseline itself",
+    # The runtime enforcement layer (code-quality-tech-debt-plan R-CQ-6). Its
+    # siblings `write_policy.py` and `agent_authority.py` were protected from the
+    # start; these were not, so an agent could rewrite the module that decides
+    # whether its next write is allowed. The verdict depends on them too: the
+    # verifier's verdict is a `make test-python` run, which imports the root
+    # `conftest.py`, so an agent that edits that file grades its own work.
+    "harness/shared/tool_executors.py": "performs every agent write, patch and read",
+    "harness/shared/tool_dispatch.py": "coerces the arguments the write gate then checks",
+    "harness/shared/tool_schemas.py": "declares which tools an agent is offered at all",
+    "harness/shared/agent_prompts.py": "the wire prompts and the permitted hook names",
+    "harness/shared/nemotron_bridge.py": "resolves the credential and the endpoint it is sent to",
+    "harness/shared/orchestrator/loop.py": "enforces the per-task tool-call and iteration budgets",
+    "harness/shared/orchestrator/dispatcher.py": "routes every tool call to its executor",
+    "harness/shared/orchestrator/hook_runner.py": "executes hook shell on the host",
+    "conftest.py": "imported by the verifier's own test run, and writes the INV-2 skip evidence",
 }
 
 

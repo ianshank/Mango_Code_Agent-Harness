@@ -10,6 +10,7 @@ from typing import Any
 
 from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
 from harness.shared.debug_dump import credential_env_names
+from harness.shared.policy_loader import orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,19 @@ class HookRunner:
     ) -> None:
         self.workspace_dir = workspace_dir
         self.hooks_dir = hooks_dir
-        self.tool_timeout = tool_timeout
+        # `None` used to be stored and handed to `subprocess.run(timeout=...)`,
+        # where it means *no timeout at all*: a hook script that never returns
+        # hung the agent loop with nothing to interrupt it, and through
+        # `run_in_threadpool` it hung an API worker with it. The facade resolved
+        # the value from policy before constructing this, so the unbounded path
+        # was reachable only by constructing a `HookRunner` directly -- which is
+        # exactly the shape `write_policy` documents as "a helper that only holds
+        # when its caller already checked". Resolved here instead, from
+        # `orchestrator.tool_timeout_sec`, so there is no unbounded construction
+        # (code-quality-tech-debt-plan R-CQ-7).
+        self.tool_timeout: int = (
+            tool_timeout if tool_timeout is not None else orchestrator_defaults()["tool_timeout_sec"]
+        )
 
     def run_hook(self, hook_name: str, **kwargs: Any) -> None:
         """Executes a pre- or post- hook script if it exists."""

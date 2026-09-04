@@ -18,7 +18,8 @@ Static analysis and architecture review identified multiple "god files" in `harn
 ## Citations (C-*)
 
 - C-GFD-1: `harness/CONTRACT.md` (INV-1 through INV-16, core authority model, fail-closed policy enforcement).
-- C-GFD-2: `governance-policy.json` (Coverage lines ≥90%, branches ≥85%, per-file line minimums).
+- C-GFD-2: `governance-policy.json` (`coverage.lines`, `coverage.branches` and the
+  `coverage.per_file` floor; the values are read from the policy, never restated here).
 - C-GFD-3: `.mango/agents/` (Role contracts for planner, nemotron-reasoner, verifier).
 - C-GFD-4: `docs/specs/orchestrator-tool-registry.md` (Tool registry dispatch and schema contracts).
 - C-GFD-5: `docs/specs/agent-containment.md` (Fail-closed execution broker and write containment).
@@ -50,7 +51,8 @@ extracted module). All eight requirements (R-GFD-1 .. R-GFD-8) are now closed.
 
 - `make lint` — ruff verification across all extracted and modified modules.
 - `make test-python` — full pytest execution including regression tier.
-- `make coverage-python` — coverage gate enforcement (≥90% lines, ≥85% branches).
+- `make coverage-python` — coverage gate enforcement against `coverage.lines` and
+  `coverage.branches` from `governance-policy.json`.
 - `make validate` — mechanical invariants and protected paths validation.
 
 ## Backward compatibility

@@ -28,27 +28,19 @@ Spec: ``docs/specs/agent-read-patch-tools.md`` (R-RPT-2, R-RPT-3).
 from __future__ import annotations
 
 import posixpath
-import re
 from pathlib import Path, PurePosixPath
 
-from harness.shared.write_policy import ALWAYS_DENIED_SEGMENTS
-
-#: The filename alternation, unanchored, so each caller composes the boundaries
-#: its own input needs: this module anchors it to a whole path segment, while
-#: ``command_actions`` wraps it in ``(?:^|[\s/])...(?:\s|$)`` to find it inside a
-#: command string. One alternation, two anchorings -- not two patterns.
-CREDENTIAL_FILENAME_ALTERNATION = r"\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|id_[rd]sa|[\w.-]+\.pem"
-
-#: Anchored to a whole path segment. Matching a *segment* rather than searching
-#: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
-#: while still catching ``secrets/id_rsa``.
-#:
-#: Case-insensitive: a case-sensitive match let ``.ENV``, ``ID_RSA`` and
-#: ``SECRETS.PEM`` -- valid names on the case-preserving filesystems this harness
-#: already targets (macOS default, Windows, and any Linux checkout an agent could
-#: simply create by that name) -- through both this policy and
-#: ``command_actions.classify`` untouched, since neither carried ``re.IGNORECASE``.
-CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION})$", re.IGNORECASE)
+#: Both names are defined in ``write_policy`` and re-exported here, unchanged.
+#: They used to live in this module, which made the read side the only door with
+#: a credential rule: ``write_denial_reason(".env")`` returned ``None``, and the
+#: write side could not import the pattern to fix that without a cycle (this
+#: module already imports ``ALWAYS_DENIED_SEGMENTS`` from there). Moving the
+#: definition up the edge that already exists gives both doors one pattern.
+from harness.shared.write_policy import (
+    ALWAYS_DENIED_SEGMENTS,
+    CREDENTIAL_FILENAME_ALTERNATION,
+    CREDENTIAL_FILENAME_PATTERN,
+)
 
 
 def _normalise(relpath: str) -> str:

@@ -201,9 +201,22 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
         logger.warning("Denied patch outside the workspace: %s", filepath)
         return f"Error patching file {filepath}: {denial}"
 
-    denial = write_denial_reason(
-        str(target_path.relative_to(workspace)), policy_path=active_policy_path()
-    )
+    relpath = str(target_path.relative_to(workspace))
+
+    # The read policy is consulted first because a patch *reads* before it
+    # writes, and the count it reports is an answer about the file's contents:
+    # `matched 0 times` and `matched 1 times` distinguish `old_text` present from
+    # absent, one call at a time. That made `apply_patch` a substring oracle over
+    # every file `read_file` refuses -- `.env` included, whose bytes could
+    # therefore be recovered a character at a time without ever calling the tool
+    # that is gated. Checking write first would hide this behind the write
+    # denial and leave the oracle live for any path the write policy allowed.
+    denial = read_denial_reason(relpath)
+    if denial is not None:
+        logger.warning("Denied patch reading a governed path: %s (%s)", filepath, denial)
+        return f"Error patching file {filepath}: {denial}"
+
+    denial = write_denial_reason(relpath, policy_path=active_policy_path())
     if denial is not None:
         logger.warning("Denied patch of a governed path: %s (%s)", filepath, denial)
         return f"Error patching file {filepath}: {denial}"
