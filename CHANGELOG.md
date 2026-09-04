@@ -10,6 +10,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation claims now carry pins (audit M26 and the Low list)
+
+Six statements the 2026 standards audit found false or unverifiable are
+corrected, and each gains a mechanical check so it cannot drift back:
+`harness/CONTRACT.md` now says the `PIN_FULL_COMMIT_SHA` placeholder lives in
+`required-workflow.example.yml` alone (every other workflow is SHA-pinned since
+DEC-045); `harness/node/Agent.md` describes the Nemotron client and governance
+mirror it actually owns instead of a React/Vite/WebSocket stack it never had;
+`docs/architecture/c4_architecture.md` lists only `/api/orchestrate` and `/`
+(never `/health`, `/v1/orchestrator/run` or `/v1/models`), says the bridge posts
+`stream: False`, and draws the LangGraph edge in the direction the nodes call;
+`CONTRIBUTING.md` states `make pre-pr` as the bar with `make ci` + linked
+`dependency-audit`/`secret-scan` job runs as the one fallback when Go is absent;
+the README's Node setup names `corepack enable`; and
+`docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` moves under `docs/reports/` (R-CQ-30's
+last open item), with `harness/README.md` indexing every report there including
+`2026-STANDARDS-AUDIT.md`. `TestDocumentedRoutesExist` joins
+`test_documentation_truth.py`; the other pins are in the new
+`test_documentation_claims.py`. `README.md`'s version literal stays: it is one of
+the mirrors `TestVersionIsSingleSourced` pins to `pyproject.toml`.
+
 ### The lock pinned versions; nothing pinned artefacts
 
 A version number is a name a registry resolves. `requirements-lock.txt` pinned

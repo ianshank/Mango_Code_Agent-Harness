@@ -50,7 +50,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
-│   ├── reports/                         # Historical hygiene, peer-review and test reports
+│   ├── reports/                         # Hygiene, peer-review, test and standards-audit reports (2026-STANDARDS-AUDIT.md is current)
 │   └── specs/                           # 24 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
@@ -243,6 +243,7 @@ python harness/shared/nemotron_bridge.py --prompt "Audit INV-1 secret scan rules
 
 ```bash
 # 1. Install dependencies
+corepack enable       # activates the pnpm version pinned by packageManager in harness/node/package.json
 cd harness/node
 pnpm install
 cd ../..

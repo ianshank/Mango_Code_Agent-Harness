@@ -6,7 +6,9 @@
 > R-CQ-31 and the constraints) and records, per requirement, whether it is carried,
 > reshaped or dropped. Landed and staying landed: Phase 1 (R-CQ-3 … R-CQ-8),
 > R-CQ-9, R-CQ-10, and R-CQ-30 except the `docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
-> move. Two corrections found at closure: R-CQ-14's landed clause wired
+> move (landed after closure by the 2026 remediation: the file is now
+> `docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, and `test_documentation_claims.py`
+> keeps the `docs/` root free of loose files). Two corrections found at closure: R-CQ-14's landed clause wired
 > `verification.timeout` to `orchestrator.api_timeout_sec`, which the audit at
 > `docs/reports/2026-STANDARDS-AUDIT.md` (H16) shows is the wrong key and the
 > superseding plan unwinds; and three ticked criteria below (AC-4, AC-5, AC-8) cited

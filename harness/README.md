@@ -14,7 +14,7 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 - `node/` — Node/TypeScript adapter and full 7-tier test matrix.
 - `jvm/` — JVM/Gradle/Kotlin adapter.
 - `control-plane/` — verifier, policy bundle, required-workflow example and reference PDP intended for an independently protected governance repository/service.
-- `docs/` — **`BENCHMARK_REPORT.md`**, `AGENT_GOVERNANCE.md`, `ROOT_OF_TRUST.md` and `PRE_PR_VERIFICATION_REFERENCE.md`. The C4 model lives at the repository's `docs/architecture/c4_architecture.md`; historical reports (`TEST-REPORT.md`, `PEER-REVIEW-REMEDIATION.md`) are under `docs/reports/`.
+- `docs/` — **`BENCHMARK_REPORT.md`**, `AGENT_GOVERNANCE.md`, `ROOT_OF_TRUST.md` and `PRE_PR_VERIFICATION_REFERENCE.md`. The C4 model lives at the repository's `docs/architecture/c4_architecture.md`. Reports are under `docs/reports/`: `2026-STANDARDS-AUDIT.md` (the current coding-standards audit and its remediation roadmap), `PEER-REVIEW-REMEDIATION.md`, `ROADMAP-PEER-REVIEW.md`, `SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, `SDLC_HYGIENE_REPORT.md` and `TEST-REPORT.md`; this list is checked against the directory by `test_documentation_claims.py`.
 
 ## Trust boundary
 
