@@ -55,7 +55,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
-│   │   ├── main.py                      # REST endpoints (/api/orchestrate) & static file server
+│   │   ├── main.py                      # REST endpoints (/api/orchestrate, /healthz, /readyz) & static file server
 │   │   ├── static/                      # Interactive Web UI dashboard & telemetry view
 │   │   └── tests/                       # API Server integration & authentication tests
 │   │

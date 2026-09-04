@@ -10,6 +10,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Every tool-using run returned 500 at the API server (audit B3)
+
+`TaskResponse.history` was `list[dict[str, str]]`, a type that admits the
+system and user turns and nothing the orchestrator appends after them. A
+tool call is an assistant turn with `content: null` and a `tool_calls` list,
+followed by a `tool` turn carrying `tool_call_id`; pydantic rejected all
+three, the endpoint's blanket `except` reported "Internal orchestration error",
+and the verdict the run had earned never left the process. The only test used
+a string-only history, so the defect was invisible to CI.
+
+`harness/api_server/messages.py` now types the history per role, mirroring
+the OpenAI chat shape `orchestrator/loop.py` and `dispatcher.py` produce.
+A string-only history serialises byte-for-byte as before (unset optional
+fields are omitted, not emitted as `null`); provider-added keys pass through;
+an unknown role is still refused as the same opaque 500. Regression:
+`TestToolUsingRunsReachTheClient` in `test_api_server_regression.py`.
+
+Additive, from audit M14: unauthenticated `GET /healthz` (liveness, always
+200) and `GET /readyz` (200 only when `API_SERVER_KEY` is set and the
+governance policy loads through `orchestrator_defaults()`; 503 with boolean
+checks otherwise -- never the failing path). `setup_json_logging` moved from
+import time into the FastAPI lifespan, so importing the app object no longer
+replaces the importing process's log handlers; a served process is configured
+at startup exactly as before. No `max_length` was placed on `TaskRequest.task`:
+no existing policy key describes a task brief (`orchestrator.max_command_bytes`
+bounds a sandbox command line, `max_output_bytes` a captured tool output), and
+a purpose-made key is a change to a protected path.
+
 ### The lock pinned versions; nothing pinned artefacts
 
 A version number is a name a registry resolves. `requirements-lock.txt` pinned
