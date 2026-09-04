@@ -598,6 +598,17 @@ change from a vacuous pass.
       passes against the shape the decision log records and fails on a `tmp_path`
       ruleset with the other two shapes; `git grep -n "NS-1" harness/node/.governance/decision-log.md`
       matches (today: no match) · stage: `make test-python` (R-CQ-1)
+      — **Partial:** the in-tree half is done. DEC-044 records the choice (the
+      second shape: no human-approval rules, the nine checks unchanged, no
+      bypass actor) and the reason the export had been unappliable all along —
+      `.github/CODEOWNERS` routes `*` to the sole author, whose own approval
+      GitHub will not accept, so one required code-owner approval could never be
+      satisfied. `unchosen_shape_reason` grades the export and the two rejected
+      shapes on `tmp_path` copies; 5 mutation proofs (revert the export's count,
+      revert its code-owner flag, gut each of the grader's three clauses).
+      **Stays unticked**: the criterion also requires the branches API to report
+      `"protected": true`, and importing a ruleset is a repository-settings
+      action no agent or CI job here can perform. NS-1 is the owner's one import.
 - [ ] AC-2: `git grep -n "DEC-014" harness/node/.governance/decision-log.md`
       matches an entry dated after 2026-09-04 recording the rotation;
       `git grep -n "#67" harness/node/.governance/decision-log.md` matches an entry

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -204,15 +205,56 @@ class TestNightlyDriftCatchesWhatBrokeMain:
         assert "coverage-python" in targets, "DEC-021's coverage check left the loop"
 
 
+def _committed_export() -> dict[str, Any]:
+    """The ruleset a maintainer would paste into GitHub, read off disk."""
+    loaded = json.loads(RULESET.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict), "the ruleset export must be a JSON object"
+    return loaded
+
+
+def unchosen_shape_reason(ruleset: dict[str, Any]) -> str | None:
+    """Why ``ruleset`` is not the shape DEC-044 chose, or ``None`` if it is.
+
+    R-CQ-1 offered three shapes a single-maintainer repository could merge
+    under. DEC-044 took the second — no human-approval requirement, the nine
+    status checks still required, nobody exempt — because the other two either
+    hand one actor a key that opens the check rules too (a bypass actor is
+    scoped to the ruleset, not to the review rule the maintainer actually
+    cannot satisfy: that is how #60 merged red), or need a second account that
+    does not exist. This function is the shape's definition; both the committed
+    export and the negatives below are graded by it, so a shape that drifts
+    back cannot pass by being merely well-formed.
+    """
+    if ruleset.get("bypass_actors", []):
+        return (
+            "a bypass actor exempts its holder from the required status checks too, "
+            "not just from the review count; that is how #60 merged with every check red"
+        )
+    rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
+    pull_request = rules.get("pull_request", {})
+    count = pull_request.get("required_approving_review_count")
+    if count != 0:
+        return (
+            f"required_approving_review_count is {count!r}: the sole maintainer authors "
+            "every pull request and GitHub does not accept an author's approval of their "
+            "own, so any count above zero makes `main` unmergeable rather than reviewed"
+        )
+    if pull_request.get("require_code_owner_review") is not False:
+        return (
+            "require_code_owner_review is still set: .github/CODEOWNERS routes `*` to the "
+            "one account that authors every pull request, so the rule asks for an approval "
+            "no one is permitted to give"
+        )
+    return None
+
+
 class TestRulesetExportMirrorsTheWorkflow:
     """R-TDH-1 / DEC-024: the committed export requires exactly the checks CI reports."""
 
     @pytest.fixture(scope="class")
     def ruleset(self) -> dict[str, Any]:
         assert RULESET.is_file(), f"{RULESET} is missing; DEC-024 commits the export beside the workflow"
-        loaded = json.loads(RULESET.read_text(encoding="utf-8"))
-        assert isinstance(loaded, dict), "the ruleset export must be a JSON object"
-        return loaded
+        return _committed_export()
 
     @staticmethod
     def _rules(ruleset: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -231,14 +273,69 @@ class TestRulesetExportMirrorsTheWorkflow:
         assert ruleset["enforcement"] == "active"
         assert "~DEFAULT_BRANCH" in ruleset["conditions"]["ref_name"]["include"]
 
-    def test_checks_are_strict_and_a_code_owner_review_is_required(self, ruleset: dict) -> None:
-        rules = self._rules(ruleset)
-        assert rules["required_status_checks"]["strict_required_status_checks_policy"] is True
-        assert rules["pull_request"]["require_code_owner_review"] is True
-        assert rules["pull_request"]["required_approving_review_count"] >= 1
+    def test_checks_are_strict(self, ruleset: dict) -> None:
+        assert self._rules(ruleset)["required_status_checks"]["strict_required_status_checks_policy"] is True
 
     def test_nobody_can_bypass(self, ruleset: dict) -> None:
-        assert ruleset.get("bypass_actors", []) == [], "a bypass actor is how #60 would merge again"
+        assert unchosen_shape_reason(ruleset) is None
+
+
+class TestTheOtherTwoShapesAreRejected:
+    """R-CQ-1 named three shapes; a grader that accepts all three grades nothing.
+
+    Each negative is the committed export edited on a `tmp_path` copy into one
+    of the two shapes DEC-044 did not take, so the assertion above fails the
+    moment the export drifts into either. Reading the copy back off disk rather
+    than mutating the dict in memory is deliberate: the export is what a
+    maintainer pastes into GitHub, so the round trip through JSON is the thing
+    under test.
+    """
+
+    @staticmethod
+    def _reshaped(tmp_path: Path, edit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        loaded = _committed_export()
+        edit(loaded)
+        copy = tmp_path / "main.json"
+        copy.write_text(json.dumps(loaded), encoding="utf-8")
+        reloaded = json.loads(copy.read_text(encoding="utf-8"))
+        assert isinstance(reloaded, dict)
+        return reloaded
+
+    def test_a_bypass_actor_for_the_admin_role_is_rejected(self, tmp_path: Path) -> None:
+        def add_admin_bypass(ruleset: dict[str, Any]) -> None:
+            ruleset["bypass_actors"] = [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+
+        reason = unchosen_shape_reason(self._reshaped(tmp_path, add_admin_bypass))
+        assert reason is not None and "bypass actor" in reason
+
+    def test_keeping_the_review_count_for_a_second_account_is_rejected(self, tmp_path: Path) -> None:
+        def restore_review_count(ruleset: dict[str, Any]) -> None:
+            for rule in ruleset["rules"]:
+                if rule["type"] == "pull_request":
+                    rule["parameters"]["required_approving_review_count"] = 1
+
+        reason = unchosen_shape_reason(self._reshaped(tmp_path, restore_review_count))
+        assert reason is not None and "required_approving_review_count is 1" in reason
+
+    def test_a_code_owner_review_requirement_is_rejected_on_its_own(self, tmp_path: Path) -> None:
+        """Zeroing the count while leaving the code-owner rule set changes nothing.
+
+        `*  @ianshank` in `.github/CODEOWNERS` means every pull request needs an
+        approval from the account that wrote it, whatever the count says. A
+        grader reading only the count would call that shape adopted.
+        """
+
+        def restore_code_owner_review(ruleset: dict[str, Any]) -> None:
+            for rule in ruleset["rules"]:
+                if rule["type"] == "pull_request":
+                    rule["parameters"]["require_code_owner_review"] = True
+
+        reason = unchosen_shape_reason(self._reshaped(tmp_path, restore_code_owner_review))
+        assert reason is not None and "require_code_owner_review" in reason
+
+    def test_the_committed_export_is_the_shape_that_passes(self) -> None:
+        """Without this the three negatives above could all pass on a broken grader."""
+        assert unchosen_shape_reason(_committed_export()) is None
 
 
 class TestParserIsNotVacuous:
