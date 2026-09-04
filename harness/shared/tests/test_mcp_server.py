@@ -583,3 +583,39 @@ def test_policy_lookup_failure_logs_the_call_as_denied(
     assert records[0].levelno == logging.WARNING
     assert "permitted=False" in records[0].getMessage()
     assert "argument_keys=[]" in records[0].getMessage()
+
+
+def test_unknown_argument_names_are_counted_not_logged(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A key *name* is caller-chosen text: with ``additionalProperties: false``
+    unenforced at this door, a credential can ride in the name of an unknown
+    key. Only schema-declared names reach the log; the rest are a count."""
+    smuggled = "nvapi-secret-in-a-key-name"
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        asyncio.run(server._call_tool_handler("read_file", {"filepath": "a.txt", smuggled: "x"}))
+
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "argument_keys=['filepath']" in message
+    assert "unknown_key_count=1" in message
+    assert smuggled not in caplog.text, "an unknown key name reached the log"
+
+
+def test_a_handler_denial_is_logged_as_denied(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The static role check passes for the reasoner, but the shared handler's
+    write policy refuses a credential file. The log must carry that final
+    outcome, at WARNING, not the role check's provisional ``permitted=True``."""
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        result = asyncio.run(server._call_tool_handler("write_file", {"filepath": ".env", "content": "K=v"}))
+
+    assert result[0].text.startswith("Error writing file .env"), result[0].text
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert "permitted=False" in records[0].getMessage()

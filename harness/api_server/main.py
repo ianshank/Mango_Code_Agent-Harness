@@ -15,7 +15,7 @@ from harness.api_server.messages import HistoryMessage, parse_history
 from harness.shared.debug_dump import redact_history
 from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
-from harness.shared.policy_loader import PolicyError, orchestrator_defaults
+from harness.shared.policy_loader import PolicyError, max_tool_calls_per_task, orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +163,12 @@ def readiness_checks() -> dict[str, bool]:
     """
     checks = {"api_key": bool(os.environ.get(API_KEY_ENV_VAR))}
     try:
-        # The accessor the orchestrator itself resolves through, so "the policy
-        # loads" means the block a run depends on, not merely that a file parses.
+        # Every accessor `MangoMASOrchestrator.__init__` resolves, so "the policy
+        # loads" means every block a run depends on, not merely that a file
+        # parses. A valid `orchestrator` block beside a missing `agent_defaults`
+        # block would otherwise report ready and then 500 on construction.
         orchestrator_defaults()
+        max_tool_calls_per_task()
         checks["policy"] = True
     except PolicyError:
         logger.exception("Readiness check failed: governance policy did not load")

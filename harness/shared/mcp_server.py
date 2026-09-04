@@ -67,8 +67,54 @@ def _build_tool_handlers(
     return dispatcher.tool_handlers
 
 
+def _schema_argument_keys(name: str) -> frozenset[str]:
+    """The argument names the tool's own schema declares.
+
+    Only these may appear in a log line. A caller controls the raw dictionary,
+    so an unknown key name is attacker-chosen text; logging it would let a
+    credential travel in the *name* of a key even though values are never
+    logged (Copilot review on PR #86).
+    """
+    for schema in NEMOTRON_TOOLS:
+        func = cast(dict[str, Any], schema["function"])
+        if func.get("name") == name:
+            params = cast(dict[str, Any], func.get("parameters") or {})
+            return frozenset(cast(dict[str, Any], params.get("properties") or {}))
+    return frozenset()
+
+
+def _loggable_argument_keys(name: str, arguments: Any) -> tuple[list[str], int]:
+    """Schema-declared key names in sorted order, plus the count of keys that were not."""
+    if not isinstance(arguments, dict):
+        return [], 0
+    declared = _schema_argument_keys(name)
+    known = sorted(key for key in arguments if key in declared)
+    return known, len(arguments) - len(known)
+
+
+#: How the executors spell a refusal or a failure. ``write_file``/``read_file``
+#: fold the write/read policy's denial into ``Error writing file …`` /
+#: ``Error reading file …``; the broker's refusal of a command and the
+#: dispatcher's argument validation carry their own prefixes.
+_REFUSAL_PREFIXES = ("Denied", "Error writing file", "Error reading file", "Error executing tool", "Error:")
+
+
+def _handler_refused(result: Any) -> bool:
+    """Whether the shared handler refused or failed the call after the static
+    role check passed: a read/write-policy denial, a broker PDP refusal, a
+    validation failure, or an execution error. The registry lambdas return the
+    executor's string verbatim, so the prefix is the structural signal."""
+    return isinstance(result, str) and result.startswith(_REFUSAL_PREFIXES)
+
+
 def _log_tool_call(
-    *, name: str, role: str, permitted: bool, duration_ms: float, argument_keys: list[str]
+    *,
+    name: str,
+    role: str,
+    permitted: bool,
+    duration_ms: float,
+    argument_keys: list[str],
+    unknown_key_count: int = 0,
 ) -> None:
     """One structured line per call, sink-agnostic (``json_logging`` wraps the
     root handler; this only chooses the fields and the level).
@@ -81,8 +127,9 @@ def _log_tool_call(
     level = logging.DEBUG if permitted else logging.WARNING
     logger.log(
         level,
-        "mcp_tool_call tool=%s role=%s permitted=%s duration_ms=%.3f argument_keys=%s",
+        "mcp_tool_call tool=%s role=%s permitted=%s duration_ms=%.3f argument_keys=%s unknown_key_count=%d",
         name, role, permitted, duration_ms, argument_keys,
+        unknown_key_count,
     )
 
 
@@ -128,12 +175,13 @@ def create_mcp_server(
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
         started = time.perf_counter()
-        argument_keys = sorted(arguments) if isinstance(arguments, dict) else []
+        argument_keys, unknown_key_count = _loggable_argument_keys(name, arguments)
         try:
             if not tool_is_permitted(role, name):
                 _log_tool_call(
                     name=name, role=role, permitted=False,
                     duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                    unknown_key_count=unknown_key_count,
                 )
                 return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
         except Exception as e:  # noqa: BLE001
@@ -141,6 +189,7 @@ def create_mcp_server(
             _log_tool_call(
                 name=name, role=role, permitted=False,
                 duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                unknown_key_count=unknown_key_count,
             )
             return [types.TextContent(type="text", text=f"Tool '{name}' denied: policy lookup failed.")]
 
@@ -159,9 +208,13 @@ def create_mcp_server(
             logger.exception("Error executing tool %s", name)
             result = f"Error executing tool '{name}': {e}"
 
+        # The static role check above is necessary, not sufficient: the shared
+        # handler consults the read/write policy and the broker PDP, and a
+        # denial there must be logged as one (Copilot review on PR #86).
         _log_tool_call(
-            name=name, role=role, permitted=True,
+            name=name, role=role, permitted=not _handler_refused(result),
             duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+            unknown_key_count=unknown_key_count,
         )
         return [types.TextContent(type="text", text=str(result))]
 

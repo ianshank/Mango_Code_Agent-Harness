@@ -223,20 +223,19 @@ TOOL_USING_HISTORY = [
 ]
 
 
-def _orchestrate_with_history(history, key):
+def _orchestrate_with_history(client: TestClient, history, key):
     with patch("harness.api_server.main.MangoMASOrchestrator") as cls:
         cls.return_value.execute_loop.return_value = _passing_outcome()
         cls.return_value.conversation_history = history
         return client.post("/api/orchestrate", json={"task": "t"}, headers={"X-API-Key": key})
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_tool_using_history_round_trips(_api_server_key):
+def test_tool_using_history_round_trips(client: TestClient, _api_server_key):
     """Audit B3. `history: list[dict[str, str]]` rejected `content: None`,
     `tool_calls` and `tool_call_id`, so every run that used a tool -- every real
     run -- returned 500 with its verdict discarded. The structure must come back
     exactly as the orchestrator built it, `null` content included."""
-    response = _orchestrate_with_history(TOOL_USING_HISTORY, _api_server_key)
+    response = _orchestrate_with_history(client, TOOL_USING_HISTORY, _api_server_key)
 
     assert response.status_code == 200, response.text
     history = response.json()["history"]
@@ -247,23 +246,21 @@ def test_tool_using_history_round_trips(_api_server_key):
     assert history[3]["tool_call_id"] == "call_1"
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_string_only_history_keeps_its_wire_shape(_api_server_key):
+def test_string_only_history_keeps_its_wire_shape(client: TestClient, _api_server_key):
     """Backward compatibility: the typed models must not add `null`-valued keys
     (`name`, `tool_calls`, ...) to a message that never had them."""
     history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
-    response = _orchestrate_with_history(history, _api_server_key)
+    response = _orchestrate_with_history(client, history, _api_server_key)
     assert response.status_code == 200
     assert response.json()["history"] == history
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_a_malformed_message_is_an_internal_error_that_leaks_nothing(_api_server_key):
+def test_a_malformed_message_is_an_internal_error_that_leaks_nothing(client: TestClient, _api_server_key):
     """An unknown role is not a shape the wire models invent a meaning for. It
     is refused as the same opaque 500 every other internal failure produces:
     no pydantic error text, no field path, no echo of the offending value."""
     malformed = [{"role": "user", "content": "hi"}, {"role": "wizard", "content": "abracadabra"}]
-    response = _orchestrate_with_history(malformed, _api_server_key)
+    response = _orchestrate_with_history(client, malformed, _api_server_key)
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal orchestration error"}
@@ -274,8 +271,7 @@ def test_a_malformed_message_is_an_internal_error_that_leaks_nothing(_api_server
 # --- Audit M14: liveness and readiness -----------------------------------------
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_healthz_is_200_without_any_credential(monkeypatch):
+def test_healthz_is_200_without_any_credential(client: TestClient, monkeypatch):
     """Liveness answers even on a misconfigured server: it reports the process
     is up, not that it is usable. No key required, none configured."""
     monkeypatch.delenv("API_SERVER_KEY", raising=False)
@@ -284,15 +280,13 @@ def test_healthz_is_200_without_any_credential(monkeypatch):
     assert response.json() == {"status": "ok"}
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_readyz_is_200_when_key_and_policy_are_in_place(_api_server_key):
+def test_readyz_is_200_when_key_and_policy_are_in_place(client: TestClient, _api_server_key):
     response = client.get("/readyz")
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "checks": {"api_key": True, "policy": True}}
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_readyz_is_503_without_the_api_key(monkeypatch):
+def test_readyz_is_503_without_the_api_key(client: TestClient, monkeypatch):
     """The negative side of readiness: an unconfigured key is exactly the
     state `/api/orchestrate` would 500 on, so the probe must say so first."""
     monkeypatch.delenv("API_SERVER_KEY", raising=False)
@@ -304,8 +298,7 @@ def test_readyz_is_503_without_the_api_key(monkeypatch):
     assert body["checks"]["policy"] is True
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_readyz_is_503_when_the_policy_does_not_load(_api_server_key, monkeypatch, tmp_path):
+def test_readyz_is_503_when_the_policy_does_not_load(client: TestClient, _api_server_key, monkeypatch, tmp_path):
     """A present-but-broken policy fails the run closed (`PolicyError`), so the
     server is not ready. The probe reports a boolean, never the path the error
     names."""
@@ -325,7 +318,6 @@ def test_readyz_is_503_when_the_policy_does_not_load(_api_server_key, monkeypatc
 # --- Logging is configured at startup, not import ------------------------------
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
 def test_lifespan_installs_the_json_handler():
     """Entering lifespan (what uvicorn does on startup) configures the root
     logger with the JSON formatter. The root logger is restored afterwards so
@@ -378,3 +370,27 @@ def test_json_logging_is_installed_by_lifespan_not_by_import():
     # JSON log lines the newly installed handler wrote to stdout.
     observed = json.loads(result.stdout.strip().splitlines()[-1])
     assert observed == {"after_import": False, "during_lifespan": True}
+
+
+def test_readyz_is_503_when_a_block_the_orchestrator_needs_is_missing(
+    client: TestClient, _api_server_key, monkeypatch, tmp_path
+):
+    """Readiness exercises every accessor `MangoMASOrchestrator.__init__`
+    resolves. A policy whose `orchestrator` block is valid but whose
+    `agent_defaults` block is absent used to report ready and then 500 on the
+    first `/api/orchestrate` (Copilot review on PR #86)."""
+    import json
+
+    from harness.shared import policy_loader
+
+    policy = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+    policy.pop("agent_defaults")
+    partial = tmp_path / "governance-policy.json"
+    partial.write_text(json.dumps(policy), encoding="utf-8")
+    monkeypatch.setattr("harness.shared.policy_loader.POLICY_PATH", partial)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json()["checks"] == {"api_key": True, "policy": False}
+    assert str(tmp_path) not in response.text

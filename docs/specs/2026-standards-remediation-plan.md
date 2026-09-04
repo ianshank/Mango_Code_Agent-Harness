@@ -45,7 +45,7 @@ own command or `file:line` on `71223f1`.
 | Program plan rev 2, 19 PRs | 9/31 requirements landed; 0/3 audit Blockers and 2/16 Highs covered; three ticked criteria collected zero tests; R-CQ-14 landed the wrong timeout key | ledger in the closed plan's header; `verification.py:81-89`; `-k patch_denied_read` → 0 collected | Plan closed; carried items listed in R-SR-30; dropped items listed in §Explicitly not doing |
 | `tech-debt-hardening-plan.md` (29/29 ticked) | AC-28 false (no `-W error::DeprecationWarning` stage exists); AC-12 third clause false; two more vacuous selectors (AC-1, AC-9) | `grep -rn "error::DeprecationWarning" Makefile pyproject.toml .github/workflows` → 0 | Selectors corrected in place; the `-W error` stage is R-SR-19 |
 | `NEXT_STEPS.md` (14 open) | 1 done and still listed; 3 without Done-when; 1 with no observable; 0 bound to a stage; duplicates R-CQ on five items; audit omitted NS-2 | `validate_plan.py --spec-dir . --all` → 0 acceptance bullets parsed | Roadmap rewritten to point here; NS-2 is R-SR-2 |
-| Four in-or-out memos | JVM: relocate (4 lines of product Kotlin, never built); LangGraph: park with sunset (5/10 stubs, one experimental caller); `openspec/`: fold (tier mis-specified, never run); mirroring: collapse after the other three, gated on a DEC superseding DEC-005 | memos' blast-radius lists | Phase E, in that order; R-SR-23 … R-SR-26 |
+| Four in-or-out memos | JVM: relocate (4 lines of product Kotlin, never built); LangGraph: park with sunset (5/10 stubs, one experimental caller); `openspec/`: fold (tier mis-specified, never run); mirroring: collapse after the other three, gated on a DEC superseding DEC-005 | memos' blast-radius lists | Phase E, in that order; R-SR-26 … R-SR-29 |
 | Audit rev 1 §5 numbered roadmap | A fourth owner of the same work | `code-quality-tech-debt-plan.md`, `NEXT_STEPS.md` | Audit §5 now points here |
 
 ## Problem statement
@@ -285,10 +285,11 @@ names the audit finding or closed-plan requirement it carries.
 - [ ] AC-8: `git grep -n "containment, not isolation" SECURITY.md harness/shared/agent-policy.json`
       finds both, and `git grep -n "\.env" SECURITY.md` names the remaining gap
       · stage: `make validate` (R-SR-8)
-- [ ] AC-9: `pytest harness/api_server/tests -k tool_call` asserts HTTP 200 with
-      a round-tripped `tool_calls` assistant message and a `tool` message, and
-      `-k unknown_role` asserts 500 whose body does not contain the pydantic
-      error text; `pytest harness/shared/tests/regression -k api_history`
+- [ ] AC-9: `pytest harness/api_server/tests -k tool_using_history_round_trips` asserts
+      HTTP 200 with a round-tripped `tool_calls` assistant message and a `tool`
+      message, and `pytest harness/api_server/tests -k malformed_message` asserts
+      500 whose body does not contain the pydantic error text;
+      `pytest harness/shared/tests/regression -k "tool_call_and_tool_result or unknown_role_is_still_refused"`
       reproduces the pre-fix 500 · stage: `make test-python` (R-SR-9)
 - [ ] AC-10: `pytest harness/api_server/tests -k "healthz or readyz"` asserts
       200/200 with a key and 200/503 without; `git grep -n "setup_json_logging" harness/api_server/main.py`
@@ -312,7 +313,7 @@ names the audit finding or closed-plan requirement it carries.
       `pytest harness/shared/tests -k invalid_arguments` asserts `write_file`
       without `filepath` never reaches the executor (reverting → the executor
       raises `IsADirectoryError`) · stage: `make test-python` (R-SR-14)
-- [ ] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or to_thread or parity"`
+- [ ] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or off_the_event_loop or concurrent_tool_calls_overlap or parity"`
       asserts the MCP handler names equal the dispatcher's and that two
       concurrent calls overlap in time; dropping a name from the shared registry
       fails the parity test · stage: `make test-python` (R-SR-15)
@@ -332,7 +333,7 @@ names the audit finding or closed-plan requirement it carries.
       asserts the hook's install line; `pytest harness/shared/tests/test_workflow_contracts.py -k "timeout_minutes or concurrency"`
       fails when either is removed; `pytest harness/shared/tests/test_makefile_contracts.py -k shellflags`
       fails when `.SHELLFLAGS` is removed · stage: `make ci` (R-SR-19)
-- [ ] AC-20: `pytest harness/shared/tests/test_documentation_truth.py -k "pin_full_commit_sha or documented_routes or persona_scope"`
+- [ ] AC-20: `pytest harness/shared/tests/test_documentation_truth.py harness/shared/tests/test_documentation_claims.py -k "Placeholder or DocumentedRoutes or PersonaScope or ContributingGate"`
       fails when any corrected claim is reverted; `ls docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
       succeeds and `ls docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` fails
       · stage: `make test-python` (R-SR-20)

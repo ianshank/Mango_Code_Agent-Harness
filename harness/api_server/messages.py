@@ -66,10 +66,13 @@ class _WireModel(BaseModel):
 class ToolCallFunction(_WireModel):
     """``tool_calls[n].function``. ``arguments`` is conventionally a JSON
     string but is model-generated; ``tool_dispatch._normalize_tool_arguments``
-    already tolerates a dict or ``null`` there, so the wire model does too."""
+    degrades *every* other JSON shape (``null``, a list, a number, an object)
+    to "no arguments" rather than failing, so the wire model accepts the same
+    set. Rejecting a shape the dispatcher accepted would recreate the 500 this
+    model exists to remove (Copilot review on PR #86)."""
 
     name: str
-    arguments: Optional[Union[str, dict[str, Any]]] = None
+    arguments: Optional[Any] = None
 
 
 class ToolCall(_WireModel):

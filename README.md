@@ -52,7 +52,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
 │   ├── reports/                         # Hygiene, peer-review, test and standards-audit reports (2026-STANDARDS-AUDIT.md is current)
-│   └── specs/                           # 24 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
+│   └── specs/                           # 25 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)

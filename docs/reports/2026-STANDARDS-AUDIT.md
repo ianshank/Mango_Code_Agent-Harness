@@ -58,7 +58,7 @@ door (script execution) is open, so the direct-door controls are speed bumps.
 |---|---|---|
 | Supply chain & CI hygiene | **A-** | Hash-locked universal lock, `--require-hashes`, SHA-pinned actions, gitleaks over tree + history. Loses points for unhashed tool installs, no job timeouts/concurrency, root Docker image. |
 | Enforcement | **F** | Branch unprotected; label-based attestation survives later pushes; one required check cannot fail; the runtime verdict is forgeable. |
-| Python tooling & typing | **C+** | ruff lint clean and well-documented deferrals; but no `ruff format` (72/98 source files would change), mypy pinned to Aug-2024, no `[build-system]`, no license, 3.9 floor. |
+| Python tooling & typing | **C+** | ruff lint clean and well-documented deferrals; but no `ruff format` (72/99 source files would change), mypy pinned to Aug-2024, no `[build-system]`, no license, 3.9 floor. |
 | Testing rigor | **B** | Fail-closed coverage/zero-skip/egress gates; 3,274 tests green. Missing: property-based tests on the model-facing parser, order randomization, mutation tooling, live/contract tests, any LLM eval harness. |
 | Agent architecture | **C** | Strong containment kernel; 2023-style loop (shared history, no budgeting per task, no tracing), LangGraph is scaffolding with 5/10 stub nodes, persona prompts written for Claude Code fed verbatim to Nemotron. |
 | Agent security (OWASP LLM/ASI) | **D+** | Allowlist command classifier, egress floor, read/write policies at the direct doors. But `python file.py` and `make -f GNUmakefile x` are graded `test_execute`, which every role holds, so write/read/egress policies and the verdict itself are bypassable in two tool calls; `.env` sits inside the workspace. |

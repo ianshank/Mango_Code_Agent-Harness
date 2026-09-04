@@ -282,10 +282,9 @@ class TestEveryCredentialIsRedactedOnTheWayOut:
         assert "api-server-key-value" not in serialised, "the API server key left over HTTP"
 
 
-# Declared, not exempted (R-EGF-6): FastAPI's TestClient drives the app over a
-# real loopback socket, so these genuinely need one. The declaration is visible
-# here at the class rather than hidden in a global allow-list.
-@pytest.mark.enable_socket
+# No socket mark (R-EGF-6): TestClient runs the app in-process over anyio's
+# unix socketpair, which `--allow-unix-socket` in addopts permits; loopback TCP
+# stays refused for this class like every other.
 class TestToolUsingRunsReachTheClient:
     """Defect 4 (audit B3). Each case is one of the three shapes the audit
     reproduced a 500 on; the assistant/tool pair is what ``loop.py:166`` and
@@ -339,3 +338,28 @@ class TestToolUsingRunsReachTheClient:
         assert response.status_code == 500
         assert response.json() == {"detail": "Internal orchestration error"}
         assert "wizard" not in response.text
+
+
+    @pytest.mark.parametrize("arguments", [[], 7, {"command": "ls"}, None, "not json"])
+    def test_every_arguments_shape_the_dispatcher_tolerates_is_accepted(
+        self, client: TestClient, server_key: str, arguments: object
+    ) -> None:
+        """`_normalize_tool_arguments` degrades a list, a number, `null` or
+        unparseable text to "no arguments" and the run completes; the wire model
+        must not then reject the same shape and turn a completed run into a 500
+        (Copilot review on PR #86)."""
+        history = [
+            {"role": "user", "content": "go"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "c1", "type": "function", "function": {"name": "run_command", "arguments": arguments}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "ok"},
+            {"role": "assistant", "content": "done"},
+        ]
+        response = self._post(client, server_key, history)
+        assert response.status_code == 200, response.text
+        assert response.json()["history"][1]["tool_calls"][0]["function"]["arguments"] == arguments
