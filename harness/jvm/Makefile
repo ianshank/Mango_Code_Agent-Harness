@@ -8,6 +8,14 @@ GITLEAKS ?= gitleaks
 GITLEAKS_VERSION ?= v8.28.0
 OSV ?= osv-scanner
 OSV_VERSION ?= v2.2.3
+# Both `*-install` targets run `go install`, which puts the binary in
+# `$(go env GOPATH)/bin` -- not on PATH by default -- so `secrets` and `audit`
+# failed closed right after their own install step. Resolve each tool as it was
+# installed: PATH first, then GOPATH/bin; a name found in neither stays as
+# written so the `command -v` guards still fail closed (root Makefile, same note).
+GO_BIN_DIR := $(shell go env GOPATH 2>/dev/null)/bin
+GITLEAKS := $(shell command -v $(GITLEAKS) 2>/dev/null || { test -x $(GO_BIN_DIR)/$(GITLEAKS) && echo $(GO_BIN_DIR)/$(GITLEAKS); } || echo $(GITLEAKS))
+OSV := $(shell command -v $(OSV) 2>/dev/null || { test -x $(GO_BIN_DIR)/$(OSV) && echo $(GO_BIN_DIR)/$(OSV); } || echo $(OSV))
 .PHONY: help install lockfiles format lint types test cov secrets specs audit remotes projections traceability governance guard-probe pre-pr clean secrets-install audit-install
 help:
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-18s %s\n", $$1, $$2}'

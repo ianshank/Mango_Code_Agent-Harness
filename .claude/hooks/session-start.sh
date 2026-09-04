@@ -7,6 +7,15 @@
 # is deliberate: an agent may run `make ci` on its very first turn, and a race
 # between that and the install is exactly the failure this prevents.
 #
+# The Python install is the CI recipe verbatim: the hashed universal lock with
+# `--require-hashes`, then the project with `--no-deps`. It used to install
+# `requirements-dev.txt` unhashed, which resolved to whatever PyPI offered that
+# day rather than what CI runs, and when pip aborted (on a distribution the
+# base image owned) the `set -e` exit was the only signal -- mypy and pytest
+# were simply missing on the first `make ci` (2026 standards audit, §2). Each
+# step now names its own failure on stderr and exits non-zero, so a session
+# that cannot run the gates says so before an agent trusts one.
+#
 # Node dependencies are installed too, through `make node-deps` -- the same
 # recipe CI uses, so the three environments cannot drift into installing
 # different things. Previously this hook was Python-only, which meant CLAUDE.md
@@ -23,15 +32,24 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
-if [ ! -f requirements-dev.txt ]; then
-    echo "session-start: requirements-dev.txt not found; skipping dependency install" >&2
+if [ ! -f requirements-lock.txt ]; then
+    echo "session-start: requirements-lock.txt not found; skipping dependency install" >&2
     exit 0
 fi
 
-echo "session-start: installing Python dev dependencies (pinned)"
-python -m pip install --quiet --upgrade pip
-python -m pip install --quiet -r requirements-dev.txt
-python -m pip install --quiet -e .
+echo "session-start: installing Python dependencies from the hashed lock (the CI recipe)"
+if ! python -m pip install --quiet --upgrade pip; then
+    echo "session-start: FAILED — 'python -m pip install --upgrade pip' exited non-zero; continuing with the pip already present" >&2
+fi
+if ! python -m pip install --quiet --require-hashes -r requirements-lock.txt; then
+    echo "session-start: FAILED — 'python -m pip install --require-hashes -r requirements-lock.txt' exited non-zero." >&2
+    echo "session-start: ruff, mypy and pytest may be missing, so no 'make' gate in this session can be trusted until this is fixed (see pip's output above)." >&2
+    exit 1
+fi
+if ! python -m pip install --quiet -e . --no-deps; then
+    echo "session-start: FAILED — 'python -m pip install -e . --no-deps' exited non-zero; the harness package is not importable and the test suites will not collect." >&2
+    exit 1
+fi
 if [ "${MANGO_SKIP_NODE_DEPS:-}" = "1" ]; then
     echo "session-start: MANGO_SKIP_NODE_DEPS=1 — skipping Node deps; 'make ci' will fail at test-node"
     exit 0

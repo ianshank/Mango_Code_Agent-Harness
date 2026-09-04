@@ -28,14 +28,31 @@ on:
 permissions:
   contents: read
 
+# One live run per ref: a push to a PR branch cancels the run for the head it
+# replaced, so the queue holds the newest commit's verdict rather than four
+# minutes of a superseded one, and the required checks re-report on the head
+# that will actually merge. Keyed on the workflow name too, so the scheduled
+# drift workflow's runs are never in the same group (audit M16). Deliberately
+# absent from scheduled-drift.yml: its jobs open issues, and cancelling one
+# loses the notification that is its whole job.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # The Node suite's outcome is Python-version-independent, so the full gate
   # (make ci, including test-node + verify-zero-skips) runs on one primary leg
   # and the remaining interpreters run the Python-scoped `make ci-python`.
   # Previously every matrix leg installed pnpm/node_modules and ran the entire
   # Vitest suite — four identical Node runs per PR for one signal.
+  # Every job carries `timeout-minutes` (audit M16). Without one a hung step
+  # holds a runner for GitHub's six-hour default and a required check stays
+  # pending for the same six hours. The values are ceilings ten times the
+  # observed durations -- a full `make ci` run takes about three minutes, the
+  # scan and audit jobs under one -- so a timeout is a hang, never a slow run.
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +104,7 @@ jobs:
 
   build-full:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Declared at the job level, so the other jobs keep the workflow-wide
     # `contents: read` and nothing else. `pull-requests: read` is needed by the
     # attestation step alone, which reads the PR description from the API rather
@@ -211,6 +229,7 @@ jobs:
   secrets:
     name: secret-scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -231,15 +250,19 @@ jobs:
         # Version is pinned in the Makefile so the local and CI gates cannot drift.
         run: make secrets-install
 
+      # No `PATH="$(go env GOPATH)/bin:$PATH"` prefix here any more: the
+      # Makefile resolves gitleaks from GOPATH/bin itself, so this step runs the
+      # gate exactly as `make secrets-install && make secrets` does locally. The
+      # prefix was a CI-only workaround that hid the recipe's defect (audit §2).
       - name: Run secret scan gate (make secrets)
-        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
+        run: make secrets
 
       # An allowlist path exempts its whole file from every rule, so an entry
       # that has stopped suppressing anything is a permanent blind spot. This
       # runs here, not in the unit suite: it needs gitleaks, the unit suite has
       # none, and INV-2 forbids adding a skip to paper over that.
       - name: Check the gitleaks allowlist still earns its entries
-        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets-allowlist-check
+        run: make secrets-allowlist-check
 
   # Closes the KNOWN_GAPS["audit"] exception in test_ci_gate_coverage.py: dependency
   # vulnerability scanning previously ran only in the per-stack adopter workflows,
@@ -249,11 +272,14 @@ jobs:
   #
   # This leg also carries the Node delegation (osv-scanner), so it stays single-run
   # rather than joining the `audit-matrix` job below. `pip-audit` itself is pinned
-  # via `make audit-install-python` (PIP_AUDIT_VERSION in the root Makefile) so this
-  # gate cannot change or break on an unreviewed upstream release.
+  # in requirements-dev.txt and so lands in the hashed lock, which is what
+  # `make audit-install-python` installs with `--require-hashes` (audit M15) --
+  # the scanner is verified the same way as everything it scans, and cannot
+  # change or break on an unreviewed upstream release.
   audit:
     name: dependency-audit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -276,8 +302,10 @@ jobs:
       - name: Install pinned osv-scanner
         run: make -C harness/node audit-install
 
+      # No PATH prefix: both Makefiles resolve their Go-installed tool from
+      # GOPATH/bin themselves (see the `secrets` job).
       - name: Run dependency audit gate (make audit)
-        run: PATH="$(go env GOPATH)/bin:$PATH" make audit
+        run: make audit
 
   # `pip-audit` resolves dependency markers, `Requires-Python` and transitive
   # constraints under the interpreter that runs it. The `audit` job above only ever
@@ -294,6 +322,7 @@ jobs:
   audit-matrix:
     name: dependency-audit (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

@@ -68,6 +68,9 @@ class TestResolveApiKey(unittest.TestCase):
 
 
 @pytest.mark.live
+# A real TCP need (R-EGF-6): these calls leave the host for the NVIDIA NIM
+# endpoint over HTTPS, which no unix-socket allowance covers. Selected only by
+# `pytest -m live`, never by the default `-m 'not live'`.
 @pytest.mark.enable_socket
 @unittest.skipUnless(IS_LIVE, "NVIDIA_API_KEY not configured — skipping live tests (DEC-026)")
 class TestCompleteChatLive(unittest.TestCase):

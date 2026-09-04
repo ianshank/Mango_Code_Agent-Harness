@@ -21,7 +21,10 @@ from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
-pytestmark = pytest.mark.enable_socket
+# No socket exemption here. The asyncio event loop these tests drive needs a
+# unix socketpair (its self-pipe), which `--allow-unix-socket` in addopts
+# permits; the module-wide `enable_socket` that stood here re-opened TCP for
+# every test in the file for a need that was never TCP (audit M12).
 
 
 class MockTool:
@@ -143,7 +146,6 @@ def test_import_failure_sets_mcp_unavailable(monkeypatch: pytest.MonkeyPatch) ->
     assert probe.stdio_server is None
 
 
-@pytest.mark.enable_socket
 def test_real_mcp_tool_accepts_the_kwargs_mcp_server_passes() -> None:
     """Pins the real SDK's Tool constructor field names directly, bypassing MockTool
     entirely -- this is the one test that would have caught the original

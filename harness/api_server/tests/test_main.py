@@ -12,7 +12,24 @@ from fastapi.testclient import TestClient
 
 from harness.api_server.main import app
 
-client = TestClient(app)
+
+@pytest.fixture
+def client() -> TestClient:
+    """A fresh TestClient per test.
+
+    This stood at module level, built once at import. Under a randomised or
+    parallel run (pytest-randomly, xdist) import-time state is shared across
+    whatever order or worker the tests land in, so a client that one test left
+    mid-request would leak into the next; a fixture is scoped to the test that
+    asked for it (audit H8).
+
+    No socket exemption either: TestClient drives the app through anyio's
+    BlockingPortal, whose plumbing is a unix socketpair, which
+    `--allow-unix-socket` in addopts permits. The per-test `enable_socket` marks
+    that stood here said "loopback" and re-opened TCP for a need that was never
+    TCP (audit M12).
+    """
+    return TestClient(app)
 
 
 def _passing_outcome(message: str = "PASS: verified"):
@@ -36,16 +53,14 @@ def _api_server_key(monkeypatch):
     return key
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_static_files():
+def test_static_files(client: TestClient):
     """Test that static UI files are served successfully."""
     response = client.get("/")
     assert response.status_code == 200
     assert "Mango MAS Dashboard" in response.text
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_api_orchestrate_success(_api_server_key):
+def test_api_orchestrate_success(client: TestClient, _api_server_key):
     """Test successful orchestration via the API."""
     with patch("harness.api_server.main.MangoMASOrchestrator") as mock_orchestrator_class:
         mock_instance = mock_orchestrator_class.return_value
@@ -69,8 +84,7 @@ def test_api_orchestrate_success(_api_server_key):
 
 
 @patch("harness.api_server.main.MangoMASOrchestrator")
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
+def test_api_orchestrate_failure(mock_orchestrator_class, client: TestClient, _api_server_key):
     """Test orchestration failure handling — internals must not leak to clients."""
     mock_instance = mock_orchestrator_class.return_value
     mock_instance.execute_loop.side_effect = RuntimeError("Nemotron API failed")
@@ -88,8 +102,7 @@ def test_api_orchestrate_failure(mock_orchestrator_class, _api_server_key):
     assert detail == "Internal orchestration error"
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_api_orchestrate_unauthorized(_api_server_key):
+def test_api_orchestrate_unauthorized(client: TestClient, _api_server_key):
     """Test unauthorized access."""
     response = client.post(
         "/api/orchestrate",
@@ -143,8 +156,7 @@ def test_dev_runner_env_overrides(monkeypatch):
     assert calls["reload"] is True
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
+def test_the_response_carries_the_verdict_and_what_earned_it(client: TestClient, monkeypatch):
     """AC-11 / R-VP-13: the verdict names the command and its exit code.
 
     `status` is deliberately unchanged -- it still means "the orchestration did
@@ -167,8 +179,7 @@ def test_the_response_carries_the_verdict_and_what_earned_it(monkeypatch):
     assert body["termination_reason"] is None
 
 
-@pytest.mark.enable_socket  # TestClient drives the app over loopback (R-EGF-6)
-def test_a_failing_verdict_is_reported_while_status_stays_success(monkeypatch):
+def test_a_failing_verdict_is_reported_while_status_stays_success(client: TestClient, monkeypatch):
     """The defect, pinned: before this change these two runs were identical."""
     from harness.shared.governance.verdict import LoopOutcome, Verdict
 

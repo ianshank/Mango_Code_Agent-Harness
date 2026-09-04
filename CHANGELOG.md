@@ -87,6 +87,41 @@ last open item), with `harness/README.md` indexing every report there including
 `test_documentation_claims.py`. `README.md`'s version literal stays: it is one of
 the mirrors `TestVersionIsSingleSourced` pins to `pyproject.toml`.
 
+### Two gates that failed right after their own install step, and the test run gets a seed
+
+The 2026 standards audit (`docs/reports/2026-STANDARDS-AUDIT.md`, §2) found
+two gates whose first failure was the gate runner, not the code: `make secrets`
+failed closed immediately after a successful `make secrets-install`, because
+`go install` writes to `$(go env GOPATH)/bin` and no recipe looked there (CI
+passed only by prefixing `PATH` by hand), and the session-start hook installed
+`requirements-dev.txt` unhashed with system pip and, when pip aborted, said
+nothing. All three Makefiles now resolve each Go-installed tool through `PATH`
+and then `GOPATH/bin` -- a name found in neither is left as written, so the
+`command -v` guards still fail closed -- and the workflow's `PATH=` prefixes are
+gone, so CI runs the gate exactly as a developer does. The hook installs the
+hashed lock with `--require-hashes` then `-e . --no-deps`, the CI recipe
+verbatim, and names the step that failed. The root Makefile gains the
+`.SHELLFLAGS := -eu -o pipefail -c` both stack Makefiles already had.
+
+**Test hygiene (H8, M12).** `pytest-randomly` and `pytest-xdist` are pinned
+and both Python runners pass `-p randomly -n auto`; the seed is printed in the
+run header and reproduces with `--randomly-seed=N`. Enabling xdist on the
+coverage run was measured first: pytest-cov combined the workers' data (lines
+99.22% / branches 97.81% under `-n auto` against 99.24% / 97.87% serial) and
+both a collection-time and a runtime skip reached the INV-2 evidence file;
+`make coverage-python` fell from 92s to 36s on four cores. `--allow-unix-socket`
+joins `--disable-socket`: the 35 `enable_socket` marks whose real need was a
+unix socketpair (asyncio's self-pipe; anyio's portal under `TestClient` --
+never the "loopback" the comments claimed) are removed, and the three survivors
+name their TCP need. `test_egress_floor.py` proves a socketpair is created and
+AF_INET still raises in the same guard state.
+
+**CI truthfulness (M15, M16).** `pip-audit` is pinned in `requirements-dev.txt`
+so it lands in the hashed lock and installs with `--require-hashes`, as does
+the drift workflow's `uv`; every workflow job carries `timeout-minutes`, and
+the PR workflow cancels superseded runs per ref (the scheduled one deliberately
+does not -- a cancelled run there is a lost notification). Decision: DEC-048.
+
 ### The lock pinned versions; nothing pinned artefacts
 
 A version number is a name a registry resolves. `requirements-lock.txt` pinned

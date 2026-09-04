@@ -21,12 +21,18 @@ permissions:
   contents: read
   issues: write
 
+# No `concurrency` group here, on purpose: these jobs open issues, and a
+# cancelled run is a lost notification -- the one outcome this workflow exists
+# to prevent. Every job does carry `timeout-minutes` (audit M16): the drift loop
+# runs the same gates CI runs in about three minutes, the weekly jobs in under
+# one, so each ceiling is a hang, never a slow run.
 jobs:
   main-drift:
     name: nightly drift on main
     # Nightly only; the weekly cron is for the staleness jobs below.
     if: github.event.schedule == '17 4 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -111,6 +117,7 @@ jobs:
     name: weekly skill staleness
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -174,6 +181,7 @@ jobs:
     name: weekly hook-install drift
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -226,12 +234,15 @@ jobs:
     name: weekly dependency lock freshness
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
 
       # The lock is what CI installs (tech-debt-hardening-plan R-TDH-9), so it
       # only moves when someone regenerates it. This job reports how far behind
@@ -239,9 +250,13 @@ jobs:
       # than a red PR: staleness is a property of the calendar, not of any
       # change in front of a reviewer. Whether Dependabot's pip updater also
       # rewrites a uv-generated lock is not relied upon; this is the guaranteed
-      # path. The lock tool is the pinned one from requirements-dev.txt.
+      # path. The lock tool comes from the lock itself, hash-verified like every
+      # other install in these workflows (audit M15): the previous step grepped
+      # `uv==` out of requirements-dev.txt and installed that pin unhashed, so
+      # the one tool that writes the lock was the one tool the lock did not
+      # protect.
       - name: Install the pinned lock tool
-        run: python -m pip install "$(grep -E '^uv==' requirements-dev.txt)"
+        run: python -m pip install --require-hashes -r requirements-lock.txt
 
       - name: Compare the lock with the newest allowed releases
         id: lock
