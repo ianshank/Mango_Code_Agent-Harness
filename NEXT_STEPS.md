@@ -49,12 +49,25 @@ the top item since v2.1.9, was independently re-flagged by an external analysis
 (DEC-018), and has outlived four releases. It is a repository-settings change,
 not code — which is exactly why nothing in CI can nag about it.
 
-**Evidence.** The GitHub branches API reports `"protected": false` for `main`
-(checked 2026-09-03). PR #75 merged on 2026-09-03 with one bot review and no
-human approval. Three merges since 2026-08-31 left `main` red on its own head
-(workflow runs 286, 319, 326); DEC-024 records the same failure on PR #60. The
-ruleset to import is committed at `.github/rulesets/main.json` and is pinned to
-the workflow by `test_ci_gate_required_checks.py`.
+**Evidence.** The GitHub branches API still reports `"protected": false` for
+`main` (re-checked 2026-09-04). PR #75 merged on 2026-09-03 with one bot review
+and no human approval; PR #79 and PR #80 merged on 2026-09-04 with none at all.
+Three merges since 2026-08-31 left `main` red on its own head (workflow runs
+286, 319, 326); DEC-024 records the same failure on PR #60. The ruleset to
+import is committed at `.github/rulesets/main.json` and is pinned to the
+workflow by `test_ci_gate_required_checks.py`.
+
+**What changed on 2026-09-04 (DEC-044).** The export could not have been applied
+as it stood, which is the part four releases of this item never said. It required
+one code-owner approval; `.github/CODEOWNERS` routes `*` to `@ianshank`, who
+authors every pull request here; GitHub does not accept an author's approval of
+their own pull request. Importing it would have made `main` unmergeable, not
+protected. R-CQ-1's second shape is now the committed one — the nine required
+checks unchanged, `bypass_actors` still empty, and both human-approval rules
+(`required_approving_review_count`, `require_code_owner_review`) stood down —
+so the import is now a real option rather than a trap. The reason for each
+rejected shape, and the compensating controls for the review layer given up, are
+in DEC-044.
 
 Required status checks (derived from `.github/workflows/python-package.yml`,
 not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
@@ -63,10 +76,12 @@ not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
 
 **Done when.** Settings → Rules → Rulesets → New ruleset → Import
 `.github/rulesets/main.json`, and the branches API reports `"protected": true`
-for `main`. If the decision is *not* to apply it, that is a legitimate answer
-for a single-maintainer repository — but it must be recorded as a decision-log
-entry, and this item is then closed as declined rather than left open for a
-fifth release.
+for `main`. That import is the whole of what remains: it is a
+repository-settings action, so no CI job and no agent working in this
+repository can perform it or evidence it, and DEC-044 deciding the shape is not
+the same as the shape being live. This item stays open until the API says
+`true`; the decline path DEC-044 declined to take remains available, but would
+now need its own entry superseding it.
 
 **Depends on.** Nothing.
 
@@ -294,17 +309,21 @@ that derived its action from a synthesised command. A follow-up closed R-CQ-8
 missing a key, `protected_paths` and `limits` lost their permissive defaults,
 the three size-budget environment overrides may only tighten a budget, and
 `verify_zero_skips` resolves its grammar on first use rather than at import.
-**Phase 1 is now complete; the plan is not** — phases 2–7 are untouched, so the
-actions are still unpinned, the lock carries no hashes, the `make` stage the
-shim test cites still does not exist, and five landed specs still show every
-acceptance box open.
+**Phase 1's six product-path slices are landed; the plan is not** — and an
+earlier revision of this paragraph said "Phase 1 is now complete", counting the
+Phase 0 prerequisites AC-1 and AC-2 as if they were Phase 1 slices. They are
+not, and neither was done: R-CQ-2 states the NS-2 credential must be rotated
+*before any Phase 1 slice merges*, so all six merged ahead of their own
+precondition. Phases 2–7 are untouched, so the actions are still unpinned, the
+lock carries no hashes, the `make` stage the shim test cites still does not
+exist, and five landed specs still show every acceptance box open.
 
 Behind that, unchanged: the two stacks disagree about which HTTP statuses to
 retry, no GitHub Action is SHA-pinned although `harness/CONTRACT.md` requires it
 of adopters, the lock carries no hashes, a `make` stage the shim test cites does
-not exist, and five landed specs show every acceptance box open again. The
-committed ruleset (NS-1) cannot be applied as it stands: one required code-owner
-approval, no bypass actor, one code owner.
+not exist, and five landed specs show every acceptance box open again. DEC-044
+settles the ruleset shape NS-1 needs and removes the code-owner rule that made
+the export unappliable, but the import itself is still not done.
 
 **Evidence.** `docs/specs/code-quality-tech-debt-plan.md`, problem items 1–16 and
 the Review record, each with the file, line or command that reproduces it on
@@ -316,10 +335,14 @@ whose premise test runs every credential-read spelling through a real `bash -c`
 so the suite fails if a spelling stops reaching the file it claims to reach.
 
 **Done when.** Its 35 acceptance boxes are ticked, each by the command it names;
-8 are ticked (all of Phase 1). Phase 0 decides the ruleset shape, rotates the NS-2 credential,
-dispositions the Dependabot queue and lands NS-20 (landed:
-`.mango/skills/gate-mutation-proof/`); Phase 1 is the product path; the rest is
-ordered there.
+7 are ticked — AC-3 through AC-8, which is all six of Phase 1's product-path
+slices, plus AC-30. Phase 0's two boxes are the ones still open: AC-1 waits on
+the NS-1 import (DEC-044 decided the shape; the branches API is the evidence)
+and AC-2 waits on the NS-2 rotation, which is off-tree, and on a Dependabot
+disposition that cannot be written honestly until Phase 2's SHA pins land, since
+the entry it calls for records #62–#66 as *superseded by* those pins. Phase 0
+also lands NS-20 (landed: `.mango/skills/gate-mutation-proof/`); Phase 1 is the
+product path; the rest is ordered there.
 
 **Depends on.** NS-2 (rotation) before any Phase 1 slice merges; NS-20 (the
 mutation-proof skill) is written in Phase 0; NS-3 (a settled release) before the

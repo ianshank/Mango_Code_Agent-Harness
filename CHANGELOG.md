@@ -10,6 +10,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The `main` ruleset asks for an approval that could never be given
+
+`.github/rulesets/main.json` has been committed, pinned by a test, and cited by
+NS-1 for four releases as the thing to import. It could not have been imported.
+It required one code-owner approval; `.github/CODEOWNERS` routes `*` to
+`@ianshank`, who authors every pull request in this repository; GitHub does not
+accept an author's approval of their own pull request. Importing it would have
+made `main` unmergeable rather than protected — so nobody did, and every gate in
+the repository stayed advisory. That is not a footnote to NS-1, it is the reason
+NS-1 never moved, and four revisions of that item never said it.
+
+The cost is on the record: the branches API still reported `"protected": false`
+for `main` on 2026-09-04; PR #79 and PR #80 both merged with zero approvals; PR
+#60 merged with every check on its head red (DEC-024).
+
+DEC-044 takes the second of R-CQ-1's three shapes. `required_approving_review_count`
+goes to `0` and `require_code_owner_review` goes with it; the nine required
+status checks and the empty `bypass_actors` list are untouched. The other two
+shapes were rejected on their own terms rather than on preference: a bypass
+actor for the repository-admin role is scoped to the *ruleset*, not to the
+review rule, so it would exempt its holder from the nine checks as well —
+reopening the #60 hole in order to close a review hole — and a second reviewing
+account requires an account that does not exist. The review layer being given up
+was already fictional; the compensating controls are the `openspec-peer-review`
+and `repo-invariant-review` skills and the third-party PR review that found five
+real defects across PR #79 and PR #80.
+
+`test_nobody_can_bypass` asserted `bypass_actors == []`, which both rejected
+shapes also satisfy — it graded one field of a shape rather than the shape. It
+now runs `unchosen_shape_reason`, which is the shape's definition, against the
+committed export *and* against `tmp_path` copies reshaped into each rejected
+shape, so a drift back cannot pass by being merely well-formed. Five mutation
+proofs: reverting the export's count, reverting its code-owner flag, and gutting
+each of the grader's three clauses in turn each fail their tests.
+
+**NS-1 is not closed by this.** Importing the export at Settings → Rules →
+Rulesets is a repository-settings action no CI job and no agent working here can
+perform or evidence, and DEC-024's rule applies to it as much as to anything
+else: the branches API reporting `"protected": true` is the evidence, and a
+decision entry recording the shape is not. AC-1 stays unticked for the same
+reason.
+
+Corrected with it: `NEXT_STEPS.md` claimed "Phase 1 is now complete" and "8 are
+ticked (all of Phase 1)". Seven are ticked, and the two open boxes in that block
+— AC-1 and AC-2 — are Phase 0 prerequisites, not Phase 1 slices. R-CQ-2 requires
+the NS-2 credential rotated *before any Phase 1 slice merges*; all six merged
+ahead of it.
+
 ### The containment classifier is observable, and one more literal is linked
 
 `command_actions` had no logger at all. `Classification.reason` is the whole
