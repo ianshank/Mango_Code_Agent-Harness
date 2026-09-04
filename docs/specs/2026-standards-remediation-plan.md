@@ -271,69 +271,82 @@ names the audit finding or closed-plan requirement it carries.
       returns four entries and `make validate` passes on them
       (`validate_governance_docs.py` rejects an entry missing from
       `GOVERNANCE_SKILL.md`) · stage: `make validate` (R-SR-5)
-- [ ] AC-6: `pytest harness/shared/tests/test_command_actions_indirect_exec.py`
+- [x] AC-6: `pytest harness/shared/tests/test_command_actions_indirect_exec.py`
       asserts `make -f GNUmakefile x`, `make -C sub`, `MAKEFILES=x make` and
       `pnpm exec node -e 1` grade `destructive`, while `make test-python`, `pytest`
       and `pnpm exec vitest` keep `test_execute`;
       `pytest harness/shared/tests/test_protected_path_liveness.py` passes with
       every new pattern live · stage: `make test-python` (R-SR-6)
-- [ ] AC-7: `pytest harness/shared/tests/regression -k enforcement_tampered`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_command_actions_indirect_exec.py`: 83 passed; `test_protected_path_liveness.py` green with the ten new patterns declared
+- [x] AC-7: `pytest harness/shared/tests/regression -k enforcement_tampered`
       runs the forgery recipe (write a script that rewrites `Makefile`, run it,
       verify) end to end through the real dispatcher, broker and backend and
       asserts `BLOCKED/enforcement_tampered`; reverting the digest check yields
       `VERIFIED` · stage: `make test-regression` (R-SR-7)
-- [ ] AC-8: `git grep -n -i "OS isolation" SECURITY.md harness/shared/agent-policy.json`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `regression/test_verdict_forgery_regression.py`: the recipe yields `BLOCKED/enforcement_tampered` through the real dispatcher, broker and backend; untampered passing → `VERIFIED`, untampered failing → `FAILED`
+- [x] AC-8: `git grep -n -i "OS isolation" SECURITY.md harness/shared/agent-policy.json`
       finds both (each names OS isolation of the process backend as the missing
       control), and `git grep -n "\.env" SECURITY.md` names the remaining gap
       · stage: `make validate` (R-SR-8)
-- [ ] AC-9: `pytest harness/api_server/tests -k tool_using_history_round_trips` asserts
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); both greps find the OS-isolation wording; SECURITY.md names the on-disk `.env` gap
+- [x] AC-9: `pytest harness/api_server/tests -k tool_using_history_round_trips` asserts
       HTTP 200 with a round-tripped `tool_calls` assistant message and a `tool`
       message, and `pytest harness/api_server/tests -k malformed_message` asserts
       500 whose body does not contain the pydantic error text;
       `pytest harness/shared/tests/regression -k "tool_call_and_tool_result or unknown_role_is_still_refused"`
       reproduces the pre-fix 500 · stage: `make test-python` (R-SR-9)
-- [ ] AC-10: `pytest harness/api_server/tests -k "healthz or readyz"` asserts
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_using_history_round_trips`, `test_a_malformed_message_is_an_internal_error_that_leaks_nothing`, `TestToolUsingRunsReachTheClient` (4 shapes + 5 argument shapes) green
+- [x] AC-10: `pytest harness/api_server/tests -k "healthz or readyz"` asserts
       200/200 with a key and 200/503 without; `git grep -n "setup_json_logging" harness/api_server/main.py`
       shows it inside `lifespan` only · stage: `make test-python` (R-SR-10)
-- [ ] AC-11: `python -c "from harness.shared.policy_loader import orchestrator_limits as o;print(o().verification_timeout_sec)"`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); healthz/readyz: 200/200 with a key, 503 without, 503 on a broken policy, 503 on a missing `agent_defaults` block; `setup_json_logging` inside `lifespan`
+- [x] AC-11: `python -c "from harness.shared.policy_loader import orchestrator_limits as o;print(o().verification_timeout_sec)"`
       prints the policy value; `pytest harness/shared/tests -k verification_timeout`
       fails when the key is removed from a `tmp_path` policy and when
       `api_timeout_sec` is patched but the verification timeout is unchanged
       · stage: `make test-python` (R-SR-11, C-SR-1)
-- [ ] AC-12: `pytest harness/shared/tests -k "sum_across_roles or task_within_the_budget"`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); accessor prints 900; `test_the_verification_timeout_does_not_follow_api_timeout` and `test_moving_the_model_latency_key_does_not_move_the_verification_timeout` green
+- [x] AC-12: `pytest harness/shared/tests -k "sum_across_roles or task_within_the_budget"`
       asserts that with a budget of N the sum of tool calls across the three
       roles cannot exceed N, and fails when each role gets a fresh budget
       · stage: `make test-python` (R-SR-12)
-- [ ] AC-13: `pytest harness/shared/tests/test_json_logging.py -k extra` asserts
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_the_sum_across_roles_cannot_exceed_the_task_budget` and `test_a_task_within_the_budget_completes` green
+- [x] AC-13: `pytest harness/shared/tests/test_json_logging.py -k extra` asserts
       `extra={"run_id": …}` appears as a top-level key and a key named
       `NVIDIA_API_KEY` never does; `pytest harness/shared/tests -k run_id`
       asserts model and tool events in one loop run share a `run_id`
       · stage: `make test-python` (R-SR-13)
-- [ ] AC-14: `pytest harness/shared/tests/test_tool_arg_validation.py` passes
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_extra_fields_become_top_level_keys`, `test_a_credential_named_extra_is_never_emitted`, `test_model_and_tool_events_carry_the_same_run_id` green
+- [x] AC-14: `pytest harness/shared/tests/test_tool_arg_validation.py` passes
       including its seeded random-dict cases, and
       `pytest harness/shared/tests -k "never_reaches_the_executor or extra_key_is_rejected"`
       asserts `write_file` without `filepath` never reaches the executor
       (reverting → the executor raises `IsADirectoryError`) and an undeclared
       key is rejected by name · stage: `make test-python` (R-SR-14)
-- [ ] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or off_the_event_loop or concurrent_tool_calls_overlap or parity"`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_arg_validation.py` (seeded random cases) green; `test_a_missing_required_key_never_reaches_the_executor`, `test_an_extra_key_is_rejected_by_name` green
+- [x] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or off_the_event_loop or concurrent_tool_calls_overlap or parity"`
       asserts the MCP handler names equal the dispatcher's and that two
       concurrent calls overlap in time; dropping a name from the shared registry
       fails the parity test · stage: `make test-python` (R-SR-15)
-- [ ] AC-16: `git grep -n "logging\.basicConfig(" -- harness/shared harness/control-plane ':!*/tests/*' ':!harness/shared/mcp_server.py' ':!harness/shared/json_logging.py'`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); registry parity, `test_call_tool_runs_the_handler_off_the_event_loop_thread`, `test_two_concurrent_tool_calls_overlap` green; dropping a name fails the parity check
+- [x] AC-16: `git grep -n "logging\.basicConfig(" -- harness/shared harness/control-plane ':!*/tests/*' ':!harness/shared/mcp_server.py' ':!harness/shared/json_logging.py'`
       returns nothing (the MCP server is a stdio transport, not a gate, and
       keeps its WARNING floor; `json_logging.py` names the call only in a
       docstring), and `LOG_LEVEL=DEBUG python harness/shared/validate_specs.py`
       emits DEBUG records · stage: `make lint` (R-SR-16)
-- [ ] AC-17: `git grep -n "mark.enable_socket" -- harness ':!*/test_egress_floor.py' ':!*/test_nemotron_bridge_live.py' ':!*/test_mango_mas_live.py'`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); grep returns nothing; `LOG_LEVEL=DEBUG` honoured by `validate_specs.py` and `validate_plan.py`
+- [x] AC-17: `git grep -n "mark.enable_socket" -- harness ':!*/test_egress_floor.py' ':!*/test_nemotron_bridge_live.py' ':!*/test_mango_mas_live.py'`
       returns no mark (the three survivors open real TCP and say so at the
       mark); `pytest harness/shared/tests/test_egress_floor.py -k socketpair`
       asserts a unix socketpair succeeds and a TCP connect raises
       `SocketBlockedError` · stage: `make test-python` (R-SR-17)
-- [ ] AC-18: `make lock-check` passes with `pytest-randomly` and `pytest-xdist` in
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); no mark outside the three declared TCP users; `test_a_unix_socketpair_is_permitted_while_tcp_still_raises` green
+- [x] AC-18: `make lock-check` passes with `pytest-randomly` and `pytest-xdist` in
       the lock; `make coverage-python` prints a `randomly` seed; three runs with
       distinct `--randomly-seed` values pass; `git grep -n "os\.chdir(" -- harness`
       returns nothing · stage: `make ci` (R-SR-18)
-- [ ] AC-19: `make secrets-install && make secrets` exits 0 in a shell whose PATH
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make lock-check: passed`; `make coverage-python` prints `--randomly-seed` and runs `-n auto` (4 workers); three seeds green in the slice run; `os.chdir(` absent
+- [x] AC-19: `make secrets-install && make secrets` exits 0 in a shell whose PATH
       lacks GOPATH/bin, pinned by `pytest harness/shared/tests/test_makefile_contracts.py -k gopath_bin`;
       `pytest harness/shared/tests/test_agent_surface_liveness.py -k SessionStartPreparesTheGates`
       asserts the hook installs the hashed lock and names a failed step;
@@ -342,10 +355,12 @@ names the audit finding or closed-plan requirement it carries.
       `grep -n "^.SHELLFLAGS" Makefile` finds the line;
       `pytest harness/shared/tests/test_makefile_contracts.py -k installs_the_lock_with_hashes`
       asserts the audit tooling installs from the hashed lock · stage: `make ci` (R-SR-19)
-- [ ] AC-20: `pytest harness/shared/tests/test_documentation_truth.py harness/shared/tests/test_documentation_claims.py -k "Placeholder or DocumentedRoutes or PersonaScope or ContributingGate"`
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make secrets-install && make secrets` passed with no PATH edit; `test_a_gitleaks_in_gopath_bin_is_what_the_secrets_gate_runs`, `TestSessionStartPreparesTheGates`, `test_workflow_runtime_limits.py`, `test_the_install_target_installs_the_lock_with_hashes` green; `.SHELLFLAGS` present
+- [x] AC-20: `pytest harness/shared/tests/test_documentation_truth.py harness/shared/tests/test_documentation_claims.py -k "Placeholder or DocumentedRoutes or PersonaScope or ContributingGate"`
       fails when any corrected claim is reverted; `ls docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
       succeeds and `ls docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` fails
       · stage: `make test-python` (R-SR-20)
+      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_documentation_claims.py` (placeholder, persona scope, contributing gate) and `TestDocumentedRoutesExist` green; the report lives under `docs/reports/`
 - [x] AC-21: `pytest harness/shared/tests/test_spec_selectors_collect.py` passes on
       the tree and fails on a spec whose ticked criterion names `-k patch_denied_read`
       (its `test_a_dead_keyword_reports_zero` case) · stage: `make test-python`
