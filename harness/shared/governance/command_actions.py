@@ -25,6 +25,7 @@ import shlex
 import typing
 
 from harness.shared.debug_dump import redact_text
+from harness.shared.governance.indirect_exec import delegated_argv, make_denial_reason
 from harness.shared.governance.shell_words import (
     WordListNotEnumerable,
     credential_word_reason,
@@ -192,8 +193,11 @@ _BY_SUBCOMMAND: typing.Mapping[tuple[str, str], str] = {
     ("pip", "list"): "read", ("pip", "show"): "read",
     ("npm", "install"): "external_write", ("npm", "publish"): "production_change",
     ("pnpm", "install"): "external_write", ("pnpm", "add"): "external_write",
-    ("pnpm", "test"): "test_execute", ("pnpm", "exec"): "test_execute",
-    ("npx", "vitest"): "test_execute",
+    ("pnpm", "test"): "test_execute",
+    # `pnpm exec` and `npx` are deliberately absent: both run the program they
+    # are handed, so they are graded as that program by `_classify_delegated`.
+    # `("pnpm", "exec"): "test_execute"` graded `pnpm exec <anything>` as a gate
+    # run (2026 standards audit, B4).
 }
 
 #: Whole-command shapes that override the program table. `find` is a read tool
@@ -366,6 +370,20 @@ def _classify_program(text: str) -> Classification:
     program = argv[0].rsplit("/", 1)[-1]
     subcommand = next((a for a in argv[1:] if not a.startswith("-")), "")
 
+    if program == "make":
+        # `make` is a gate run only against the canonical makefile. Told to read
+        # another file, another directory, injected text or an overridden
+        # variable, it runs whatever the agent chose -- `make -f GNUmakefile x`
+        # was arbitrary shell for every role (2026 standards audit, B4).
+        denial = make_denial_reason(argv[1:])
+        if denial is not None:
+            return Classification(UNCLASSIFIED_ACTION, denial)
+        return Classification(_BY_PROGRAM[program], f"{program} against the canonical makefile")
+
+    delegation = delegated_argv(argv)
+    if delegation is not None:
+        return _classify_delegated(*delegation)
+
     by_sub = _BY_SUBCOMMAND.get((program, subcommand))
     if by_sub is not None:
         return Classification(by_sub, f"{program} {subcommand}")
@@ -379,6 +397,29 @@ def _classify_program(text: str) -> Classification:
         return Classification(by_prog, program)
 
     return Classification(UNCLASSIFIED_ACTION, f"{program} is not a modelled program")
+
+
+def _classify_delegated(delegator: str, inner: list[str]) -> Classification:
+    """``pnpm exec <x>`` and ``npx <x>`` are ``<x>``, graded by the same tables.
+
+    Only a program ``_BY_PROGRAM`` already grades ``test_execute`` is accepted,
+    and its own arguments are then graded exactly as a bare invocation would be
+    -- so ``pnpm exec make -f evil`` is refused for the same reason
+    ``make -f evil`` is. There is no second allowlist here: the set of gate
+    programs is the one table, read through the delegator.
+    """
+    if not inner:
+        return Classification(UNCLASSIFIED_ACTION, f"{delegator} names no program to run")
+    program = inner[0].rsplit("/", 1)[-1]
+    if _BY_PROGRAM.get(program) != "test_execute":
+        return Classification(
+            UNCLASSIFIED_ACTION,
+            f"{delegator} runs {program!r}, which is not one of the repository's gate programs",
+        )
+    inner_verdict = _classify_program(shlex.join(inner))
+    if inner_verdict.action != "test_execute":
+        return Classification(UNCLASSIFIED_ACTION, f"{delegator}: {inner_verdict.reason}")
+    return Classification(inner_verdict.action, f"{delegator} {program}")
 
 
 def write_targets(command: str) -> list[str]:
