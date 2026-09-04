@@ -282,8 +282,9 @@ names the audit finding or closed-plan requirement it carries.
       verify) end to end through the real dispatcher, broker and backend and
       asserts `BLOCKED/enforcement_tampered`; reverting the digest check yields
       `VERIFIED` · stage: `make test-regression` (R-SR-7)
-- [ ] AC-8: `git grep -n "containment, not isolation" SECURITY.md harness/shared/agent-policy.json`
-      finds both, and `git grep -n "\.env" SECURITY.md` names the remaining gap
+- [ ] AC-8: `git grep -n -i "OS isolation" SECURITY.md harness/shared/agent-policy.json`
+      finds both (each names OS isolation of the process backend as the missing
+      control), and `git grep -n "\.env" SECURITY.md` names the remaining gap
       · stage: `make validate` (R-SR-8)
 - [ ] AC-9: `pytest harness/api_server/tests -k tool_using_history_round_trips` asserts
       HTTP 200 with a round-tripped `tool_calls` assistant message and a `tool`
@@ -299,10 +300,10 @@ names the audit finding or closed-plan requirement it carries.
       fails when the key is removed from a `tmp_path` policy and when
       `api_timeout_sec` is patched but the verification timeout is unchanged
       · stage: `make test-python` (R-SR-11, C-SR-1)
-- [ ] AC-12: `pytest harness/shared/tests -k shared_budget` asserts that with a
-      budget of N the sum of tool calls across the three roles cannot exceed N,
-      and fails when each role gets a fresh budget · stage: `make test-python`
-      (R-SR-12)
+- [ ] AC-12: `pytest harness/shared/tests -k "sum_across_roles or task_within_the_budget"`
+      asserts that with a budget of N the sum of tool calls across the three
+      roles cannot exceed N, and fails when each role gets a fresh budget
+      · stage: `make test-python` (R-SR-12)
 - [ ] AC-13: `pytest harness/shared/tests/test_json_logging.py -k extra` asserts
       `extra={"run_id": …}` appears as a top-level key and a key named
       `NVIDIA_API_KEY` never does; `pytest harness/shared/tests -k run_id`
@@ -310,29 +311,37 @@ names the audit finding or closed-plan requirement it carries.
       · stage: `make test-python` (R-SR-13)
 - [ ] AC-14: `pytest harness/shared/tests/test_tool_arg_validation.py` passes
       including its seeded random-dict cases, and
-      `pytest harness/shared/tests -k invalid_arguments` asserts `write_file`
-      without `filepath` never reaches the executor (reverting → the executor
-      raises `IsADirectoryError`) · stage: `make test-python` (R-SR-14)
+      `pytest harness/shared/tests -k "never_reaches_the_executor or extra_key_is_rejected"`
+      asserts `write_file` without `filepath` never reaches the executor
+      (reverting → the executor raises `IsADirectoryError`) and an undeclared
+      key is rejected by name · stage: `make test-python` (R-SR-14)
 - [ ] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or off_the_event_loop or concurrent_tool_calls_overlap or parity"`
       asserts the MCP handler names equal the dispatcher's and that two
       concurrent calls overlap in time; dropping a name from the shared registry
       fails the parity test · stage: `make test-python` (R-SR-15)
-- [ ] AC-16: `git grep -n "logging.basicConfig" harness/shared harness/control-plane -- ':!*/tests/*'`
-      returns nothing, and `LOG_LEVEL=DEBUG python harness/shared/validate_specs.py`
+- [ ] AC-16: `git grep -n "logging\.basicConfig(" -- harness/shared harness/control-plane ':!*/tests/*' ':!harness/shared/mcp_server.py' ':!harness/shared/json_logging.py'`
+      returns nothing (the MCP server is a stdio transport, not a gate, and
+      keeps its WARNING floor; `json_logging.py` names the call only in a
+      docstring), and `LOG_LEVEL=DEBUG python harness/shared/validate_specs.py`
       emits DEBUG records · stage: `make lint` (R-SR-16)
-- [ ] AC-17: `git grep -n "enable_socket" harness -- ':!*/test_egress_floor.py'`
-      returns nothing; `pytest harness/shared/tests/test_egress_floor.py` asserts
-      a unix socketpair succeeds and a TCP connect raises `SocketBlockedError`
-      · stage: `make test-python` (R-SR-17)
+- [ ] AC-17: `git grep -n "mark.enable_socket" -- harness ':!*/test_egress_floor.py' ':!*/test_nemotron_bridge_live.py' ':!*/test_mango_mas_live.py'`
+      returns no mark (the three survivors open real TCP and say so at the
+      mark); `pytest harness/shared/tests/test_egress_floor.py -k socketpair`
+      asserts a unix socketpair succeeds and a TCP connect raises
+      `SocketBlockedError` · stage: `make test-python` (R-SR-17)
 - [ ] AC-18: `make lock-check` passes with `pytest-randomly` and `pytest-xdist` in
       the lock; `make coverage-python` prints a `randomly` seed; three runs with
-      distinct `--randomly-seed` values pass; `git grep -n "os.chdir" harness/*/tests`
+      distinct `--randomly-seed` values pass; `git grep -n "os\.chdir(" -- harness`
       returns nothing · stage: `make ci` (R-SR-18)
 - [ ] AC-19: `make secrets-install && make secrets` exits 0 in a shell whose PATH
-      lacks GOPATH/bin; `pytest harness/shared/tests/test_session_hooks.py -k require_hashes`
-      asserts the hook's install line; `pytest harness/shared/tests/test_workflow_contracts.py -k "timeout_minutes or concurrency"`
-      fails when either is removed; `pytest harness/shared/tests/test_makefile_contracts.py -k shellflags`
-      fails when `.SHELLFLAGS` is removed · stage: `make ci` (R-SR-19)
+      lacks GOPATH/bin, pinned by `pytest harness/shared/tests/test_makefile_contracts.py -k gopath_bin`;
+      `pytest harness/shared/tests/test_agent_surface_liveness.py -k SessionStartPreparesTheGates`
+      asserts the hook installs the hashed lock and names a failed step;
+      `pytest harness/shared/tests/test_workflow_runtime_limits.py` fails when
+      a job loses its timeout or the PR workflow its concurrency group;
+      `grep -n "^.SHELLFLAGS" Makefile` finds the line;
+      `pytest harness/shared/tests/test_makefile_contracts.py -k installs_the_lock_with_hashes`
+      asserts the audit tooling installs from the hashed lock · stage: `make ci` (R-SR-19)
 - [ ] AC-20: `pytest harness/shared/tests/test_documentation_truth.py harness/shared/tests/test_documentation_claims.py -k "Placeholder or DocumentedRoutes or PersonaScope or ContributingGate"`
       fails when any corrected claim is reverted; `ls docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
       succeeds and `ls docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` fails
