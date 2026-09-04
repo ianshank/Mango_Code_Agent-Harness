@@ -10,6 +10,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The lock pinned versions; nothing pinned artefacts
+
+A version number is a name a registry resolves. `requirements-lock.txt` pinned
+79 distributions and carried zero hashes, so a file replaced under an existing
+pin would have installed with no diff here and no warning there — while
+`test_workflow_contracts.py` asserted CI installs "from the lock" and was
+satisfied. That test was true and not sufficient.
+
+All four `uv pip compile` recipes (`lock`, `lock-check`, `lock-upgrade-check`,
+`lock-upgrade`) now pass `--generate-hashes`. Regenerating changed **0 pins** and
+added **2,249 hash lines**, verified by diffing the pin lines of the old and new
+files. All **three** workflow install steps pass `--require-hashes` — the plan
+said two, and missed the one in `scheduled-drift.yml`. A hashed lock read by an
+install that does not check it is decoration.
+
+**`make audit-python` now scans the lock alone**, and that change was forced
+rather than chosen. pip enters `--require-hashes` mode as soon as *any* input
+file carries a hash, then demands `==` on every requirement in every file:
+
+```
+$ pip-audit -r requirements.txt -r requirements-langgraph.txt -r requirements-lock.txt
+ERROR: In --require-hashes mode, all requirements must have their versions
+pinned with ==. These do not:
+    fastapi<1.0,>=0.110 ... (from -r requirements.txt (line 5))
+
+$ pip-audit -r requirements-lock.txt
+No known vulnerabilities found
+```
+
+Scanning the lock alone is **broader** than what it replaces, not narrower.
+`requirements-dev.txt` opens with `-r requirements.txt` and the lock compiles
+from dev + langgraph, so all 15 distributions named across the three inputs are
+pinned in the lock — which carries 79. The other 64 are transitive dependencies
+the range files never mention and the old invocation scanned only as a
+by-product of resolution. The ranges were also the wrong thing to scan: a range
+resolves to whatever the index offers that day, so the old form audited versions
+no leg installs.
+
+`test_dependency_lock_contracts.py` makes that subsumption a gate rather than a
+comment, and takes the lock concern out of `test_workflow_contracts.py` at
+653/700 lines — the seam DEC-035 names: workflow *shape* there, dependency *set*
+here, with `_workflow_paths.py` holding what both read instead of a second copy.
+
+Five mutation proofs: stripping one requirement's hashes, removing
+`--generate-hashes` from the header, dropping `--require-hashes` from one
+install step, restoring a range file to the audit target, and breaking the
+range-file parser's `-r` skip each fail their tests.
+
 ### The Dependabot queue, dispositioned — and the plan was wrong about half of it
 
 R-CQ-2 predicted "#62–#66 superseded by the SHA pins of R-CQ-9". **They are not.**

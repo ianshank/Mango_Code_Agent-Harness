@@ -29,20 +29,17 @@ from typing import Any
 import pytest
 
 from harness.shared.tests._ci_gate_helpers import _reported_check_names
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._workflow_paths import (
+    DEPENDABOT,
+    DRIFT_WORKFLOW,
+    RULESET,
+    UNSUPPORTED_LEG,
+    WORKFLOW,
+)
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
 
 pytestmark = pytest.mark.governance
 
-WORKFLOW_DIR = REPO / ".github" / "workflows"
-WORKFLOW = WORKFLOW_DIR / "python-package.yml"
-DRIFT_WORKFLOW = WORKFLOW_DIR / "scheduled-drift.yml"
-DEPENDABOT = REPO / ".github" / "dependabot.yml"
-RULESET = REPO / ".github" / "rulesets" / "main.json"
-LOCK = REPO / "requirements-lock.txt"
-LOCK_NAME = LOCK.name
-# The oldest interpreter in the matrix; langgraph declares Requires-Python >=3.10.
-UNSUPPORTED_LEG = "3.9"
 
 #: Lowest major of each action whose runtime is Node 24, verified against each
 #: action's `action.yml` (`runs.using: node24`) on 2026-09-02. A `uses:` below
@@ -120,10 +117,6 @@ def unpinned_uses(workflow_text: str) -> list[str]:
     return [line for line in pinnable_uses(workflow_text) if not PINNED_USES.match(line)]
 
 
-def pip_install_lines(workflow_text: str) -> list[str]:
-    return [line.strip() for line in workflow_text.splitlines() if re.match(r"^\s*python -m pip install ", line)]
-
-
 @pytest.fixture(scope="module")
 def workflow_text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
@@ -139,59 +132,6 @@ def jobs(workflow_text: str) -> dict[str, str]:
     sections = job_sections(workflow_text)
     assert {"build", "build-full"} <= set(sections), f"expected jobs missing: {sorted(sections)}"
     return sections
-
-
-class TestDependenciesComeFromTheLock:
-    """R-TDH-9: what CI installs is what the committed lock says, on every leg."""
-
-    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
-    def test_every_requirements_install_reads_the_lock(self, path: Path) -> None:
-        installs = [line for line in pip_install_lines(path.read_text(encoding="utf-8")) if " -r " in line]
-        assert installs, f"{path.name} installs no requirements file at all"
-        offenders = [line for line in installs if LOCK_NAME not in line]
-        assert not offenders, (
-            f"{path.name} installs from an unlocked requirements file: {offenders}. "
-            f"Install from {LOCK_NAME} so an upstream release cannot change what CI runs."
-        )
-
-    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
-    def test_the_editable_install_does_not_resolve_dependencies(self, path: Path) -> None:
-        editable = [line for line in pip_install_lines(path.read_text(encoding="utf-8")) if " -e " in line]
-        assert editable, f"{path.name} never installs the project itself"
-        assert all("--no-deps" in line for line in editable), (
-            f"`pip install -e .` without --no-deps re-resolves the project's ranges and can "
-            f"override the lock: {editable}"
-        )
-
-    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
-    def test_pip_cache_keys_follow_the_lock(self, path: Path) -> None:
-        keys = re.findall(r"cache-dependency-path:\s*(\S+)", path.read_text(encoding="utf-8"))
-        python_keys = [k for k in keys if k.startswith("requirements")]
-        assert python_keys, f"{path.name} declares no pip cache key"
-        assert set(python_keys) == {LOCK_NAME}, f"pip cache keyed on something other than the lock: {python_keys}"
-
-    def test_the_lock_carries_langgraph_behind_a_marker(self) -> None:
-        """The 3.9 leg must not receive langgraph; every other leg must."""
-        text = LOCK.read_text(encoding="utf-8")
-        entry = re.search(r"^langgraph==[^\s;]+ ; (.+)$", text, re.M)
-        assert entry, f"{LOCK_NAME} pins no langgraph; the StateGraph suites would skip everywhere again"
-        assert re.search(r"python_full_version >= '3\.10'", entry.group(1)), (
-            f"langgraph's marker in {LOCK_NAME} is {entry.group(1)!r}; it must exclude {UNSUPPORTED_LEG}"
-        )
-
-    def test_the_lock_does_not_carry_the_postgres_checkpointer(self) -> None:
-        text = LOCK.read_text(encoding="utf-8")
-        assert not re.search(r"^(psycopg|langgraph-checkpoint-postgres)==", text, re.M), (
-            "the Postgres checkpointer is its own extra; nothing under harness/ imports it "
-            "and pip-audit would scan a driver no gate exercises"
-        )
-
-    def test_the_lock_is_universal_not_interpreter_specific(self) -> None:
-        text = LOCK.read_text(encoding="utf-8")
-        assert "--universal" in text.splitlines()[1], (
-            "the header must show the lock was compiled with --universal; a per-interpreter "
-            "compile evaluates the markers away and cannot serve the 3.9/3.10/3.12 matrix"
-        )
 
 
 class TestTheUnsupportedLegDeselectsRatherThanSkips:

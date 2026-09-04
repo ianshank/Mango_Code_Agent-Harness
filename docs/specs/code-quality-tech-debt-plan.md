@@ -693,12 +693,29 @@ change from a vacuous pass.
       lives only in `pinnable_uses`, and the reconciliation test is parametrised
       over a workflow that has a local action, because the two real workflows
       cannot tell the correct count from the wrong one.
-- [ ] AC-10: `pytest harness/shared/tests/test_workflow_contracts.py -k require_hashes`
+- [ ] AC-10: `pytest harness/shared/tests/test_dependency_lock_contracts.py -k "hash"`
       fails on a `tmp_path` lock with one requirement line not followed by a
       `--hash=` line and on an install step without `--require-hashes`, and passes
       on the tree (today: the test does not exist and the lock has 0 hash lines);
       `make lock-check` passes on the hashed lock; the `dependency-audit` job on
       the PR head is green · stage: `make ci` (R-CQ-10)
+      — **Criterion corrected.** It named `test_workflow_contracts.py`, which was
+      at 653/700 lines before this slice; the lock concern moved to its own
+      module along DEC-035's seam, and the original command now selects **zero
+      tests and passes vacuously** — `41 deselected in 0.04s`. A criterion that
+      cannot fail is worse than one that is merely wrong, so the path is updated
+      rather than the split avoided.
+      — **Partial:** 10 passed / 14 deselected on the command as corrected;
+      `make lock-check: passed` against the hashed lock; `make ci` exit 0.
+      0 pins changed, 2,249 hash lines added across 79 distributions. Five
+      mutation proofs (strip one requirement's hashes; drop `--generate-hashes`
+      from the header; drop `--require-hashes` from one install step; restore a
+      range file to the audit target; break the range-file parser's `-r` skip).
+      `pip-audit` was measured on both forms: the three-file invocation fails
+      outright under hashes, the lock alone returns clean (DEC-047).
+      **Stays unticked** until the `dependency-audit` job is green on the pushed
+      head, which is the one part of this criterion that no local run can
+      evidence (DEC-024).
 - [ ] AC-11: `pytest harness/shared/tests/test_dockerfile_contract.py` fails on a
       `tmp_path` Dockerfile missing any of `@sha256:`, `USER`, the
       `COPY … package.json` before `corepack`, or carrying `EXPOSE` or `pnpm@`, and
