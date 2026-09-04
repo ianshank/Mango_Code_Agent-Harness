@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.governance.broker import ExecutionBroker, ProcessBackend
@@ -115,6 +116,85 @@ class TestToolHandlersToleratesJsonNull:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
         result = orch.execution_loop.dispatcher.tool_handlers["run_command"]({"command": None})
         assert not result.startswith("Traceback")
+
+
+class TestDispatchValidatesArgumentsAgainstTheAdvertisedSchema:
+    """The schema the model is shown is the schema its call is checked against,
+    before any handler runs (2026 standards audit H7). A missing `filepath`
+    used to become `""` and reach the executor, where only the operating
+    system refused it; an extra key passed straight through."""
+
+    def _dispatch(self, orch: MangoMASOrchestrator, name: str, args: dict[str, Any]) -> str:
+        from harness.shared.tests._orchestrator_helpers import _tool_call
+
+        messages: list[dict[str, Any]] = []
+        orch.execution_loop.dispatcher.dispatch(messages, [_tool_call(name, args)])
+        (reply,) = messages
+        assert reply["name"] == name
+        return str(reply["content"])
+
+    def test_a_missing_required_key_never_reaches_the_executor(self, mock_workspace: Path, monkeypatch) -> None:
+        from harness.shared.orchestrator import dispatcher as dispatcher_module
+
+        def explode(*_a: Any, **_k: Any) -> str:
+            raise AssertionError("the executor was reached with invalid arguments")
+
+        monkeypatch.setattr(dispatcher_module, "execute_write_file", explode)
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        result = self._dispatch(orch, "write_file", {"content": "x"})
+        assert result.startswith("Error: invalid_arguments:")
+        assert "filepath" in result
+
+    def test_an_extra_key_is_rejected_by_name(self, mock_workspace: Path) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        result = self._dispatch(orch, "write_file", {"filepath": "a.txt", "content": "x", "mode": "append"})
+        assert result == "Error: invalid_arguments: unexpected argument 'mode'"
+        assert not (mock_workspace / "a.txt").exists()
+
+    def test_a_wrongly_typed_key_is_rejected_before_the_handler(self, mock_workspace: Path) -> None:
+        (mock_workspace / "f.txt").write_text("one\ntwo\n", encoding="utf-8")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        result = self._dispatch(orch, "read_file", {"filepath": "f.txt", "start_line": "1"})
+        assert result == "Error: invalid_arguments: argument 'start_line' must be integer, got string"
+
+    def test_a_correct_call_is_unchanged(self, mock_workspace: Path) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        result = self._dispatch(orch, "write_file", {"filepath": "ok.txt", "content": "data"})
+        assert result.startswith("Success:")
+        assert (mock_workspace / "ok.txt").read_text(encoding="utf-8") == "data"
+
+    def test_slice_bounds_are_still_the_executors_to_judge(self, mock_workspace: Path) -> None:
+        """Types are the schema's; ranges are `_slice_bounds_denial`'s, which
+        the validator must not pre-empt or duplicate."""
+        (mock_workspace / "f.txt").write_text("one\ntwo\n", encoding="utf-8")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        result = self._dispatch(orch, "read_file", {"filepath": "f.txt", "start_line": 0})
+        assert result.startswith("Error reading file f.txt: start_line must be 1 or greater")
+
+    def test_unparseable_arguments_are_a_schema_failure_not_an_empty_write(self, mock_workspace: Path) -> None:
+        from harness.shared.tests._orchestrator_helpers import _tool_call
+
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        messages: list[dict[str, Any]] = []
+        orch.execution_loop.dispatcher.dispatch(messages, [_tool_call("write_file", "not-json{")])
+        assert messages[0]["content"].startswith("Error: invalid_arguments: missing required argument")
+
+    def test_a_handled_tool_with_no_schema_is_refused(self, mock_workspace: Path) -> None:
+        """Fail closed: a handler nothing advertised is a call nothing can check."""
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        dispatcher = orch.execution_loop.dispatcher
+        dispatcher.tool_handlers["unadvertised"] = lambda _args: "ran"
+        dispatcher.parameter_schemas.pop("unadvertised", None)
+        from harness.shared.orchestrator import dispatcher as dispatcher_module
+
+        with patch.object(dispatcher_module, "tool_is_permitted", return_value=True):
+            result = self._dispatch(orch, "unadvertised", {})
+        assert result == "Error: invalid_arguments: tool 'unadvertised' advertises no parameter schema"
+
+    def test_role_and_unknown_tool_checks_come_before_the_schema(self, mock_workspace: Path) -> None:
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, active_role="verifier")
+        assert self._dispatch(orch, "write_file", {}).startswith("Error: tool 'write_file' is not available")
+        assert self._dispatch(orch, "frobnicate", {}) == "Error: Unknown tool 'frobnicate'"
 
 
 class TestToolRegistry:

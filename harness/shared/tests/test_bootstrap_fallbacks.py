@@ -128,7 +128,10 @@ class TestCoverageGateFallback:
         monkeypatch.syspath_prepend(str(SHARED))
         ns = runpy.run_path(str(SHARED / "coverage_gate.py"), run_name="coverage_gate_fallback")
         assert callable(ns["main"])
-        assert callable(ns["resolve_log_level"])
+        # The name the sibling leg binds moved with M25 (2026 standards audit):
+        # the gate's `__main__` block now routes through the shared process
+        # sink rather than resolving a level and calling basicConfig itself.
+        assert callable(ns["configure_gate_process_logging"])
 
 
 class TestCheckDedupFallback:

@@ -82,7 +82,7 @@ purpose and its enforcement surface:
 - [ ] AC-4: `git grep -il pong -- ':!docs/specs'` returns no hits outside this
   spec and historical changelog entries — verified by that command's output.
   — open 2026-09-02: besides the two changelogs the grep reports
-  `docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, `harness/TEST-REPORT.md`,
+  `docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` (since moved to `docs/reports/`), `harness/TEST-REPORT.md`,
   `harness/docs/BENCHMARK_REPORT.md` (superseded reports),
   `harness/shared/tests/test_documentation_truth.py` (the test asserting the
   Pong artefacts stay gone) and three files under

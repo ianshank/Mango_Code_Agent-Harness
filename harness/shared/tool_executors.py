@@ -10,7 +10,13 @@ from harness.shared.agent_authority import execution_identity
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.read_policy import read_denial_reason
-from harness.shared.tool_result_format import format_execution_result
+from harness.shared.tool_result_format import (
+    INVALID_ARGUMENTS,
+    ToolText,
+    denied,
+    failed,
+    format_execution_result,
+)
 from harness.shared.write_policy import active_policy_path, write_denial_reason
 
 if TYPE_CHECKING:
@@ -89,7 +95,7 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
     workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
     if denial is not None:
         logger.warning("Denied write outside the workspace: %s", filepath)
-        return f"Error writing file {filepath}: {denial}"
+        return denied(f"Error writing file {filepath}: {denial}")
 
     # `policy_path` is passed explicitly rather than defaulted: a parameter no
     # caller supplies is never exercised outside tests, which is how the write
@@ -101,7 +107,7 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
     )
     if denial is not None:
         logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
-        return f"Error writing file {filepath}: {denial}"
+        return denied(f"Error writing file {filepath}: {denial}")
 
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,7 +115,7 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         return f"Success: Wrote {len(content)} characters to {target_path.resolve()}"
     except Exception as e:
         logger.exception("Failed writing %s", filepath)
-        return f"Error writing file {filepath}: {str(e)}"
+        return failed(f"Error writing file {filepath}: {str(e)}")
 
 
 def execute_read_file(
@@ -134,35 +140,35 @@ def execute_read_file(
     workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
     if denial is not None:
         logger.warning("Denied read outside the workspace: %s", filepath)
-        return f"Error reading file {filepath}: {denial}"
+        return denied(f"Error reading file {filepath}: {denial}")
 
     denial = read_denial_reason(str(target_path.relative_to(workspace)))
     if denial is not None:
         logger.warning("Denied read of a governed path: %s (%s)", filepath, denial)
-        return f"Error reading file {filepath}: {denial}"
+        return denied(f"Error reading file {filepath}: {denial}")
 
     denial = _slice_bounds_denial(start_line, end_line)
     if denial is not None:
         logger.warning("Denied read with bad bounds: %s (%s)", filepath, denial)
-        return f"Error reading file {filepath}: {denial}"
+        return ToolText(f"Error reading file {filepath}: {denial}", INVALID_ARGUMENTS)
 
     if target_path.is_dir():
         try:
             entries = sorted(p.name for p in target_path.iterdir())
             listing = "\n".join(entries)
             prefix = f"Error reading file {filepath}: Path is a directory. Directory contents:\n"
-            return _cap(prefix + listing, DEFAULT_MAX_OUTPUT_BYTES)
+            return failed(_cap(prefix + listing, DEFAULT_MAX_OUTPUT_BYTES))
         except OSError as e:
-            return f"Error reading file {filepath}: {e}"
+            return failed(f"Error reading file {filepath}: {e}")
 
     try:
         content = _read_preserving_newlines(target_path)
     except FileNotFoundError:
         logger.info("File does not exist: %s", filepath)
-        return f"Error reading file {filepath}: File does not exist. You can create it with write_file."
+        return failed(f"Error reading file {filepath}: File does not exist. You can create it with write_file.")
     except Exception as e:
         logger.exception("Failed reading %s", filepath)
-        return f"Error reading file {filepath}: {str(e)}"
+        return failed(f"Error reading file {filepath}: {str(e)}")
 
     header = ""
     if start_line is not None or end_line is not None:
@@ -204,7 +210,7 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
     workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
     if denial is not None:
         logger.warning("Denied patch outside the workspace: %s", filepath)
-        return f"Error patching file {filepath}: {denial}"
+        return denied(f"Error patching file {filepath}: {denial}")
 
     relpath = str(target_path.relative_to(workspace))
 
@@ -219,25 +225,25 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
     denial = read_denial_reason(relpath)
     if denial is not None:
         logger.warning("Denied patch reading a governed path: %s (%s)", filepath, denial)
-        return f"Error patching file {filepath}: {denial}"
+        return denied(f"Error patching file {filepath}: {denial}")
 
     denial = write_denial_reason(relpath, policy_path=active_policy_path())
     if denial is not None:
         logger.warning("Denied patch of a governed path: %s (%s)", filepath, denial)
-        return f"Error patching file {filepath}: {denial}"
+        return denied(f"Error patching file {filepath}: {denial}")
 
     try:
         content = _read_preserving_newlines(target_path)
     except Exception as e:
         logger.exception("Failed reading %s before patch", filepath)
-        return f"Error patching file {filepath}: {str(e)}"
+        return failed(f"Error patching file {filepath}: {str(e)}")
 
     # An empty `old_text` counts once per position, so it is refused here by the
     # same rule rather than needing a special case.
     count = content.count(old_text)
     if count != 1:
         logger.warning("Denied patch with a non-unique match: %s (matched %d times)", filepath, count)
-        return (
+        return failed(
             f"Error patching file {filepath}: old_text matched {count} times, expected exactly 1. "
             "Widen old_text with surrounding lines until it identifies one place in the file."
         )
@@ -247,7 +253,7 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
             handle.write(content.replace(old_text, new_text, 1))
     except Exception as e:
         logger.exception("Failed writing patched %s", filepath)
-        return f"Error patching file {filepath}: {str(e)}"
+        return failed(f"Error patching file {filepath}: {str(e)}")
     return f"Success: patched {filepath}"
 
 

@@ -45,6 +45,30 @@ def test_the_guard_blocks_a_loopback_connection(unused_tcp_port: int = 9) -> Non
         socket.create_connection(("127.0.0.1", unused_tcp_port), timeout=0.01)
 
 
+def test_a_unix_socketpair_is_permitted_while_tcp_still_raises() -> None:
+    """`--allow-unix-socket` is not a hole in the floor; this is the proof.
+
+    AF_UNIX cannot leave the host, and it is what asyncio's self-pipe and
+    anyio's BlockingPortal (under FastAPI's TestClient) are made of. Before the
+    allowance, 35 tests carried `enable_socket` for that need and the marks
+    re-opened TCP as well (audit M12). Both halves are asserted in one test so
+    neither can be satisfied by the other: the socketpair is created, and in the
+    same guard state a TCP socket is still refused.
+    """
+    left, right = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        assert left.fileno() >= 0 and right.fileno() >= 0
+        left.sendall(b"ping")
+        assert right.recv(4) == b"ping"
+    finally:
+        left.close()
+        right.close()
+    with pytest.raises(pytest_socket.SocketBlockedError):
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+
+# A real TCP need (R-EGF-6): this test exists to open an AF_INET socket, which
+# the unix-socket allowance does not cover, so the exemption has to be declared.
 @pytest.mark.enable_socket
 def test_the_guard_can_be_declared_off_per_test() -> None:
     """R-EGF-6: an exemption is visible at the test that needs it.
@@ -75,6 +99,12 @@ def test_no_global_socket_exemption_exists() -> None:
     assert "--disable-socket" in addopts, "the egress floor was removed from addopts"
     assert "--allow-hosts" not in addopts, "a global host allow-list re-opens the floor"
     assert "--enable-socket" not in addopts, "a global enable re-opens the floor"
+    # The one global allowance, and it is not egress: AF_UNIX stays on the host.
+    # Pinned so a drop of it does not silently bring the 35 per-test marks back.
+    assert "--allow-unix-socket" in addopts, (
+        "the unix-socket allowance left addopts; asyncio's self-pipe and TestClient's "
+        "portal would need per-test enable_socket marks again, which re-open TCP too"
+    )
 
 
 # --- the Python reasoning path (R-EGF-3) -----------------------------------

@@ -93,7 +93,23 @@ CRITICAL_PATTERNS = {
         "owns the coverage-threshold classification; unprotected, it could be deleted "
         "outright with every gate still green"
     ),
+    "**/conftest.py": (
+        "every nested conftest is imported by the verifier's own `make test-python` run; "
+        "the root one was protected by DEC-042 and the nested ones were not (audit B4)"
+    ),
 }
+
+# Code-execution surfaces the verifier's `make test-python` run would honour if
+# they existed, protected before they exist so the guard is armed rather than
+# added after the first forgery. Reproduced by the 2026 standards audit (B4):
+# `write_denial_reason("GNUmakefile")` was `None`, and GNU Make reads
+# `GNUmakefile` and `makefile` before `Makefile`; pytest reads `pytest.ini`,
+# `tox.ini` and `setup.cfg` in preference to `pyproject.toml`; the interpreter
+# imports `sitecustomize`/`usercustomize` and `.pth` files at startup; and
+# `setup.py` is executed by any legacy install. Each is dormant for the same
+# reason as `.claude/settings.local.json` below: no such file is tracked, and
+# the pattern is what stops an agent creating one.
+ARMED_BEFORE_USE = "no such file is tracked; the pattern arms the guard before an agent creates one (audit B4)"
 
 # Patterns that intentionally match nothing today. Each entry must say why, so
 # that "this pattern is dead" is a reviewed statement rather than an accident.
@@ -121,6 +137,24 @@ DORMANT_PATTERNS = {
         "so the guard is armed before one appears rather than after"
     ),
     ".mango/settings.local.json": "no local override file exists yet; arms the guard when one is added",
+    "GNUmakefile": f"GNU Make reads it before Makefile; {ARMED_BEFORE_USE}",
+    "makefile": f"GNU Make reads it before Makefile; {ARMED_BEFORE_USE}",
+    "setup.py": f"executed by a legacy install; {ARMED_BEFORE_USE}",
+    "setup.cfg": f"pytest reads it as configuration; {ARMED_BEFORE_USE}",
+    "pytest.ini": f"pytest reads it in preference to pyproject.toml; {ARMED_BEFORE_USE}",
+    "tox.ini": f"pytest reads it as configuration; {ARMED_BEFORE_USE}",
+    "sitecustomize.py": f"imported by the interpreter at startup; {ARMED_BEFORE_USE}",
+    "usercustomize.py": f"imported by the interpreter at startup; {ARMED_BEFORE_USE}",
+    # The nested forms: the interpreter imports these from *any* sys.path entry,
+    # a virtualenv's site-packages included, and the root-only pattern left
+    # `.venv/lib/*/site-packages/sitecustomize.py` writable (Copilot review on
+    # PR #86). `**/` needs a character before the slash, so the pair covers both.
+    "**/sitecustomize.py": f"imported by the interpreter at startup from any sys.path entry; {ARMED_BEFORE_USE}",
+    "**/usercustomize.py": f"imported by the interpreter at startup from any sys.path entry; {ARMED_BEFORE_USE}",
+    # `*.pth`, not `**/*.pth`: fnmatch's `*` crosses `/`, so this one pattern
+    # matches a root `extra.pth` and a nested `src/extra.pth` alike, while the
+    # `**/` form needs a character before the slash and misses the root.
+    "*.pth": f"executed by site at interpreter startup; {ARMED_BEFORE_USE}",
 }
 
 # One sentinel per reason the control surface is gated at all. If any of these
@@ -153,6 +187,10 @@ CONTROL_SURFACE = {
     "harness/shared/orchestrator/dispatcher.py": "routes every tool call to its executor",
     "harness/shared/orchestrator/hook_runner.py": "executes hook shell on the host",
     "conftest.py": "imported by the verifier's own test run, and writes the INV-2 skip evidence",
+    "harness/shared/tests/conftest.py": (
+        "imported by the verifier's own test run; a nested conftest can monkeypatch the "
+        "suite into passing exactly as the root one can (audit B4)"
+    ),
 }
 
 
@@ -424,11 +462,13 @@ class TestPortableLiveness:
             "this repository's own pattern set against its own tree must stay quiet, "
             f"got {[(f.kind, f.pattern) for f in own]}"
         )
-        assert len(DORMANT_PATTERNS) == 6, (
-            "the six declared dormant patterns are accepted unchanged by the "
+        assert len(DORMANT_PATTERNS) == 17, (
+            "the seventeen declared dormant patterns are accepted unchanged by the "
             f"generalised assertion; the declaration now holds {len(DORMANT_PATTERNS)}. "
             "(Was 7: `.github/CODEOWNERS` was reclassified out of this set when a real "
-            "root CODEOWNERS was added, per test_awake_patterns_reclassify's own contract.)"
+            "root CODEOWNERS was added, per test_awake_patterns_reclassify's own contract; "
+            "then 6; then 15 when audit B4 armed nine code-execution surfaces before use; "
+            "then 17 when the nested sitecustomize/usercustomize forms were armed.)"
         )
 
     def test_a_pattern_that_does_match_the_foreign_tree_is_not_reported(self, patterns):

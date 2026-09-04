@@ -89,10 +89,14 @@ class MangoMASOrchestrator:
         self.max_iterations = max_iterations if max_iterations is not None else limits["max_iterations"]
         self.api_timeout = api_timeout if api_timeout is not None else limits["api_timeout_sec"]
         self.tool_timeout = tool_timeout if tool_timeout is not None else limits["tool_timeout_sec"]
+        # The verification run is a test suite, not a model round-trip, so it
+        # has its own ceiling (2026 standards audit H16). Passing `api_timeout`
+        # here made a slow runner's passing suite a BLOCKED/harness_fault.
+        self.verification_timeout = limits["verification_timeout_sec"]
         self.max_tool_calls_per_task = max_tool_calls_per_task()
         self._broker = broker or ExecutionBroker()
         self._verification = verification or VerificationRunner(
-            self._broker, execution_identity("verifier"), timeout=self.api_timeout
+            self._broker, execution_identity("verifier"), timeout=self.verification_timeout
         )
         self._verification_cwd = verification_cwd if verification_cwd is not None else workspace_dir
         self._active_role = active_role
@@ -135,6 +139,14 @@ class MangoMASOrchestrator:
     @property
     def conversation_history(self) -> list[dict[str, Any]]:
         return self.execution_loop.conversation_history
+
+    @property
+    def run_id(self) -> str | None:
+        """The identifier every structured event of the current loop carries.
+
+        Minted by ``execute_loop``; ``None`` until a loop or agent has run.
+        """
+        return self.execution_loop.run_id
 
     def load_agent_prompt(self, agent_name: str) -> str:
         return self.execution_loop.load_agent_prompt(agent_name)

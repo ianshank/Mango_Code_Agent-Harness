@@ -1,5 +1,11 @@
 {
   "schema_version": "2.0.0",
+  "_comment": [
+    "What this authority model is enforced by, stated so it is not read as more than it is.",
+    "Every action here is checked at three layers on the direct doors (tool schema, dispatch, broker), and the broker's ProcessBackend CONTAINS but does not ISOLATE: pinned cwd, bounded runtime, capped output, credentials stripped from the child environment; neither the filesystem nor the network is confined (governance/broker.py, DEC-010, INV-13).",
+    "Known gap until OS isolation lands: test_execute permits running a workspace script, and the script is not governed by this model. It can still read the on-disk .env, write any protected file and open sockets. The verdict is protected against that route (VerificationRunner refuses to grade when a protected file changed since the loop started); the script's other effects are not prevented.",
+    "No role may hold 'destructive': it is the action every unmodelled or indirect-execution command grades as, and the fail-closed default depends on no role holding it."
+  ],
   "limits": {
     "max_delegation_depth": 2,
     "max_parallel_subagents": 6,

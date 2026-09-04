@@ -10,6 +10,216 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase B of the 2026 remediation plan: the loop, the policy and the MCP transport
+
+Landed together with the slices recorded below, from
+`docs/specs/2026-standards-remediation-plan.md` (R-SR-11 … R-SR-16):
+
+- **Verification runs under its own timeout.** `orchestrator.verification_timeout_sec`
+  joins `governance-policy.json`, `OrchestratorLimits` and `orchestrator_defaults()`;
+  `VerificationRunner` and the facade read it instead of the model-latency
+  `api_timeout_sec` that the closed plan's R-CQ-14 had wired in. A present
+  policy without the key fails closed (DEC-050).
+- **One tool budget per task.** `execute_loop` mints a single `ToolBudget` and
+  hands it to planner, reasoner and verifier; `max_tool_calls_per_task` was
+  enforced as three times its declared value before.
+- **A run id and structured events.** `ExecutionLoop.run_id` (uuid4) is minted
+  per loop and carried on one `model_call` event per completion (agent,
+  iteration, latency, usage tokens when present) and one `tool_call` event per
+  dispatch (tool, permitted, duration). `JSONFormatter` now emits `extra=`
+  fields as top-level keys, dropping credential-named ones. No arguments or
+  message contents are logged.
+- **Tool arguments are checked before any executor runs.** `tool_arg_validation.py`
+  (stdlib only) validates a call against the tool's own `parameters` schema:
+  required keys, `additionalProperties: false`, primitive types. A failing call
+  returns `Error: invalid_arguments: <key>` and never reaches the executor.
+- **One gate log sink.** Every gate script configures logging through
+  `json_logging.configure_gate_process_logging`; `validate_specs.py` and
+  `validate_plan.py` honour `LOG_LEVEL`.
+- **MCP serves the dispatcher's registry.** `mcp_server._build_tool_handlers`
+  instantiates `ToolDispatcher` and serves its table, so a tool added to one
+  transport appears in the other; handlers run via `asyncio.to_thread` so a long
+  `run_command` no longer freezes the transport; each call logs tool, role, the
+  handler's final outcome and duration, with schema-declared argument names
+  only and unknown names as a count (Copilot review on PR #86).
+- **Readiness means every accessor the orchestrator resolves.** `/readyz` also
+  exercises `max_tool_calls_per_task()`, and `tool_calls[].function.arguments`
+  accepts every JSON shape the dispatcher degrades to "no arguments" (Copilot
+  review on PR #86).
+- **Second review round.** The enforcement digest is re-checked after the
+  verification command exits, so a change that persists inside the run is
+  `BLOCKED/enforcement_tampered` too (the swap-and-restore residual is stated in
+  `SECURITY.md`); a baseline that could not be recorded is remembered and
+  refuses to grade rather than silently starting one; the MCP transport runs
+  the same schema gate as the dispatcher before any handler; `npx`/`pnpm exec`
+  with any leading option fails closed; a pinned supplied write policy widens
+  the digested set instead of replacing the harness floor; a failed model call
+  still emits a `model_call` event; `/readyz` checks the model credential; the
+  selector gate matches the whole node identity (Copilot review on PR #86).
+- **Third review round (DEC-051).** A workspace `pytest.py` was the pytest the
+  verification recipe ran: `PYTEST` is now `$(PYTHON) -I -m pytest` and the
+  Makefile exports `PYTHONSAFEPATH=1` for the xdist workers, with a regression
+  proving the forgery under the old recipe shape and its absence under the new.
+  The enforcement digest walks the whole workspace (only `.git` skipped) so a
+  virtualenv's `*.pth` and `sitecustomize.py` are in the set the write door
+  protects; `**/sitecustomize.py` and `**/usercustomize.py` join
+  `protected_paths`. `make` long options are recognised by exact spelling or
+  refused, closing GNU make's unique-prefix expansion (`--dir=`, `--ev=`), and
+  `-e` is refused. Tool outcomes are typed on the result
+  (`tool_result_format.ToolText`) instead of inferred from its text, so the
+  dispatcher's `tool_call` event and the MCP log report the executor's own
+  decision (`denied_policy`, `failed`, `executed`). `SECURITY.md` names the
+  three residuals that remain until OS isolation.
+
+### A ticked acceptance criterion must name a selector that collects something
+
+Peer review of the closed program plan found three ticked criteria whose
+`pytest … -k` selectors collected zero tests: the code had landed, the tests
+existed under other names, and the boxes were ticked on commands that could not
+fail. `harness/shared/tests/test_spec_selectors_collect.py` now parses every
+ticked `AC-*` bullet in `docs/specs/`, evaluates its `-k` expression with
+pytest's own grammar against the test names the cited files declare, and fails
+on a zero match. Its first run found four more in two landed specs
+(`tech-debt-hardening-plan.md` AC-1/AC-9, `gate-truthfulness.md` AC-2/AC-6),
+corrected in place with the selector that collects the real test.
+
+### The 2026 standards audit, its plan, and the roadmap that points at it
+
+`docs/reports/2026-STANDARDS-AUDIT.md` (revision 2, after an adversarial
+falsification pass executed every Blocker and High) answers "does this repository
+meet 2026 standards" with the gates run on `71223f1` and four deciding facts:
+`main` is unprotected, the harness verdict is forgeable by scripting a rewrite of
+the protected `Makefile`, the API server 500s on every tool-using run, and the
+Python floor is a year past end-of-life. `docs/specs/2026-standards-remediation-plan.md`
+supersedes the open remainder of `code-quality-tech-debt-plan.md` (closed at
+revision 2) and owns every finding in six phases; the four in-or-out decisions
+(JVM, LangGraph, `openspec/`, per-stack mirroring) are recorded from their
+memos. `NEXT_STEPS.md` is rewritten to point at the plan instead of restating
+it, with every item carrying a Done-when bound to a stage and a failure it can
+report. The audit procedure is a skill, `.mango/skills/standards-audit/`,
+composing `tech-debt-audit`, `validation-runner` and `gate-mutation-proof`.
+
+### Every tool-using run returned 500 at the API server (audit B3)
+
+`TaskResponse.history` was `list[dict[str, str]]`, a type that admits the
+system and user turns and nothing the orchestrator appends after them. A
+tool call is an assistant turn with `content: null` and a `tool_calls` list,
+followed by a `tool` turn carrying `tool_call_id`; pydantic rejected all
+three, the endpoint's blanket `except` reported "Internal orchestration error",
+and the verdict the run had earned never left the process. The only test used
+a string-only history, so the defect was invisible to CI.
+
+`harness/api_server/messages.py` now types the history per role, mirroring
+the OpenAI chat shape `orchestrator/loop.py` and `dispatcher.py` produce.
+A string-only history serialises byte-for-byte as before (unset optional
+fields are omitted, not emitted as `null`); provider-added keys pass through;
+an unknown role is still refused as the same opaque 500. Regression:
+`TestToolUsingRunsReachTheClient` in `test_api_server_regression.py`.
+
+Additive, from audit M14: unauthenticated `GET /healthz` (liveness, always
+200) and `GET /readyz` (200 only when `API_SERVER_KEY` is set and the
+governance policy loads through `orchestrator_defaults()`; 503 with boolean
+checks otherwise -- never the failing path). `setup_json_logging` moved from
+import time into the FastAPI lifespan, so importing the app object no longer
+replaces the importing process's log handlers; a served process is configured
+at startup exactly as before. No `max_length` was placed on `TaskRequest.task`:
+no existing policy key describes a task brief (`orchestrator.max_command_bytes`
+bounds a sandbox command line, `max_output_bytes` a captured tool output), and
+a purpose-made key is a change to a protected path.
+
+### Documentation claims now carry pins (audit M26 and the Low list)
+
+Six statements the 2026 standards audit found false or unverifiable are
+corrected, and each gains a mechanical check so it cannot drift back:
+`harness/CONTRACT.md` now says the `PIN_FULL_COMMIT_SHA` placeholder lives in
+`required-workflow.example.yml` alone (every other workflow is SHA-pinned since
+DEC-045); `harness/node/Agent.md` describes the Nemotron client and governance
+mirror it actually owns instead of a React/Vite/WebSocket stack it never had;
+`docs/architecture/c4_architecture.md` lists the four routes the server
+registers, `/api/orchestrate`, `/healthz`, `/readyz` and `/` (never `/health`,
+`/v1/orchestrator/run` or `/v1/models`), says the bridge posts
+`stream: False`, and draws the LangGraph edge in the direction the nodes call;
+`CONTRIBUTING.md` states `make pre-pr` as the bar with `make ci` + linked
+`dependency-audit`/`secret-scan` job runs as the one fallback when Go is absent;
+the README's Node setup names `corepack enable`; and
+`docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` moves under `docs/reports/` (R-CQ-30's
+last open item), with `harness/README.md` indexing every report there including
+`2026-STANDARDS-AUDIT.md`. `TestDocumentedRoutesExist` joins
+`test_documentation_truth.py`; the other pins are in the new
+`test_documentation_claims.py`. `README.md`'s version literal stays: it is one of
+the mirrors `TestVersionIsSingleSourced` pins to `pyproject.toml`.
+
+### Two gates that failed right after their own install step, and the test run gets a seed
+
+The 2026 standards audit (`docs/reports/2026-STANDARDS-AUDIT.md`, §2) found
+two gates whose first failure was the gate runner, not the code: `make secrets`
+failed closed immediately after a successful `make secrets-install`, because
+`go install` writes to `$(go env GOPATH)/bin` and no recipe looked there (CI
+passed only by prefixing `PATH` by hand), and the session-start hook installed
+`requirements-dev.txt` unhashed with system pip and, when pip aborted, said
+nothing. All three Makefiles now resolve each Go-installed tool through `PATH`
+and then `GOPATH/bin` -- a name found in neither is left as written, so the
+`command -v` guards still fail closed -- and the workflow's `PATH=` prefixes are
+gone, so CI runs the gate exactly as a developer does. The hook installs the
+hashed lock with `--require-hashes` then `-e . --no-deps`, the CI recipe
+verbatim, and names the step that failed. The root Makefile gains the
+`.SHELLFLAGS := -eu -o pipefail -c` both stack Makefiles already had.
+
+**Test hygiene (H8, M12).** `pytest-randomly` and `pytest-xdist` are pinned
+and both Python runners pass `-p randomly -n auto`; the seed is printed in the
+run header and reproduces with `--randomly-seed=N`. Enabling xdist on the
+coverage run was measured first: pytest-cov combined the workers' data (lines
+99.22% / branches 97.81% under `-n auto` against 99.24% / 97.87% serial) and
+both a collection-time and a runtime skip reached the INV-2 evidence file;
+`make coverage-python` fell from 92s to 36s on four cores. `--allow-unix-socket`
+joins `--disable-socket`: the 35 `enable_socket` marks whose real need was a
+unix socketpair (asyncio's self-pipe; anyio's portal under `TestClient` --
+never the "loopback" the comments claimed) are removed, and the three survivors
+name their TCP need. `test_egress_floor.py` proves a socketpair is created and
+AF_INET still raises in the same guard state.
+
+**CI truthfulness (M15, M16).** `pip-audit` is pinned in `requirements-dev.txt`
+so it lands in the hashed lock and installs with `--require-hashes`, as does
+the drift workflow's `uv`; every workflow job carries `timeout-minutes`, and
+the PR workflow cancels superseded runs per ref (the scheduled one deliberately
+does not -- a cancelled run there is a lost notification). Decision: DEC-048.
+### The verdict was forgeable by the agent it judges (audit B4, DEC-049)
+
+`write_file Makefile` is refused; `write_file forge.py` then `run_command
+python3 forge.py` was not, and the script rewrote the protected `Makefile` so
+the next `VerificationRunner.run` returned `VERIFIED` on a failing suite —
+reproduced through the real dispatcher, broker and process backend. `-f
+Makefile` pinned *which* file was read; nothing pinned *what it said*.
+
+- `protected_paths` gains the code-execution surfaces the verifier's own
+  `make test-python` would honour: `GNUmakefile`, `makefile`, `setup.py`,
+  `setup.cfg`, `pytest.ini`, `tox.ini`, `sitecustomize.py`,
+  `usercustomize.py`, `*.pth`, `**/conftest.py`. Nine are declared dormant in
+  `test_protected_path_liveness.py` — no such file is tracked; the pattern arms
+  the guard before an agent creates one.
+- `make` is graded by what it is told to read (`governance/indirect_exec.py`):
+  `-f <anything but Makefile>`, `-C`, `--eval`, `-I`, a bundled short flag or a
+  `NAME=value` override all grade `destructive`. `pnpm exec <x>` / `npx <x>`
+  grade as `<x>`, accepted only for the programs `_BY_PROGRAM` already grades
+  `test_execute` — one table, read through the delegator.
+- `VerificationRunner.snapshot_enforcement` digests every protected file
+  before the first agent turn (`ExecutionLoop.execute_loop`); `run` refuses
+  with `BLOCKED` / `enforcement_tampered` naming the files if any changed,
+  appeared or vanished. `HarnessCheck.tampered_files` carries the evidence so
+  `derive_verdict` cannot grade past it. The digest is the sha256 the control
+  plane pins the bundle with; a test pins the three copies agree.
+- `SECURITY.md` and `agent-policy.json` now say what `broker.py` says:
+  containment, not isolation. **Still open:** the script still runs, and can
+  read the on-disk `.env`, write `.git/hooks/*` and open sockets. The verdict
+  is unforgeable by that route; the script's other effects are not prevented.
+  OS isolation of `ProcessBackend` is the fix and its own spec.
+
+Regression tier: `regression/test_verdict_forgery_regression.py` drives the
+audit's recipe through `bash -c` in the real backend, proves the forged
+makefile passes on its own, and asserts the harness refuses it —
+plus the negative controls (untouched passing tree → VERIFIED; untouched
+failing tree → FAILED; forgery reverted to the exact bytes → the real suite runs).
+
 ### The lock pinned versions; nothing pinned artefacts
 
 A version number is a name a registry resolves. `requirements-lock.txt` pinned

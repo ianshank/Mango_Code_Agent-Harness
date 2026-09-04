@@ -207,7 +207,12 @@ this work.
   It does under the no-hard-coded-values rule, and does not while the module default is
   the only consumer and a policy change would require rebuilding the committed policy
   artifact. Revisit when a second consumer exists.
-- **Still open.** Whether the configuration surface (`GNUmakefile`, `makefile`,
-  `conftest.py`, `pytest.ini`, `tox.ini`, `setup.cfg`, `vitest.config.ts`) should join
-  `protected_paths`, and whether `mv` should classify its source. Both are pre-existing
-  containment questions this change surfaces but does not answer.
+- **Resolved in part — DEC-049 (2026-09-04).** `GNUmakefile`, `makefile`,
+  `**/conftest.py`, `pytest.ini`, `tox.ini`, `setup.cfg`, `setup.py`,
+  `sitecustomize.py`, `usercustomize.py` and `*.pth` joined `protected_paths` after the
+  2026 standards audit (B4) reproduced a forged verdict: `-f Makefile` pinned which
+  file the check read, and a script run through `run_command` rewrote what it said.
+  The runner now digests every protected file before the first agent turn and refuses
+  to grade (`enforcement_tampered`) if any changed, appeared or vanished. **Still
+  open:** `vitest.config.ts` (a per-stack file, not a root pattern) and whether `mv`
+  should classify its source.

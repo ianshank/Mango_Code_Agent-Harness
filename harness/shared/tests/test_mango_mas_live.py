@@ -32,6 +32,8 @@ def _set_nemotron_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.live
+# A real TCP need (R-EGF-6): the orchestrator calls the Nemotron API over HTTPS,
+# which no unix-socket allowance covers. Selected only by `pytest -m live`.
 @pytest.mark.enable_socket
 @pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY (DEC-026)")
 class TestMangoMASLive:

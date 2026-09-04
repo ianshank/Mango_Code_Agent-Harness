@@ -24,6 +24,7 @@ the scheduled workflow to raise as an issue.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from datetime import date, datetime, timedelta, timezone
@@ -106,6 +107,13 @@ STANDALONE_SKILLS = {
         "Provides guidelines for persisting memory and managing context retention. "
         "It acts as a protocol specification for agents to read and write persistent data, "
         "rather than an automated CI step."
+    ),
+    "standards-audit": (
+        "A yearly (or baseline-moving) external-standards audit: gates executed in a clean "
+        "environment, six review lenses, GitHub API cross-checks, then an adversarial "
+        "falsification pass over the draft. Its mechanical residue is already a gate -- "
+        "test_spec_selectors_collect.py catches the vacuous-selector class it found by hand -- "
+        "and the rest is judgement about a report, which no per-PR target should run."
     ),
 }
 
@@ -304,9 +312,88 @@ class TestSessionStartPreparesTheGates:
         Python only -- so in a web session `make ci` could never complete, because
         test-node and verify-zero-skips have no node_modules."""
         text = self.HOOK.read_text(encoding="utf-8")
-        assert "requirements-dev.txt" in text, "Python dev dependencies are not installed"
+        assert "requirements-lock.txt" in text, "Python dependencies are not installed"
         assert "node-deps" in text, (
             "Node dependencies are not installed, so `make ci` cannot reach test-node"
+        )
+
+    def test_the_python_install_is_the_ci_recipe(self) -> None:
+        """The hook installed `requirements-dev.txt` unhashed with whatever pip
+        resolved that day, while every CI leg installs the hashed lock -- so a
+        web session ran gates against a dependency set CI never saw, and when
+        the install aborted it left mypy and pytest missing with nothing said
+        (2026 standards audit, §2). Same recipe, same artefacts, same hashes."""
+        text = self.HOOK.read_text(encoding="utf-8")
+        assert "python -m pip install --quiet --require-hashes -r requirements-lock.txt" in text, (
+            "the hook does not install the hashed lock with --require-hashes"
+        )
+        assert "python -m pip install --quiet -e . --no-deps" in text, (
+            "the editable install must not re-resolve the ranges over the lock (--no-deps)"
+        )
+        assert not re.search(r"pip install .*-r requirements-dev\.txt", text), (
+            "the hook still installs requirements-dev.txt directly, which is unhashed and unlocked"
+        )
+
+    @POSIX_ONLY
+    @pytest.mark.parametrize(
+        ("failing_step", "named_command"),
+        [
+            pytest.param("--require-hashes", "--require-hashes -r requirements-lock.txt", id="the-lock-install"),
+            pytest.param("-e .", "-e . --no-deps", id="the-editable-install"),
+        ],
+    )
+    def test_a_failed_install_is_named_and_fails_the_hook(
+        self, tmp_path: Path, failing_step: str, named_command: str
+    ) -> None:
+        """Driven with a fake `python` whose one install step fails.
+
+        Under plain `set -e` the abort was silent: pip's own error went to a
+        stderr nobody surfaced and the hook simply stopped. The line the hook
+        prints has to name the command that failed so the next `make ci` failure
+        is read as "the session never got its tools", not as a real red gate.
+        """
+        result = self._run_with_fake_python(tmp_path, failing_step=failing_step)
+        assert result.returncode != 0, "a failed install must not leave the hook reporting success"
+        assert f"session-start: FAILED — 'python -m pip install {named_command}' exited non-zero" in result.stderr, (
+            f"the failure line does not name the step that failed:\n{result.stderr}"
+        )
+
+    @POSIX_ONLY
+    def test_a_successful_install_is_silent_about_failure(self, tmp_path: Path) -> None:
+        """The control: with every step succeeding the hook exits 0 and prints no FAILED line."""
+        result = self._run_with_fake_python(tmp_path, failing_step=None)
+        assert result.returncode == 0, result.stderr
+        assert "FAILED" not in result.stderr + result.stdout
+
+    def _run_with_fake_python(self, tmp_path: Path, *, failing_step: str | None) -> subprocess.CompletedProcess[str]:
+        """Run the hook as a managed remote against a throwaway project with a fake interpreter.
+
+        The fake `python` succeeds on every invocation except the one whose
+        arguments contain ``failing_step``; ``MANGO_SKIP_NODE_DEPS=1`` stops the
+        hook before it reaches the Node install, which is not under test here.
+        """
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "requirements-lock.txt").write_text("# probe lock\n", encoding="utf-8")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        fake_python = bin_dir / "python"
+        refuse = ""
+        if failing_step:
+            refuse = f'case "$*" in *"{failing_step}"*) echo "fake pip: refusing" >&2; exit 1 ;; esac\n'
+        fake_python.write_text(f"#!/bin/bash\n{refuse}exit 0\n", encoding="utf-8")
+        fake_python.chmod(0o755)
+        env = dict(os.environ)
+        env.update(
+            {
+                "CLAUDE_CODE_REMOTE": "true",
+                "CLAUDE_PROJECT_DIR": str(project),
+                "MANGO_SKIP_NODE_DEPS": "1",
+                "PATH": os.pathsep.join([str(bin_dir), env.get("PATH", "")]),
+            }
+        )
+        return subprocess.run(
+            ["bash", str(self.HOOK)], capture_output=True, text=True, env=env, timeout=60, cwd=tmp_path
         )
 
     def test_node_install_shares_the_ci_recipe(self) -> None:

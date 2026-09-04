@@ -229,3 +229,40 @@ class TestTheRepositoryPasses:
             capture_output=True, text=True, cwd=REPO,
         )
         assert result.returncode == 0, result.stderr
+
+
+@POSIX_ONLY
+class TestVerbosityDegradesRatherThanCrashing:
+    """`args.log_level.upper()` went straight into `logging.basicConfig`, so
+    `--log-level BOGUS` raised `ValueError: Unknown level` before a single plan
+    was read, and the environment's `LOG_LEVEL` was not consulted at all
+    (2026 standards audit M25)."""
+
+    def _run(self, tmp_path: Path, *argv: str, **env: str) -> subprocess.CompletedProcess[str]:
+        import os
+
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir(exist_ok=True)
+        (spec_dir / "probe.md").write_text(CONFORMING, encoding="utf-8")
+        return subprocess.run(
+            ["python3", str(REPO / "harness/shared/validate_plan.py"),
+             "--repo-root", str(tmp_path), "--spec-dir", str(spec_dir), "--all", *argv],
+            capture_output=True, text=True, cwd=REPO, env={**os.environ, **env},
+        )
+
+    def test_a_bogus_flag_value_is_not_a_crash(self, tmp_path: Path) -> None:
+        result = self._run(tmp_path, "--log-level", "BOGUS")
+        assert result.returncode == 0, result.stderr
+        assert "Unknown level" not in result.stderr
+        assert "plan: passed (1 plan(s) examined)" in result.stdout
+
+    def test_a_bogus_environment_value_is_not_a_crash(self, tmp_path: Path) -> None:
+        result = self._run(tmp_path, LOG_LEVEL="BOGUS")
+        assert result.returncode == 0, result.stderr
+        assert "Unknown level" not in result.stderr
+
+    def test_the_verdict_is_byte_identical_across_levels(self, tmp_path: Path) -> None:
+        quiet = self._run(tmp_path, LOG_LEVEL="CRITICAL")
+        loud = self._run(tmp_path, LOG_LEVEL="DEBUG")
+        assert quiet.returncode == loud.returncode == 0
+        assert quiet.stdout == loud.stdout

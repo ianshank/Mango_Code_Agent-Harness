@@ -110,8 +110,9 @@ class TestEgressFloor:
     """AQA: egress floor blocks undeclared network access.
 
     The pytest-socket plugin is configured in pyproject.toml (addopts includes
-    --disable-socket). These tests verify the contract holds: any test that
-    does not carry @pytest.mark.enable_socket cannot open a socket.
+    --disable-socket, with --allow-unix-socket for the in-process socketpairs
+    asyncio and anyio need). These tests verify the contract holds: any test
+    that does not carry @pytest.mark.enable_socket cannot open a TCP socket.
     """
 
     def test_socket_is_blocked(self) -> None:

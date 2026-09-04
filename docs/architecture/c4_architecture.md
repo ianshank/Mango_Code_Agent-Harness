@@ -38,7 +38,7 @@ graph TD
     CIGates["🚦 Automated CI/CD Gates<br/>(Ruff, Mypy, Pytest, Zero-Skips, Gitleaks, pip-audit/OSV-Scanner, Spec Traceability)"]
 
     User -->|Submits prompt / task| Orchestrator
-    Orchestrator -->|Streams reasoning & tool-call requests| NIM
+    Orchestrator -->|Non-streaming chat completions with tool schemas| NIM
     NIM -->|Returns tool_calls payload / response| Orchestrator
     Orchestrator -->|Requests command execution| Broker
     Broker -->|Consults authority model| ControlPlane
@@ -82,7 +82,7 @@ The Container diagram zooms into the Agentic SSD system boundaries, displaying i
 graph TD
     subgraph Client_Plane ["Client & Interface Tier"]
         CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr, make test-langgraph, make test-aqa)"]
-        APIServer["FastAPI Gateway (Port 8080)<br/>(/health, /v1/orchestrator/run, /v1/models)"]
+        APIServer["FastAPI Gateway (Port 8080)<br/>(POST /api/orchestrate, GET /healthz, GET /readyz, static UI at /)"]
     end
 
     subgraph Governance_Kernel ["Shared Governance Kernel (harness/shared)"]
@@ -91,6 +91,8 @@ graph TD
         ExecBroker["Execution Broker<br/>(governance/broker.py)"]
         ProcBackend["Process Backend<br/>(governance/process_backend.py)"]
         VerifRunner["Verification Runner<br/>(governance/verification.py)"]
+        EnforceDigest["Enforcement Digest<br/>(governance/enforcement_digest.py)"]
+        IndirectExec["Indirect-Exec Grading<br/>(governance/indirect_exec.py)"]
         AuditBuilder["Evidence Builder<br/>(governance/evidence_manifest.py)"]
     end
 
@@ -98,6 +100,7 @@ graph TD
         MAS["MangoMASOrchestrator (Facade)<br/>(mango_mas_orchestrator.py)"]
         Loop["ExecutionLoop<br/>(orchestrator/loop.py)"]
         Dispatch["ToolDispatcher<br/>(orchestrator/dispatcher.py)"]
+        ArgCheck["Tool Argument Validation<br/>(tool_arg_validation.py)"]
         HookRunner["HookRunner<br/>(orchestrator/hook_runner.py)"]
         LangGraph_Engine["LangGraph StateGraph Engine<br/>(langgraph/graph.py, state.py, nodes.py)"]
         Bridge["Nemotron Bridge<br/>(nemotron_bridge.py)"]
@@ -120,14 +123,17 @@ graph TD
 
     CLI --> APIServer
     CLI --> Governance_Kernel
-    APIServer --> MAS
+    APIServer -->|execute_loop| MAS
     MAS --> Loop
-    Loop --> LangGraph_Engine
+    LangGraph_Engine -.->|nodes wrap execute_agent, orchestrator passed via config| MAS
     Loop --> Bridge
     Loop --> Dispatch
     Loop --> HookRunner
+    Dispatch --> ArgCheck
     Dispatch --> Executors
     Executors --> ExecBroker
+    ExecBroker --> IndirectExec
+    VerifRunner --> EnforceDigest
     ExecBroker --> PDP
     ExecBroker --> PreToolGuard
     ExecBroker --> ProcBackend
@@ -136,6 +142,14 @@ graph TD
     MAS --> Shadow
     Governance_Kernel --> PolicyArtifact
 ```
+
+The `MAS`/`LangGraph_Engine` edge is drawn in the direction the code calls: the
+StateGraph's agent nodes (`langgraph/nodes.py`) wrap
+`MangoMASOrchestrator.execute_agent`, receiving the orchestrator through the
+graph's `configurable` config. Neither the facade nor `orchestrator/loop.py`
+imports LangGraph, and `build_graph` is reached only from the parked
+`experimental/autonomous_healing.py` (DEC-027). An earlier revision drew
+`Loop → LangGraph_Engine`, which reversed that dependency.
 
 ### 2.1 Detailed container view of `harness/shared` (from the v2.1.9 snapshot)
 
@@ -246,6 +260,32 @@ graph TD
     PyBridge -->|HTTPS POST| NIM
 ```
 
+### 2.2 API surface (`harness/api_server/main.py`)
+
+The FastAPI gateway exposes one orchestration route, two unauthenticated probe
+routes, and serves the static UI:
+
+- `/api/orchestrate` — `POST`, guarded by the `X-API-Key` header (`API_SERVER_KEY`,
+  compared with `secrets.compare_digest`); runs `MangoMASOrchestrator.execute_loop`
+  in a threadpool and returns the redacted history, typed per role
+  (`harness/api_server/messages.py`), with the earned verdict.
+- `/healthz` — `GET`, liveness: 200 whenever the process answers.
+- `/readyz` — `GET`, readiness: 200 only when `API_SERVER_KEY` is set and the
+  governance policy loads (every accessor the orchestrator's constructor
+  resolves) and the bridge can resolve a model credential; otherwise 503 with
+  the body `{"status": "unavailable", "checks": {"api_key": bool, "policy": bool, "model_credential": bool}}`,
+  never a path or a value.
+- `/` — the static dashboard under `harness/api_server/static/`, mounted with
+  `html=True`; the directory is created by the lifespan hook, not at import.
+
+Every backticked path in this section is asserted against `app.routes` by
+`TestDocumentedRoutesExist` in `test_documentation_truth.py`. An earlier revision
+listed three routes — a health probe, a versioned orchestrator-run path and a
+models list — none of which the server has ever registered (2026 standards
+audit, M26); that is the drift the assertion exists to catch. The bridge posts
+`stream: False` (`nemotron_bridge.py`), so nothing on the Python path streams
+reasoning; SSE streaming exists only in the Node client (§3.2).
+
 ---
 
 ## 3. Level 3: Component Diagram (MAS Orchestration & Execution)
@@ -330,7 +370,7 @@ classDiagram
         +mask_api_key(key) str
     }
 
-    MangoMASOrchestrator --> LangGraphEngine : delegates graph orchestration
+    LangGraphEngine --> MangoMASOrchestrator : nodes call execute_agent (orchestrator via config)
     LangGraphEngine --> MangoState : state channels
     LangGraphEngine --> GraphNodes : invokes nodes
     GraphNodes --> MangoMASOrchestrator : wraps execute_agent & _harness_verdict

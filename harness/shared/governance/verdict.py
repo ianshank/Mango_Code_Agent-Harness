@@ -46,6 +46,10 @@ HARNESS_FAULT = "harness_fault"
 DENIED = "verification_denied"
 FAILED_CHECK = "verification_failed"
 UNRECOGNISED = "unrecognised_status"
+#: A protected file the check depends on changed between the start of the loop
+#: and the check. The check did not run: a verdict earned against a makefile
+#: the agent rewrote would be the agent's verdict, not the harness's.
+TAMPERED = "enforcement_tampered"
 
 #: Broker (``ExecutionResult``) statuses this module models. Anything else is
 #: not a pass -- an allowlist, so a backend inventing a status cannot invent a
@@ -75,6 +79,12 @@ class HarnessCheck(typing.NamedTuple):
     separately because R-VP-3's ``-f Makefile`` pin is the whole point of the
     fix it verifies -- a verdict naming the target and silently dropping how it
     was run would lose the provenance the invocation exists to guarantee.
+
+    ``tampered_files`` names the protected files that changed between the loop's
+    start and the check. Non-empty means the check was refused, whatever the
+    other fields say: it is the evidence, typed into the check rather than
+    inferred from a reason string, so ``derive_verdict`` cannot grade past it.
+    Defaulted so every existing constructor call still typechecks.
     """
 
     target: str
@@ -84,6 +94,7 @@ class HarnessCheck(typing.NamedTuple):
     reason: str
     probe_ok: bool
     latency_ms: int
+    tampered_files: tuple[str, ...] = ()
 
 
 class Verdict(typing.NamedTuple):
@@ -169,6 +180,11 @@ def derive_verdict(check: typing.Any) -> Verdict:
     def _v(status: str, reason: str, termination: str) -> Verdict:
         return _emit(Verdict(status, reason, termination, check.command, check.exit_code))
 
+    if check.tampered_files:
+        # First, before the probe: a probe result obtained against a rewritten
+        # makefile is a fact about the forgery, not about the change.
+        changed = ", ".join(check.tampered_files)
+        return _v(BLOCKED, check.reason or f"{check.target} refused: protected files changed: {changed}", TAMPERED)
     if not check.probe_ok:
         return _v(BLOCKED, f"{check.target} could not be established as runnable", UNAVAILABLE)
     if check.status == _BLOCKED:

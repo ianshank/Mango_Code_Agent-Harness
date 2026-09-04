@@ -536,3 +536,62 @@ class TestEveryMermaidDiagramCanRender:
     def test_the_detector_accepts_a_quoted_label(self) -> None:
         quoted = 'Node["label with [brackets] and (parens)"]'
         assert [m for m in UNQUOTED_MERMAID_NODE.finditer(quoted) if "[" in m.group(1)] == []
+
+
+# --- Documented routes are registered routes ------------------------------------
+#
+# `c4_architecture.md` listed `/health`, `/v1/orchestrator/run` and `/v1/models`
+# as the gateway's API while `harness/api_server/main.py` registered exactly one
+# route, `/api/orchestrate`, plus the static mount at `/` (2026 standards audit,
+# M26). The list is read from the doc's "API surface" section only, so prose
+# elsewhere may discuss a route that is planned; a path *listed as the API* has
+# to exist on the app object at test time.
+
+C4_ARCHITECTURE = REPO / "docs" / "architecture" / "c4_architecture.md"
+API_SECTION_HEADING = re.compile(r"^(#{2,4}) [^\n]*API surface", re.M)
+
+
+def documented_api_routes(text: str) -> list[str]:
+    """Every backticked ``/...`` path under the API-surface heading.
+
+    The section runs to the next heading of the same or a higher level, so a
+    later section's paths are not attributed to the API.
+    """
+    match = API_SECTION_HEADING.search(text)
+    if not match:
+        return []
+    body = text[match.end():]
+    end = re.search(rf"^#{{1,{len(match.group(1))}}} ", body, re.M)
+    if end:
+        body = body[: end.start()]
+    return re.findall(r"`(/[^`\s]*)`", body)
+
+
+class TestDocumentedRoutesExist:
+    @staticmethod
+    def _registered_paths() -> set[str]:
+        from harness.api_server.main import app
+
+        # Starlette stores `Mount("/")` with an empty path (it strips the
+        # trailing slash), so the static mount is read back as the `/` it serves.
+        return {str(getattr(route, "path", "")) or "/" for route in app.routes}
+
+    def test_the_section_lists_routes(self) -> None:
+        """Guards the parse: a heading rename would make the check below vacuous."""
+        assert documented_api_routes(C4_ARCHITECTURE.read_text(encoding="utf-8")), (
+            "no backticked route found under the C4 doc's 'API surface' heading"
+        )
+
+    def test_every_documented_route_is_registered(self) -> None:
+        documented = set(documented_api_routes(C4_ARCHITECTURE.read_text(encoding="utf-8")))
+        missing = sorted(documented - self._registered_paths())
+        assert not missing, (
+            f"c4_architecture.md documents routes the FastAPI app does not register: {missing}. "
+            "List a route in the API-surface section only once `app.routes` carries it."
+        )
+
+    def test_the_parser_stops_at_the_next_section(self) -> None:
+        """The negative case: a path listed after the section is not the API's."""
+        text = "## 2.2 API surface\n- `/nowhere`\n#### note `/still-inside`\n## 3. Next\n- `/outside`\n"
+        assert documented_api_routes(text) == ["/nowhere", "/still-inside"]
+        assert "/nowhere" not in self._registered_paths()

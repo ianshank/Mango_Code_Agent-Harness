@@ -67,3 +67,6 @@ mango_code_agent_harness.egg-info/
 # Pytest / Hypothesis temp directories created during local runs
 harness/node/test-*/
 .hypothesis/
+
+# Agent session state (never a build input); .mango/ above already covers the memory store
+.claude/

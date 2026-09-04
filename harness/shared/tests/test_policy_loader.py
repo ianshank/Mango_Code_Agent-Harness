@@ -53,6 +53,7 @@ class TestSectionAccessors:
         declared = {
             "max_iterations": 3,
             "api_timeout_sec": 7,
+            "verification_timeout_sec": 11,
             "tool_timeout_sec": 5,
             "max_command_bytes": 4096,
             "max_healing_retries": 3,

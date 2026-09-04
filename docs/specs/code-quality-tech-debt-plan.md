@@ -1,6 +1,19 @@
 # Spec: Code-quality, tech-debt and hardening plan (audit round 3)
 
-> Status: IN PROGRESS, revision 2 (peer-reviewed) · Date: 2026-09-04 · Base: `main` @ `487870a` (PR #76)
+> Status: CLOSED, revision 2 · Date: 2026-09-04 · Base: `main` @ `487870a` (PR #76)
+> Closed 2026-09-04 at `71223f1` by `docs/specs/2026-standards-remediation-plan.md`,
+> which supersedes every open requirement here (R-CQ-1, R-CQ-2, R-CQ-11 … R-CQ-29,
+> R-CQ-31 and the constraints) and records, per requirement, whether it is carried,
+> reshaped or dropped. Landed and staying landed: Phase 1 (R-CQ-3 … R-CQ-8),
+> R-CQ-9, R-CQ-10, and R-CQ-30 except the `docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
+> move (landed after closure by the 2026 remediation: the file is now
+> `docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, and `test_documentation_claims.py`
+> keeps the `docs/` root free of loose files). Two corrections found at closure: R-CQ-14's landed clause wired
+> `verification.timeout` to `orchestrator.api_timeout_sec`, which the audit at
+> `docs/reports/2026-STANDARDS-AUDIT.md` (H16) shows is the wrong key and the
+> superseding plan unwinds; and three ticked criteria below (AC-4, AC-5, AC-8) cited
+> `-k` selectors that collect zero tests, corrected in place so the ticks carry
+> real evidence. No box below is re-judged after this date.
 >
 > Phase 1 (R-CQ-3 … R-CQ-7) and R-CQ-30 are landed; their acceptance boxes below
 > are ticked with the command that proves each, and every gate they add is
@@ -637,16 +650,30 @@ change from a vacuous pass.
       · stage: `make test-python` (R-CQ-3)
 - [x] AC-4: `pytest harness/shared/tests/test_write_policy.py -k credential`
       asserts `write_denial_reason(".env")` is a denial (today: `None`) and
-      `pytest harness/shared/tests/test_tool_executors.py -k patch_denied_read`
+      `pytest harness/shared/tests/test_tool_executors.py -k credential_file_is_refused`
       asserts `execute_apply_patch(ws, ".env", "nvapi-", "x")` returns a denial
       string rather than `matched` (today: returns a match count)
       · stage: `make test-python` (R-CQ-4)
+      — **Selector corrected at closure (2026-09-04):** the original second
+      command, `-k patch_denied_read`, collected **0 tests, 47 deselected**; the
+      test that proves the claim is
+      `test_tool_executors.py::test_patching_a_credential_file_is_refused`. With
+      the corrected selector: 2 passed.
 - [x] AC-5: `git grep -n "def _broker_authorize_write\|def authorize_write" harness/shared`
       reports one definition site imported by both `mcp_server.py` and
       `orchestrator/dispatcher.py` (today: one site, one importer);
-      `pytest harness/shared/tests -k "dispatcher and write_denied"` fails on a
-      `tmp_path` workspace when the PDP denies and the dispatcher writes anyway
-      · stage: `make test-python` (R-CQ-5)
+      `pytest harness/shared/tests/test_tool_executors.py -k "share_one_function or refused_by_the_dispatcher"`
+      fails on a `tmp_path` workspace when the PDP denies and the dispatcher
+      writes anyway · stage: `make test-python` (R-CQ-5)
+      — **Selector corrected at closure (2026-09-04):** the original second
+      command, `-k "dispatcher and write_denied"`, collected **0 tests, 3173
+      deselected**; the identity assertion and the dispatcher refusal live in
+      `test_the_two_transports_share_one_function` and
+      `test_a_role_without_the_write_action_is_refused_by_the_dispatcher`. With
+      the corrected selector: 2 passed. The "one registry" half of R-CQ-5 is
+      **not** landed: `mcp_server._build_tool_handlers` still hand-mirrors
+      `ToolDispatcher.tool_handlers` (its own docstring says so); carried by the
+      superseding plan.
 - [x] AC-6: `python -c "from harness.shared.write_policy import write_denial_reason as w; import sys; sys.exit(0 if all(w(p) for p in ['harness/shared/tool_executors.py','harness/shared/orchestrator/loop.py','harness/shared/nemotron_bridge.py','conftest.py']) else 1)"`
       exits 0 (today: exits 1); `pytest harness/shared/tests/test_protected_path_liveness.py`
       passes · stage: `make validate` (R-CQ-6)
@@ -659,9 +686,13 @@ change from a vacuous pass.
 - [x] AC-8: `pytest harness/shared/tests/test_policy_loader.py -k present_policy_missing_key`
       asserts `PolicyError` on a `tmp_path` policy whose `orchestrator` block lacks
       `max_iterations` (today: returns 10);
-      `pytest harness/shared/tests/test_validate_invariants.py -k "missing_protected_paths or env_override_tightens_only"`
+      `pytest harness/shared/tests/test_validate_invariants_policy.py -k "missing_protected_paths or env_override_tightens_only"`
       fails closed on a policy without `protected_paths` and asserts
-      `MAX_FILE_LINES=9999` cannot raise the budget;
+      `MAX_FILE_LINES=9999` cannot raise the budget (**file corrected at
+      closure, 2026-09-04:** the original named `test_validate_invariants.py`,
+      where the selector collects 0 tests; the two tests live in
+      `test_validate_invariants_policy.py` since DEC-035's split, and the
+      corrected command reports 2 passed);
       `pytest harness/shared/tests/test_import_purity.py` passes with
       `governance/verify_zero_skips.py` importing under a malformed `tmp_path`
       policy (today: `SystemExit` at import) · stage: `make test-python` (R-CQ-8)
@@ -693,7 +724,7 @@ change from a vacuous pass.
       lives only in `pinnable_uses`, and the reconciliation test is parametrised
       over a workflow that has a local action, because the two real workflows
       cannot tell the correct count from the wrong one.
-- [ ] AC-10: `pytest harness/shared/tests/test_dependency_lock_contracts.py -k "hash"`
+- [x] AC-10: `pytest harness/shared/tests/test_dependency_lock_contracts.py -k "hash"`
       fails on a `tmp_path` lock with one requirement line not followed by a
       `--hash=` line and on an install step without `--require-hashes`, and passes
       on the tree (today: the test does not exist and the lock has 0 hash lines);
@@ -716,6 +747,11 @@ change from a vacuous pass.
       **Stays unticked** until the `dependency-audit` job is green on the pushed
       head, which is the one part of this criterion that no local run can
       evidence (DEC-024).
+      — **Ticked at closure (2026-09-04):** `dependency-audit` and every other
+      check is green on `71223f1` (CI run 504, `.github/workflows/python-package.yml`,
+      conclusion `success`), and `make lock-check` / `pip-audit --requirement
+      requirements-lock.txt` both pass locally on that head
+      (`docs/reports/2026-STANDARDS-AUDIT.md` §2).
 - [ ] AC-11: `pytest harness/shared/tests/test_dockerfile_contract.py` fails on a
       `tmp_path` Dockerfile missing any of `@sha256:`, `USER`, the
       `COPY … package.json` before `corepack`, or carrying `EXPOSE` or `pnpm@`, and

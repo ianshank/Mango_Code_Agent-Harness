@@ -3,10 +3,49 @@
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
+# Same flags both stack Makefiles set: a recipe line stops at its first failing
+# command (-e), an unset variable is an error rather than an empty string (-u),
+# and a pipeline reports the failure of any stage, not only the last (pipefail).
+# Without these, `grep ... | awk ...` in `help` and the `||` chains below could
+# report success over a failed left-hand side.
+.SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
 PYTHON   ?= python
-PYTEST   ?= $(PYTHON) -m pytest
+# `-I` (isolated mode) keeps the workspace off the interpreter's import path.
+# `python -m pytest` puts the current directory first on sys.path, so a
+# `pytest.py` or `pytest/__main__.py` written into the workspace -- neither a
+# protected path -- was imported in place of the installed pytest, and a
+# verification run graded by exit status was forgeable without touching a
+# single digested file (Copilot review on PR #86). Test modules still import
+# `harness` through pytest's own `pythonpath = ["."]` in pyproject.toml, which
+# pytest applies after it has loaded itself and its plugins. `-I` also ignores
+# PYTHON* environment variables and the user site directory; nothing in this
+# repository's recipes relies on either.
+PYTEST   ?= $(PYTHON) -I -m pytest
+# The same protection for the xdist workers, which execnet starts with
+# `python -u -c ...` and which therefore begin with the current directory on
+# their path regardless of the parent's flags. Honoured by Python 3.11 and
+# later; earlier interpreters ignore it, and SECURITY.md states that residual.
+export PYTHONSAFEPATH := 1
+# Both Python test runners load pytest-randomly explicitly (`-p randomly`): the
+# plugin shuffles module, class and test order under a seed it prints in the run
+# header (`Using --randomly-seed=N`), so an order coupling surfaces as a failure
+# with a reproducible seed instead of hiding behind alphabetical collection.
+# Naming the plugin, rather than relying on entry-point autoload, makes a missing
+# plugin an ImportError that stops the run instead of a quietly unshuffled suite.
+PYTEST_ORDER_FLAGS ?= -p randomly
+# Both runners also split the suite across every core (pytest-xdist). Measured
+# before enabling it on the coverage run: pytest-cov combines the workers' data
+# (lines 99.22% / branches 97.81% under `-n auto` against 99.24% / 97.87%
+# serial, same gate verdict), and the INV-2 skip evidence is complete -- xdist
+# forwards runtime and collection-time skip reports to the controller, which is
+# the one process that writes the evidence file (_session_hooks.py). Wall time
+# for `coverage-python` fell from 92s to 36s on four cores. Set
+# `PYTEST_PARALLEL_FLAGS=` to run serially, e.g. to bisect an order coupling
+# with `--randomly-seed=N` on one worker.
+PYTEST_PARALLEL_FLAGS ?= -n auto
+PYTEST_RUN_FLAGS := $(PYTEST_ORDER_FLAGS) $(PYTEST_PARALLEL_FLAGS)
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
 # --check-untyped-defs checks the *bodies* of unannotated functions, which is
@@ -21,14 +60,26 @@ PM       ?= pnpm
 GITLEAKS ?= gitleaks
 # Pinned to match the per-stack adopter workflows; bump both together.
 GITLEAKS_VERSION ?= v8.28.0
-# Pinned so the audit gate cannot change or break on an unreviewed upstream
-# release; CI installs this exact version via `audit-install`, never `--upgrade`
-# with no pin. Mirrors GITLEAKS_VERSION/OSV_VERSION (harness/node/Makefile).
-# Capped at 2.9.0, not the newer 2.10.x: pip-audit 2.10.0 raised its own floor to
+# `make secrets-install` runs `go install`, which drops the binary in
+# `$(go env GOPATH)/bin` -- a directory that is not on PATH by default. So the
+# `command -v` guard in `secrets` failed closed immediately after a successful
+# install, and CI worked around it by prefixing PATH by hand (2026 standards
+# audit, §2). Resolve the tool the same way it was installed: PATH first, then
+# GOPATH/bin. A name found in neither is left as written, so the guard still
+# fails closed when the tool is genuinely absent, and a command-line
+# `GITLEAKS=...` still overrides everything here (make's precedence rule).
+GO_BIN_DIR := $(shell go env GOPATH 2>/dev/null)/bin
+GITLEAKS := $(shell command -v $(GITLEAKS) 2>/dev/null || { test -x $(GO_BIN_DIR)/$(GITLEAKS) && echo $(GO_BIN_DIR)/$(GITLEAKS); } || echo $(GITLEAKS))
+# pip-audit is pinned in requirements-dev.txt so it lands in the hashed lock and
+# installs with `--require-hashes` like every other tool (audit M15); this reads
+# that pin back rather than restating it, so there is one declaration. Capped at
+# 2.9.0, not the newer 2.10.x: pip-audit 2.10.0 raised its own floor to
 # Requires-Python >=3.10, which cannot install at all on the 3.9 leg of the
-# `audit-matrix` job below -- confirmed by that job's first real CI run. 2.9.0 is
-# the newest release still declaring >=3.9, matching this project's own floor.
-PIP_AUDIT_VERSION ?= 2.9.0
+# `audit-matrix` job -- confirmed by that job's first real CI run. 2.9.0 is the
+# newest release still declaring >=3.9, matching this project's own floor.
+PIP_AUDIT_VERSION := $(shell sed -n 's/^pip-audit==\([^ ;]*\).*/\1/p' requirements-dev.txt)
+# Invoked through the interpreter, never as a bare binary on PATH (DEC-013).
+PIP_AUDIT ?= $(PYTHON) -m pip_audit
 # Coverage thresholds are sourced from the governance policy (single source of
 # truth) and applied by coverage_gate.py as TWO separate numbers: coverage.lines
 # against line coverage and coverage.branches against branch coverage. With
@@ -90,8 +141,8 @@ lint: lint-python check-compat ## Run code style, static analysis, and runtime-c
 
 # --- Python Testing & Coverage ---
 .PHONY: test-python
-test-python: ## Run full pytest suite (excludes live tests)
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" -v
+test-python: ## Run full pytest suite in a seeded random order across every core (excludes live tests)
+	$(PYTEST) $(PYTEST_RUN_FLAGS) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" -v
 
 .PHONY: test-regression
 test-regression: ## Run the regression/AQA tier on its own (one reproduction per fixed defect)
@@ -114,8 +165,8 @@ test-aqa: ## Run AQA smoke tests and coverage-gap regression suite
 	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py $(SHARED_TESTS)/regression/test_nemotron_api_aqa.py -m "not live" -v
 
 .PHONY: coverage-python
-coverage-python: ## Run pytest, then enforce lines and branches floors from governance-policy.json
-	$(PYTEST) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
+coverage-python: ## Run pytest in a seeded random order across every core, then enforce lines and branches floors from governance-policy.json
+	$(PYTEST) $(PYTEST_RUN_FLAGS) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" --cov=$(SHARED_SRC) --cov=harness/api_server --cov=harness/control-plane --cov-report=term-missing --cov-report=json
 	$(PYTHON) $(SHARED_SRC)/coverage_gate.py
 
 # --- Node Testing & Zero-Skip Verification ---
@@ -234,9 +285,9 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 # `TestAuditingTheLockAloneIsNotAPartialAudit` reads them directly.
 .PHONY: audit-python
 audit-python: ## Dependency vulnerability scan for the Python interpreter running this invocation
-	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
+	@$(PYTHON) -c 'import pip_audit' 2>/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
 	@test -f requirements-lock.txt || { echo 'requirements-lock.txt missing; refusing a vacuous audit'; exit 1; }
-	pip-audit --requirement requirements-lock.txt
+	$(PIP_AUDIT) --requirement requirements-lock.txt
 
 # --- Dependency Lock ---
 # One universal lock serves every interpreter in the CI matrix: `uv pip compile
@@ -289,8 +340,9 @@ audit: audit-python ## Dependency vulnerability scan: pip-audit (Python) + deleg
 	$(MAKE) -C $(NODE_DIR) audit
 
 .PHONY: audit-install-python
-audit-install-python: ## Install the pinned pip-audit used by the audit gate
-	python -m pip install --upgrade "pip-audit==$(PIP_AUDIT_VERSION)"
+audit-install-python: ## Install the pinned pip-audit from the hashed lock (the same artefacts every CI leg installs)
+	@test -n "$(PIP_AUDIT_VERSION)" || { echo 'requirements-dev.txt pins no pip-audit==; refusing an unpinned audit tool'; exit 1; }
+	$(PYTHON) -m pip install --require-hashes -r $(LOCK_FILE)
 
 .PHONY: audit-install
 audit-install: audit-install-python ## Install pip-audit and the Node stack's pinned osv-scanner

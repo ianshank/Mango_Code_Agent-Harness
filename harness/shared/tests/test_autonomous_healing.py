@@ -9,7 +9,9 @@ import pytest
 from harness.shared.experimental.autonomous_healing import TestHealer
 from harness.shared.governance.broker import ExecutionResult
 
-pytestmark = pytest.mark.enable_socket
+# No socket exemption: nothing here opens one. The module-wide `enable_socket`
+# that stood here had no justification and no need -- every test passes with
+# the egress floor armed (code-quality-tech-debt-plan R-CQ-21, audit M12).
 
 
 def test_run_test_suite_success(tmp_path) -> None:

@@ -40,10 +40,10 @@ import tempfile
 from pathlib import Path
 
 try:
-    from harness.shared.json_logging import resolve_log_level
+    from harness.shared.json_logging import configure_gate_process_logging
 except ImportError:  # direct `python harness/shared/governance/check_secret_allowlist.py`
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from json_logging import resolve_log_level  # type: ignore[no-redef]
+    from json_logging import configure_gate_process_logging  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -227,5 +227,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=resolve_log_level(), format="%(levelname)s: %(message)s")
+    configure_gate_process_logging()
     sys.exit(main())

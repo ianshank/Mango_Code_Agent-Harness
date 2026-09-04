@@ -12,13 +12,21 @@ these checks can evolve without a label round-trip.
 
 from __future__ import annotations
 
+import os
 import re
+import stat
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from harness.shared.tests._helpers import REPO
 
 MAKEFILE = REPO / "Makefile"
+NODE_MAKEFILE = REPO / "harness" / "node" / "Makefile"
+JVM_MAKEFILE = REPO / "harness" / "jvm" / "Makefile"
+REQUIREMENTS_DEV = REPO / "requirements-dev.txt"
 REGRESSION_DIR = REPO / "harness" / "shared" / "tests" / "regression"
 
 pytestmark = pytest.mark.governance
@@ -26,6 +34,33 @@ pytestmark = pytest.mark.governance
 
 def _text() -> str:
     return MAKEFILE.read_text(encoding="utf-8")
+
+
+#: The shell flags every Makefile in this repository runs its recipes under.
+#: `-e` stops a recipe line at its first failing command, `-u` makes an unset
+#: variable an error, and `pipefail` reports the failure of any pipeline stage.
+FAIL_CLOSED_SHELLFLAGS = "-eu -o pipefail -c"
+
+
+def shellflags(makefile_text: str) -> str | None:
+    """The `.SHELLFLAGS` a Makefile declares, or None when it runs on make's default."""
+    match = re.search(r"^\.SHELLFLAGS\s*:?=\s*(.+?)\s*$", makefile_text, re.M)
+    return match.group(1) if match else None
+
+
+def gopath_resolved_tools(makefile_text: str) -> set[str]:
+    """Tool variables a Makefile re-resolves through PATH and then GOPATH/bin.
+
+    The shape is a `:=` reassignment whose value asks `command -v` first and
+    falls back to `$(GO_BIN_DIR)/<tool>`; a Makefile that only ever says
+    `TOOL ?= tool` leaves a `go install`-ed binary invisible to its own guard.
+    """
+    return {
+        match.group(1)
+        for match in re.finditer(
+            r"^([A-Z_]+)\s*:=\s*\$\(shell command -v \$\(\1\).*\$\(GO_BIN_DIR\)/\$\(\1\)", makefile_text, re.M
+        )
+    }
 
 
 def _targets() -> dict[str, str]:
@@ -251,3 +286,210 @@ class TestLintNodeWiring:
         assert recipe, "Makefile has no lint-node recipe"
         for tool in ("eslint", "prettier", "knip"):
             assert tool in recipe, f"lint-node no longer runs {tool}"
+
+
+class TestRecipesRunUnderFailClosedShellFlags:
+    """Both stack Makefiles set `.SHELLFLAGS := -eu -o pipefail -c`; the root
+    one did not (2026 standards audit, Low). Under make's default `sh -c`, a
+    recipe like `grep ... | awk ...` reports awk's exit status whatever grep
+    did, and an unset `$$var` silently expands to nothing.
+    """
+
+    @pytest.mark.parametrize("path", [MAKEFILE, NODE_MAKEFILE, JVM_MAKEFILE], ids=lambda p: str(p.relative_to(REPO)))
+    def test_every_makefile_declares_the_same_flags(self, path: Path) -> None:
+        assert shellflags(path.read_text(encoding="utf-8")) == FAIL_CLOSED_SHELLFLAGS, (
+            f"{path.relative_to(REPO)} does not run recipes under `{FAIL_CLOSED_SHELLFLAGS}`; "
+            "a failed left-hand side of a pipe or an unset variable would pass silently"
+        )
+
+    def test_a_makefile_without_the_declaration_is_reported(self) -> None:
+        """Without this the reader could pass on any text by returning the constant."""
+        assert shellflags("SHELL := /bin/bash\nall:\n\techo hi\n") is None
+        assert shellflags(".SHELLFLAGS := -c\n") == "-c"
+
+
+class TestGoInstalledToolsAreFoundWhereGoPutThem:
+    """`make secrets` failed closed right after a successful `make secrets-install`.
+
+    `go install` writes to `$(go env GOPATH)/bin`, which is not on PATH by
+    default, and the recipe's `command -v` guard never looked there -- CI only
+    passed because the workflow prefixed PATH by hand (2026 standards audit,
+    §2). The Makefiles now resolve each Go-installed tool through PATH and then
+    GOPATH/bin; the probes below drive the real Makefile with a fake `go` so the
+    resolution is exercised, not just read.
+    """
+
+    @pytest.mark.parametrize(
+        ("path", "tools"),
+        [
+            pytest.param(MAKEFILE, {"GITLEAKS"}, id="root"),
+            pytest.param(NODE_MAKEFILE, {"GITLEAKS", "OSV"}, id="node"),
+            pytest.param(JVM_MAKEFILE, {"GITLEAKS", "OSV"}, id="jvm"),
+        ],
+    )
+    def test_every_go_installed_tool_is_resolved(self, path: Path, tools: set[str]) -> None:
+        text = path.read_text(encoding="utf-8")
+        assert "go env GOPATH" in text, f"{path.relative_to(REPO)} never asks go where it installs binaries"
+        assert gopath_resolved_tools(text) >= tools, (
+            f"{path.relative_to(REPO)} resolves {sorted(gopath_resolved_tools(text))}, not {sorted(tools)}; "
+            "the guard for an unresolved tool fails closed right after its own install target"
+        )
+
+    def test_a_makefile_that_only_defaults_the_name_is_reported(self) -> None:
+        assert gopath_resolved_tools("GITLEAKS ?= gitleaks\nsecrets:\n\t$(GITLEAKS) dir .\n") == set()
+
+    @staticmethod
+    def _fake_toolchain(tmp_path: Path, *, install_gitleaks: bool) -> tuple[Path, dict[str, str]]:
+        """A PATH holding a fake `go` (whose GOPATH is under tmp_path) and no gitleaks."""
+        gopath = tmp_path / "gopath"
+        (gopath / "bin").mkdir(parents=True)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        fake_go = bin_dir / "go"
+        fake_go.write_text(f'#!/bin/sh\n[ "$1 $2" = "env GOPATH" ] && echo "{gopath}"\n', encoding="utf-8")
+        fake_go.chmod(fake_go.stat().st_mode | stat.S_IXUSR)
+        if install_gitleaks:
+            stub = gopath / "bin" / "gitleaks"
+            stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        env = dict(os.environ)
+        # Only the fake toolchain and the system directories: a gitleaks on the
+        # developer's PATH would otherwise satisfy `command -v` and prove nothing.
+        env["PATH"] = os.pathsep.join([str(bin_dir), "/usr/bin", "/bin"])
+        return gopath, env
+
+    @staticmethod
+    def _make(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["make", "-C", str(REPO), "--no-print-directory", *args, f"PYTHON={sys.executable}"],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+
+    def test_a_gitleaks_in_gopath_bin_is_what_the_secrets_gate_runs(self, tmp_path: Path) -> None:
+        """`make -n` still resolves `$(shell ...)` at parse time, so the dry run
+        shows which binary the recipe would execute without scanning anything."""
+        gopath, env = self._fake_toolchain(tmp_path, install_gitleaks=True)
+        result = self._make("-n", "secrets", env=env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"{gopath}/bin/gitleaks dir ." in result.stdout, (
+            f"the secrets gate did not resolve gitleaks from GOPATH/bin:\n{result.stdout}{result.stderr}"
+        )
+
+    def test_a_gitleaks_found_nowhere_still_fails_closed(self, tmp_path: Path) -> None:
+        """The fallback must not turn an absent tool into an absent scan (INV-1)."""
+        _, env = self._fake_toolchain(tmp_path, install_gitleaks=False)
+        result = self._make("secrets", env=env)
+        assert result.returncode != 0
+        assert "gitleaks missing; failing closed" in result.stdout + result.stderr
+
+
+class TestPythonRunnersShuffleUnderAPrintedSeed:
+    """Audit H8: no order randomisation existed, so an order coupling could
+    only be found by luck (the root conftest records one that was). Both
+    runners now load pytest-randomly by name, so the run header prints the seed
+    and a missing plugin is an ImportError rather than a quietly ordered suite.
+    """
+
+    @pytest.mark.parametrize("target", ["test-python", "coverage-python"])
+    def test_the_runner_shuffles_and_parallelises(self, target: str) -> None:
+        recipe = _targets().get(target, "")
+        assert "$(PYTEST_RUN_FLAGS)" in recipe, f"{target} no longer passes the order/parallel flags"
+
+    def test_the_run_flags_compose_both_plugins(self) -> None:
+        """Order randomisation and parallelism are separate variables so either
+        can be switched off on the command line without editing the recipe."""
+        text = _text()
+        order = re.search(r"^PYTEST_ORDER_FLAGS\s*\?=\s*(.+?)\s*$", text, re.M)
+        parallel = re.search(r"^PYTEST_PARALLEL_FLAGS\s*\?=\s*(.+?)\s*$", text, re.M)
+        composed = re.search(r"^PYTEST_RUN_FLAGS\s*:=\s*(.+?)\s*$", text, re.M)
+        assert order is not None and "-p randomly" in order.group(1), "PYTEST_ORDER_FLAGS does not load pytest-randomly"
+        assert parallel is not None and "-n auto" in parallel.group(1), "PYTEST_PARALLEL_FLAGS does not run under xdist"
+        assert composed is not None and {"$(PYTEST_ORDER_FLAGS)", "$(PYTEST_PARALLEL_FLAGS)"} <= set(
+            composed.group(1).split()
+        ), "PYTEST_RUN_FLAGS does not compose both variables"
+
+    def test_the_plugins_are_pinned_where_the_lock_compiles_from(self) -> None:
+        """`-p randomly` on a leg without the plugin is an ImportError, and `-n`
+        without xdist is a usage error; the pins keep both off every interpreter
+        in the matrix."""
+        text = REQUIREMENTS_DEV.read_text(encoding="utf-8")
+        assert re.search(r"^pytest-randomly==", text, re.M), "requirements-dev.txt pins no pytest-randomly"
+        assert re.search(r"^pytest-xdist==", text, re.M), "requirements-dev.txt pins no pytest-xdist"
+
+
+class TestTheGraderCannotBeShadowedFromTheWorkspace:
+    """`python -m pytest` puts the current directory first on `sys.path`, so a
+    `pytest.py` written into the workspace -- not a protected path -- was the
+    pytest the verification recipe ran, and a failing suite graded VERIFIED
+    with no digested file changed (Copilot review on PR #86). The regression
+    in `regression/test_verdict_forgery_regression.py` proves the two recipe
+    shapes; these pin the real Makefile to the safe one.
+    """
+
+    def test_the_python_runner_cannot_import_a_shadow_module_from_the_workspace(self) -> None:
+        text = _text()
+        runner = re.search(r"^PYTEST\s*\?=\s*(.+?)\s*$", text, re.M)
+        assert runner is not None, "PYTEST is no longer defined in the Makefile"
+        flags = runner.group(1).split()
+        assert "-I" in flags and "-m" in flags and "pytest" in flags, (
+            f"PYTEST is {runner.group(1)!r}; the interpreter must run in isolated mode (-I) "
+            "so the workspace is not on its import path when pytest is imported"
+        )
+        assert flags.index("-I") < flags.index("-m"), "-I must precede -m, or it is an argument to pytest"
+
+    def test_the_xdist_workers_cannot_import_a_shadow_module_either(self) -> None:
+        """execnet starts each worker with `python -u -c ...`, which begins with
+        the current directory on its path whatever the parent's flags; the
+        exported variable is what guards it (Python 3.11 and later)."""
+        assert re.search(r"^export PYTHONSAFEPATH\s*:=\s*1\s*$", _text(), re.M), (
+            "the Makefile no longer exports PYTHONSAFEPATH=1 to every recipe"
+        )
+
+
+class TestAuditToolIsInstalledFromTheHashedLock:
+    """Audit M15: `pip-audit` was installed by name, unhashed, into the job that
+    scans everything else for tampering. The pin now lives in requirements-dev.txt
+    (so it is in the lock) and the install target installs the lock.
+    """
+
+    def test_requirements_dev_pins_pip_audit(self) -> None:
+        assert re.search(r"^pip-audit==\d", REQUIREMENTS_DEV.read_text(encoding="utf-8"), re.M)
+
+    def test_the_install_target_installs_the_lock_with_hashes(self) -> None:
+        recipe = _targets().get("audit-install-python", "")
+        assert "--require-hashes -r $(LOCK_FILE)" in recipe, "audit-install-python no longer installs the hashed lock"
+        assert not re.search(r"pip install .*pip-audit", recipe), (
+            "audit-install-python installs pip-audit by name, which bypasses the lock's hashes"
+        )
+
+    def test_the_makefile_reads_the_pin_rather_than_restating_it(self) -> None:
+        """One declaration. The Makefile's PIP_AUDIT_VERSION must be derived from
+        requirements-dev.txt, and evaluating it must give the pin that file holds."""
+        definition = re.search(r"^PIP_AUDIT_VERSION\s*:?=\s*(.+?)\s*$", _text(), re.M)
+        assert definition is not None, "Makefile defines no PIP_AUDIT_VERSION"
+        assert "requirements-dev.txt" in definition.group(1) and not re.search(r"\d\.\d", definition.group(1)), (
+            f"PIP_AUDIT_VERSION is {definition.group(1)!r}: a literal here is a second copy of the pin"
+        )
+        pinned = re.search(r"^pip-audit==([^\s;]+)", REQUIREMENTS_DEV.read_text(encoding="utf-8"), re.M)
+        assert pinned is not None
+        result = subprocess.run(
+            [
+                "make", "-C", str(REPO), "--no-print-directory",
+                "--eval", "print-pip-audit-version:\n\t@echo $(PIP_AUDIT_VERSION)",
+                "print-pip-audit-version", f"PYTHON={sys.executable}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == pinned.group(1)
+
+    def test_the_scan_invokes_the_tool_through_the_interpreter(self) -> None:
+        """DEC-013: a bare `pip-audit` on PATH can be a different version than the lock's."""
+        recipe = _targets().get("audit-python", "")
+        assert "$(PIP_AUDIT)" in recipe
+        assert re.search(r"^PIP_AUDIT\s*\?=\s*\$\(PYTHON\) -m pip_audit", _text(), re.M)

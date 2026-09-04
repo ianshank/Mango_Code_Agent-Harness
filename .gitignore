@@ -40,6 +40,10 @@ __pycache__/
 
 .venv
 
+# Isolated worktrees Claude Code creates for parallel agent slices; each is
+# merged as a branch and removed, never committed from the primary checkout.
+.claude/worktrees/
+
 # Pytest / Hypothesis temp directories created in harness/node/ during local runs
 harness/node/test-*/
 .hypothesis/

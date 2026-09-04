@@ -27,7 +27,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 14 reusable skills; the only skill root
+│   ├── skills/                          # 15 reusable skills; the only skill root
 │   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
@@ -40,6 +40,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   ├── standards-audit/             # Yearly external-standards audit with a falsification pass
 │   │   ├── tech-debt-audit/             # Repeatable full-repo SDLC/SQE audit procedure
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
@@ -50,12 +51,13 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
-│   ├── reports/                         # Historical hygiene, peer-review and test reports
-│   └── specs/                           # 24 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
+│   ├── reports/                         # Hygiene, peer-review, test and standards-audit reports (2026-STANDARDS-AUDIT.md is current)
+│   └── specs/                           # 25 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
-│   │   ├── main.py                      # REST endpoints (/api/orchestrate) & static file server
+│   │   ├── main.py                      # REST endpoints (/api/orchestrate, /healthz, /readyz) & static file server
+│   │   ├── messages.py                  # Per-role history wire models (tool_calls survive the round trip)
 │   │   ├── static/                      # Interactive Web UI dashboard & telemetry view
 │   │   └── tests/                       # API Server integration & authentication tests
 │   │
@@ -89,6 +91,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Tool executors + the shared PDP write authorization
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
+│   │   ├── tool_arg_validation.py       # Schema check of model-sent tool arguments before any executor runs
 │   │   ├── tool_schemas.py              # OpenAI/Nemotron-compatible tool definitions
 │   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
 │   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
@@ -106,9 +109,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
-│   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
+│   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation, tamper-refusing
+│   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
+│   │   │   ├── indirect_exec.py         # make/pnpm/npx argument grading: no indirect shell via test_execute
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (3,195 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (3,760 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
@@ -198,7 +203,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **3,318 automated tests** (123 Vitest + 3,195 Pytest across 7 tiers), measured 2026-09-04 by `pnpm exec vitest run` and `pytest --collect-only`. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
+- **Total Automated Tests:** **3,883 automated tests** (123 Vitest + 3,760 Pytest across 7 tiers), measured 2026-09-04 by `pnpm exec vitest run` and `pytest --collect-only` on the Phase B head. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **99.23% Lines | 97.87% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 76 files with all 73 gated files meeting the per-file floor and **none waived**. Measured 2026-09-04 on the `langgraph`-installed configuration — the one `build-full` runs. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
@@ -243,6 +248,7 @@ python harness/shared/nemotron_bridge.py --prompt "Audit INV-1 secret scan rules
 
 ```bash
 # 1. Install dependencies
+corepack enable       # activates the pnpm version pinned by packageManager in harness/node/package.json
 cd harness/node
 pnpm install
 cd ../..

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -232,3 +233,36 @@ class TestRepositorySpecsAreConforming:
         """Mirrors the `specs` CI stage against the committed specs."""
         result = _run(REPO / "docs" / "specs")
         assert result.returncode == 0, result.stderr
+
+
+class TestVerbosityComesFromTheEnvironment:
+    """`validate_specs.py` hard-coded INFO in its `__main__` block, so
+    `LOG_LEVEL` -- the knob every other gate honours -- did nothing there
+    (2026 standards audit M25). The verdict on stdout is untouched at any
+    verbosity.
+
+    The script itself, not `validate_specs.sh`: the shell gate runs the
+    structural tier as an inline heredoc and never invokes this entry point,
+    which is the only place the hard-coded level lived.
+    """
+
+    def _script(self, **env_overrides: str) -> subprocess.CompletedProcess[str]:
+        env = {**os.environ, **env_overrides}
+        return subprocess.run(
+            [sys.executable, str(REPO / "harness" / "shared" / "validate_specs.py")],
+            capture_output=True, text=True, env=env, cwd=REPO,
+        )
+
+    def test_the_pass_diagnostic_follows_log_level(self):
+        loud = self._script(LOG_LEVEL="INFO")
+        quiet = self._script(LOG_LEVEL="ERROR")
+        assert loud.returncode == quiet.returncode == 0, (loud.stderr, quiet.stderr)
+        assert "INFO: [PASS] All " in loud.stderr
+        assert "INFO: [PASS]" not in quiet.stderr
+        assert loud.stdout == quiet.stdout and "[PASS] All " in loud.stdout
+
+    def test_a_bogus_level_degrades_rather_than_failing_the_gate(self):
+        result = self._script(LOG_LEVEL="BOGUS")
+        assert result.returncode == 0, result.stderr
+        assert "Unknown level" not in result.stderr
+        assert "INFO: [PASS] All " in result.stderr, "BOGUS degrades to INFO, the default"
