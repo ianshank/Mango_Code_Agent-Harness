@@ -155,7 +155,7 @@ graph TD
             Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
-            AgentMetaTools[Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) [Planned]]
+            AgentMetaTools["Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) — Planned"]
             Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
             MA --> SubAgents
             SubAgents --> Personas
@@ -185,6 +185,8 @@ graph TD
             end
             subgraph "Gates — policy-sourced, fail-closed"
                 CoverageGate[coverage_gate.py<br/>lines + branches as two floors<br/>from governance-policy.json]
+                CoverageScope[coverage_scope.py<br/>which files the floors judge:<br/>per-file floor, optional-extra waivers,<br/>measured-set bound vs on-disk sources]
+                CoverageGate -->|delegates membership to| CoverageScope
             end
             subgraph "governance/"
                 Broker[broker.py<br/>ExecutionBroker + ProcessBackend<br/>INV-8/9/10 — contains, does not isolate]
@@ -192,6 +194,8 @@ graph TD
                 Actions[command_actions.py<br/>command → declared action; allowlist,<br/>unmodelled ⇒ an action no role holds]
                 GovGuards[pretooluse_guard.py<br/>Policy Guards — resolved from the installed<br/>package; unavailability denies]
                 Validators["Governance Validators<br/>traceability, zero-skips, remotes"]
+                AllowlistGate["check_secret_allowlist.py<br/>every .gitleaks.toml allowlist entry must still<br/>suppress a real finding; keeps are scoped to the<br/>allowlist block itself — INV-1, DEC-035"]
+                Attestation["attestation.py<br/>derives the protected-path attestation table<br/>from validate_invariants own matcher and<br/>discovery — imported, never reimplemented; DEC-038"]
                 Evidence[evidence_manifest.py<br/>EvidenceBuilder — HMAC attestation]
                 Broker --> PDP
                 Broker --> Actions
@@ -409,9 +413,11 @@ graph TD
 
 ```mermaid
 flowchart TD
-    Commit[Pre-PR Git Commit] --> Lock["Dependency Lock Freshness<br/>(make lock-check — the universal uv lock recompiles unchanged)"]
+    Commit[Pre-PR Git Commit] --> NodeLint["Node Lint Tier<br/>(make lint-node — ESLint + Prettier + Knip;<br/>a ci prerequisite, never ci-python: those legs install no pnpm.<br/>Carries R-TDH-23's policy-sourced ESLint max-lines, DEC-034)"]
+    NodeLint --> Lock["Dependency Lock Freshness<br/>(make lock-check — the universal uv lock recompiles unchanged)"]
     Lock --> Secrets[INV-1: Full Working Tree & History Secret Scan]
-    Secrets --> ZeroSkip["INV-2: Zero-Skip Test Verification<br/>(Node: make verify-zero-skips — Vitest JSON;<br/>Python: make verify-zero-skips-python — root conftest TSV, DEC-026/DEC-030)"]
+    Secrets --> AllowlistLive["Allowlist Liveness<br/>(make secrets-allowlist-check — every .gitleaks.toml allowlist entry<br/>must still suppress a real finding; runs in the secret-scan job,<br/>never the unit suite, which has no gitleaks — R-GT-10)"]
+    AllowlistLive --> ZeroSkip["INV-2: Zero-Skip Test Verification<br/>(Node: make verify-zero-skips — Vitest JSON;<br/>Python: make verify-zero-skips-python — root conftest TSV, DEC-026/DEC-030)"]
     ZeroSkip --> DeadCode["Dead-Code Gate<br/>(vulture at confidence 80 in make lint-python, R-TDH-17)"]
     DeadCode --> SizeBudget["Per-File Size Budgets<br/>(limits.size_budget_lines for sources, limits.test_size_budget_lines for tests;<br/>make validate, R-TDH-22)"]
     SizeBudget --> Remotes["INV-3: Canonical Remote URL Normalizer & Allowlist<br/>(make remotes)"]
@@ -421,12 +427,14 @@ flowchart TD
     SpecGate --> SpecTrace[Traceability: Bidirectional Requirements]
     SpecTrace --> Policy[INV-6: External Root of Trust Digest Verification]
     Policy --> Protected["Protected-Path Gate<br/>(fail-closed unless ALLOW_GITHUB_CHANGES;<br/>patterns proven live by test_protected_path_liveness.py)"]
-    Protected --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
+    Protected --> Attested["Attestation Table Check<br/>(make attestation-check — the PR's per-file table must match the set<br/>the protected-path gate enforces, in both directions.<br/>Runs in build-full BEFORE make ci and independent of the label:<br/>make ci stops at the gate above without it, so a later step<br/>would never run on the PRs this is for — DEC-038)"]
+    Attested --> ArtifactDrift["Policy Artifact Drift Gate<br/>(publish_policy_artifact --check, via pytest)"]
     ArtifactDrift --> Delegation[INV-7: Bounded Agent Authority & Trace Logging]
     Delegation --> Boundary["INV-16: Cognitive/Execution Boundary<br/>(no CognitiveSignal field reaches a control path)"]
     Boundary --> Purity["Import Purity<br/>(every shared/control-plane module imports from a foreign CWD<br/>with exit 0, no output, no writes — test_import_purity.py)"]
     Purity --> ConfigLive["Configuration Liveness<br/>(every per-file-ignore and gitleaks allowlist entry still<br/>suppresses something real — test_lint_config_liveness.py)"]
-    ConfigLive --> Deferrals["Deferral Register<br/>(every declined rule carries a measured count and a reason;<br/>fails if a deferred rule got enabled — test_deferred_rigor.py)"]
+    ConfigLive --> ConstInv["Constant Inventory Completeness<br/>(every module-level numeric constant is policy-linked, decision-linked,<br/>or excluded with a reason — discovered from source by ast,<br/>not read from a hand-kept list; test_constant_triage.py, DEC-039)"]
+    ConstInv --> Deferrals["Deferral Register<br/>(every declined rule carries a measured count and a reason;<br/>fails if a deferred rule got enabled — test_deferred_rigor.py)"]
     Deferrals --> Regression["Regression / AQA Tier<br/>(one reproduction per defect that already shipped;<br/>make test-regression)"]
     Regression --> Surface["Agent Surface Liveness<br/>(skills dated and classified, hooks reference real paths,<br/>.mango is the only skill root — test_agent_surface_liveness.py)"]
     Surface --> Pass[PR Approved for Merge]

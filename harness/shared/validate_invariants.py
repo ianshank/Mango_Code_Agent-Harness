@@ -211,8 +211,19 @@ def check_hardcoded_secrets(workspace_dir: Path) -> bool:
 
 
 def _check_line_budget(workspace_dir: Path, budget: int, label: str, tests: bool) -> bool:
-    """Shared scan for the two budgets: `tests` selects test modules or everything else."""
+    """Shared scan for the two budgets: `tests` selects test modules or everything else.
+
+    On success the closest file and its remaining headroom are reported, which
+    turns a cliff into a gauge. The budget previously said nothing at all until
+    it failed, so the first signal a contributor got was a red gate mid-PR:
+    `test_verify_zero_skips.py` sat at 684 of 700 — sixteen lines, in the suite
+    for the invariant most likely to gain a test — and nothing surfaced that.
+    The line is INFO and cannot change the verdict; it reports the measurement
+    the check already performs rather than introducing a second threshold to
+    keep in step with the first.
+    """
     failed = False
+    closest: tuple[int, str] | None = None
     for py_file in _first_party_py_files(workspace_dir):
         if _is_test_module(py_file) != tests:
             continue
@@ -221,10 +232,16 @@ def _check_line_budget(workspace_dir: Path, budget: int, label: str, tests: bool
             if line_count > budget:
                 logger.error("[FAIL] %s: File %s exceeds %d lines (%d lines).", label, py_file.name, budget, line_count)
                 failed = True
+            elif closest is None or line_count > closest[0]:
+                closest = (line_count, py_file.name)
         except Exception as e:  # noqa: BLE001 - unreadable file must not abort the scan
             logger.debug("Skipping unreadable file %s: %s", py_file, e)
     if not failed:
         logger.info("[PASS] %s: All %s under %d lines.", label, "test modules" if tests else "files", budget)
+        if closest is not None:
+            logger.info(
+                "%s: closest is %s at %d lines (%d to spare).", label, closest[1], closest[0], budget - closest[0]
+            )
     return not failed
 
 

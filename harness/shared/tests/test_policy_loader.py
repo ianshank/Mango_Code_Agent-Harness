@@ -5,6 +5,7 @@ of operational values (spec: policy-single-source)."""
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -202,3 +203,83 @@ class TestRepoPolicyIsWired:
         values = agent_defaults()
         assert values["max_delegation_depth"] == repo_policy["agent_defaults"]["max_delegation_depth"]
         assert values["max_parallel_subagents"] == repo_policy["agent_defaults"]["max_parallel_subagents"]
+
+
+class TestPolicyResolutionLogging:
+    """R-GT-4: which policy did this run read, and what did it resolve?
+
+    Every threshold in the system resolves through this module and nothing
+    recorded either answer, so under `LOG_LEVEL=DEBUG` the question was
+    unanswerable -- while every gate depends on it. `ExecutionLoop` already
+    logged its own resolution at DEBUG; this is the same pattern at the source.
+    """
+
+    def test_resolution_names_the_key_the_value_and_the_source(self, caplog) -> None:
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.policy_loader"):
+            resolved = policy_loader.orchestrator_defaults()
+        assert caplog.records, "resolving a policy block emitted no DEBUG record"
+        message = caplog.records[-1].getMessage()
+        assert "orchestrator" in message
+        assert str(policy_loader.POLICY_PATH) in message, "the record does not name the file it read"
+        assert f"max_iterations={resolved['max_iterations']!r}" in message, (
+            "the record does not name the resolved value, so it cannot answer "
+            "'which thresholds is this run enforcing'"
+        )
+
+    def test_nothing_is_logged_at_the_default_level(self, caplog) -> None:
+        """DEBUG-only, so wiring this in changes nothing for existing callers."""
+        with caplog.at_level(logging.INFO, logger="harness.shared.policy_loader"):
+            policy_loader.orchestrator_defaults()
+        assert not caplog.records, "policy resolution is noisy at INFO"
+
+    def test_an_absent_policy_says_so_rather_than_naming_a_file_it_did_not_read(
+        self, tmp_path, caplog
+    ) -> None:
+        """The adopter path resolves built-in defaults; the log must not imply a read."""
+        missing = tmp_path / "no-such-policy.json"
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.policy_loader"):
+            policy_loader.orchestrator_defaults(missing)
+        message = caplog.records[-1].getMessage()
+        assert "absent" in message and "built-in defaults" in message
+
+    @pytest.mark.parametrize(
+        "accessor",
+        ["orchestrator_defaults", "nemotron_defaults", "langgraph_defaults", "coverage_defaults"],
+    )
+    def test_every_block_accessor_records_its_resolution(self, accessor: str, caplog) -> None:
+        """One instrumented accessor and three silent ones is the drift to prevent."""
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.policy_loader"):
+            getattr(policy_loader, accessor)()
+        assert caplog.records, f"{accessor} resolved silently"
+
+
+class TestLimitsAreTyped:
+    """R-GT-5: an undeclared key is a static error, not a runtime KeyError.
+
+    The runtime behaviour is unchanged -- a TypedDict is a dict -- so this
+    asserts the contract that makes `python -m mypy` able to see the typo:
+    the declared key set matches what the accessor actually returns. A key
+    added to one and not the other is the drift that would make the type
+    annotation a lie while every test still passed.
+    """
+
+    @pytest.mark.parametrize(
+        ("accessor", "typed"),
+        [
+            ("orchestrator_defaults", "OrchestratorLimits"),
+            ("nemotron_defaults", "NemotronDefaults"),
+            ("langgraph_defaults", "LangGraphDefaults"),
+            ("coverage_defaults", "CoverageThresholds"),
+        ],
+    )
+    def test_the_declared_keys_are_the_returned_keys(self, accessor: str, typed: str) -> None:
+        declared = set(getattr(policy_loader, typed).__annotations__)
+        returned = set(getattr(policy_loader, accessor)())
+        assert declared == returned, (
+            f"{typed} declares {sorted(declared)} but {accessor}() returns {sorted(returned)}; "
+            "the annotation no longer describes the value, so mypy is checking a fiction"
+        )
+
+    def test_the_blocks_are_still_plain_dicts_at_runtime(self) -> None:
+        """Backward compatibility: adopters reading the block dynamically are unaffected."""
+        assert isinstance(policy_loader.orchestrator_defaults(), dict)

@@ -414,3 +414,129 @@ class TestProseNamesTestsThatExist:
             "reference or the test -- a pointer to nothing is worse than no pointer, "
             "because it reads as evidence the claim is enforced."
         )
+
+
+class TestSkillsNameRealTargets:
+    """R-GT-6: a skill that tells an agent to run a target that does not exist.
+
+    `test_wired_skill_is_actually_named_by_make_review` checks the other
+    direction -- that a skill name appears in the Makefile. Nothing checked that
+    the `make` commands a SKILL.md instructs an agent to run are real targets,
+    so a rename on either side, or a typo, produces a skill whose documented
+    procedure fails at the first step. Measured when this was written: all eight
+    distinct targets named across the thirteen skills exist, so this is a gate
+    against regression rather than a fix for a live defect.
+    """
+
+    #: Backticked spans and fenced lines are scanned separately because three
+    #: targets (`coverage`, `test-governance`, `pre-pr`) appear only inside
+    #: fenced blocks, and prose contains phrases like "to make a stage green"
+    #: that a bare `make \w+` scan reads as a target. Anchoring each form --
+    #: span-initial for inline, line-initial for fenced -- excludes the prose
+    #: without an exception list.
+    INLINE = re.compile(r"`make\s+([a-z][a-z0-9_.-]*)")
+    FENCED = re.compile(r"^\s*make\s+([a-z][a-z0-9_.-]*)", re.M)
+
+    def _referenced_targets(self, skill: Path) -> set[str]:
+        text = skill.read_text(encoding="utf-8")
+        found: set[str] = set()
+        in_fence = False
+        for line in text.splitlines():
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                found.update(self.FENCED.findall(line))
+            else:
+                found.update(self.INLINE.findall(line))
+        return found
+
+    def test_the_scan_finds_references(self) -> None:
+        """Guards the scan: zero references would make the check below vacuous."""
+        total = {t for skill in _skill_dirs() for t in self._referenced_targets(skill / "SKILL.md")}
+        assert len(total) > 3, (
+            f"only found {sorted(total)} make targets across the skills; the scanner has "
+            "stopped matching and the check below would pass on anything"
+        )
+
+    @pytest.mark.parametrize("skill", _skill_dirs(), ids=lambda p: p.name)
+    def test_every_make_target_a_skill_names_exists(self, skill: Path) -> None:
+        from harness.shared.tests._ci_gate_helpers import _make_targets
+
+        defined = _make_targets((REPO / "Makefile").read_text(encoding="utf-8"))
+        referenced = self._referenced_targets(skill / "SKILL.md")
+        missing = sorted(referenced - defined)
+        assert not missing, (
+            f"{skill.name}/SKILL.md tells an agent to run make target(s) that do not exist: "
+            f"{missing}. The documented procedure fails at that step."
+        )
+
+
+class TestHookNamespacePartition:
+    """R-GT-8: every hook script belongs to a namespace, and the live one exists.
+
+    `.mango/hooks/` holds two disjoint kinds of script: `pre-nemotron-run.sh`,
+    which `ExecutionLoop` fires at the top of every agent turn, and five that
+    `.mango/settings.json` registers and DEC-003 keeps dormant. Nothing asserted
+    the partition, so a new script belonged to neither and no test said so; and
+    nothing asserted the live one exists, because `HookRunner.run_hook` no-ops
+    when the file is missing -- correct behaviour, but it means deleting or
+    renaming the script leaves the whole suite green while the hook silently
+    stops running.
+    """
+
+    MANGO_HOOKS = REPO / ".mango" / "hooks"
+
+    def _scripts(self) -> list[Path]:
+        return sorted(self.MANGO_HOOKS.glob("*.sh"))
+
+    def _settings_registered(self) -> set[str]:
+        """Stems named by a `.mango/settings.json` hook command.
+
+        Scoped to that file specifically: DEC-003 turns on whether these are
+        registered where Claude Code cannot see them, so counting a `.claude/`
+        registration here would legitimise exactly the change
+        `test_mango_hooks_stay_dormant` forbids.
+        """
+        text = MANGO_SETTINGS.read_text(encoding="utf-8")
+        return {Path(name).stem for name in re.findall(r"\.mango/hooks/([\w.\-]+\.sh)", text)}
+
+    def test_the_live_pre_run_hook_exists_on_disk(self) -> None:
+        """`run_hook` no-ops on a missing file, so only this notices a deletion."""
+        from harness.shared.agent_prompts import PRE_RUN_HOOK
+
+        hook = self.MANGO_HOOKS / f"{PRE_RUN_HOOK}.sh"
+        assert hook.is_file(), (
+            f"{hook.relative_to(REPO)} is missing. ExecutionLoop fires {PRE_RUN_HOOK!r} at the "
+            "top of every agent turn and HookRunner.run_hook no-ops when the script is absent, "
+            "so the governance validation it runs would silently stop happening."
+        )
+        assert "validate_invariants.py" in hook.read_text(encoding="utf-8"), (
+            f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
+        )
+
+    def test_every_hook_script_belongs_to_a_namespace(self) -> None:
+        """Either the orchestrator may fire it, or a settings file registers it."""
+        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
+
+        registered = self._settings_registered()
+        orphans = [
+            script.name
+            for script in self._scripts()
+            if script.stem not in PERMITTED_HOOK_NAMES and script.stem not in registered
+        ]
+        assert not orphans, (
+            f"scripts in .mango/hooks/ that neither the orchestrator may fire nor "
+            f".mango/settings.json registers: {orphans}. A script in neither namespace runs "
+            "nowhere and is reviewed by nobody -- register it, name it after a permitted hook, "
+            "or delete it."
+        )
+
+    def test_the_partition_is_not_vacuous(self) -> None:
+        """Both namespaces must be non-empty, or the union above proves nothing."""
+        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
+
+        scripts = {script.stem for script in self._scripts()}
+        assert scripts, ".mango/hooks/ contains no scripts; the partition check is vacuous"
+        assert scripts & PERMITTED_HOOK_NAMES, "no hook script is a name the orchestrator may fire"
+        assert scripts & self._settings_registered(), "no hook script is registered by .mango/settings.json"

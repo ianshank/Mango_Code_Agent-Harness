@@ -13,7 +13,12 @@ on:
     # the label cannot re-run CI -- "Re-run all jobs" replays the original,
     # unlabelled event payload -- so a protected-path PR could only be unblocked
     # by pushing another commit or closing and reopening it.
-    types: [opened, synchronize, reopened, labeled]
+    # `edited` is here for the same reason as `labeled`: the attestation check in
+    # `build-full` judges the PR description, and without this a corrected
+    # description could not re-run it -- "Re-run failed jobs" replays the original
+    # event, so the only way to clear the check would be an otherwise pointless
+    # commit. It does fire on title edits too, which is the accepted cost.
+    types: [opened, synchronize, reopened, labeled, edited]
     # Stacked/phase branches must also be gated, otherwise a PR targeting an
     # integration branch merges without ever running `make ci`. `claude/**` is
     # the agent branch namespace and was missing here: a PR stacked onto one got
@@ -82,6 +87,13 @@ jobs:
 
   build-full:
     runs-on: ubuntu-latest
+    # Declared at the job level, so the other jobs keep the workflow-wide
+    # `contents: read` and nothing else. `pull-requests: read` is needed by the
+    # attestation step alone, which reads the PR description from the API rather
+    # than from the event payload; see the note on that step for why.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -130,6 +142,50 @@ jobs:
       - name: Install Node dependencies
         run: make node-deps
 
+      # The `infra-reviewed` label attests to the table in the PR description, so
+      # a table that does not list what the change actually touches makes the
+      # attestation cover less than the label claims. That table was transcribed
+      # by hand and drifted (DEC-038); this step compares it to the same set
+      # `validate_invariants.py` enforces.
+      #
+      # Placed BEFORE `make ci` on purpose, and not gated on the label. `make ci`
+      # ends at the protected-path gate whenever the label is absent -- which is
+      # every PR this check is for -- so a step after it would never run on the
+      # PRs that need it, and the reviewer must be able to read a verified table
+      # *before* deciding whether to attest. Needs only Python and git.
+      #
+      # The description is fetched from the API, NOT taken from
+      # `github.event.pull_request.body`. That field is a snapshot of the moment
+      # the run was queued, which broke this check three ways on its second real
+      # run: a description corrected after the push was judged as it had been
+      # before the correction; "Re-run failed jobs" replays the original payload,
+      # so the stale text would fail forever and the gate could not be cleared
+      # without a new commit; and passing the body through an env var printed the
+      # whole description into the log's step-setup group. Reading it live fixes
+      # all three, and `edited` in the trigger types above re-runs the check when
+      # someone fixes the table.
+      #
+      # The description never touches the shell: curl writes it to a file, and
+      # only the path is passed on. `set -o pipefail` is explicit because the
+      # default `bash -e` would otherwise let a failed fetch produce an empty file
+      # and report a missing table rather than a broken request.
+      - name: Verify the protected-path attestation table
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          curl -sSf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            > "$RUNNER_TEMP/pr.json"
+          python -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1]))["body"] or "")' \
+            "$RUNNER_TEMP/pr.json" > "$RUNNER_TEMP/pr-body.md"
+          make attestation-check FILE="$RUNNER_TEMP/pr-body.md"
+
       # Run the regression tier on its own, before the full gate. These tests
       # each reproduce a defect that already shipped once, so a failure here has
       # a specific meaning -- something came back -- that is worth reading
@@ -144,6 +200,7 @@ jobs:
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
         run: make ci
+
 
   # INV-1 (secret scan over working tree AND full history) had no live enforcement:
   # the gitleaks steps live in harness/{node,jvm}/.github/workflows/ci.yml, which are
@@ -176,6 +233,13 @@ jobs:
 
       - name: Run secret scan gate (make secrets)
         run: PATH="$(go env GOPATH)/bin:$PATH" make secrets
+
+      # An allowlist path exempts its whole file from every rule, so an entry
+      # that has stopped suppressing anything is a permanent blind spot. This
+      # runs here, not in the unit suite: it needs gitleaks, the unit suite has
+      # none, and INV-2 forbids adding a skip to paper over that.
+      - name: Check the gitleaks allowlist still earns its entries
+        run: PATH="$(go env GOPATH)/bin:$PATH" make secrets-allowlist-check
 
   # Closes the KNOWN_GAPS["audit"] exception in test_ci_gate_coverage.py: dependency
   # vulnerability scanning previously ran only in the per-stack adopter workflows,

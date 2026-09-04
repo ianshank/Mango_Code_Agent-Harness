@@ -13,7 +13,12 @@ try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     MCP_AVAILABLE = True
-except ImportError:  # pragma: no cover
+except ImportError:
+    # No pragma: this arc is the Python 3.9 leg's real code path (the mcp SDK's
+    # floor is 3.10) and `test_import_failure_sets_mcp_unavailable` executes it
+    # directly, by blocking the SDK in sys.modules and re-running this module
+    # from its path. Excluding it understated the file and hid whether the
+    # fallback still leaves the module in a safe state (gate-truthfulness R-GT-3).
     MCP_AVAILABLE = False
     types = None  # type: ignore[assignment]
     Server = None  # type: ignore[assignment,misc]

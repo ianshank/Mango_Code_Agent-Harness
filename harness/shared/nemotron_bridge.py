@@ -182,6 +182,7 @@ def complete_chat(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
     max_tokens: Optional[int] = None,
     timeout_sec: Optional[int] = None,
     tools: Optional[list[dict[str, Any]]] = None,
@@ -204,6 +205,8 @@ def complete_chat(
 
     if temperature is None:
         temperature = policy["temperature"]
+    if top_p is None:
+        top_p = policy["top_p"]
     if max_tokens is None:
         max_tokens = policy["max_tokens"]
     if timeout_sec is None:
@@ -229,6 +232,7 @@ def complete_chat(
         "model": target_model,
         "messages": messages,
         "temperature": max(0.0, min(2.0, temperature)),
+        "top_p": max(0.0, min(1.0, top_p)),
         "max_tokens": max_tokens,
         "stream": False,
     }

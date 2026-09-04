@@ -422,3 +422,117 @@ class TestChangelogSectionCap:
         )
         assert oversized_changelog_sections(text, cap) == {"## [1.1.0] - 2026-01-02": cap + 1}
         assert changelog_sections(text)["## [1.0.0] - 2026-01-01"] == cap
+
+
+class TestTheDeclaredVersionIsARealRelease:
+    """R-GT-9: the mirrors agreeing with each other is not the same as the
+    release existing.
+
+    `TestVersionIsSingleSourced` pins the four mirrors to `pyproject.toml` and
+    passes -- it passed on 2026-09-03 while the most recently merged work was
+    described in a commit message and an RCA filename as v2.5.0, with no
+    `## [2.5.0]` section anywhere in the changelog and no git tag in the
+    repository's history. Nothing connected a declared version to a released
+    one, so the whole set of mirrors could be internally consistent and
+    collectively wrong.
+    """
+
+    @staticmethod
+    def _sections(text: str) -> set[str]:
+        return set(re.findall(r"^## \[v?(\d+\.\d+\.\d+)\]", text, re.M))
+
+    def test_the_parser_finds_the_release_sections(self) -> None:
+        """Guards the check: no sections found would make it vacuous."""
+        sections = self._sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert len(sections) > 1, f"only found {sections} in CHANGELOG.md; the parser has stopped matching"
+
+    def test_declared_version_has_a_changelog_section(self) -> None:
+        declared = declared_version(REPO)
+        sections = self._sections(CHANGELOG.read_text(encoding="utf-8"))
+        assert declared in sections, (
+            f"pyproject.toml declares {declared} but CHANGELOG.md has no `## [{declared}]` section. "
+            f"Sections present: {sorted(sections)}. Either the version was bumped without writing "
+            "the release, or the release was written under a different number -- both leave the "
+            "repository disagreeing with itself about what it currently is."
+        )
+
+    def test_a_version_with_no_section_is_reported(self, tmp_path: Path) -> None:
+        """The negative case, so this cannot pass by matching everything."""
+        for rel in ["pyproject.toml", "CHANGELOG.md"]:
+            target = tmp_path / rel
+            target.write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+        pyproject = tmp_path / "pyproject.toml"
+        bumped = re.sub(
+            r'^(version\s*=\s*)"[^"]+"', r'\1"9.9.9"', pyproject.read_text(encoding="utf-8"), count=1, flags=re.M
+        )
+        pyproject.write_text(bumped, encoding="utf-8")
+        assert declared_version(tmp_path) == "9.9.9"
+        assert "9.9.9" not in self._sections((tmp_path / "CHANGELOG.md").read_text(encoding="utf-8"))
+
+
+#: A mermaid node whose label is delimited by bare brackets, capturing the label.
+#: Quoted labels (`id["..."]`) are excluded by the negative lookahead: quoting is
+#: exactly what makes a bracket inside a label safe, so a quoted node is correct
+#: by construction and must not be reported.
+UNQUOTED_MERMAID_NODE = re.compile(r"\w+\[(?!\")([^\]]*)\]")
+
+#: Documentation trees whose fenced mermaid blocks must be renderable.
+DIAGRAM_ROOTS = ("docs", "README.md", "CLAUDE.md")
+
+
+def mermaid_blocks(text: str) -> list[str]:
+    """The body of every fenced ```mermaid block in `text`."""
+    return re.findall(r"```mermaid\n(.*?)```", text, re.S)
+
+
+def documents_with_diagrams() -> list[Path]:
+    """Markdown files under `DIAGRAM_ROOTS` that contain at least one mermaid block."""
+    candidates: list[Path] = []
+    for entry in DIAGRAM_ROOTS:
+        target = REPO / entry
+        candidates.extend(sorted(target.rglob("*.md")) if target.is_dir() else [target])
+    return [path for path in candidates if path.is_file() and "```mermaid" in path.read_text(encoding="utf-8")]
+
+
+class TestEveryMermaidDiagramCanRender:
+    """A diagram that fails to parse documents nothing, and says so to no one.
+
+    `c4_architecture.md` carried a node label reading
+    ``AgentMetaTools[... (Context7) [Planned]]``. Mermaid ends a bare-bracket
+    label at the first `]`, so the trailing `]]` is a syntax error and the whole
+    diagram -- the agent-topology view, not one node -- rendered as an error box
+    on GitHub. It had no gate: prose is checked here for naming real paths, and
+    nothing checked that the pictures still draw. This is the documentation
+    instance of the branch's recurring shape, a gate whose scope stopped short
+    of the artefact it is supposed to cover.
+    """
+
+    def test_at_least_one_document_carries_a_diagram(self) -> None:
+        """Guards the finder: a glob that matches nothing would pass every case below."""
+        found = documents_with_diagrams()
+        assert found, "no markdown with a mermaid block was found; the discovery is broken"
+        assert any(path.name == "c4_architecture.md" for path in found)
+
+    def test_no_node_label_ends_early_on_a_nested_bracket(self) -> None:
+        offenders: list[str] = []
+        for path in documents_with_diagrams():
+            for index, block in enumerate(mermaid_blocks(path.read_text(encoding="utf-8"))):
+                for lineno, line in enumerate(block.splitlines(), 1):
+                    for match in UNQUOTED_MERMAID_NODE.finditer(line):
+                        if "[" in match.group(1):
+                            offenders.append(f"{path.relative_to(REPO)} block {index} line {lineno}: {line.strip()}")
+        assert not offenders, (
+            "these mermaid node labels contain a bracket without being quoted, so the label ends "
+            "early and the diagram fails to parse. Wrap the label in double quotes: "
+            + "; ".join(offenders)
+        )
+
+    def test_the_detector_reports_a_known_bad_label(self) -> None:
+        """The exact shape found in `c4_architecture.md`, so the regex cannot silently stop matching."""
+        bad = 'Node[label with (parens) [Planned]]'
+        match = UNQUOTED_MERMAID_NODE.search(bad)
+        assert match is not None and "[" in match.group(1)
+
+    def test_the_detector_accepts_a_quoted_label(self) -> None:
+        quoted = 'Node["label with [brackets] and (parens)"]'
+        assert [m for m in UNQUOTED_MERMAID_NODE.finditer(quoted) if "[" in m.group(1)] == []

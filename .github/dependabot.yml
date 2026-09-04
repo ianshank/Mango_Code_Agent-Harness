@@ -1,9 +1,15 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+  # The `pip` ecosystem is deliberately absent. DEC-031 closed PRs #38-#46 as
+  # superseded by the universal `requirements-lock.txt` and named the weekly
+  # `lock-upgrade-check` job (scheduled-drift.yml, R-TDH-9) the Python upgrade
+  # signal from then on. Leaving the ecosystem enabled contradicted that
+  # decision in the only way that matters -- it kept refilling the queue: twelve
+  # bot PRs reopened on 2026-09-02, including a mypy 1.11 -> 2.3 major bump no
+  # lock-driven process had asked for. A per-package pin proposed against a
+  # locked dependency set is either a no-op or a reintroduction of the pinning
+  # the lock supersedes. Re-enable this only by superseding DEC-031, not by
+  # editing this file (gate-truthfulness, NS-4).
 
   - package-ecosystem: "npm"
     directory: "/harness/node"

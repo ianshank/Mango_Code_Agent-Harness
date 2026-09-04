@@ -287,3 +287,74 @@ class TestEslintMaxLinesIsPolicySourced:
         assert block is not None, (
             "the max-lines rule is not scoped to `files: ['src/**/*.ts']`; a rule over no files enforces nothing"
         )
+
+
+class TestPrettierLeavesPinnedArtefactsAlone:
+    """R-GT-2: the formatter and the root-of-trust digest cannot both own a file.
+
+    `make lint-node` was recorded as blocked by a `typescript` /
+    `typescript-eslint` incompatibility (DEC-013). Measured against the
+    installed workspace on 2026-09-03 that blocker is gone -- ESLint and Knip
+    both pass -- and what actually failed was `prettier --check` on
+    `harness/node/.governance/policy.json`, over whitespace inside the
+    `coverage.optional_extras.path_prefixes` array DEC-028 added.
+
+    That file's bytes are pinned: `docs/rca/e2e_origin_sync_triage_rca_v2.5.0.md`
+    records Prettier's reformat breaking the root-of-trust SHA256, and the fix
+    being to restore the exact bytes. So the two gates are mutually exclusive by
+    construction, and no amount of running `prettier --write` resolves it --
+    running it is what breaks `validate_adoption.py`. Excluding the tree is the
+    only move that lets both hold, which is why this asserts the exclusion
+    exists rather than asserting the file is formatted.
+
+    Written in the shape of the `.gitignore`/`.dockerignore` dead-rule gates:
+    an ignore rule that matches nothing is the failure mode to avoid.
+    """
+
+    IGNORE = REPO / "harness" / "node" / ".prettierignore"
+    PINNED_TREE = REPO / "harness" / "node" / ".governance"
+
+    def _rules(self) -> list[str]:
+        assert self.IGNORE.is_file(), (
+            f"{self.IGNORE} is missing; `make lint-node` is a prerequisite of `make ci`, "
+            "and without this file Prettier reformats the digest-pinned .governance/ tree"
+        )
+        return [
+            line.strip()
+            for line in self.IGNORE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    def test_the_governance_tree_is_excluded_from_prettier(self) -> None:
+        rules = self._rules()
+        assert any(rule.rstrip("/") == ".governance" for rule in rules), (
+            f"{self.IGNORE.name} does not exclude .governance/; Prettier would reformat "
+            "policy.json and break the root-of-trust digest validate_adoption.py checks. "
+            f"Rules present: {rules}"
+        )
+
+    def test_every_rule_excludes_something_that_exists(self) -> None:
+        """A rule for a tree that is gone silently covers whatever lands there."""
+        dead = [rule for rule in self._rules() if not (self.IGNORE.parent / rule.rstrip("/")).exists()]
+        assert not dead, (
+            f"{self.IGNORE.name} rules matching nothing on disk: {dead}. Remove them, or they "
+            "quietly exempt whatever is created at that path later."
+        )
+
+    def test_the_excluded_tree_is_the_one_under_digest(self) -> None:
+        """The exclusion is justified by the pin, not by taste.
+
+        If `.governance/` ever stops being digest-pinned, the reason for
+        exempting it from the formatter is gone and this should be revisited
+        rather than inherited.
+        """
+        root_of_trust = self.PINNED_TREE / "root-of-trust.json"
+        assert root_of_trust.is_file(), (
+            f"{root_of_trust} is gone; the reason .governance/ is exempt from Prettier "
+            "no longer holds, so the exclusion needs re-deciding rather than keeping"
+        )
+        pinned = json.loads(root_of_trust.read_text(encoding="utf-8"))
+        assert pinned.get("policy_sha256"), (
+            "root-of-trust.json declares no policy_sha256; nothing pins policy.json's bytes, "
+            "so the Prettier exclusion is unjustified as written"
+        )

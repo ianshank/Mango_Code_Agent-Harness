@@ -33,6 +33,23 @@ CLAUDE_MD = REPO / "CLAUDE.md"
 # The three roles the orchestrator actually executes (planner -> reasoner -> verifier).
 EXPECTED_ACTIVE_ROLES = {"planner", "nemotron-reasoner", "verifier"}
 
+#: Persona frontmatter names Claude Code's tool vocabulary (`Read`, `Bash`, ...);
+#: `agent_authority.TOOL_REQUIRED_ACTION` names the tool-bridge vocabulary
+#: (`read_file`, `run_command`, ...). The two sets are disjoint apart from the
+#: meta-tools, so without this join a persona could be granted anything at all
+#: and no gate would notice. Declared here rather than in `agent_authority.py`
+#: because it is knowledge about the *documentation* surface, not about
+#: execution: nothing at runtime reads a persona's frontmatter. Each entry maps
+#: to the bridge tool whose authority the Claude Code tool actually confers.
+CLAUDE_CODE_TOOL_ALIASES: dict[str, str] = {
+    "Read": "read_file",
+    "Grep": "read_file",
+    "Glob": "read_file",
+    "Bash": "run_command",
+    "Write": "write_file",
+    "Edit": "apply_patch",
+}
+
 
 def _frontmatter(path: Path) -> dict[str, str]:
     """Parse the leading YAML-ish frontmatter block of a SKILL.md/agent .md."""
@@ -135,6 +152,131 @@ class ActiveAgentTests(unittest.TestCase):
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")
+
+
+class AgentSurfaceTruthTests(unittest.TestCase):
+    """R-GT-6: two claims on the agent surface that presence checks cannot see.
+
+    The tests above assert that names *appear* in the right files. A persona can
+    declare an authority its role exists to withhold, and the mapping table can
+    have its rows permuted, without changing which names appear anywhere -- so
+    every existing check stays green through both. These assert the pairings.
+    """
+
+    def _declared_tools(self, role: str) -> set[str]:
+        """The persona's frontmatter `tools:` field, as a set of tokens."""
+        fields = _frontmatter(ACTIVE_AGENTS / f"{role}.md")
+        return {token.strip() for token in fields.get("tools", "").split(",") if token.strip()}
+
+    def test_no_persona_declares_an_authority_its_role_withholds(self):
+        """A persona is a grant, and the authority model is what bounds it.
+
+        The verifier is the case that matters: `agent_authority.py` exists to
+        withhold `write` from it, and until now nothing compared the persona's
+        own `tools:` line against that. `write_file` could be added to
+        `verifier.md` with the whole suite green.
+        """
+        from harness.shared.agent_authority import TOOL_REQUIRED_ACTION, tool_is_permitted
+
+        violations = []
+        for role in sorted(EXPECTED_ACTIVE_ROLES):
+            for token in sorted(self._declared_tools(role)):
+                bridge = CLAUDE_CODE_TOOL_ALIASES.get(token, token)
+                # Tools outside the authority model (documentation-only names)
+                # are not judged here; the model is the only source of truth we
+                # have, and inventing a verdict for a name it does not know
+                # would be the hard-coding this repository forbids.
+                if bridge not in TOOL_REQUIRED_ACTION:
+                    continue
+                if not tool_is_permitted(role, bridge):
+                    violations.append(
+                        f"{role}.md declares `{token}`"
+                        + (f" (-> {bridge})" if bridge != token else "")
+                        + f", requiring `{TOOL_REQUIRED_ACTION[bridge]}`, which the role does not hold"
+                    )
+        self.assertEqual(
+            [],
+            violations,
+            "persona frontmatter grants authority the policy withholds: " + "; ".join(violations),
+        )
+
+    def test_every_role_still_declares_the_tools_it_needs(self):
+        """The converse, so the gate above cannot be satisfied by an empty list.
+
+        A persona whose `tools:` field was emptied would violate nothing, and
+        the check above would pass on it -- vacuously.
+        """
+        for role in sorted(EXPECTED_ACTIVE_ROLES):
+            self.assertTrue(
+                self._declared_tools(role),
+                f"{role}.md declares no tools at all; the authority check above would pass vacuously",
+            )
+
+    def _authoritative_mapping(self) -> dict[str, set[str]]:
+        """Parse the `## Authoritative mapping` table into role -> contracts.
+
+        Scoped to the first contiguous table after that heading, on purpose: a
+        second `Derived exposure` table follows under no heading of its own and
+        names the same three roles in its first column, so both a plain
+        heading-to-heading split and an unscoped row scan would let a swap
+        between the two tables satisfy this.
+        """
+        text = (ACTIVE_AGENTS / "README.md").read_text(encoding="utf-8")
+        section = text.split("## Authoritative mapping", 1)
+        self.assertEqual(len(section), 2, ".mango/agents/README.md has no '## Authoritative mapping' heading")
+
+        mapping: dict[str, set[str]] = {}
+        started = False
+        for line in section[1].splitlines():
+            stripped = line.strip()
+            is_row = stripped.startswith("|") and stripped.endswith("|")
+            if not is_row:
+                if started:
+                    break  # end of the first table; anything below is a different one
+                continue
+            started = True
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if len(cells) < 2 or all(re.fullmatch(r"-+", cell) for cell in cells):
+                continue  # separator row
+            role_match = re.search(r"`([^`]+)`", cells[0])
+            if role_match is None:
+                continue  # header row
+            contracts = {name.removesuffix(".md") for name in re.findall(r"`([^`]+)`", cells[1])}
+            mapping[role_match.group(1)] = contracts
+        return mapping
+
+    def test_the_mapping_table_matches_the_authority_model_row_by_row(self):
+        """A swapped row keeps every string in the file and breaks the contract.
+
+        `test_mapping_readme_*` assert that each role name and each canonical
+        contract name appears somewhere in the document. Exchanging the planner
+        and verifier rows changes no name's presence, so both stay green while
+        the table tells a reader the exact opposite of what the code does.
+        """
+        from harness.shared.agent_authority import ACTIVE_TO_CANONICAL
+
+        documented = self._authoritative_mapping()
+        expected = {role: set(contracts) for role, contracts in ACTIVE_TO_CANONICAL.items()}
+        self.assertEqual(
+            expected,
+            documented,
+            "the authoritative mapping table disagrees with agent_authority.ACTIVE_TO_CANONICAL; "
+            "a reader following the table would attribute the wrong contracts to a role",
+        )
+
+    def test_the_mapping_parser_found_every_active_role(self):
+        """Guards the parse itself: a table this cannot read must not read empty.
+
+        Set equality against an empty dict would fail loudly, but a partial
+        parse that happened to match a partial model would not -- so pin the
+        row count against the roles that exist.
+        """
+        self.assertEqual(
+            EXPECTED_ACTIVE_ROLES,
+            set(self._authoritative_mapping()),
+            "the mapping table parser did not recover exactly the active roles; "
+            "the table's format changed and the comparison above is no longer meaningful",
+        )
 
 
 class SkillTests(unittest.TestCase):

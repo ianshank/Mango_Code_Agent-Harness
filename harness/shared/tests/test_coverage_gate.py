@@ -18,8 +18,16 @@ from pathlib import Path
 import pytest
 
 from harness.shared import coverage_gate as cg
+from harness.shared import coverage_scope as cs
 
 GATE = Path(cg.__file__).resolve()
+
+#: Capture on the package logger, not on one module's. The gate's scope concern
+#: moved to `coverage_scope.py`, and every `caplog.at_level(..., logger=cg.logger.name)`
+#: silently stopped seeing the records it asserted on -- the behaviour was
+#: unchanged, the capture target had moved. Anchoring on the common parent
+#: survives the next move too, since child loggers inherit its level.
+SHARED_LOGGER = "harness.shared"
 
 pytestmark = pytest.mark.governance
 
@@ -58,7 +66,7 @@ def test_load_thresholds_reads_both_metrics(policy_file: Path):
 
 def test_load_thresholds_missing_coverage_block_fails_closed(tmp_path: Path, caplog):
     policy = _write_json(tmp_path / "policy.json", {"limits": {}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.load_thresholds(policy)
     assert exc.value.code == 1
@@ -68,7 +76,7 @@ def test_load_thresholds_missing_coverage_block_fails_closed(tmp_path: Path, cap
 @pytest.mark.parametrize("bad_value", ["90", None, True])
 def test_load_thresholds_non_numeric_metric_fails_closed(tmp_path: Path, bad_value, caplog):
     policy = _write_json(tmp_path / "policy.json", {"coverage": {"lines": bad_value, "branches": 70}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.load_thresholds(policy)
     assert exc.value.code == 1
@@ -83,7 +91,7 @@ def test_load_thresholds_unreadable_policy_fails_closed(tmp_path: Path):
 
 def test_load_thresholds_non_object_root_fails_closed(tmp_path: Path, caplog):
     policy = _write_json(tmp_path / "policy.json", ["not", "an", "object"])
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.load_thresholds(policy)
     assert exc.value.code == 1
@@ -100,7 +108,7 @@ def test_measure_extracts_percentages(coverage_file: Path):
 
 def test_measure_missing_totals_fails_closed(tmp_path: Path, caplog):
     report = _write_json(tmp_path / "coverage.json", {"files": {}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.measure(report)
     assert exc.value.code == 1
@@ -114,7 +122,7 @@ def test_measure_missing_branch_counters_fails_closed(tmp_path: Path, caplog):
         tmp_path / "coverage.json",
         {"totals": {"covered_lines": 90, "num_statements": 100}},
     )
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.measure(report)
     assert exc.value.code == 1
@@ -133,7 +141,7 @@ def test_measure_zero_denominator_fails_closed(tmp_path: Path, caplog):
             }
         },
     )
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         with pytest.raises(SystemExit) as exc:
             cg.measure(report)
     assert exc.value.code == 1
@@ -144,13 +152,13 @@ def test_measure_zero_denominator_fails_closed(tmp_path: Path, caplog):
 
 
 def test_check_passes_when_all_floors_met(caplog):
-    with caplog.at_level(logging.INFO, logger=cg.logger.name):
+    with caplog.at_level(logging.INFO, logger=SHARED_LOGGER):
         assert cg.check({"lines": 80.0, "branches": 70.0}, {"lines": 90.0, "branches": 75.0}) is True
     assert "[PASS]" in caplog.text
 
 
 def test_check_fails_when_one_metric_below_floor(caplog):
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         assert cg.check({"lines": 80.0, "branches": 90.0}, {"lines": 90.0, "branches": 75.0}) is False
     assert "below the policy floor" in caplog.text
 
@@ -215,14 +223,14 @@ def test_waiver_applies_only_when_env_is_set_and_extra_is_absent(tmp_path: Path,
     policy = _extras_policy(tmp_path)
     assert cg.optional_extra_waivers(policy, environ={}) == {}
     assert cg.optional_extra_waivers(policy, environ={_ENV: "yes"}) == {}
-    with caplog.at_level(logging.WARNING, logger=cg.logger.name):
+    with caplog.at_level(logging.WARNING, logger=SHARED_LOGGER):
         assert cg.optional_extra_waivers(policy, environ={_ENV: "1"}) == {"opt": (_PREFIX,)}
     assert "[WAIVED]" in caplog.text
 
 
 def test_waiver_is_refused_when_the_extra_is_importable(tmp_path: Path, caplog):
     policy = _extras_policy(tmp_path, import_name="json")
-    with caplog.at_level(logging.INFO, logger=cg.logger.name):
+    with caplog.at_level(logging.INFO, logger=SHARED_LOGGER):
         assert cg.optional_extra_waivers(policy, environ={_ENV: "1"}) == {}
     assert "stays enforced" in caplog.text
 
@@ -251,7 +259,7 @@ def test_extras_without_a_coverage_block_fail_closed(tmp_path: Path):
 )
 def test_malformed_extra_fails_closed(tmp_path: Path, overrides: dict, caplog):
     policy = _extras_policy(tmp_path, **overrides)
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER), pytest.raises(SystemExit) as exc:
         cg.optional_extra_waivers(policy, environ={})
     assert exc.value.code == 1
     assert "coverage.optional_extras" in caplog.text
@@ -270,7 +278,7 @@ def test_malformed_extras_container_fails_closed(tmp_path: Path, extras: object)
 def test_check_per_file_reports_waived_files_and_still_enforces_the_rest(tmp_path: Path, caplog):
     report = _per_file_report(tmp_path)
     assert cg.check_per_file(report, 90.0) is False
-    with caplog.at_level(logging.INFO, logger=cg.logger.name):
+    with caplog.at_level(logging.INFO, logger=SHARED_LOGGER):
         assert cg.check_per_file(report, 90.0, {"opt": (_PREFIX,)}) is True
     assert f"[WAIVED] Coverage per-file: {_PREFIX}nodes.py at 20.00% lines" in caplog.text
     assert "(1 waived)" in caplog.text
@@ -281,10 +289,30 @@ def test_a_waiver_does_not_rescue_a_file_outside_its_prefixes(tmp_path: Path):
     assert cg.check_per_file(report, 90.0, {"opt": ("harness/shared/elsewhere/",)}) is False
 
 
+def _synthetic_root_for(tmp_path: Path, report: Path) -> Path:
+    """A repo root whose first-party sources are exactly the report's files.
+
+    `main` bounds the measured set whenever per-file enforcement is on, so a
+    per-file test must supply a tree the report can be compared against --
+    otherwise it measures this repository's real layout against a synthetic
+    report and fails for a reason unrelated to what it is testing.
+    """
+    root = tmp_path / "synthetic-root"
+    for relative in json.loads(report.read_text(encoding="utf-8"))["files"]:
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x = 1\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[tool.coverage.run]\nsource = ["harness/shared"]\n\n[tool.z]\nk = 1\n', encoding="utf-8"
+    )
+    return root
+
+
 def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     policy = _extras_policy(tmp_path)
     report = _per_file_report(tmp_path)
-    args = ["--coverage-json", str(report), "--policy", str(policy)]
+    root = _synthetic_root_for(tmp_path, report)
+    args = ["--coverage-json", str(report), "--policy", str(policy), "--repo-root", str(root)]
     monkeypatch.delenv(_ENV, raising=False)
     assert cg.main(args) == 1
     monkeypatch.setenv(_ENV, "1")
@@ -292,7 +320,9 @@ def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, 
     strict_policy = json.loads(policy.read_text(encoding="utf-8"))
     strict_policy["coverage"]["lines"] = 99
     strict = _write_json(tmp_path / "strict.json", strict_policy)
-    assert cg.main(["--coverage-json", str(report), "--policy", str(strict)]) == 1, "aggregate floor still applies"
+    assert cg.main(
+        ["--coverage-json", str(report), "--policy", str(strict), "--repo-root", str(root)]
+    ) == 1, "aggregate floor still applies"
 
 
 def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
@@ -336,7 +366,13 @@ def test_the_gates_own_directory_cannot_shadow_the_extra(tmp_path: Path, monkeyp
     importlib.invalidate_caches()
     assert cg._importable("shadowextra.graph") is True, "sanity: visible when it is just another path entry"
 
-    monkeypatch.setattr(cg, "__file__", str(tmp_path / "gate_dir" / "coverage_gate.py"))
+    # Patched on the module that *defines* `_importable`, which is where the
+    # `__file__` it reads lives. That is `coverage_scope` since the scope concern
+    # was split out; patching `cg.__file__` after the split left this regression
+    # asserting nothing, because the function never reads it. Production
+    # behaviour is unchanged either way -- both modules sit in harness/shared/,
+    # so "the script's own directory" resolves to the same path (DEC-032).
+    monkeypatch.setattr(cs, "__file__", str(tmp_path / "gate_dir" / "coverage_scope.py"))
     assert cg._importable("shadowextra.graph") is False
     assert "shadowextra" not in sys.modules, "the probe must not leave its imports behind"
     assert cg._importable("json.decoder") is True, "removing the own directory must not hide real modules"
@@ -359,7 +395,7 @@ def test_per_file_enabled_without_a_coverage_block_fails_closed(tmp_path: Path, 
     enforcement while the gate reported success -- so it exits 1 with the reason,
     like every other reader in the module."""
     policy = _write_json(tmp_path / "policy.json", {"limits": {}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER), pytest.raises(SystemExit) as exc:
         cg.per_file_enabled(policy)
     assert exc.value.code == 1
     assert "no coverage block" in caplog.text
@@ -371,7 +407,7 @@ def test_check_per_file_entry_without_a_summary_fails_closed(tmp_path: Path, ent
     the way the gate expects; per-file compliance cannot be proven from it, so the
     gate must exit 1 rather than skip the file and pass."""
     report = _write_json(tmp_path / "coverage.json", {"files": {"harness/shared/x.py": entry}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER), pytest.raises(SystemExit) as exc:
         cg.check_per_file(report, 90.0)
     assert exc.value.code == 1
     assert "harness/shared/x.py has no summary block" in caplog.text
@@ -385,7 +421,7 @@ def test_check_per_file_entry_with_non_integer_counters_fails_closed(tmp_path: P
     """Counters that are missing or not integers are not measured, they are guessed;
     the gate exits 1 naming the file instead of computing a percentage from them."""
     report = _write_json(tmp_path / "coverage.json", {"files": {"harness/shared/x.py": {"summary": summary}}})
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name), pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER), pytest.raises(SystemExit) as exc:
         cg.check_per_file(report, 90.0)
     assert exc.value.code == 1
     assert "harness/shared/x.py lacks covered_lines/num_statements" in caplog.text
@@ -414,6 +450,131 @@ def test_a_waiver_covering_every_measured_file_is_not_a_pass(tmp_path: Path, cap
     gate still printed `[PASS]`, with a 0 in the count nobody reads.
     """
     report = _per_file_report(tmp_path)
-    with caplog.at_level(logging.ERROR, logger=cg.logger.name):
+    with caplog.at_level(logging.ERROR, logger=SHARED_LOGGER):
         assert cg.check_per_file(report, 90.0, {"opt": ("harness/",)}) is False
     assert "0 file(s) measured" in caplog.text
+
+
+class TestMeasuredSetIsBounded:
+    """R-GT-3: the omit list cannot silently shrink what the floors judge.
+
+    `check_per_file` iterates whatever `coverage.json`'s `files` block holds, so
+    adding a source file to `[tool.coverage.run] omit` drops it from the per-file
+    floor *and* raises the aggregate, because the uncovered lines it contributed
+    disappear. Every number improves and no gate objects. Its only emptiness
+    guard fires when a waiver swallows the whole set, which is a different and
+    much larger mistake.
+    """
+
+    def _tree(self, tmp_path: Path, measured: list[str]) -> tuple[Path, Path]:
+        """A miniature repository: two source roots, a test tree, a report."""
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg" / "tests").mkdir()
+        (tmp_path / "pkg" / "alpha.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pkg" / "beta.py").write_text("y = 2\n", encoding="utf-8")
+        (tmp_path / "pkg" / "tests" / "test_alpha.py").write_text("z = 3\n", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.coverage.run]\nbranch = true\nsource = ["pkg"]\nomit = []\n\n[tool.other]\nk = 1\n',
+            encoding="utf-8",
+        )
+        report = _write_json(
+            tmp_path / "coverage.json",
+            {"files": {path: {"summary": {"covered_lines": 1, "num_statements": 1}} for path in measured}},
+        )
+        return report, tmp_path / "pyproject.toml"
+
+    def test_the_full_first_party_set_passes(self, tmp_path: Path) -> None:
+        report, pyproject = self._tree(tmp_path, ["pkg/alpha.py", "pkg/beta.py"])
+        assert cg.check_measured_set(report, tmp_path, pyproject) is True
+
+    def test_a_source_file_dropped_from_the_report_fails_by_name(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The omit-list mutation: beta.py stops being measured."""
+        report, pyproject = self._tree(tmp_path, ["pkg/alpha.py"])
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+        assert "pkg/beta.py" in caplog.text
+
+    def test_a_test_file_counted_as_source_fails(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The inverse drift: test code measured as source inflates every number."""
+        report, pyproject = self._tree(
+            tmp_path, ["pkg/alpha.py", "pkg/beta.py", "pkg/tests/test_alpha.py"]
+        )
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+        assert "pkg/tests/test_alpha.py" in caplog.text
+
+    def test_no_first_party_sources_fails_closed(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Absence of evidence is never a pass -- this module's own contract."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.coverage.run]\nsource = ["absent"]\n\n[tool.other]\nk = 1\n', encoding="utf-8"
+        )
+        report = _write_json(tmp_path / "coverage.json", {"files": {}})
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, tmp_path / "pyproject.toml") is False
+        assert "vacuously" in caplog.text
+
+    def test_a_report_without_a_files_block_fails(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        report, pyproject = self._tree(tmp_path, [])
+        _write_json(report, {"totals": {}})
+        with caplog.at_level(logging.ERROR):
+            assert cg.check_measured_set(report, tmp_path, pyproject) is False
+
+    def test_the_source_roots_are_read_from_the_coverage_table_only(self, tmp_path: Path) -> None:
+        """An unscoped parse would take the first `source = [` in the file."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.something]\nsource = ["wrong"]\n\n[tool.coverage.run]\nsource = ["right"]\n\n[tool.z]\nk = 1\n',
+            encoding="utf-8",
+        )
+        assert cg.declared_source_roots(pyproject) == ["right"]
+
+    @pytest.mark.parametrize(
+        ("content", "why"),
+        [
+            ('[tool.other]\nk = 1\n\n[tool.z]\nj = 2\n', "no [tool.coverage.run] table"),
+            ('[tool.coverage.run]\nbranch = true\n\n[tool.z]\nk = 1\n', "no source roots"),
+        ],
+    )
+    def test_an_unusable_pyproject_exits_rather_than_defaulting(
+        self, tmp_path: Path, content: str, why: str
+    ) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(content, encoding="utf-8")
+        with pytest.raises(SystemExit):
+            cg.declared_source_roots(pyproject)
+
+    def test_an_unreadable_pyproject_exits(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit):
+            cg.declared_source_roots(tmp_path / "does-not-exist.toml")
+
+    def test_the_coverage_table_may_be_the_last_table_in_the_file(self, tmp_path: Path) -> None:
+        """Found by review: the lookahead required a following `[`, so a
+        pyproject ending with [tool.coverage.run] matched nothing and the gate
+        failed closed reporting "declares no table" -- accurate about the
+        regex, wrong about the file. An adopter fork whose config ends there
+        would have been unable to run the gate at all.
+        """
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.other]\nk = 1\n\n[tool.coverage.run]\nsource = ["pkg", "other"]\n',
+            encoding="utf-8",
+        )
+        assert cg.declared_source_roots(pyproject) == ["pkg", "other"]
+
+    def test_caches_and_test_trees_are_not_first_party(self, tmp_path: Path) -> None:
+        (tmp_path / "pkg" / "__pycache__").mkdir(parents=True)
+        (tmp_path / "pkg" / "__pycache__" / "cached.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pkg" / "real.py").write_text("x = 1\n", encoding="utf-8")
+        assert cg.first_party_sources(tmp_path, ["pkg"]) == {"pkg/real.py"}
+
+    def test_a_declared_root_that_does_not_exist_contributes_nothing(self, tmp_path: Path) -> None:
+        """Adopter forks declare roots they may not ship; that is not a failure here."""
+        assert cg.first_party_sources(tmp_path, ["absent"]) == set()

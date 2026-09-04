@@ -252,3 +252,82 @@ class TestParserIsNotVacuous:
     def test_uses_lines_reads_both_list_and_mapping_forms(self) -> None:
         text = "      - uses: actions/checkout@v5\n      - name: x\n        uses: actions/setup-go@v6\n"
         assert uses_lines(text) == [("actions/checkout", 5), ("actions/setup-go", 6)]
+
+
+class TestTheAttestationCheckRunsWhereItCanBeRead:
+    """DEC-038: a verified table has to reach the reviewer *before* they attest.
+
+    The step was first written after `make ci`, which was wrong in a way no
+    assertion would have reported: `make ci` ends at the protected-path gate on
+    any PR lacking `infra-reviewed`, which is every PR this check exists for, so
+    the step would never have executed on one. Green CI would have meant the
+    table was unchecked. Both halves of the placement are pinned here.
+    """
+
+    def test_it_precedes_the_gate_that_stops_without_the_label(self, jobs: dict[str, str]) -> None:
+        job = jobs["build-full"]
+        check = job.find("make attestation-check")
+        gate = job.find("run: make ci")
+        assert check != -1, "build-full must verify the attestation table"
+        assert gate != -1, "build-full must still run the unified gate"
+        assert check < gate, (
+            "the attestation check must run before `make ci`: that target ends at the "
+            "protected-path gate whenever `infra-reviewed` is absent, so a step after it "
+            "never runs on the PRs the check is for"
+        )
+
+    def test_it_is_not_gated_on_the_attestation_it_verifies(self, jobs: dict[str, str]) -> None:
+        step = jobs["build-full"].split("make attestation-check")[0].rsplit("- name:", 1)[-1]
+        assert "ALLOW_GITHUB_CHANGES" not in step, (
+            "deriving the step's own condition from the label would make it verify the table "
+            "only once the reviewer had already trusted it"
+        )
+
+    def test_the_description_is_read_live_not_from_the_event_payload(self, jobs: dict[str, str]) -> None:
+        """The payload's `body` is a snapshot; judging it made the check unclearable.
+
+        On its second real run the step failed against a description that had
+        already been corrected, and no re-run could have cleared it: "Re-run
+        failed jobs" replays the original event. Reading the description from the
+        API is what makes the check reflect the PR as it is now, so the payload
+        field must not come back.
+        """
+        job = jobs["build-full"]
+        assert "${{ github.event.pull_request.body }}" not in job, (
+            "the event payload's body is a snapshot taken when the run was queued; "
+            "fetch the description from the API instead"
+        )
+        assert "/pulls/$PR_NUMBER" in job
+
+    def test_a_corrected_description_can_re_run_the_check(self, workflow_text: str) -> None:
+        """Without `edited`, clearing the check would require an otherwise pointless commit.
+
+        Asserted against the parsed `types:` list, not the surrounding text. The
+        first version of this test searched the trigger section for the word
+        `edited` and passed on the *comment* that explains why `edited` is there
+        — so deleting the type itself left it green. Caught by mutating the
+        workflow rather than by reading the assertion.
+        """
+        match = re.search(r"^\s*types:\s*\[([^\]]*)\]", workflow_text, re.M)
+        assert match is not None, "the pull_request trigger declares no explicit types"
+        types = {entry.strip() for entry in match.group(1).split(",")}
+        assert "edited" in types, "a corrected PR description must be able to re-run the attestation check"
+        assert "labeled" in types, "applying `infra-reviewed` must be able to re-run CI"
+
+    def test_the_description_reaches_the_script_as_data(self, jobs: dict[str, str]) -> None:
+        """A PR body is author-controlled text; it must never reach the shell as code."""
+        job = jobs["build-full"]
+        assert 'make attestation-check FILE="$RUNNER_TEMP/pr-body.md"' in job
+        assert "set -euo pipefail" in job, (
+            "a failed fetch under plain `bash -e` leaves an empty file, which the gate would "
+            "report as a missing table rather than a broken request"
+        )
+
+    def test_the_pull_request_read_scope_is_scoped_to_the_job_that_needs_it(
+        self, workflow_text: str, jobs: dict[str, str]
+    ) -> None:
+        """Least privilege: only `build-full` reads pull requests."""
+        assert "pull-requests: read" in jobs["build-full"]
+        assert "pull-requests" not in workflow_text.split("jobs:")[0], (
+            "the scope belongs on the one job that fetches the description, not workflow-wide"
+        )

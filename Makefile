@@ -176,6 +176,27 @@ secrets: ## Working-tree and full-history secret scans (INV-1; fails closed if g
 	$(GITLEAKS) dir . --config .gitleaks.toml --redact --no-banner
 	$(GITLEAKS) git . --config .gitleaks.toml --redact --no-banner --log-opts="HEAD"
 
+.PHONY: secrets-allowlist-check
+secrets-allowlist-check: ## Every .gitleaks.toml allowlist entry must still suppress a real finding (INV-1)
+	@command -v $(GITLEAKS) >/dev/null || { echo 'gitleaks missing; failing closed (run: make secrets-install)'; exit 1; }
+	$(PYTHON) harness/shared/governance/check_secret_allowlist.py --gitleaks $(GITLEAKS)
+
+# --- Protected-path attestation (harness/CONTRACT.md) ---
+# The per-file table a PR description must carry was transcribed by hand from a
+# CI log, and drifted (DEC-038). These targets derive it from the same matcher
+# and the same file discovery `validate_invariants.py` uses, so the table a
+# reviewer reads and the set the gate enforces cannot disagree. BASE_REF is
+# resolved by the script from the remote's published default when unset, so an
+# adopter fork whose default branch is not `main` needs no edit here.
+.PHONY: attestation
+attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... to override)
+	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),)
+
+.PHONY: attestation-check
+attestation-check: ## Verify a written attestation table against the real protected set (FILE=pr-body.md)
+	@test -n "$(FILE)" || { echo 'usage: make attestation-check FILE=<pr-body.md>'; exit 1; }
+	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),)
+
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
 	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
@@ -304,7 +325,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+ci: lint lint-node lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lint-node → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
 
 # The Node suite's result is Python-version-independent, so the CI matrix runs
 # the full `ci` on one leg only and this Python-scoped pipeline on the others.

@@ -2,7 +2,7 @@
  * Nemotron request defaults, read from the governance policy.
  *
  * Requirement Citations:
- * - R-NPW-1: `timeout_ms`, `max_retries`, `temperature` and `max_tokens` come
+ * - R-NPW-1: `timeout_ms`, `max_retries`, `temperature`, `top_p` and `max_tokens` come
  *   from `harness/shared/governance-policy.json`, never from a literal here.
  * - R-NPW-2: The read fails closed. A policy file with no `nemotron` block, or
  *   one where any of the four keys is missing or not a number, throws a
@@ -30,6 +30,7 @@ export interface NemotronPolicy {
   readonly timeout_ms: number;
   readonly max_retries: number;
   readonly temperature: number;
+  readonly top_p: number;
   readonly max_tokens: number;
 }
 
@@ -37,6 +38,7 @@ const NEMOTRON_POLICY_KEYS = [
   'timeout_ms',
   'max_retries',
   'temperature',
+  'top_p',
   'max_tokens',
 ] as const satisfies readonly (keyof NemotronPolicy)[];
 

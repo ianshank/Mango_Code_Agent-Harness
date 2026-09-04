@@ -10,6 +10,420 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### End-to-end tests for the wiring no unit test reached
+
+Every gate this branch added ran the real thing in its unit tests — real git
+repositories, `runpy` of the scripts. None of them exercised the *wiring*: no
+test in the repository invoked `make` as a subprocess, so the `$(if
+$(BASE_REF),…)` conditional, the `FILE=` usage guard and the `command -v`
+fail-closed guard had zero coverage, and three of this branch's own defects
+lived in exactly that layer.
+
+- **`regression/test_gate_truthfulness_e2e.py`** runs the recipes a
+  contributor types: `make attestation-check` without `FILE=` prints usage and
+  fails; an ordinary PR passes the check with no table *through the recipe CI
+  runs* (the `5261568` defect, reproduced where it would have bitten);
+  over-attestation still fails; a nonexistent `BASE_REF` surfaces as a git
+  error, proving the flag reached the script; `make secrets-allowlist-check`
+  fails closed without gitleaks rather than reporting a pass.
+- **The workflow's own shell, executed.** The attestation step's `run:` block
+  is read from the YAML — not copied, so the test and the workflow cannot
+  drift the way the skill and the tool did (DEC-038) — and run under `bash`
+  with `curl` stubbed. A fetched description flows through to the check; a
+  failed fetch stops at the fetch and says nothing about tables. That second
+  claim was the reason `set -euo pipefail` is there (DEC-040), and it had only
+  ever been asserted as text.
+- **`harness/node/tests/ai/e2e/sampling-parity.test.ts`** is the end-to-end
+  the live parity test admits it cannot be: the real `complete_chat` in a
+  subprocess with `urlopen` patched to capture the request, against the real
+  `buildChatRequestBody`, both reading the shipped policy. Field-by-field
+  equality, key-set equality (a field added to one stack and not the other is
+  the shape of the DEC-036 defect), and the values pinned to the policy.
+  Reverting the `top_p` line fails four of nine.
+
+  It lives in the Node suite deliberately. `pnpm`/`tsx` exist only on
+  `build-full`, while the Python regression tier also runs on the three matrix
+  legs — a Python-side version would have to skip there, and INV-2 forbids it.
+  `python` is present wherever this suite runs.
+- **A limit, stated.** The E2E tests use this repository's own Makefile with
+  the branch as its own base ref, so their premise is an empty protected set.
+  Mutating a protected file in place — the workflow, `attestation.py` — breaks
+  that premise before the case under test runs; the fixture says so rather
+  than failing obscurely. Those two proofs were run by feeding the harness a
+  mutated shell string and at the unit level respectively, not by editing
+  protected files.
+
+
+### A 700-line budget that was silent until it failed, and the module sixteen lines from it (DEC-041)
+
+`test_verify_zero_skips.py` stood at **684 of 700** — the suite for INV-2, the
+invariant most likely to gain a test, since every new waiver shape lands there.
+Nothing surfaced that: the per-file size budget reported only breaches, so the
+first signal a contributor would get was a red gate mid-PR.
+
+- **Split at the section banner the module had already drawn.** The
+  `unique_id_glob` cases move to `test_verify_zero_skips_glob_waivers.py`. The
+  trigger was mechanical; the seam is not. Per DEC-035, split where the defects
+  fall: a glob waiver widens *which node ids a waiver addresses* while leaving
+  *what it approves* untouched, and that distinction is what DEC-026 and the
+  later waiver narrowing both turned on.
+- **`run_script` and the fixture move to `_zero_skip_harness.py`**, imported by
+  both halves rather than copied — a duplicated runner is how the two would come
+  to disagree about what "run the gate" means. Imported by name rather than put
+  in the directory `conftest.py`, where `test_files` would be visible to every
+  module in `harness/shared/tests/`; DEC-030 records what conftest-scoping
+  errors cost here already.
+- **The test-function set is unchanged**, verified by diffing the sorted
+  `def test_` names before and after. The only difference is the fixture that
+  moved.
+- **`test_junit_missing_fields` renamed.** It read as a test about JUnit
+  evidence while passing `--vitest-json` with no JUnit events involved; its
+  actual subject is a waiver declaring `framework: junit` without the fields
+  naming which node id it addresses.
+- **The budget now reports headroom.** `_check_line_budget` logs the closest
+  file and its remaining lines on a passing run — INFO-only, unable to change
+  the verdict, suppressed on a failing run so the failure leads. It reports the
+  measurement the check already performs rather than adding a second threshold
+  to keep in step with the first.
+
+
+### The attestation check judged a snapshot, and could not be cleared (DEC-040)
+
+DEC-038 read the PR description from `github.event.pull_request.body`. That
+field is captured when the run is queued, and the mechanism failed three ways
+on its second real run:
+
+1. **Stale.** The description was corrected minutes after the push that queued
+   the run, so the check reported a missing row against a table that already
+   had one.
+2. **Unclearable** — the serious one. `edited` was not a trigger type, and
+   "Re-run failed jobs" replays the *original* payload, so a stale description
+   could never be cleared. The only way past the gate would have been an
+   otherwise pointless commit, and a gate whose only escape is a no-op commit
+   teaches people to make no-op commits.
+3. **Disclosed.** Passing the body through an environment variable printed the
+   entire description into the step-setup group of the CI log.
+
+The step now fetches the pull request with the job token, writes `.body` to a
+file, and passes only the path — the description still never reaches the shell
+as code. `set -euo pipefail` is explicit, because the runner's default
+`bash -e` does not set pipefail and a failed fetch would otherwise leave an
+empty file that the gate reports as a *missing table*: a true failure for a
+false reason. `pull-requests: read` is declared on `build-full` alone, so every
+other job keeps `contents: read` and nothing more. `edited` joins the trigger
+types for the same reason `labeled` is already there.
+
+The first version of the `edited` assertion searched the trigger section for
+that string and passed on the *comment* explaining why `edited` is there —
+deleting the type left it green. Found by mutating the workflow, not by reading
+the test; it now asserts against the parsed `types:` list.
+
+### The inventory that calls itself the inventory was never checked for completeness (DEC-039)
+
+`test_constant_triage.py`'s docstring says "a new constant needs a row here"
+and "the table is the inventory; the test is what stops it rotting." Every
+assertion ran in one direction: each *listed* row was checked for a valid
+policy or decision link, and nothing checked that every constant which exists
+is listed. The way to defeat the inventory was to not write the row — and seven
+live operational defaults had:
+
+| Constant | Why it was worth finding |
+|---|---|
+| `meta_tools.DEFAULT_LOCK_TIMEOUT_S`, `DEFAULT_LOCK_POLL_S`, `MIN_LOCK_POLL_S` | Three timings on the advisory lock guarding the meta-tool store, none of them registered anywhere. |
+| `debug_dump.DUMP_DIR_MODE` | `0o700`. The previous code took `0o777 & ~umask`, leaving prompt-and-tool-output history world-readable on a shared host. A security posture with no record. |
+| `debug_dump.MIN_ENV_CREDENTIAL_LENGTH` | A correctness floor: `redact_text` replaces by substring, so treating a one-character env value as a credential would rewrite every occurrence of that character. |
+| `tool_dispatch.DEFAULT_HYPOTHESIS_CONFIDENCE` | The value recorded when a model omits confidence — any other number asserts a belief the model did not express. |
+| `agent_prompts.TASK_LOG_PREVIEW_CHARS` | Log-volume bound; the mildest of the seven, and still unlinked. |
+
+`TestTheInventoryIsComplete` discovers module-level numeric constants across
+`harness/shared`, `harness/api_server` and `harness/control-plane` with `ast` —
+**parsed, not imported**, so the gate does not run the import side effects of
+the modules it judges — and requires each to be triaged or carry an `EXCLUDED`
+entry saying why it is a fact rather than a limit. Exclusions must state a
+reason, must still be discovered (a stale one is standing permission for a
+future constant of that name), and must not outnumber the triaged rows.
+Discovery is numeric-only on purpose: the shape of an operational limit is a
+number, and demanding a decision for every string identifier buries the real
+rows until the table stops being read.
+
+Eight names are recorded as facts rather than limits: the hex-width constants
+in `publish_policy_artifact` and `shadow_planner`, `pretooluse_guard`'s two
+hook-protocol exit codes, and `langgraph`'s `EXPECTED_NODE_COUNT` /
+`CHANNEL_COUNT`.
+
+### A mermaid diagram that cannot parse documents nothing
+
+`c4_architecture.md` carried `AgentMetaTools[... (Context7) [Planned]]`.
+Mermaid ends a bare-bracket label at the first `]`, so the trailing `]]` was a
+syntax error and the **entire** agent-topology diagram rendered as an error box
+on GitHub. Prose in this repository is gated for naming real paths; nothing
+checked that the pictures still draw. `TestEveryMermaidDiagramCanRender` scans
+every fenced block under `docs/`, `README.md` and `CLAUDE.md` and rejects an
+unquoted node label containing a bracket, with a positive and a negative test
+pinning the detector itself.
+
+### The attestation skill still carried a second, weaker matcher
+
+`.mango/skills/protected-path-attestation/SKILL.md` — the procedure a human
+actually follows — contained an inline script that re-derived the protected set
+with its own `fnmatch` loop, hard-coded `origin/main` twice, and enumerated
+only `merge-base...HEAD`, so it could not see the staged, unstaged or untracked
+protected files the gate *does* see. DEC-038 made the tool single-source and
+left the documented procedure diverging from it. The skill now calls
+`make attestation` and `make attestation-check`, and its output-format sample
+is labelled as an illustration of the columns rather than something to paste.
+
+### The attestation table a reviewer signs is now derived and checked, not transcribed (DEC-038)
+
+`harness/CONTRACT.md` requires a PR touching a protected path to carry a
+per-file table, because applying `infra-reviewed` is the human attestation the
+`check_protected_paths` gate stands on. Nothing derived that table — it was
+copied out of a CI log, and on this branch's own PR a comment claimed thirteen
+attested rows where the validator's set was ten. An inflated count reads as
+thoroughness, which makes it the more dangerous direction of the DEC-024 failure
+class, reproduced inside the control written to prevent it.
+
+- **`harness/shared/governance/attestation.py`** prints the table for a change
+  and, with `--check`, verifies a written description against it. It imports
+  `is_protected`, `git_modified_files` and `load_protected_patterns` from
+  `validate_invariants` rather than reimplementing them; the test asserts
+  **symbol identity**, not agreement on today's tree, so the printed table and
+  the enforced set cannot diverge the way a second implementation would.
+- **Fails closed three ways**: no attestation section, a section with no table,
+  or any row-to-path mismatch in either direction — a row naming a path the
+  change does not touch is reported too, since it invites the reviewer to attest
+  to something absent.
+- **Nothing is hard-coded.** The base branch resolves from `--base-ref`, then
+  `GITHUB_BASE_REF`, then the remote's published `origin/HEAD`, so an adopter
+  fork whose default branch is not `main` needs no edit; the section heading is a
+  `--section` pattern; a header row is found by the separator beneath it rather
+  than by position, so a table introduced by a paragraph parses correctly.
+- **Wired**: `make attestation` / `make attestation-check`, and a `build-full`
+  step that runs on every pull request and is deliberately *not* gated on the
+  label — the reviewer must be able to read a verified table before deciding.
+  The description reaches the script through a file written from an environment
+  variable, never interpolated into a shell command.
+- The module sits under `harness/shared/governance/` so the existing
+  `harness/shared/governance/**` pattern protects it. A gate anything unreviewed
+  can weaken is the defect this branch exists to close; that placement costs it
+  one row in its own table.
+
+### Cross-stack sampling parity, and the constant inventory that had drifted from its own decision (DEC-036, DEC-037)
+
+A hard-coded-value pass over the branch. The headline finding is a divergence
+neither stack could see:
+
+- **`nemotron.top_p` becomes a policy key read by both stacks.** The Node client
+  hard-coded `top_p: 0.7`; the Python bridge omitted `top_p` from its payload
+  entirely. The two stacks had therefore been sending different sampling
+  parameters to the same endpoint. `test_wire_format_parity_with_typescript`
+  exists to prevent exactly this and could not detect it: it asserts the request
+  succeeds rather than comparing the two bodies, and its docstring enumerated
+  the fields from the Python payload alone — which is why `top_p` was missing
+  from the list too. The docstring now says what the test does and does not
+  prove.
+- **The two duplicated request-body literals collapse into one builder.**
+  `complete()` and `stream()` each carried a verbatim 15-line copy differing
+  only in `stream:`; one branch edited both identically three times.
+  `buildChatRequestBody` takes the policy as an argument, so a test can prove
+  the body follows the policy it is given rather than one that happens to agree
+  with the shipped file. Sixteen new tests, two of them mutation-proven: making
+  the bodies diverge, and reverting `top_p` to the literal, each fail.
+  `SAMPLING_BOUNDS` stays out of policy deliberately — the clamp ranges are the
+  provider's accepted input domain, and a policy widening them would describe a
+  request the endpoint rejects.
+- **Five constants were unlinked in practice.** `test_constant_triage.py`'s
+  table *is* the inventory, so a constant absent from it is untriaged however
+  well a decision reads. DEC-025 accepts five Node resilience constants by name;
+  the table registered two. `resetTimeoutMs`, `halfOpenSuccessThreshold` and
+  `maxBackoffMs` are now registered against the decision that already justified
+  them. `pretooluse_guard.FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC` duplicated
+  `orchestrator.tool_timeout_sec` with nothing holding them equal — they agreed
+  at 30 by coincidence, and the only test asserted `> 0`; it is now policy-linked.
+- **`JITTER_CEILING_MS` needed a decision, not a table row.** DEC-025 names
+  neither it nor `retry.ts`, so a row citing DEC-025 fails the linkage check —
+  `NEXT_STEPS.md` NS-16 had called this "a triage row", implying a table edit.
+  DEC-037 records why it is a true constant: Python jitters proportionally, Node
+  adds an absolute millisecond ceiling, so they are not one knob in two
+  languages.
+- **Two comments asserted things the code contradicts.** `types.ts` documented
+  `maxRetries` as "default: 3" while the policy declares 0 — the drift
+  `policy.ts` was written about, surviving in prose; it now names the policy key
+  instead of restating a number. The client's header comment implied DEC-025
+  covered the endpoint, which it does not.
+
+Adding the policy key required `policy_loader` (exact-equality pinned by
+`test_policy_consistency.py`) and a rebuilt `policy-artifact.json`, which
+digests the shared policy — `publish_policy_artifact.py build`, not
+`make digest-regen`: the per-stack mirrors carry no `nemotron` block, so their
+root-of-trust digests are untouched.
+
+Behaviour change, intended and stated: the Python bridge now sends `top_p`
+where it previously let the provider default apply. The Node value is unchanged.
+
+
+### Gate truthfulness — eight gates that could pass on absent evidence (R-GT-1..R-GT-10)
+
+Spec: `docs/specs/gate-truthfulness.md`. Opened by
+`docs/reports/ROADMAP-PEER-REVIEW.md`. DEC-032 fixed four gates reporting PASS
+without the evidence they claim to check; the same shape survived in eight more
+places. The shared defect is that a gate's *scope* was unbounded — nothing
+asserted that the set it examined is the set that exists.
+
+- **`make lint-node` runs in CI for the first time, and the blocker on record
+  was not the real one (DEC-034).** DEC-013 and `docs/specs/ci-enforcement-gaps.md`
+  recorded a `typescript` / `typescript-eslint` incompatibility. Measured
+  against the installed workspace: ESLint passes, Knip passes, and
+  `prettier --check` fails on exactly one file —
+  `harness/node/.governance/policy.json`, over whitespace in the
+  `coverage.optional_extras.path_prefixes` array DEC-028 added. That file's bytes
+  are pinned by `.governance/root-of-trust.json`, so Prettier's formatting and
+  `validate_adoption.py` are mutually exclusive by construction and running
+  `prettier --write` is what *breaks* the digest. `harness/node/.prettierignore`
+  excludes the pinned tree; `lint-node` becomes a direct prerequisite of `ci` and
+  deliberately not of `ci-python` or the shared `lint` target, whose matrix legs
+  install no pnpm. This also brings R-TDH-23's policy-sourced ESLint `max-lines`
+  rule into a job for the first time — it was enforced nowhere.
+- **The coverage measured set is bounded.** Adding a source file to
+  `[tool.coverage.run] omit` dropped it from the per-file floor *and raised* the
+  aggregate, because its uncovered lines vanished — every number improved and no
+  gate objected. `coverage_gate.check_measured_set` compares the report's file
+  set against the on-disk first-party set and fails closed on divergence, on a
+  report with no `files` block, and on an empty expected set. Coupled to
+  `coverage.per_file`, because the bound is what lets that floor keep its promise.
+- **`mcp_server.py`'s `# pragma: no cover` is removed.** The arc is the 3.9
+  leg's real path and `test_import_failure_sets_mcp_unavailable` already executed
+  it; excluding it understated the file. 94.06% → 94.44%, and 92% against the
+  90% floor on the 3.9 leg where the `mcp` SDK is absent.
+- **`policy_loader` records what it resolved and from where.** Every threshold in
+  the system resolves through it and nothing logged either answer, so under
+  `LOG_LEVEL=DEBUG` "which policy is this run enforcing" was unanswerable.
+  DEBUG-only and silent by default. Each block is now a `TypedDict`, so an
+  undeclared key is a `mypy` error rather than the runtime `KeyError` DEC-032
+  fixed by hand — which immediately surfaced four `dict[str, Any]` annotations in
+  `langgraph/policy.py` that were discarding exactly that checking.
+- **Three agent-surface mutations now fail.** A `SKILL.md` could name a `make`
+  target that does not exist; a persona's `tools:` frontmatter could declare an
+  authority `agent_authority.py` exists to withhold (`write_file` on the
+  verifier); the 3-active→7-canonical mapping table's rows could be *swapped*
+  with every string still present in the file. All three passed the full suite
+  before, because the existing checks test substring presence rather than
+  membership or pairing.
+- **Skip waivers are node-scoped.** Seven of eight rows paired a module-wide
+  `unique_id_glob` with `test: "*"`, pre-approving any skip added to that module
+  later provided its reason mentions the decision id — which the reusable
+  `POSIX_ONLY` marker's reason already does. Two globs addressed ~135 node ids to
+  approve 4 real skips; both are narrowed to the classes that carry the
+  condition. `test_skip_waiver_scope.py` is the first test to read the shipped
+  registry.
+- **The `.mango/hooks/` namespace is partitioned and the live hook is pinned.**
+  `HookRunner.run_hook` no-ops on a missing file, so deleting or renaming
+  `pre-nemotron-run.sh` left the suite green while the pre-turn governance
+  validation silently stopped running. A rename to the dormant scripts'
+  snake_case convention is the exact silent case, and now fails.
+- **A declared version must have a changelog section.** The four version mirrors
+  agreeing with *each other* is not the same as the release existing:
+  `test_documentation_truth.py` passed while the last merge commit and an RCA
+  filename said v2.5.0, nothing in this file did, and no git tag had ever existed.
+- **The gitleaks allowlist proves it still suppresses something.** An allowlist
+  path exempts its whole file from every rule, and the existing check asserted
+  only that the path exists — which is how the list reached 23 paths of which 18
+  blinded their files for nothing. `make secrets-allowlist-check` scans with the
+  allowlist removed and fails any entry matching no finding; a scan yielding zero
+  findings is itself a failure, since it cannot be distinguished from a ruleset
+  that is not running. Runs in the `secret-scan` job, never the unit suite, which
+  has no gitleaks and must not gain a skip (INV-2).
+- **`.github/dependabot.yml` stops contradicting DEC-031 (DEC-033).** The `pip`
+  ecosystem is removed; twelve bot PRs had reopened on 2026-09-02 including an
+  unrequested `mypy` 1.11 → 2.3 major.
+
+Every assertion was mutation-tested against the defect it claims to catch. No
+test skip, `xfail` or waiver was added, and the skip count is unchanged.
+
+### Post-implementation review of the batch above — two of its own gates were weakenable (DEC-035)
+
+Probing the new gates rather than trusting them found two defects no test would
+have caught, both the shape the batch exists to close: a control an unreviewed
+edit somewhere else can widen.
+
+- **A `# keep:` comment anywhere in `.gitleaks.toml` granted an allowlist
+  exemption.** `declared_keeps` scanned the whole config, so a header comment,
+  prose after the block, or a commented-out rule could exempt an entry from the
+  liveness check that had just been added to stop exactly that kind of quiet
+  widening. Keeps are now scoped to the `[allowlist]` block, where a reviewer
+  reading the entry sees its exemption beside it.
+- **`declared_source_roots` matched nothing when `[tool.coverage.run]` was the
+  last table in `pyproject.toml`.** The lookahead required a following `[`. It
+  failed closed, so nothing was unsafe — but it reported "declares no table",
+  which is true of the regex and false of the file, and would leave an adopter
+  fork shaped that way unable to run the gate at all.
+
+Both carry regression tests that fail against the pre-fix code.
+
+### `coverage_gate.py` split along the seam its own defects drew (DEC-035)
+
+The gate reached 470 lines against a 500-line `limits.size_budget_lines` — one
+edit of headroom. The measurement-*scope* concern moves to
+`harness/shared/coverage_scope.py` (per-file floor, optional-extra waivers,
+source discovery, measured-set bound); `coverage_gate.py` keeps the
+aggregate-*threshold* concern. The seam is not the line count: every defect
+found in this area has been a scope defect rather than a threshold one — the
+`startswith` waiver prefix that covered siblings, the waiver set that covered
+everything and still printed `[PASS] 0 file(s)` (both DEC-032), and the `omit`
+entry that dropped a file from the floor while raising the aggregate.
+
+Backwards compatible by construction: every moved symbol is re-exported from
+`coverage_gate`, including the two private helpers existing tests reach
+(`_importable`, `_waiving_extra`); the standalone
+`python harness/shared/coverage_gate.py` invocation keeps its ImportError
+fallback; both modules measure 100%.
+
+The split invalidated three test-side assumptions that no assertion would have
+reported, each fixed rather than worked around:
+
+- `test_the_gates_own_directory_cannot_shadow_the_extra` patched
+  `coverage_gate.__file__`, but `_importable` now reads `coverage_scope.__file__`
+  — so the DEC-032 regression had silently stopped exercising anything.
+  Production behaviour is identical: both modules sit in `harness/shared/`, so
+  "the script's own directory" resolves to the same path.
+- Sixteen `caplog.at_level(..., logger=cg.logger.name)` sites stopped seeing
+  records now emitted under the new module's name. Anchored on the
+  `harness.shared` parent logger, which child loggers inherit, so the next move
+  cannot blind them either.
+
+
+**Deferred with its measurement, not silently.** `langgraph/__init__.py:52`'s
+pragma hides an `except ImportError: pass` that swallows a real failure to
+import `graph.py`. Removing the pragma alone leaves that arc unreachable wherever
+langgraph *is* installed — 8/10 = 80% against a 90% floor, red on 3.10 and 3.12.
+Deleting the swallow reads 7/7 there but 5/7 on a machine without the extra and
+without `MANGO_CI_DESELECT_LANGGRAPH=1`, where no waiver applies. Its failure
+mode lands on a contributor's first `make ci`, so it needs its own change with
+the extra installed. Tracked as NS-9.
+
+### Roadmap rewritten as a roadmap, its history archived
+
+- **`NEXT_STEPS.md` was 93% changelog.** 496 of 533 lines were completed-milestone
+  history duplicating this file, and eight open items were buried inside it under
+  mixed `🚧`/`✅` headings, so the forward plan could not be read in one place.
+  The record moves verbatim to `docs/releases/milestone-history.md` — the
+  treatment R-TDH-24 gave the v2.2.4 release body — with a banner marking it a
+  snapshot rather than a tracker. The rewrite is forward-looking only: every item
+  carries why-now, re-runnable evidence, a falsifiable done-when and its
+  dependency; parked items name the gate blocking them; declined work is listed
+  rather than left to be rediscovered.
+- **`docs/reports/ROADMAP-PEER-REVIEW.md`** records the four-persona review
+  (`openspec-peer-review`) behind the rewrite: eleven findings, two blockers,
+  each verified against the tree or the GitHub API rather than against the
+  roadmap's own claims, with what could not be verified logged as a knowledge gap.
+  The two blockers are `main` being unprotected (`"protected": false`) and the
+  credential DEC-014 documents, which was silenced by narrowing the scanner and
+  never rotated.
+- **Delivered items are removed from the roadmap, not left checked.** The review's
+  own F-4 finding was that the file listed already-delivered work as open;
+  shipping this batch and leaving it listed would repeat that defect. Section 6
+  states each with its evidence.
+
 ### Review follow-up — the neuro-symbolic sandbox suite (PR #33 threads left open on main)
 
 The feature itself landed as `2362d84` with three follow-up commits; these are

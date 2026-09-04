@@ -14,9 +14,16 @@ export interface NemotronConfig {
   readonly apiKey?: string | undefined;
   /** Default model identifier */
   readonly defaultModel?: string | undefined;
-  /** Request timeout in milliseconds (default: 30000) */
+  /** Request timeout in milliseconds (from `nemotron.timeout_ms`) */
   readonly timeoutMs: number;
-  /** Maximum number of retry attempts on 429/5xx (default: 3) */
+  /**
+   * Maximum retry attempts on 429/5xx (from `nemotron.max_retries`).
+   *
+   * Deliberately not restating a number: this comment said "default: 3" while
+   * the policy declared 0, which is the drift `policy.ts` was written about
+   * surviving in prose. The value has one source; naming it here would only
+   * create a second one to fall out of step (DEC-036).
+   */
   readonly maxRetries: number;
   /** Initial backoff duration in milliseconds (default: 500) */
   readonly baseBackoffMs: number;
