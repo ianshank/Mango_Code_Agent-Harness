@@ -10,6 +10,45 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The Dependabot queue, dispositioned — and the plan was wrong about half of it
+
+R-CQ-2 predicted "#62–#66 superseded by the SHA pins of R-CQ-9". **They are not.**
+Within minutes of #82 merging, Dependabot rebased all five onto the new pins and
+now proposes majors *in the pinned form*: #64 offers
+`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, which is
+the exact commit `git ls-remote --tags` reports for `refs/tags/v7.0.1`, comment
+preserved.
+
+That is a better result than the plan expected and a different one. It proves the
+pin form survives Dependabot's own rewrite as a one-line diff — the thing R-CQ-9
+needed and could not check until a bot did it — and it leaves five *accurate*
+major-bump proposals rather than five stale ones. DEC-045 deferred those majors
+deliberately, and `dependabot.yml` keeps the `github-actions` ecosystem enabled
+to "keep the majors moving", so they stay open as the queue for that deferred
+decision. Closing them as superseded would have recorded a false reason.
+
+**#67 (mypy 1.11.2 → 2.3.1) is closed as blocked on NS-6**, measured rather than
+assumed. mypy 2.3.1 declares `Requires-Python >=3.10`, and
+`mypy --python-version 3.9` answers `error: argument --python-version: Python
+3.9 is not supported (must be 3.10 or higher)` — the mypy 2.0 removal, confirmed
+against the release. `make ci-python` runs mypy on every matrix leg including
+3.9, and `[tool.mypy]` sets no `python_version`, so mypy targets whichever
+interpreter runs it. Two independent blocks on one leg: no installable candidate
+under 3.9 at all (the DEC-016 `pip-audit` failure repeated exactly), and no
+target setting on a newer runner that serves 3.9 either. Nothing here is
+configurable around it; the floor has to move first.
+
+**#68, #70, #71, #73 are closed as orphans of DEC-033.** Removing the `pip`
+ecosystem stopped new PRs but could not close the ones already open, so four
+outlived the decision that retired them.
+
+**#69, #77, #78 stay open.** They are `npm`, an ecosystem `dependabot.yml`
+deliberately keeps; closing PRs the configuration exists to produce would
+contradict the configuration rather than tidy it.
+
+Five closed, eight open with a recorded reason each — not R-CQ-2's twelve
+closures.
+
 ### The workflows pin what they run, and the repository stops exempting itself
 
 `harness/CONTRACT.md` has required adopters to SHA-pin their GitHub Actions

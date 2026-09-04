@@ -340,10 +340,14 @@ so the suite fails if a spelling stops reaching the file it claims to reach.
 8 are ticked — AC-3 through AC-8, which is all six of Phase 1's product-path
 slices, plus AC-30 and now AC-9. Phase 0's two boxes are the ones still open:
 AC-1 waits on the NS-1 import (DEC-044 decided the shape; the branches API is
-the evidence) and AC-2 waits on the NS-2 rotation, which is off-tree. AC-2's
-other half is now unblocked rather than done: R-CQ-9's pins have landed, so the
-Dependabot disposition entry can finally record #62–#66 as superseded by them
-without saying something untrue, and it is the next slice to write. Phase 0
+the evidence) and AC-2 waits on the NS-2 rotation, which is off-tree — that one
+sub-check is all that holds it. AC-2's other two sub-checks now pass: DEC-046
+dispositions the Dependabot queue and names the mypy 2.0 `--python-version 3.9`
+removal and NS-6, and the mutation-proof skill exists and is classified. DEC-046
+also corrects R-CQ-2, which predicted #62–#66 would be *superseded* by the SHA
+pins: they were not. Dependabot rebased them onto the pins and they now propose
+accurate majors in pin form, so they stay open as the queue for the decision
+DEC-045 deferred; five PRs are closed, eight open with a reason each. Phase 0
 also lands NS-20 (landed: `.mango/skills/gate-mutation-proof/`); Phase 1 is the
 product path; the rest is ordered there.
 
