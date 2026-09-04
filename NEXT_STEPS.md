@@ -269,6 +269,25 @@ being fired, or a decision-log entry records that the post-`*`-run namespace
 stays empty and why — so the three unfired names stop reading as an oversight.
 **Depends on** nothing.
 
+### NS-29 · Audit round 3: the code-quality and hardening plan *(spec exists)*
+
+**Why now.** Round 2 (`docs/specs/tech-debt-hardening-plan.md`) closed all 29 of
+its boxes and left the gates green and advisory. The third audit found the debt
+the current gates cannot see: the two stacks disagree about which HTTP statuses to
+retry, nine per-stack shell scripts are byte-copies outside `check_dedup`'s
+`*.py` glob, no GitHub Action is SHA-pinned although `harness/CONTRACT.md` requires
+it of adopters, the lock carries no hashes, and five landed specs show every
+acceptance box open again.
+
+**Evidence.** `docs/specs/code-quality-tech-debt-plan.md`, problem items 1–11,
+each with the file, line or command that reproduces it on `487870a`.
+
+**Done when.** Its 28 acceptance boxes are ticked, each by the command it names.
+Phase 0 is NS-1 and the Dependabot queue; the rest is ordered there.
+
+**Depends on.** Nothing for Phases 1–4; Phase 5's `control-plane` rename and the
+shim removal clock depend on NS-3 (a settled release).
+
 ### NS-19 · NIM multi-model routing and prompt-cache cost tracking *(spec required)*
 
 Dynamic model fallback (fast reasoning → deep synthesis) and a local prompt-cache
