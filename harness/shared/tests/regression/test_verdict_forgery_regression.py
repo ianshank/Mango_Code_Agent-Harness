@@ -97,6 +97,12 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # what production is (the orchestrator is not run by make).
     for var in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
         monkeypatch.delenv(var, raising=False)
+    # The root Makefile exports PYTHONSAFEPATH=1 to every recipe, this suite's
+    # own run included, and a child `python -m pytest` inherits it -- which
+    # would make the "old recipe shape" below safe by accident and the premise
+    # test fail to reproduce the forgery it exists to prove. The fixture
+    # makefiles state their own environment; the inherited one is removed.
+    monkeypatch.delenv("PYTHONSAFEPATH", raising=False)
     (tmp_path / "Makefile").write_text(FAILING_SUITE, encoding="utf-8")
     agents = tmp_path / ".mango" / "agents"
     agents.mkdir(parents=True)
