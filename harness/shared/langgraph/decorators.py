@@ -23,6 +23,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from harness.shared.langgraph.errors import error_record
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,23 +59,16 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                     )
                     return {
                         "errors": [
-                            {
-                                "node": fn.__name__,
-                                "error": f"role {role!r} lacks {required_action} authority",
-                                "traceback": "",
-                            }
+                            error_record(
+                                fn.__name__,
+                                f"role {role!r} lacks {required_action} authority",
+                            )
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
                 logger.error("Authority check failed for %s: %s", fn.__name__, exc)
                 return {
-                    "errors": [
-                        {
-                            "node": fn.__name__,
-                            "error": f"authority check failed: {exc}",
-                            "traceback": "",
-                        }
-                    ]
+                    "errors": [error_record(fn.__name__, f"authority check failed: {exc}")]
                 }
 
             return fn(*args, **kwargs)
@@ -108,24 +103,15 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
                     )
                     return {
                         "errors": [
-                            {
-                                "node": fn.__name__,
-                                "error": f"tool budget exhausted ({current}/{budget_limit})",
-                                "traceback": "",
-                            }
+                            error_record(
+                                fn.__name__,
+                                f"tool budget exhausted ({current}/{budget_limit})",
+                            )
                         ]
                     }
             except Exception as exc:  # noqa: BLE001
                 logger.error("Budget check failed for %s: %s", fn.__name__, exc)
-                return {
-                    "errors": [
-                        {
-                            "node": fn.__name__,
-                            "error": f"budget check failed: {exc}",
-                            "traceback": "",
-                        }
-                    ]
-                }
+                return {"errors": [error_record(fn.__name__, f"budget check failed: {exc}")]}
 
             result = fn(state, *args, **kwargs)
 

@@ -29,8 +29,25 @@ from harness.shared.agent_prompts import (
 )
 from harness.shared.governance.verdict import BLOCKED, FAILED, VERIFIED
 from harness.shared.langgraph.decorators import budgeted, with_authority
+from harness.shared.langgraph.errors import blocking_error, error_record
 from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
+
+#: ``gate_status`` keys this module writes beside the per-gate outcomes.
+#: ``quality_gate_reason`` tells ``_route_quality_gate`` *why* the gate failed,
+#: so a deterministic failure escalates instead of consuming revision budget;
+#: ``clarify_count`` bounds the plan_gate/clarify cycle. Both live in the
+#: existing dict channel rather than as new channels, so ``CHANNEL_COUNT``
+#: (INV-LG-1) is unchanged (C-LGH-2).
+QUALITY_GATE_REASON = "quality_gate_reason"
+CLARIFY_COUNT = "clarify_count"
+
+#: Why ``quality_gate_node`` withheld a pass. ``REASON_ERROR`` is terminal —
+#: ``errors`` is an ``operator.add`` accumulator no node clears, so a retry
+#: cannot remove the record that failed the gate (R-LGH-3).
+REASON_ERROR = "error"
+REASON_INCONCLUSIVE = "inconclusive"
+REASON_TESTS_FAILED = "tests_failed"
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +98,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("planner_node failed: %s", exc)
-        return {"errors": [{"node": "planner", "error": str(exc), "traceback": traceback.format_exc()}]}
+        return {"errors": [error_record("planner", exc, traceback.format_exc())]}
 
 
 @with_authority("planner", may_write=False)
@@ -99,7 +116,7 @@ def shadow_planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("shadow_planner_node failed: %s", exc)
-        return {"errors": [{"node": "shadow_planner", "error": str(exc), "traceback": traceback.format_exc()}]}
+        return {"errors": [error_record("shadow_planner", exc, traceback.format_exc())]}
 
 
 @with_authority("nemotron-reasoner", may_write=True)
@@ -150,7 +167,7 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("implementer_node failed: %s", exc)
-        return {"errors": [{"node": "implementer", "error": str(exc), "traceback": traceback.format_exc()}]}
+        return {"errors": [error_record("implementer", exc, traceback.format_exc())]}
 
 
 @with_authority("verifier", may_write=False)
@@ -199,7 +216,7 @@ def evaluation_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str,
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("evaluation_node failed: %s", exc)
-        return {"errors": [{"node": "test_eval", "error": str(exc), "traceback": traceback.format_exc()}]}
+        return {"errors": [error_record("test_eval", exc, traceback.format_exc())]}
 
 
 # ── Gate/routing nodes ───────────────────────────────────────
@@ -230,25 +247,63 @@ def plan_gate_node(state: MangoState, config=None, **_kwargs: Any) -> dict:
     }
 
 
-def quality_gate_node(state: MangoState) -> dict:
-    """Quality gate: evaluates latest test results, error channels, and verification status."""
-    revision_count = state.get("revision_count", 0)
+def _conclusive(latest: object) -> bool:
+    """Whether a ``test_results`` entry is evidence that a suite actually ran.
+
+    ``passed == failed == 0`` is the shape ``evaluation_node`` returns on its
+    no-orchestrator path, and grading it by ``failed > 0`` alone made zero
+    executed tests indistinguishable from a green suite. DEC-024 makes an
+    absence of evidence a non-pass, so it is graded as one (R-LGH-2).
+    """
+    if not isinstance(latest, dict):
+        return False
+    return (latest.get("passed", 0) or 0) + (latest.get("failed", 0) or 0) > 0
+
+
+def _quality_gate_reason(state: MangoState) -> str | None:
+    """Why the quality gate withholds a pass, or ``None`` when it grants one."""
+    if blocking_error(state.get("errors", [])) is not None:
+        return REASON_ERROR
     test_results = state.get("test_results", [])
-    errors = state.get("errors", [])
+    latest = test_results[-1] if test_results else None
+    if not _conclusive(latest):
+        return REASON_INCONCLUSIVE
+    if isinstance(latest, dict) and (latest.get("failed", 0) or 0) > 0:
+        return REASON_TESTS_FAILED
+    return None
 
-    if test_results:
-        latest = test_results[-1]
-        has_failed_tests = bool(isinstance(latest, dict) and latest.get("failed", 0) > 0)
-        passes = not has_failed_tests
+
+def quality_gate_node(state: MangoState) -> dict:
+    """Quality gate: grades the run on errors, evidence, and test outcomes.
+
+    Three things withhold a pass, and the gate records which one did so
+    ``_route_quality_gate`` can tell a retryable failure from a terminal one:
+
+    * a **blocking** error in the ``errors`` channel (R-LGH-1) — an error from
+      the observation plane is recorded and ignored, because INV-16 requires an
+      observation-mode producer's failure to leave the incumbent path
+      unaffected;
+    * an **inconclusive** verification result (R-LGH-2);
+    * a **failing** suite, which is the case this gate always handled.
+    """
+    revision_count = state.get("revision_count", 0)
+    reason = _quality_gate_reason(state)
+    passes = reason is None
+
+    logger.info(
+        "quality_gate_node: revision_count=%d passes=%s reason=%s",
+        revision_count, passes, reason or "-",
+    )
+    gate_status = {
+        **state.get("gate_status", {}),
+        "quality_gate": "pass" if passes else "fail",
+    }
+    if passes:
+        gate_status.pop(QUALITY_GATE_REASON, None)
     else:
-        passes = not bool(errors)
-
-    logger.info("quality_gate_node: revision_count=%d passes=%s", revision_count, passes)
+        gate_status[QUALITY_GATE_REASON] = reason
     return {
-        "gate_status": {
-            **state.get("gate_status", {}),
-            "quality_gate": "pass" if passes else "fail",
-        },
+        "gate_status": gate_status,
         "verdict": VERIFIED if passes else FAILED,
     }
 
@@ -260,12 +315,23 @@ def clarify_node(state: MangoState) -> dict:
     """Clarify node: pauses for human input when plan gate fails.
 
     Phase 1 stub: returns immediately.  Phase 3 will add ``interrupt()``.
+
+    Counting the visits is not stub behaviour, it is the cycle's only bound.
+    ``clarify_node`` writes ``plan_gate: "pass"`` and ``plan_gate_node``
+    immediately recomputes that key from ``plan_divergence``, which nothing in
+    the cycle changes — so with a real divergence the two nodes hand the run
+    back and forth until the framework's own recursion ceiling raises
+    ``GraphRecursionError``. ``_route_plan_gate`` reads this counter to leave
+    for ``escalate`` at the bound instead (R-LGH-5).
     """
-    logger.info("clarify_node: stub (no interrupt in Phase 1)")
+    gate_status = state.get("gate_status", {})
+    attempts = gate_status.get(CLARIFY_COUNT, 0) + 1
+    logger.info("clarify_node: stub (no interrupt in Phase 1), attempt=%d", attempts)
     return {
         "gate_status": {
-            **state.get("gate_status", {}),
+            **gate_status,
             "plan_gate": "pass",  # After clarification, gate passes
+            CLARIFY_COUNT: attempts,
         },
     }
 
@@ -325,6 +391,11 @@ def security_reviewer_node(state: MangoState) -> dict[str, Any]:
 
 
 __all__ = [
+    "CLARIFY_COUNT",
+    "QUALITY_GATE_REASON",
+    "REASON_ERROR",
+    "REASON_INCONCLUSIVE",
+    "REASON_TESTS_FAILED",
     "clarify_node",
     "escalate_node",
     "implementer_node",
