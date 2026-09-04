@@ -225,12 +225,17 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 # requirement in every file, so `fastapi>=0.110,<1.0` made the three-file form
 # fail outright. `test_dependency_lock_contracts.py` asserts the subsumption, so
 # "the lock covers the ranges" is a gate rather than this comment.
+#
+# Only the lock is guarded below, because only the lock is read. The two range
+# files kept their guards through one revision of this change and would have
+# failed with "refusing a partial audit" over a file the scan no longer opens --
+# a message stating a reason that is not the reason. Their absence is caught
+# where it means something: `lock-check` cannot compile without them, and
+# `TestAuditingTheLockAloneIsNotAPartialAudit` reads them directly.
 .PHONY: audit-python
 audit-python: ## Dependency vulnerability scan for the Python interpreter running this invocation
 	@command -v pip-audit >/dev/null || { echo 'pip-audit missing; failing closed (run: make audit-install)'; exit 1; }
-	@test -f requirements.txt || { echo 'requirements.txt missing; refusing a vacuous audit'; exit 1; }
-	@test -f requirements-langgraph.txt || { echo 'requirements-langgraph.txt missing; refusing a partial audit'; exit 1; }
-	@test -f requirements-lock.txt || { echo 'requirements-lock.txt missing; refusing a partial audit'; exit 1; }
+	@test -f requirements-lock.txt || { echo 'requirements-lock.txt missing; refusing a vacuous audit'; exit 1; }
 	pip-audit --requirement requirements-lock.txt
 
 # --- Dependency Lock ---
@@ -252,10 +257,14 @@ UV           ?= $(PYTHON) -m uv
 lock: ## Regenerate requirements-lock.txt from the requirements files (universal, floor from pyproject)
 	$(UV) pip compile --universal --generate-hashes --python-version $(PYTHON_FLOOR) -o $(LOCK_FILE) $(LOCK_INPUTS)
 
-# Both checks compare pins only (`grep -v '^#'`): uv writes the compile command,
-# output path included, into the header, so a byte comparison against a temp
-# output would always differ. The committed header is still pinned by
-# test_workflow_contracts.py (it must show `--universal`).
+# Both checks strip comments (`grep -v '^#'`) and compare everything else: uv
+# writes the compile command, output path included, into the header, so a byte
+# comparison against a temp output would always differ. Since `--generate-hashes`
+# (DEC-047) "everything else" is pins *and* their `--hash=` continuation lines,
+# which are requirement lines rather than comments -- so these checks now catch a
+# changed or dropped artefact digest, not only a changed version. The committed
+# header is pinned by test_dependency_lock_contracts.py, which requires it to
+# show both `--universal` and `--generate-hashes`.
 .PHONY: lock-check
 lock-check: ## Fail if requirements-lock.txt is not what the requirements files compile to
 	@test -f $(LOCK_FILE) || { echo '$(LOCK_FILE) missing; run make lock'; exit 1; }
