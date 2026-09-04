@@ -27,7 +27,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 14 reusable skills; the only skill root
+│   ├── skills/                          # 15 reusable skills; the only skill root
 │   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
@@ -40,6 +40,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
+│   │   ├── standards-audit/             # Yearly external-standards audit with a falsification pass
 │   │   ├── tech-debt-audit/             # Repeatable full-repo SDLC/SQE audit procedure
 │   │   └── validation-runner/           # Single entry point for the validation matrix
 │   └── settings.json                    # Mango agent lifecycle hook bindings
@@ -50,7 +51,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── god-file-refactoring-guide.md # Architecture & Decomposition Migration Guide
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
-│   ├── reports/                         # Historical hygiene, peer-review and test reports
+│   ├── reports/                         # Hygiene, peer-review, test and standards-audit reports (2026-STANDARDS-AUDIT.md is current)
 │   └── specs/                           # 24 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
@@ -243,6 +244,7 @@ python harness/shared/nemotron_bridge.py --prompt "Audit INV-1 secret scan rules
 
 ```bash
 # 1. Install dependencies
+corepack enable       # activates the pnpm version pinned by packageManager in harness/node/package.json
 cd harness/node
 pnpm install
 cd ../..

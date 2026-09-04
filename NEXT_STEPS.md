@@ -2,72 +2,61 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap — forward-looking only
-**Last reviewed:** 2026-09-03 · findings in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
+**Last reviewed:** 2026-09-04 · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md)
 
 ---
 
 ## How to read this file
 
 This file is the single roadmap for the repository, and it contains **only work
-that is not yet done**. Completed milestones through v2.4.0 were moved verbatim
-to [`docs/releases/milestone-history.md`](docs/releases/milestone-history.md) on
-2026-09-03; the narrative of what shipped lives in `CHANGELOG.md` and
-`docs/releases/`. Before that move, 496 of this file's 533 lines were history,
-and eight open items were buried inside it under `🚧` headings — the roadmap
-could not be read as a roadmap.
+that is not yet done**. Completed milestones through v2.4.0 live in
+[`docs/releases/milestone-history.md`](docs/releases/milestone-history.md); the
+narrative of what shipped lives in `CHANGELOG.md` and `docs/releases/`.
 
-Every item below carries four fields, and an item without them is not ready to
-be worked:
+The roadmap does not own work that a program spec owns. The 2026 remediation
+plan (`docs/specs/2026-standards-remediation-plan.md`, R-SR-1 … R-SR-30) carries
+every audit finding and every open requirement of the closed
+`code-quality-tech-debt-plan.md`; this file lists what is **blocked on a person**,
+what an **agent can do without a decision**, and what is **parked** with its
+blocker named. An earlier revision of this file restated the program plan's
+status paragraph by paragraph and drifted from it on every PR; that is why the
+pointer replaces the restatement.
+
+Every item carries four fields, and an item without them is not ready to be
+worked:
 
 - **Why now** — the consequence of not doing it, not a restatement of the title.
-- **Evidence** — a command, a file reference, or an API result that a reviewer
-  can re-run today. This file follows the same rule as the rest of the
-  repository: a claim in prose is not evidence (DEC-024).
-- **Done when** — a falsifiable acceptance criterion.
+- **Evidence** — a command, a file reference, or an API result a reviewer can
+  re-run today. A claim in prose is not evidence (DEC-024).
+- **Done when** — a falsifiable criterion bound to the stage that proves it, with
+  the failure it must be able to report.
 - **Depends on** — the item that must land first, or `nothing`.
 
-Priorities are an ordering, not a schedule. P0 items are ordered relative to
-each other; everything in P1 is unblocked and may be taken in any order.
-
-**Spec discipline.** Items marked *(spec required)* change behaviour, policy, or
-a protected path, and per `CLAUDE.md` must not be implemented without a spec:
-`make spec NAME=<feature>`, peer-reviewed with the `openspec-peer-review` skill,
-then `make pre-pr`. Items not so marked are contained enough to go straight to a
-PR with the usual gate evidence.
+Priorities are an ordering, not a schedule. **Spec discipline.** Items marked
+*(spec required)* change behaviour, policy, or a protected path and must not be
+implemented without `make spec NAME=<feature>`, the `openspec-peer-review`
+skill, then `make pre-pr`.
 
 ---
 
-## 1. P0 — the repository's guarantees do not hold until these land
+## 1. P0 — one owner sitting, zero code
+
+These five are settings, credentials, a file and four decision-log entries.
+Nothing an agent does advances them, which is why P0 has been static for four
+releases: it had no agent-executable front. Section 2 gives it one.
 
 ### NS-1 · Apply the branch ruleset to `main`
 
-**Why now.** Every gate in this repository is advisory. `main` accepts a direct
-push and a merge with no passing check and no review, which makes the coverage
-floors, the fail-closed policy loaders, the zero-skip evidence hooks and the
-secret scan a matter of author discipline rather than enforcement. This has been
-the top item since v2.1.9, was independently re-flagged by an external analysis
-(DEC-018), and has outlived four releases. It is a repository-settings change,
-not code — which is exactly why nothing in CI can nag about it.
+**Why now.** Every gate in this repository is advisory. `GET
+/repos/ianshank/Mango_Code_Agent-Harness/rules/branches/main` returns `[]` and
+the branches API reports `"protected": false` (both re-queried 2026-09-04
+during the standards audit). PR #60 merged with all four `build` checks
+`failure`; PRs #60, #79 and #80 carry no approving review. DEC-044 already
+removed the code-owner rule that made the export unappliable.
 
-**Evidence.** The GitHub branches API still reports `"protected": false` for
-`main` (re-checked 2026-09-04). PR #75 merged on 2026-09-03 with one bot review
-and no human approval; PR #79 and PR #80 merged on 2026-09-04 with none at all.
-Three merges since 2026-08-31 left `main` red on its own head (workflow runs
-286, 319, 326); DEC-024 records the same failure on PR #60. The ruleset to
-import is committed at `.github/rulesets/main.json` and is pinned to the
-workflow by `test_ci_gate_required_checks.py`.
-
-**What changed on 2026-09-04 (DEC-044).** The export could not have been applied
-as it stood, which is the part four releases of this item never said. It required
-one code-owner approval; `.github/CODEOWNERS` routes `*` to `@ianshank`, who
-authors every pull request here; GitHub does not accept an author's approval of
-their own pull request. Importing it would have made `main` unmergeable, not
-protected. R-CQ-1's second shape is now the committed one — the nine required
-checks unchanged, `bypass_actors` still empty, and both human-approval rules
-(`required_approving_review_count`, `require_code_owner_review`) stood down —
-so the import is now a real option rather than a trap. The reason for each
-rejected shape, and the compensating controls for the review layer given up, are
-in DEC-044.
+**Evidence.** The two API calls above; `.github/rulesets/main.json` (nine
+required contexts, `bypass_actors: []`, `required_approving_review_count: 0`);
+`test_workflow_contracts.py` pins the export to the workflow's job names.
 
 Required status checks (derived from `.github/workflows/python-package.yml`,
 not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
@@ -75,308 +64,340 @@ not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
 `dependency-audit (3.10)`, `dependency-audit (3.12)`.
 
 **Done when.** Settings → Rules → Rulesets → New ruleset → Import
-`.github/rulesets/main.json`, and the branches API reports `"protected": true`
-for `main`. That import is the whole of what remains: it is a
-repository-settings action, so no CI job and no agent working in this
-repository can perform it or evidence it, and DEC-044 deciding the shape is not
-the same as the shape being live. This item stays open until the API says
-`true`; the decline path DEC-044 declined to take remains available, but would
-now need its own entry superseding it.
+`.github/rulesets/main.json` (with `required_signatures` and
+`required_linear_history` added first, R-SR-1), and
+`GET …/rules/branches/main` returns a non-empty list; a PR whose head has a
+failing required check then reports the failure on its merge button. Plan
+criterion AC-1. Until the API says so, the item stays open.
 
 **Depends on.** Nothing.
 
 ### NS-2 · Rotate the credential DEC-014 documents, then purge and re-verify
 
-**Why now.** DEC-014 states plainly that the branch `feature/governed-run-console`
-"carries a real leaked key". The remediation recorded there was to scope
-`gitleaks git` to `--log-opts="HEAD"` so a PR's gate only scans its own
-ancestry. That fix is correct on its own terms — a PR author cannot action a
-secret on someone else's branch — but it silenced the finding without ever
-retiring the credential. DEC-014's accepted consequence was that the secret
-"remains caught the moment that branch's own PR is opened"; no PR has been
-opened, the branch is still on the remote, and nothing tracks it. A scanner
-narrowed until it stops reporting a known live secret is the failure class
-DEC-024 exists to name, applied to INV-1.
+**Why now.** DEC-014 states that the branch `feature/governed-run-console`
+"carries a real leaked key". The remediation scoped `gitleaks git` to
+`--log-opts="HEAD"`, which is correct for a PR gate and silent about a branch
+nobody opens a PR for. The audit's `make secrets` run reports "no leaks found";
+that sentence covers this branch's ancestry only, and revision 1 of the audit
+misread it as "full history" (corrected in its revision record).
 
 **Evidence.** `git ls-remote --heads origin feature/governed-run-console`
-returns `5970249…` (2026-09-03). Searching `docs/`, `CHANGELOG.md` and
-`harness/node/.governance/decision-log.md` for rotation, revocation or history
-rewriting returns nothing about this key. `Makefile:177` and both per-stack
-mirrors pass `--log-opts="HEAD"`, so no scheduled job scans that ref.
+returns `5970249…`; `Makefile:177` and both stack mirrors pass
+`--log-opts="HEAD"`; no decision-log entry records a rotation.
 
-**Done when.** The credential is rotated at the provider (do this first —
-rewriting history does not un-leak a key that was pushed), the branch is deleted
-or its history purged, and a decision-log entry records the rotation date and
-the scanning gap that let it sit. Then confirm: a full-history scan
-(`gitleaks git . --log-opts="--all"`, run once by hand — not wired into `make
-secrets`, which must stay ref-scoped per DEC-014) reports clean.
+**Done when.** The credential is rotated at the provider first, the branch is
+deleted or purged, a decision-log entry records the date, and
+`gitleaks git . --config .gitleaks.toml --log-opts="--all"` run once reports
+clean — it must report the leak on the pre-rotation ref set, or the scan
+proves nothing (R-SR-2, AC-2). `make secrets` stays ref-scoped per DEC-014.
 
 **Depends on.** Nothing. Do not wait for NS-1.
 
-> Deliberately terse: this item names no path, no key shape and no commit. The
-> detail already sits in a public decision log, which is itself part of the
-> finding.
+### NS-3 · Settle the release identity, tag it, and cap `[Unreleased]`
 
-### NS-3 · Settle the release identity, then tag it
+**Why now.** No git tag has ever existed, so "2.4.0" names no commit;
+`docs/rca/e2e_origin_sync_triage_rca_v2.5.0.md` says v2.5.0 while the four
+version mirrors say 2.4.0; and `CHANGELOG.md`'s `[Unreleased]` is 1,197 lines
+against a 400-line cap whose regex matches only `## [x.y.z]` headings, so the
+cap cannot fire on it. The Phase E removal clocks in the program plan count
+from a release that does not exist.
 
-**Why now.** The repository does not agree with itself about what version it is.
-The last merge commit and `docs/rca/e2e_origin_sync_triage_rca_v2.5.0.md` say
-v2.5.0; `pyproject.toml`, `README.md`, `CHANGELOG.md` and this file say 2.4.0.
-`CHANGELOG.md` has no entry of any kind for the work PR #75 merged — the MCP
-tool-schema fix, the live-E2E stabilisation and the Node client hardening are in
-the tree and in an RCA, but not in the changelog. And no git tag has ever
-existed, so "2.4.0" names no commit. `test_documentation_truth.py` pins the four
-version mirrors to each other and passes today, which is precisely why this
-drift is invisible: nothing pins a *release* to a changelog entry or a tag.
+**Evidence.** `git tag -l` and `git ls-remote --tags origin` are empty;
+`test_documentation_truth.py:343` (the cap regex); `CHANGELOG.md:11-1208`.
 
-**Evidence.** `git tag -l` and `git ls-remote --tags origin` are both empty.
-`grep -n "2\.5\.0" CHANGELOG.md` returns nothing. The four mirrors agree on
-2.4.0 and the suite is green with the RCA claiming otherwise.
+**Done when.** Either the mirrors move to 2.5.0 with a `## [2.5.0]` section
+covering PR #75, or the RCA is renamed; an annotated tag exists at the release
+commit; `pytest harness/shared/tests/test_documentation_truth.py -k real_release`
+fails when the tag is absent (R-SR-4, AC-4); and the cap applies to
+`[Unreleased]` so `-k changelog_section` fails at its current length.
 
-**The gate is now in place; the decision is not.**
-`test_documentation_truth.TestTheDeclaredVersionIsARealRelease` asserts that the
-version `pyproject.toml` declares has a matching `## [x.y.z]` section in
-`CHANGELOG.md` (R-GT-9). It passes today because 2.4.0 has one — so it constrains
-whichever answer is chosen without choosing it.
+**Depends on.** Nothing.
 
-**Done when.** Either the four mirrors move to 2.5.0 with a `## [2.5.0]`
-changelog section covering PR #75, or the RCA is renamed to the version it
-actually documents — and either way an annotated tag exists at the release
-commit. Only a person can decide which; the drift is a fact, the resolution is a
-judgement about what PR #75 was.
+### NS-30 · Choose a licence
+
+**Why now.** There is no `LICENSE`, no `license` key in `pyproject.toml` or
+`harness/node/package.json`, and `/license` on the GitHub API returns 404,
+while README and `harness/CONTRACT.md` present the repository as an adoption
+template. Nobody may legally adopt it (audit B2).
+
+**Evidence.** `ls LICENSE*` → none; `grep -in license pyproject.toml
+harness/node/package.json` → nothing.
+
+**Done when.** `LICENSE` exists, `pyproject.toml` declares the same licence under
+PEP 639, `package.json` matches, and
+`pytest harness/shared/tests/test_documentation_truth.py -k license` fails when
+any of the three is removed (R-SR-3, AC-3). Only a person can choose; the plan
+recommends Apache-2.0.
+
+**Depends on.** Nothing.
+
+### NS-31 · Record the four in-or-out decisions
+
+**Why now.** Four half-done stacks cost gates, shims and personas on every PR:
+`harness/jvm/` (4 lines of product Kotlin, never built, hard-coded floors),
+`harness/shared/langgraph/` (5 of 10 nodes stubs, one experimental caller),
+`openspec/` (a strict tier that has run zero times and is mis-specified), and
+the per-stack governance mirror (28 shim scripts policed by `check_dedup.py`).
+Each has a decision memo with evidence, options, cost and migration order,
+summarised in the program plan's review record. Phase E cannot start until
+the decisions are entries in the log, because every step there deletes
+something a constraint in the closed plan told it to keep (C-CQ-2).
+
+**Evidence.** Program plan §Review record, row "Four in-or-out memos"; audit
+H14, M3, M22, M23.
+
+**Done when.** Four decision-log entries exist (JVM relocation, LangGraph park
+with a named sunset release, `openspec/` fold, mirroring collapse including the
+DEC-005 push posture), each restated in `GOVERNANCE_SKILL.md` so
+`validate_governance_docs.py` passes, and `make validate` rejects an entry
+missing from either (R-SR-5, AC-5). The posture question (open question 2 of
+the plan) is the one that needs thought; the other three are recommendations
+the memos already make.
 
 **Depends on.** Nothing.
 
 ---
 
-## 2. P1 — unblocked, take in any order
+## 2. P0 — agent-executable, no decision needed
 
-### NS-6 · Move the Python floor to 3.10 *(spec required)*
+### NS-32 · Land Phase B of the remediation plan (PR #86)
 
-Python 3.9 reached upstream end-of-life in October 2025. Holding the floor costs
-three carve-outs, each currently recorded rather than hidden: the per-file
-coverage waiver for `harness/shared/langgraph/**` on the leg that cannot install
-the extra (`coverage.optional_extras`), a forked pytest pin (9.0.3 on ≥3.10 for
-PYSEC-2026-1845, 8.4.2 below), and a `continue-on-error` dependency-audit leg
-carrying unpatchable CVEs (DEC-017). `fastapi` ≥0.141, `langgraph` and `mcp` are
-all 3.10+. Moving the floor retires all three at once and unblocks NS-14. **Done
-when** `requires-python` is `>=3.10`, the CI matrix drops the 3.9 legs, the three
-carve-outs are deleted rather than re-homed, and the suite is green on the
-remaining legs. This is a compatibility-breaking decision for adopters: it needs
-its own spec and a decision-log entry. **Depends on** nothing (blocks NS-14).
+**Why now.** The audit's two runtime Blockers are one PR away: the API server
+returns 500 on every tool-using run, and the harness verdict is forgeable by
+scripting a rewrite of the protected `Makefile` (audit B3, B4). Phase B also
+carries the verification-timeout key, the per-task budget, run ids and
+structured events, schema-validated tool arguments, the unix-socket egress
+floor, order randomization, the two gate-runner fixes, documentation truth,
+and the vacuous-selector gate.
 
-### NS-9 · Justify the last pragma, and stop the swallow behind it
+**Evidence.** `docs/specs/2026-standards-remediation-plan.md` R-SR-6 … R-SR-22;
+PR #86's Validation section carries the `make ci` tails on its head.
 
-**Mostly delivered** by `docs/specs/gate-truthfulness.md` (R-GT-3). The
-measured-set bound is live: `coverage_gate.check_measured_set` fails closed when
-the report's file set diverges from the on-disk first-party set, so an added
-`omit` entry can no longer drop a file from the per-file floor while raising the
-aggregate. `mcp_server.py:16`'s pragma is gone; the file measured 94.06% before
-and 94.44% after.
+**Done when.** PR #86 is merged with every required check green on its head,
+its attestation table verified by `make attestation-check`, and plan criteria
+AC-6 … AC-22 ticked with the command each names. Any criterion whose command
+cannot fail is not ticked (the `test_spec_selectors_collect.py` gate enforces
+this for `-k` selectors).
 
-What remains is `langgraph/__init__.py:52`, and it is not a one-line change.
-Removing the pragma alone leaves the `except ImportError: pass` arc unreachable
-wherever langgraph *is* installed, taking the file to 80% against a 90% floor —
-red on the 3.10 and 3.12 legs. The defect worth fixing is the swallow itself: a
-real failure to import `graph.py` currently degrades silently to "`build_graph`
-just isn't exported". Deleting the `try`/`except` fixes that and reads 7/7 where
-langgraph is installed, but 5/7 on a local run without the extra and without
-`MANGO_CI_DESELECT_LANGGRAPH=1` — no waiver applies there, so it would be a red
-gate on a contributor's first `make ci`.
-
-**Done when** the swallow is gone and both cases are measured on a machine with
-the extra installed. `harness/shared/langgraph/**` is a protected path, so this
-carries an attestation. **Depends on** nothing, but do not fold it into a batch:
-its failure mode lands on whoever has not installed the optional extra.
-
-### NS-11 · Reconcile the regression tier with the contract it claims
-
-`harness/CONTRACT.md` defines `harness/shared/tests/regression/` as one
-reproduction per defect that reached `main`, run standalone by
-`make test-regression`. Several excellent reproductions for recently fixed
-defects — the coverage-gate shadowing probe in `test_coverage_gate.py`, the
-session-hook `pytester` run in `test_session_hooks.py` — sit in the unit tier
-instead, so `make test-regression` runs none of them. **Done when** either they
-move (each naming its pre-fix commit, as
-`regression/test_write_containment_regression.py` does) or the contract stops
-calling that target a per-defect gate. The contract currently states a guarantee
-the directory does not provide. **Depends on** nothing.
-
-### NS-14 · The entrypoint contract (DEC-029)
-
-31 `sys.path` bootstrap sites in four styles, accepted as-is because a helper
-would need the bootstrap it replaces and the per-stack scripts are digested
-root-of-trust artefacts. DEC-029 defers this explicitly to "when the 3.9 floor
-moves". **Depends on NS-6** — it is a follow-on, not an independent item.
-
-### NS-15 · Split `write_policy.py` by concern
-
-381 lines, under the 500-line `limits.size_budget_lines` budget — so this is a
-cohesion item, not a budget violation, and it should be scheduled as one. Split
-into distinct boundary and invariant validators. **Depends on** nothing.
-
-### NS-17 · Retention policy for the agent memory directory
-
-Persistent storage for knowledge-gap logs exists via the `agent-memory-manager`
-skill, which declares retention as its responsibility. No retention or periodic
-summarisation is implemented, so context grows unbounded across sessions.
-**Done when** a bounded policy is sourced from `governance-policy.json` and
-enforced, with the bound tested. **Depends on** nothing.
-
-### NS-18 · Connect the reasoner to the MCP server *(spec required)*
-
-The first product item that is genuinely unblocked: `mcp_server.py` shipped in
-v2.3.0, and `.mango/agents/nemotron-reasoner.md` still never mentions it — the
-persona's tool guidance describes the direct bridge only, and no
-`mcp-server-integration` skill exists. **Done when** the persona names the MCP
-path, a skill documents it, and a test asserts the persona's declared tools
-match what the server exposes. **Depends on** nothing, but do it after the P0
-block: it changes the agent control surface, a protected path.
-
-### NS-20 · Turn the mutation-proof procedure into a skill
-
-Every gate added in the `gate-truthfulness` batch was validated the same way:
-mutate the thing the gate claims to catch, assert the gate fails, restore the
-tree, assert it passes. That loop ran **more than ten times by hand** in one
-change — delete `.prettierignore`; drop `lint-node` from `ci`; add it to
-`ci-python`; add `write_file` to the verifier persona; swap two mapping rows;
-fabricate a `make` target inside a fenced block; delete the live hook; rename it
-to snake_case; plant an orphan hook; restore the pre-narrowing waiver registry.
-It also caught two defects in the batch's *own* gates that no test would have
-found: a `[tool.coverage.run]` table as the last table in `pyproject.toml`
-matched nothing, and a `# keep:` comment anywhere in `.gitleaks.toml` granted an
-exemption.
-
-A repeated manual procedure with a mechanical shape and a history of finding
-real defects is the definition of a skill this repository already uses
-elsewhere (`tech-debt-audit` codified exactly this kind of recurring review).
-**Done when** `.mango/skills/gate-mutation-proof/SKILL.md` states the procedure,
-including the two failure modes it must warn about — a mutation that leaves the
-tree dirty (`git checkout` cannot restore an untracked file, which happened
-here), and a "proof" run against a stale artifact — and
-`test_agent_surface_liveness.py` classifies it. **Depends on** nothing.
-
-**Landed**, and the skill has since grown two more failure modes it hit while
-being used, both the same shape: *an assertion looser than the property it
-claims to pin*. A fixture whose value coincides with the built-in default
-(asserting a timeout equals `orchestrator.api_timeout_sec`, which is 300, while
-the mutation restores the literal 300) and a probe that sets state after the
-import the mutation happens at. Both were caught by the procedure itself and
-recorded rather than quietly fixed — a proof that needed two attempts names a
-trap the next author would otherwise walk into.
-
-### NS-21 · The hook surface has one live hook and no loop
-
-Five of six `.mango/hooks/` scripts are dormant by DEC-003, and the sixth
-(`pre-nemotron-run.sh`) is the only hook on a live product path. NS-13 now
-asserts the partition and pins that hook, so the surface is *described*
-accurately for the first time — which makes the gap visible rather than closing
-it: three of the four names in `PERMITTED_HOOK_NAMES`
-(`post-planner-run`, `post-nemotron-reasoner-run`, `post-verifier-run`) have no
-script on disk, so `ExecutionLoop` fires them into `hook_path.exists()`'s false
-branch on every agent turn. That is by design today, and it means the loop has
-no post-turn observation point at all.
-
-Two candidates, both needing a decision rather than code first:
-
-- **A post-turn hook that records the turn's verdict and tool-call count.** The
-  data already exists in `ExecutionLoop`; nothing persists it per turn, so
-  "which turn exhausted the budget" is answerable only from logs that are not
-  kept. This is the cheapest real use of the dormant namespace.
-- **Waking the five dormant scripts** would change tool-call behaviour for every
-  session on logic that has never executed. DEC-003 declined this deliberately;
-  reversing it needs a superseding entry, not an edit to `.mango/settings.json`
-  — which is not the file Claude Code reads anyway.
-
-**Done when** either a post-turn hook exists with a test that fails when it stops
-being fired, or a decision-log entry records that the post-`*`-run namespace
-stays empty and why — so the three unfired names stop reading as an oversight.
-**Depends on** nothing.
-
-### NS-29 · Audit round 3: the code-quality and hardening plan *(spec exists)*
-
-**Why now.** Round 2 (`docs/specs/tech-debt-hardening-plan.md`) closed all 29 of
-its boxes and left the gates green and advisory. The third audit, peer-reviewed
-into revision 2, found the product path bypassable: `cat .en?` and process
-substitution classified as `read` for every role, the write side had no
-credential-file rule so a patch to `.env` redirected the API key on the next call,
-and the modules that enforce this were agent-writable. Those four are closed —
-Phase 1 landed R-CQ-3..R-CQ-7 and R-CQ-30, and adversarial re-review closed three
-more spellings the first fix missed (quoting and backslash escaping, brace
-expansion, then parameter expansion and ANSI-C quoting) plus a second write door
-that derived its action from a synthesised command. A follow-up closed R-CQ-8
-(DEC-043): every Python policy reader now fails closed on a *present* policy
-missing a key, `protected_paths` and `limits` lost their permissive defaults,
-the three size-budget environment overrides may only tighten a budget, and
-`verify_zero_skips` resolves its grammar on first use rather than at import.
-**Phase 1's six product-path slices are landed; the plan is not** — and an
-earlier revision of this paragraph said "Phase 1 is now complete", counting the
-Phase 0 prerequisites AC-1 and AC-2 as if they were Phase 1 slices. They are
-not, and neither was done: R-CQ-2 states the NS-2 credential must be rotated
-*before any Phase 1 slice merges*, so all six merged ahead of their own
-precondition. Phase 2 has started: R-CQ-9 landed, so all 20 `uses:` references
-are SHA pins with version comments (DEC-045), so this repository no longer asks
-adopters for something it had not done itself, and R-CQ-10 landed too, so the
-lock carries artefact hashes and every install checks them (DEC-047). R-CQ-11
-and phases 3–7 are untouched, so the `make` stage the shim test cites still does
-not exist, the Dockerfile is unpinned, and five landed specs still show every
-acceptance box open.
-
-Behind that, unchanged: the two stacks disagree about which HTTP statuses to
-retry, a `make` stage the shim test cites does not exist, and five landed specs
-show every acceptance box open again. DEC-044
-settles the ruleset shape NS-1 needs and removes the code-owner rule that made
-the export unappliable, but the import itself is still not done.
-
-**Evidence.** `docs/specs/code-quality-tech-debt-plan.md`, problem items 1–16 and
-the Review record, each with the file, line or command that reproduces it on
-`487870a`; the four bypasses were reproduced by running the real `classify`,
-`write_denial_reason` and `execute_apply_patch`. Each is now pinned by an
-end-to-end reproduction in
-`harness/shared/tests/regression/test_credential_containment_regression.py`,
-whose premise test runs every credential-read spelling through a real `bash -c`
-so the suite fails if a spelling stops reaching the file it claims to reach.
-
-**Done when.** Its 35 acceptance boxes are ticked, each by the command it names;
-8 are ticked — AC-3 through AC-8, which is all six of Phase 1's product-path
-slices, plus AC-30 and now AC-9. Phase 0's two boxes are the ones still open:
-AC-1 waits on the NS-1 import (DEC-044 decided the shape; the branches API is
-the evidence) and AC-2 waits on the NS-2 rotation, which is off-tree — that one
-sub-check is all that holds it. AC-2's other two sub-checks now pass: DEC-046
-dispositions the Dependabot queue and names the mypy 2.0 `--python-version 3.9`
-removal and NS-6, and the mutation-proof skill exists and is classified. DEC-046
-also corrects R-CQ-2, which predicted #62–#66 would be *superseded* by the SHA
-pins: they were not. Dependabot rebased them onto the pins and they now propose
-accurate majors in pin form, so they stay open as the queue for the decision
-DEC-045 deferred; five PRs are closed, eight open with a reason each. Phase 0
-also lands NS-20 (landed: `.mango/skills/gate-mutation-proof/`); Phase 1 is the
-product path; the rest is ordered there.
-
-**Depends on.** NS-2 (rotation) before any Phase 1 slice merges; NS-20 (the
-mutation-proof skill) is written in Phase 0; NS-3 (a settled release) before the
-shim removal clock in Phase 4 and the `control-plane` shim directory in Phase 6.
-
-### NS-19 · NIM multi-model routing and prompt-cache cost tracking *(spec required)*
-
-Dynamic model fallback (fast reasoning → deep synthesis) and a local prompt-cache
-adapter to cut repeated token cost on invariant-verification prompts. Both are
-still one-line roadmap ambitions with no spec, no owner and no acceptance
-criteria; neither should be started until one exists. **Depends on** nothing
-mechanical — only on someone deciding it is worth the spec.
+**Depends on.** Nothing mechanical. NS-1 makes its green checks mean something.
 
 ---
 
-## 4. Parked — blocked on a gate that does not exist yet
+## 3. P1 — unblocked, take in any order
 
-These are not backlog items. Each is blocked on something specific, and naming
-the blocker is the point: without it, they resurface every audit.
+### NS-6 · Move the Python floor to 3.10, then 3.11 *(spec required)*
+
+**Why now.** 3.9 reached end-of-life 2025-10-31; 3.10 reaches it 2026-10-31.
+Every runtime dependency is already `>= 3.10`. Four carve-outs hold the floor:
+the forked pytest pin (`8.4.2` on 3.9 carries PYSEC-2026-1845), a
+`continue-on-error` audit leg that is also a *required* check, the
+`coverage.optional_extras` per-file waiver, and `check_py_compat.py`'s AST
+gate. mypy is pinned to 1.11.2 because 2.x removed `--python-version 3.9`
+(DEC-046). An earlier revision of this item listed three carve-outs; the
+fourth is the compatibility gate itself.
+
+**Evidence.** `pyproject.toml:4`; `requirements-dev.txt:5-11`;
+`.github/workflows/python-package.yml:320`; DEC-028; audit H1, M10.
+
+**Done when.** `make spec NAME=python-floor-310` supersedes DEC-028;
+`requires-python` is `>=3.10`; the 3.9 legs, both forked pins, the waiver, the
+`continue-on-error` step and the `dependency-audit (3.9)` required context are
+deleted rather than re-homed; 3.14 joins the matrix; mypy is 2.x with
+`warn_unused_ignores` on; `target-version` is gone from `pyproject.toml`; and
+`pytest harness/shared/tests/test_ci_gate_required_checks.py` fails if the
+ruleset still names the 3.9 context (R-SR-23, AC-23). Plan open question 3
+decides whether 3.11 lands in the same spec.
+
+**Depends on.** Nothing. Unblocks the ESLint and packaging halves of Phase F and
+the mypy bump.
+
+### NS-9 · Justify the last pragma, and stop the swallow behind it
+
+**Why now.** `langgraph/__init__.py:52` carries the one remaining
+`# pragma: no cover`, and the `except ImportError: pass` it covers turns a real
+failure to import `graph.py` into "`build_graph` just isn't exported".
+Removing the pragma alone takes the file to 80% against the 90% floor on the
+legs that install the extra; deleting the swallow reads 7/7 there and 5/7 on a
+local run without the extra and without `MANGO_CI_DESELECT_LANGGRAPH=1`.
+
+**Evidence.** `harness/shared/langgraph/__init__.py:52`; `coverage.optional_extras`
+in `harness/shared/governance-policy.json`.
+
+**Done when.** The swallow is gone and
+`pytest harness/shared/tests/test_langgraph_regression.py -k import_failure`
+fails when a broken `graph.py` is silently absorbed; both interpreter cases
+are recorded from a run with the extra installed. `harness/shared/langgraph/**`
+is a protected path, so this carries an attestation. If NS-31 parks the
+package first (R-SR-27), this item moves with it.
+
+**Depends on.** Nothing, but do not batch it: its failure mode lands on whoever
+has not installed the optional extra.
+
+### NS-11 · Reconcile the regression tier with the contract it claims
+
+**Why now.** `harness/CONTRACT.md` defines `harness/shared/tests/regression/` as
+one reproduction per defect that reached `main`, run standalone by
+`make test-regression`. Reproductions for recent defects (the coverage-gate
+shadowing probe in `test_coverage_gate.py`, the `pytester` session-hook run in
+`test_session_hooks.py`) sit in the unit tier, and `build-full` runs the
+regression tier twice because `testpaths` already recurses into it.
+
+**Evidence.** `harness/CONTRACT.md:104-113`; `test_coverage_gate.py:355`;
+`pyproject.toml:26`; `.github/workflows/python-package.yml:195-202`.
+
+**Done when.** Each named reproduction moves into the tier naming its pre-fix
+commit (as `regression/test_write_containment_regression.py` does), and
+`make test-regression` fails when one is moved back out — pinned by a test that
+lists them. Rewriting the contract instead is not an option here: the contract's
+guarantee is the one adopters read.
+
+**Depends on.** Nothing.
+
+### NS-17 · Retention and scoping for the agent memory directory
+
+**Why now.** `knowledge_gap_log` and `hypothesis_register` append to
+`.mango/memory/*.json` with no bound, and `MEMORY_DIR` resolves from the harness
+install path rather than the workspace, so every workspace shares one store and
+nothing ever reads it back (audit M4). Retention alone is the narrow framing.
+
+**Evidence.** `harness/shared/meta_tools.py:20-22,117-166`; grep for readers
+outside tests → none.
+
+**Done when.** A bound sourced from `governance-policy.json` is enforced and
+`pytest harness/shared/tests/test_meta_tools.py -k retention` fails when a
+write exceeds it; the store lives under the workspace; and one reader exists
+(open gaps fed into the next planner prompt) with a test that fails when the
+gap is not surfaced.
+
+**Depends on.** Nothing.
+
+### NS-21 · The hook surface has one live hook and no loop
+
+**Why now.** Five of six `.mango/hooks/` scripts are dormant by DEC-003; three of
+the four names in `PERMITTED_HOOK_NAMES` have no script on disk, so the loop
+fires them into `hook_path.exists()`'s false branch on every turn. Phase B adds
+a `run_id` and one structured event per model and tool call (R-SR-13), which
+is the observation point this item wanted; what remains is the decision about
+the dormant namespace.
+
+**Evidence.** `harness/shared/orchestrator/hook_runner.py:51`; `.mango/hooks/`;
+DEC-003.
+
+**Done when.** Either a post-turn hook records the turn's verdict and tool-call
+count with a test that fails when it stops being fired, or a decision-log entry
+records that the `post-*-run` namespace stays empty and why.
+
+**Depends on.** NS-32 (the events it would consume).
+
+### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
+
+**Why now.** `.mango/agents/nemotron-reasoner.md` was written for a Claude Code
+subagent: it names `Bash`, `Read`, `Grep`, `Glob`, a skill and `make pre-pr`,
+and is fed verbatim to Nemotron as its system prompt; only `run_command`
+matches the tool bridge (audit M2). Phase B's MCP slice already serves one
+registry to both transports (R-SR-15); the persona still describes neither.
+
+**Evidence.** `.mango/agents/nemotron-reasoner.md:4,26-27`;
+`harness/shared/orchestrator/loop.py:96-105`; `harness/shared/tool_schemas.py`.
+
+**Done when.** The runtime system prompt's tool paragraph is generated from
+`NEMOTRON_TOOLS`, a prompt sha is logged on the `run_id` events, and
+`pytest harness/shared/tests/test_agent_prompts.py -k tools_match_bridge`
+fails when the persona names a tool the bridge does not expose. Protected
+path; attestation required.
+
+**Depends on.** NS-32.
+
+### NS-33 · Adopt `ruff format`
+
+**Why now.** No `[tool.ruff.format]`, no target, no CI step; `ruff format
+--check` would change 176 of 361 files. `E`/`W` are selected but the formatter
+that replaced them is absent (audit H11). It is one commit, and it must be its
+own commit so `git blame` can skip it.
+
+**Evidence.** `grep -rn "ruff format" Makefile pyproject.toml .github/workflows`
+→ nothing; `python -m ruff format --check .` → 176 files.
+
+**Done when.** One reformat commit is listed in `.git-blame-ignore-revs`,
+`make lint-python` runs `ruff format --check`, and
+`pytest harness/shared/tests/test_makefile_contracts.py -k format_check` fails
+when the step is removed.
+
+**Depends on.** NS-32 (to avoid reformatting files Phase B is editing).
+
+### NS-34 · Decision records as records
+
+**Why now.** 48 decisions are single pipe-delimited lines (longest 4,591
+characters) in `harness/node/.governance/decision-log.md`, each restated by
+validator in a 31 KB `GOVERNANCE_SKILL.md`; `docs/decisions/` does not exist.
+Supersession is prose. Every PR writes each decision twice (audit H15).
+
+**Evidence.** `harness/node/.governance/decision-log.md:3`;
+`harness/shared/validate_governance_docs.py:21`.
+
+**Done when.** One file per decision under `docs/decisions/` with status,
+context, decision, consequences and a machine-readable `supersedes:` field;
+`verify_zero_skips.py` and `validate_governance_docs.py` read the generated
+index; the `GOVERNANCE_SKILL.md` lockstep copy is deleted; and `make validate`
+fails on a decision file without a status. This is the migration NS-31's four
+entries should be the last to write in the old format.
+
+**Depends on.** NS-31.
+
+### NS-35 · A mutation score instead of mutation prose *(spec required)*
+
+**Why now.** `gate-mutation-proof` is a by-hand loop whose results appear in
+CHANGELOG as "five mutation proofs" — the unverifiable claim CLAUDE.md rejects
+(audit H9). The skill stays as the procedure for one-off proofs; the score is
+what CI can read.
+
+**Evidence.** `.mango/skills/gate-mutation-proof/SKILL.md:40-58`; no `mutmut`
+in the lock or the Makefile.
+
+**Done when.** `mutmut` runs nightly in `scheduled-drift.yml` over
+`orchestrator/`, `tool_dispatch.py`, `tool_executors.py`,
+`governance/command_actions.py` and `write_policy.py`, a `mutation.min_score`
+policy key exists, and the job fails below it.
+
+**Depends on.** NS-6 (mutmut's current major is `>= 3.10`).
+
+### NS-36 · Phase D of the plan: CI truthfulness *(spec exists)*
+
+**Why now.** The `infra-reviewed` label survives later pushes, so a PR labelled
+once accepts arbitrary later commits to workflows and policies (audit H3); the
+Dockerfile runs as root on an un-digested base and is never built (M17);
+Dependabot lacks `docker` and an explicit `cooldown` (M18).
+
+**Evidence.** `.github/workflows/python-package.yml:84,201`; `Dockerfile:2,38`;
+`.github/dependabot.yml`.
+
+**Done when.** R-SR-24 and R-SR-25 are landed with AC-24 and AC-25 ticked by
+the commands they name; a PR with a stale SHA in its attestation table fails
+`build-full`.
+
+**Depends on.** NS-1 (signatures need the ruleset live).
+
+### NS-29 · The program plans
+
+The audit-round-3 plan (`docs/specs/code-quality-tech-debt-plan.md`) is
+**closed** at revision 2: Phase 1, R-CQ-9, R-CQ-10 and most of R-CQ-30 landed;
+three of its ticked criteria were found to cite selectors collecting zero tests
+and were corrected in place; its open remainder is carried or dropped by
+`docs/specs/2026-standards-remediation-plan.md`, which owns every audit finding.
+Status is that spec's boxes, read there, not here.
+
+---
+
+## 4. Parked — blocked on a decision or a gate that does not exist yet
 
 | Item | Blocked on |
 |---|---|
-| **LATS end-to-end wiring into the supervisor StateGraph** | `synthesis.lats_enabled` is `false` and INV-15 requires passing an ablation gate first. No ablation result exists. `lats_optimizer.py` is parked under `harness/shared/experimental/` with zero runtime callers (DEC-027). |
-| **Autonomous healing triggered by test-suite failure** | The lifecycle hooks it would bind to are dormant by DEC-003, and `.mango/settings.json` is not the file Claude Code reads. NS-13 is the prerequisite that would make a hook namespace trustworthy. |
-| **`AC-CE-1` — capability-profile enforcement in `ProcessBackend`** | The production broker does not enforce capability profiles; the passing tests simulate the violation in a mock. Open in `openspec/changes/add-neurosym-governed-synthesis/`, needs the versioned profile schemas under `harness/control-plane/capability-profiles/` first. |
-| **`harness/jvm/` CI parity** | Declared an unadopted reference template with no live CI enforcement. Bringing it to parity is substantially larger than labelling it, and nothing depends on it. |
+| **Phase E of the plan** (JVM relocation, LangGraph park, `openspec/` fold, mirroring collapse; R-SR-26 … R-SR-29) | NS-31's four decision-log entries; NS-2's rotation before any Phase E slice. Order fixed by the memos: JVM → openspec → LangGraph → mirroring, with `[project.scripts]` first inside the last. |
+| **NS-19 · NIM multi-model routing and prompt-cache cost tracking** | No spec; and no provider boundary to route through — `complete_chat` is a monkeypatched module function with `stream: False` hard-coded and `usage` discarded (audit M5). The boundary is a Phase F item; routing follows it. |
+| **Context-window budget and human-in-the-loop interrupts** (audit H4, H5) | The Phase B events give the loop token counts for the first time; a budget needs a policy key and a spec. HITL needs the LangGraph decision (interrupts live there or nowhere). |
+| **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false` and INV-15 requires an ablation gate that does not exist (DEC-027). Moves with the LangGraph decision. |
+| **`AC-CE-1` capability-profile enforcement in `ProcessBackend`** | The permanent fix for audit B4 is OS-level isolation of the backend; the Phase B digest check is containment. Needs the versioned profile schemas first. |
+| **Eval harness and nightly live smoke** (audit H10) | A scoped `NVIDIA_API_KEY` secret in the scheduled workflow, which is an owner action, and the recorded-transcript fixtures the eval spec (`openspec/changes/add-neurosym-governed-synthesis/specs/agent-evaluation/spec.md`, DRAFT) would replay — which moves under `docs/specs/` in Phase E. |
 
 ---
 
@@ -384,20 +405,36 @@ the blocker is the point: without it, they resurface every audit.
 
 Recorded so a future audit does not rediscover them as findings:
 
-- **Annotating the test suite** (`--disallow-untyped-defs` reports 533 findings,
-  essentially all `no-untyped-def` on test functions). A separate project, not a
-  hygiene item.
+- **Annotating the test suite** (`--disallow-untyped-defs` reports ~530 findings,
+  essentially all `no-untyped-def` on test functions). Strict typing lands on
+  source via mypy overrides in NS-6; the tests are a separate project.
 - **Regrouping `harness/shared/`** — DEC-020 stands, reaffirmed by DEC-029. A
   regroup needs a superseding entry answering DEC-020's three reasons, and an
   acyclicity test landed first.
-- **Deleting the 20 per-stack shim scripts** — they are root-of-trust artefacts;
-  DEC-004 sizes removal as a rotation. R-TDH-21 keeps them.
-- **Raising the `fastapi` floor to ≥0.141.1** (Dependabot #40) until NS-6 lands;
-  fastapi 0.141 requires 3.10 and would break the 3.9 leg today.
+- **The closed plan's ceremony items** — R-CQ-13 child spec, R-CQ-15, R-CQ-19,
+  R-CQ-20, R-CQ-21's fixture-dedup rule, R-CQ-24, R-CQ-26, R-CQ-27, R-CQ-28,
+  R-CQ-31 and AC-31/34/35: inventory or process assertions with no defect
+  behind them for a single maintainer. Listed with reasons in the remediation
+  plan's §Explicitly not doing.
+- **Pre-emptive decomposition of the three files nearest their size budget**
+  (`write_policy.py` 448/500, `plan_rules.py` 428, `nemotron-client.ts` 432).
+  Headroom exists; a split lands with the change that needs it. Phase B's
+  containment slice is the first such change for `write_policy.py`.
+- **Raising the `fastapi` floor to ≥0.141.1** (Dependabot #40) until NS-6 lands.
+- **A `HEALTHCHECK` in the Dockerfile** — nothing listens; the CMD exits.
 
 ---
 
 ## 6. Delivered, and removed from the list above
+
+**Closed on 2026-09-04 by the standards audit and the plan rewrite:**
+
+| Was | Now |
+|---|---|
+| **NS-20** Turn the mutation-proof procedure into a skill | Landed (`.mango/skills/gate-mutation-proof/`, classified by `test_agent_surface_liveness.py`); it sat in P1 marked "Landed" for a day. The *score* half is NS-35. |
+| **NS-14** The entrypoint contract (DEC-029) | Folded into R-SR-29: `[project.scripts]` is the CLI-contract change DEC-029 named, and the mirroring collapse is where the 28 shims go. Two owners (this item and R-CQ-18) disagreed on its dependency; the plan settles it. |
+| **NS-15** Split `write_policy.py` by concern | Folded into the plan's "Explicitly not doing": headroom exists (448/500); the split lands with the first change that needs it, which is Phase B's containment slice. |
+| **NS-29** as a status mirror | Reduced to a pointer. The paragraph-by-paragraph restatement of the program plan drifted from it on every PR and once counted Phase 0 prerequisites as Phase 1 slices. |
 
 An item that is done does not stay on a roadmap. The peer review's F-4 finding
 was that this file listed two already-delivered items as open, which teaches

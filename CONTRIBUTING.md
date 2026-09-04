@@ -32,17 +32,20 @@ pip install -e .
 make pre-pr
 ```
 
-This runs the full local gate: `ci` (lint, coverage, tests, specs, remotes,
-governance validators, drift checks) plus a cold mypy pass, `pip-audit`, and
-the secret scanner. It must pass before you push. `make review` (part of
-`pre-pr`) also prints a checklist naming three skills worth running for
-non-trivial changes: `openspec-peer-review`, `repo-invariant-review`, and
-`validation-runner`.
+`make pre-pr` is the bar. It runs `ci` (lint, coverage, tests, specs, remotes,
+governance validators, drift checks), `review`, a cold mypy pass (`lint-cold`),
+the dependency audit (`audit`) and the secret scan (`secrets`). `make review`
+prints a checklist naming three skills worth running for non-trivial changes:
+`openspec-peer-review`, `repo-invariant-review`, and `validation-runner`.
 
-`audit` and `secrets` need `pip-audit`, `osv-scanner` and `gitleaks` (the last
-two via the Go toolchain, `make audit-install` / `make secrets-install`). Where
-those are not installable, run `make ci` and `make lint-cold` locally and let the
-dedicated `dependency-audit` and `secret-scan` CI jobs evidence the other two.
+Two of those gates need Go binaries: `audit` uses `osv-scanner` and `secrets`
+uses `gitleaks`, installed by `make audit-install` / `make secrets-install`
+(`pip-audit` comes from pip). Where the Go toolchain is absent, the documented
+fallback is to run `make ci` and `make lint-cold` locally and to link the
+`dependency-audit` and `secret-scan` job runs on the pushed head in the PR's
+Validation section — those jobs are the evidence for the two gates you could
+not run. That is the one sanctioned substitute; a claim that the gates passed
+without either the local output or the job link is treated as absent.
 
 Python dependencies are pinned by one universal lock. If you change
 `requirements.txt`, `requirements-dev.txt` or `requirements-langgraph.txt`, run

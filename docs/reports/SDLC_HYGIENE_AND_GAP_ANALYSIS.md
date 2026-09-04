@@ -1,5 +1,9 @@
 # SDLC Hygiene, Gap Analysis & Peer Review Report
 
+> Moved from the `docs/` root to `docs/reports/` (code-quality tech-debt plan
+> R-CQ-30, landed by the 2026 remediation); content unchanged. Do not read any
+> number below as current — `docs/reports/2026-STANDARDS-AUDIT.md` supersedes it.
+
 ## v2.3.0 Wrap-Up (MCP, LATS, Autonomous Healing)
 **Date:** 2026-09-01
 **Status:** ALL GATES PASSING
