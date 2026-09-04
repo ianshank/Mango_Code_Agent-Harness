@@ -68,7 +68,5 @@ mango_code_agent_harness.egg-info/
 harness/node/test-*/
 .hypothesis/
 
-# Agent session state and local virtualenvs (never build inputs)
+# Agent session state (never a build input); .mango/ above already covers the memory store
 .claude/
-.venv/
-.mango/memory/
