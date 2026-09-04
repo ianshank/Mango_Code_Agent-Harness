@@ -10,10 +10,12 @@ Use this skill when you need high-capacity chain-of-thought reasoning, multi-tur
 
 ## Available Invocation Channels
 
-> **These are operator commands.** An agent calling `run_command` cannot run them:
-> a bare `python <script>.py` or `npx <bin>` is unmodelled by
-> `command_actions.classify`, so it resolves to an action no role holds and the
-> broker denies it. From inside the loop use `make`, `pytest`, `python -m pytest`,
+> **These are operator commands.** An agent calling `run_command` is graded
+> differently: `python <script>.py` classifies as `test_execute` (held by every
+> role), so it runs, but the verdict it could try to influence is refused if any
+> protected enforcement file changed since the loop started (DEC-049); `npx <bin>`
+> grades as `<bin>` and is denied unless `<bin>` is an allowlisted test runner.
+> From inside the loop use `make`, `pytest`, `python -m pytest`,
 > `ruff` or `mypy`, all of which classify as `test_execute`.
 
 ### 1. TypeScript CLI Runner (Node)

@@ -10,6 +10,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase B of the 2026 remediation plan: the loop, the policy and the MCP transport
+
+Landed together with the slices recorded below, from
+`docs/specs/2026-standards-remediation-plan.md` (R-SR-11 … R-SR-16):
+
+- **Verification runs under its own timeout.** `orchestrator.verification_timeout_sec`
+  joins `governance-policy.json`, `OrchestratorLimits` and `orchestrator_defaults()`;
+  `VerificationRunner` and the facade read it instead of the model-latency
+  `api_timeout_sec` that the closed plan's R-CQ-14 had wired in. A present
+  policy without the key fails closed (DEC-050).
+- **One tool budget per task.** `execute_loop` mints a single `ToolBudget` and
+  hands it to planner, reasoner and verifier; `max_tool_calls_per_task` was
+  enforced as three times its declared value before.
+- **A run id and structured events.** `ExecutionLoop.run_id` (uuid4) is minted
+  per loop and carried on one `model_call` event per completion (agent,
+  iteration, latency, usage tokens when present) and one `tool_call` event per
+  dispatch (tool, permitted, duration). `JSONFormatter` now emits `extra=`
+  fields as top-level keys, dropping credential-named ones. No arguments or
+  message contents are logged.
+- **Tool arguments are checked before any executor runs.** `tool_arg_validation.py`
+  (stdlib only) validates a call against the tool's own `parameters` schema:
+  required keys, `additionalProperties: false`, primitive types. A failing call
+  returns `Error: invalid_arguments: <key>` and never reaches the executor.
+- **One gate log sink.** Every gate script configures logging through
+  `json_logging.configure_gate_process_logging`; `validate_specs.py` and
+  `validate_plan.py` honour `LOG_LEVEL`.
+- **MCP serves the dispatcher's registry.** `mcp_server._build_tool_handlers`
+  instantiates `ToolDispatcher` and serves its table, so a tool added to one
+  transport appears in the other; handlers run via `asyncio.to_thread` so a long
+  `run_command` no longer freezes the transport; each call logs tool, role, the
+  handler's final outcome and duration, with schema-declared argument names
+  only and unknown names as a count (Copilot review on PR #86).
+- **Readiness means every accessor the orchestrator resolves.** `/readyz` also
+  exercises `max_tool_calls_per_task()`, and `tool_calls[].function.arguments`
+  accepts every JSON shape the dispatcher degrades to "no arguments" (Copilot
+  review on PR #86).
+
 ### A ticked acceptance criterion must name a selector that collects something
 
 Peer review of the closed program plan found three ticked criteria whose

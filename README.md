@@ -57,6 +57,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
 │   │   ├── main.py                      # REST endpoints (/api/orchestrate, /healthz, /readyz) & static file server
+│   │   ├── messages.py                  # Per-role history wire models (tool_calls survive the round trip)
 │   │   ├── static/                      # Interactive Web UI dashboard & telemetry view
 │   │   └── tests/                       # API Server integration & authentication tests
 │   │
@@ -90,6 +91,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
 │   │   ├── tool_executors.py            # Tool executors + the shared PDP write authorization
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
+│   │   ├── tool_arg_validation.py       # Schema check of model-sent tool arguments before any executor runs
 │   │   ├── tool_schemas.py              # OpenAI/Nemotron-compatible tool definitions
 │   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
 │   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
@@ -107,9 +109,11 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
-│   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
+│   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation, tamper-refusing
+│   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
+│   │   │   ├── indirect_exec.py         # make/pnpm/npx argument grading: no indirect shell via test_execute
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (3,195 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (3,705 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions

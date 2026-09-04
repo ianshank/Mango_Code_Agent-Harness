@@ -82,7 +82,7 @@ The Container diagram zooms into the Agentic SSD system boundaries, displaying i
 graph TD
     subgraph Client_Plane ["Client & Interface Tier"]
         CLI["CLI Tooling / Make Interface<br/>(make ci, make review, make pre-pr, make test-langgraph, make test-aqa)"]
-        APIServer["FastAPI Gateway (Port 8080)<br/>(POST /api/orchestrate, static UI mounted at /)"]
+        APIServer["FastAPI Gateway (Port 8080)<br/>(POST /api/orchestrate, GET /healthz, GET /readyz, static UI at /)"]
     end
 
     subgraph Governance_Kernel ["Shared Governance Kernel (harness/shared)"]
@@ -91,6 +91,8 @@ graph TD
         ExecBroker["Execution Broker<br/>(governance/broker.py)"]
         ProcBackend["Process Backend<br/>(governance/process_backend.py)"]
         VerifRunner["Verification Runner<br/>(governance/verification.py)"]
+        EnforceDigest["Enforcement Digest<br/>(governance/enforcement_digest.py)"]
+        IndirectExec["Indirect-Exec Grading<br/>(governance/indirect_exec.py)"]
         AuditBuilder["Evidence Builder<br/>(governance/evidence_manifest.py)"]
     end
 
@@ -98,6 +100,7 @@ graph TD
         MAS["MangoMASOrchestrator (Facade)<br/>(mango_mas_orchestrator.py)"]
         Loop["ExecutionLoop<br/>(orchestrator/loop.py)"]
         Dispatch["ToolDispatcher<br/>(orchestrator/dispatcher.py)"]
+        ArgCheck["Tool Argument Validation<br/>(tool_arg_validation.py)"]
         HookRunner["HookRunner<br/>(orchestrator/hook_runner.py)"]
         LangGraph_Engine["LangGraph StateGraph Engine<br/>(langgraph/graph.py, state.py, nodes.py)"]
         Bridge["Nemotron Bridge<br/>(nemotron_bridge.py)"]
@@ -126,8 +129,11 @@ graph TD
     Loop --> Bridge
     Loop --> Dispatch
     Loop --> HookRunner
+    Dispatch --> ArgCheck
     Dispatch --> Executors
     Executors --> ExecBroker
+    ExecBroker --> IndirectExec
+    VerifRunner --> EnforceDigest
     ExecBroker --> PDP
     ExecBroker --> PreToolGuard
     ExecBroker --> ProcBackend
