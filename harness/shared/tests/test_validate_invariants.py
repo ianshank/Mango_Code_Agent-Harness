@@ -23,7 +23,17 @@ def temp_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     shared.mkdir(parents=True)
     policy = shared / "governance-policy.json"
     policy.write_text(
-        json.dumps({"protected_paths": [".github/workflows/**", "Makefile"]}),
+        # `limits` is stated, not omitted. Since R-CQ-8 a *present* policy that
+        # does not declare a budget fails closed rather than substituting the
+        # built-in, so a fixture without this block would exercise the
+        # fail-closed path in every test that uses it instead of the behaviour
+        # each one is about. The numbers match this repository's own policy.
+        json.dumps(
+            {
+                "protected_paths": [".github/workflows/**", "Makefile"],
+                "limits": {"size_budget_lines": 500, "test_size_budget_lines": 700},
+            }
+        ),
         encoding="utf-8",
     )
     # Baseline commit so git diff has a HEAD to compare against.
@@ -46,9 +56,10 @@ def test_load_protected_patterns_reads_policy(temp_repo: Path):
     assert patterns == [".github/workflows/**", "Makefile"]
 
 
-def test_load_protected_patterns_defaults_when_missing(tmp_path: Path):
-    # Non-existent policy path -> fails closed (sys.exit) is the contract,
-    # but the default branch returns [".github/**"] only when the key is absent.
+def test_load_protected_patterns_fails_closed_when_the_policy_is_missing(tmp_path: Path):
+    # Renamed and re-commented: the "defaults" this used to describe are gone.
+    # There is no longer a `[".github/**"]` branch for an absent key (R-CQ-8),
+    # so an unreadable policy path is the only case left, and it exits 1.
     missing = tmp_path / "does-not-exist.json"
     with pytest.raises(SystemExit) as exc_info:
         vi.load_protected_patterns(missing)
@@ -499,9 +510,131 @@ def test_main_fails_on_an_oversized_test_module_from_policy(temp_repo: Path, mon
     monkeypatch.delenv(vi.SIZE_BUDGET_ENV, raising=False)
     policy = _policy_path(temp_repo)
     policy.write_text(
-        json.dumps({"protected_paths": ["Makefile"], "limits": {"test_size_budget_lines": 40}}), encoding="utf-8"
+        # Both budgets stated: `main()` reads the source budget too, and since
+        # R-CQ-8 a present policy that omits it fails closed before this test's
+        # own assertion is reached. 40 stays distinguishable from the built-in
+        # 700, which is what makes this a liveness check on the policy value.
+        json.dumps(
+            {
+                "protected_paths": ["Makefile"],
+                "limits": {"test_size_budget_lines": 40, "size_budget_lines": 500},
+            }
+        ),
+        encoding="utf-8",
     )
     _write_lines(temp_repo / "test_over.py", 41)
     assert vi.main(temp_repo, policy_path=policy) == 1
     _write_lines(temp_repo / "test_over.py", 40)
     assert vi.main(temp_repo, policy_path=policy) == 0
+
+
+# --- R-CQ-8: a present policy that has lost a key must stop the gate ---
+
+class TestAPresentPolicyMissingAKeyFailsClosed:
+    """The gate must not report PASS against a threshold the policy stopped stating.
+
+    Both readers here defaulted: `load_protected_patterns` fell back to
+    `[".github/**"]` and `_policy_limit` to its built-in budget. Neither
+    fallback is reachable from a malformed policy -- the JSON parses fine. What
+    reaches them is a policy that is *valid and incomplete*, which is what a bad
+    merge, a partial template or an over-eager edit produces, and the fallback
+    then reports success over a set it is no longer checking.
+    """
+
+    def test_missing_protected_paths_fails_closed(self, tmp_path: Path):
+        """The worst of the two: one surviving pattern, and a PASS over the rest.
+
+        `[".github/**"]` still matches something, so the run printed
+        `[PASS] Protected Paths` while the enforcement layer, the agent control
+        surface and the runtime gates were all unprotected.
+        """
+        policy = tmp_path / "policy.json"
+        policy.write_text(json.dumps({"limits": {"size_budget_lines": 500}}), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc:
+            vi.load_protected_patterns(policy)
+        assert exc.value.code == 1
+
+    def test_an_empty_protected_paths_list_is_a_statement_not_a_hole(self, tmp_path: Path):
+        """Control. `"protected_paths": []` says "this adopter protects nothing
+        yet", which is a decision someone wrote down; a missing key says nothing
+        was decided. Failing closed on both would make the empty case
+        unexpressible."""
+        policy = tmp_path / "policy.json"
+        policy.write_text(json.dumps({"protected_paths": []}), encoding="utf-8")
+        assert vi.load_protected_patterns(policy) == []
+
+    @pytest.mark.parametrize(
+        ("accessor", "key"),
+        [
+            pytest.param("size_budget_lines", "size_budget_lines", id="source"),
+            pytest.param("test_size_budget_lines", "test_size_budget_lines", id="test"),
+        ],
+    )
+    def test_a_missing_limit_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, accessor: str, key: str
+    ):
+        monkeypatch.delenv(vi.SIZE_BUDGET_ENV, raising=False)
+        monkeypatch.delenv(vi.TEST_SIZE_BUDGET_ENV, raising=False)
+        policy = tmp_path / "policy.json"
+        policy.write_text(json.dumps({"limits": {}, "protected_paths": []}), encoding="utf-8")
+        with pytest.raises(SystemExit) as exc:
+            getattr(vi, accessor)(policy)
+        assert exc.value.code == 1
+
+    def test_an_absent_policy_is_still_the_adopter_path(self, tmp_path: Path, monkeypatch):
+        """Control: absence is supported, and must not be collapsed into the above."""
+        monkeypatch.delenv(vi.SIZE_BUDGET_ENV, raising=False)
+        assert vi.size_budget_lines(tmp_path / "nothing.json") == vi.SIZE_BUDGET_LINES
+
+
+class TestTheEnvOverrideTightensOnly:
+    """`MAX_FILE_LINES=9999` used to be returned verbatim.
+
+    Anyone able to set an environment variable could therefore switch the size
+    gate off while it went on printing `[PASS] Size Budget` -- and a gate whose
+    report is indistinguishable from a real pass is worse than no gate, because
+    it is trusted. Tightening is still allowed: a stricter local run is a real
+    use, and it cannot weaken what the policy states (R-CQ-8).
+    """
+
+    def test_env_override_tightens_only(self, temp_repo: Path, monkeypatch: pytest.MonkeyPatch):
+        policy = _policy_path(temp_repo)
+        monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "9999")
+        assert vi.size_budget_lines(policy) == 500, "an override must not raise the budget"
+        monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "120")
+        assert vi.size_budget_lines(policy) == 120, "an override must still tighten it"
+
+    def test_env_override_equal_to_the_policy_is_not_a_change(
+        self, temp_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The boundary: `>=` not `>`, so an equal value is a no-op either way
+        and the rule has no off-by-one to argue about."""
+        monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "500")
+        assert vi.size_budget_lines(_policy_path(temp_repo)) == 500
+
+    def test_the_test_budget_override_tightens_only_too(
+        self, temp_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        policy = _policy_path(temp_repo)
+        monkeypatch.setenv(vi.TEST_SIZE_BUDGET_ENV, "9999")
+        assert vi.test_size_budget_lines(policy) == 700
+        monkeypatch.setenv(vi.TEST_SIZE_BUDGET_ENV, "300")
+        assert vi.test_size_budget_lines(policy) == 300
+
+    def test_an_ignored_override_says_so(
+        self, temp_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog
+    ):
+        """Silently ignoring it is its own trap: the caller believes the budget
+        moved and reads the PASS as meaning something it does not."""
+        monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "9999")
+        with caplog.at_level(logging.WARNING, logger=vi.logger.name):
+            vi.size_budget_lines(_policy_path(temp_repo))
+        assert "only tighten" in caplog.text and "9999" in caplog.text
+
+    def test_the_gate_still_fails_on_a_real_violation_under_a_loosening_override(
+        self, temp_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """End to end: the point of the rule is that this cannot be switched off."""
+        _write_lines(temp_repo / "huge.py", 600)
+        monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "9999")
+        assert vi.check_size_budget(temp_repo, policy_path=_policy_path(temp_repo)) is False

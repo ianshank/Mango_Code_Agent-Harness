@@ -280,9 +280,15 @@ and the modules that enforce this were agent-writable. Those four are closed —
 Phase 1 landed R-CQ-3..R-CQ-7 and R-CQ-30, and adversarial re-review closed three
 more spellings the first fix missed (quoting and backslash escaping, brace
 expansion, then parameter expansion and ANSI-C quoting) plus a second write door
-that derived its action from a synthesised command. **Phase 1 is not complete:**
-AC-8 / R-CQ-8 (policy readers that fail closed rather than defaulting permissive)
-is still open, and the plan's remaining phases are untouched.
+that derived its action from a synthesised command. A follow-up closed R-CQ-8
+(DEC-043): every Python policy reader now fails closed on a *present* policy
+missing a key, `protected_paths` and `limits` lost their permissive defaults,
+the three size-budget environment overrides may only tighten a budget, and
+`verify_zero_skips` resolves its grammar on first use rather than at import.
+**Phase 1 is now complete; the plan is not** — phases 2–7 are untouched, so the
+actions are still unpinned, the lock carries no hashes, the `make` stage the
+shim test cites still does not exist, and five landed specs still show every
+acceptance box open.
 
 Behind that, unchanged: the two stacks disagree about which HTTP statuses to
 retry, no GitHub Action is SHA-pinned although `harness/CONTRACT.md` requires it
@@ -301,7 +307,7 @@ whose premise test runs every credential-read spelling through a real `bash -c`
 so the suite fails if a spelling stops reaching the file it claims to reach.
 
 **Done when.** Its 35 acceptance boxes are ticked, each by the command it names;
-7 are ticked. Phase 0 decides the ruleset shape, rotates the NS-2 credential,
+8 are ticked (all of Phase 1). Phase 0 decides the ruleset shape, rotates the NS-2 credential,
 dispositions the Dependabot queue and lands NS-20 (landed:
 `.mango/skills/gate-mutation-proof/`); Phase 1 is the product path; the rest is
 ordered there.

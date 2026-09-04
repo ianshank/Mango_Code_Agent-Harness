@@ -165,41 +165,91 @@ def load_policy(policy_path: Path | None = None) -> dict:
     return data
 
 
-def _section(name: str, policy_path: Path | None = None) -> dict:
-    section = load_policy(policy_path).get(name, {})
-    if not isinstance(section, dict):
+class _Section:
+    """One policy block, and whether a policy file backs it.
+
+    That second fact is the whole of R-CQ-8. The previous helpers took
+    ``section.get(key, default)``, which cannot tell *this adopter has no policy
+    file, so use the built-in default* from *the policy governing this run has
+    lost a key*. It answered the literal for both. The first is a supported
+    path -- ``policy_file_is_absent`` exists to keep it working. The second is a
+    policy that no longer says what every reader believes it says, and the Node
+    reader has always thrown for it (``policy.ts:58-69``): one stack failed
+    closed while the other quietly substituted a number nobody reviewed.
+
+    A dropped key is not hypothetical in the direction that matters. Deleting
+    ``orchestrator.max_iterations`` returned 10 and the loop kept running;
+    deleting ``coverage.lines`` returned 90 while the policy on disk was the
+    document a reviewer had been pointed at. The failure is silent by
+    construction, because the substituted value is a *plausible* one.
+
+    Carrying ``backed`` next to the data is what lets one call site express both
+    outcomes, so every accessor below gets the behaviour without restating it.
+    """
+
+    __slots__ = ("_data", "_name", "_backed")
+
+    def __init__(self, data: dict, name: str, backed: bool) -> None:
+        self._data = data
+        self._name = name
+        self._backed = backed
+
+    def _value(self, key: str, default: object) -> object:
+        if key in self._data:
+            return self._data[key]
+        if self._backed:
+            raise PolicyError(
+                f"policy {self._name}.{key} is missing from a present policy at this path; "
+                "refusing to substitute the built-in default, which would let a gate "
+                "report success against a threshold the policy no longer states"
+            )
+        return default
+
+    def int(self, key: str, default: int) -> int:
+        value = self._value(key, default)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise PolicyError(f"policy {self._name}.{key} must be an integer, got {value!r}")
+        return int(value)
+
+    def float(self, key: str, default: float) -> float:
+        value = self._value(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PolicyError(f"policy {self._name}.{key} must be a number, got {value!r}")
+        return float(value)
+
+    def optional(self, key: str, default: object) -> object:
+        """A key whose *absence* is part of the schema, not a hole in it.
+
+        Only for keys documented as optional at their accessor. Missing here
+        means "this deployment declares none", which is a statement; missing in
+        ``_value`` means the policy stopped saying something it used to say.
+        """
+        return self._data.get(key, default)
+
+
+def _section(name: str, policy_path: Path | None = None) -> _Section:
+    path = POLICY_PATH if policy_path is None else policy_path
+    backed = not policy_file_is_absent(path)
+    data = load_policy(path).get(name, {}) if backed else {}
+    if not isinstance(data, dict):
         raise PolicyError(f"policy section {name!r} is not an object")
-    return section
-
-
-def _int_value(section: dict, key: str, default: int, section_name: str) -> int:
-    value = section.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise PolicyError(f"policy {section_name}.{key} must be an integer, got {value!r}")
-    return int(value)
-
-
-def _float_value(section: dict, key: str, default: float, section_name: str) -> float:
-    value = section.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise PolicyError(f"policy {section_name}.{key} must be a number, got {value!r}")
-    return float(value)
+    return _Section(data, name, backed)
 
 
 def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:
     """Operational limits for MangoMASOrchestrator; policy `orchestrator` block."""
     section = _section("orchestrator", policy_path)
     resolved: OrchestratorLimits = {
-        "max_iterations": _int_value(section, "max_iterations", 10, "orchestrator"),
-        "api_timeout_sec": _int_value(section, "api_timeout_sec", 300, "orchestrator"),
-        "tool_timeout_sec": _int_value(section, "tool_timeout_sec", 30, "orchestrator"),
-        "max_command_bytes": _int_value(section, "max_command_bytes", 8192, "orchestrator"),
-        "max_healing_retries": _int_value(section, "max_healing_retries", 3, "orchestrator"),
+        "max_iterations": section.int("max_iterations", 10),
+        "api_timeout_sec": section.int("api_timeout_sec", 300),
+        "tool_timeout_sec": section.int("tool_timeout_sec", 30),
+        "max_command_bytes": section.int("max_command_bytes", 8192),
+        "max_healing_retries": section.int("max_healing_retries", 3),
         # Captured-output ceiling for the process backend (a containment control:
         # an unbounded capture becomes a prompt, a signal-sink entry and an HTTP
         # body). Was an unlinked 64 KiB literal in process_backend.py
         # (tech-debt-hardening-plan R-TDH-16).
-        "max_output_bytes": _int_value(section, "max_output_bytes", 65536, "orchestrator"),
+        "max_output_bytes": section.int("max_output_bytes", 65536),
     }
     _log_resolution("orchestrator", resolved, policy_path)
     return resolved
@@ -209,14 +259,14 @@ def nemotron_defaults(policy_path: Path | None = None) -> NemotronDefaults:
     """Request defaults for the Nemotron bridge; policy `nemotron` block."""
     section = _section("nemotron", policy_path)
     resolved: NemotronDefaults = {
-        "temperature": _float_value(section, "temperature", 0.2, "nemotron"),
+        "temperature": section.float("temperature", 0.2),
         # Was a literal 0.7 in the Node client and absent from the Python
         # payload entirely -- the two stacks sampled differently against the
         # same endpoint. One key, both readers (NEXT_STEPS.md NS-16).
-        "top_p": _float_value(section, "top_p", 0.7, "nemotron"),
-        "max_tokens": _int_value(section, "max_tokens", 4096, "nemotron"),
-        "timeout_ms": _int_value(section, "timeout_ms", 30000, "nemotron"),
-        "max_retries": _int_value(section, "max_retries", 0, "nemotron"),
+        "top_p": section.float("top_p", 0.7),
+        "max_tokens": section.int("max_tokens", 4096),
+        "timeout_ms": section.int("timeout_ms", 30000),
+        "max_retries": section.int("max_retries", 0),
     }
     _log_resolution("nemotron", resolved, policy_path)
     return resolved
@@ -224,9 +274,7 @@ def nemotron_defaults(policy_path: Path | None = None) -> NemotronDefaults:
 
 def max_tool_calls_per_task(policy_path: Path | None = None) -> int:
     """Cumulative tool-call budget per agent task; policy `agent_defaults` block."""
-    resolved = _int_value(
-        _section("agent_defaults", policy_path), "max_tool_calls_per_task", 100, "agent_defaults"
-    )
+    resolved = _section("agent_defaults", policy_path).int("max_tool_calls_per_task", 100)
     _log_resolution("agent_defaults", {"max_tool_calls_per_task": resolved}, policy_path)
     return resolved
 
@@ -235,11 +283,9 @@ def langgraph_defaults(policy_path: Path | None = None) -> LangGraphDefaults:
     """LangGraph orchestration-graph tuning; policy `langgraph` block."""
     section = _section("langgraph", policy_path)
     resolved: LangGraphDefaults = {
-        "recursion_limit": _int_value(section, "recursion_limit", 50, "langgraph"),
-        "max_concurrency": _int_value(section, "max_concurrency", 3, "langgraph"),
-        "plan_divergence_threshold": _float_value(
-            section, "plan_divergence_threshold", 0.35, "langgraph"
-        ),
+        "recursion_limit": section.int("recursion_limit", 50),
+        "max_concurrency": section.int("max_concurrency", 3),
+        "plan_divergence_threshold": section.float("plan_divergence_threshold", 0.35),
     }
     _log_resolution("langgraph", resolved, policy_path)
     return resolved
@@ -254,8 +300,8 @@ def coverage_defaults(policy_path: Path | None = None) -> CoverageThresholds:
     """
     section = _section("coverage", policy_path)
     resolved: CoverageThresholds = {
-        "lines": _int_value(section, "lines", 90, "coverage"),
-        "branches": _int_value(section, "branches", 80, "coverage"),
+        "lines": section.int("lines", 90),
+        "branches": section.int("branches", 80),
     }
     _log_resolution("coverage", resolved, policy_path)
     return resolved
@@ -271,7 +317,7 @@ def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]
     ``path_prefixes`` (those modules). One key, three readers (DEC-028).
     Absent block: {}. Malformed block: PolicyError.
     """
-    extras = _section("coverage", policy_path).get("optional_extras", {})
+    extras = _section("coverage", policy_path).optional("optional_extras", {})
     if not isinstance(extras, dict):
         raise PolicyError("policy coverage.optional_extras must be an object keyed by extra name")
     result: dict[str, dict] = {}
@@ -300,12 +346,12 @@ def agent_defaults(policy_path: Path | None = None) -> dict:
     non-numeric keys in this section (approval/evidence lists, the
     deny_unclassified_side_effects flag) are read directly by validate_policy.py
     and test_policy_consistency.py and have no numeric-default shape for
-    _int_value/_float_value to validate.
+    ``_Section.int``/``.float`` to validate.
     """
     section = _section("agent_defaults", policy_path)
     return {
-        "max_delegation_depth": _int_value(section, "max_delegation_depth", 2, "agent_defaults"),
-        "max_parallel_subagents": _int_value(section, "max_parallel_subagents", 6, "agent_defaults"),
+        "max_delegation_depth": section.int("max_delegation_depth", 2),
+        "max_parallel_subagents": section.int("max_parallel_subagents", 6),
     }
 
 
@@ -313,6 +359,6 @@ def lats_defaults(policy_path: Path | None = None) -> dict:
     """LATS/MCTS search tuning; policy `lats` block."""
     section = _section("lats", policy_path)
     return {
-        "max_budget": _int_value(section, "max_budget", 10, "lats"),
-        "exploration_weight": _float_value(section, "exploration_weight", 1.414, "lats"),
+        "max_budget": section.int("max_budget", 10),
+        "exploration_weight": section.float("exploration_weight", 1.414),
     }

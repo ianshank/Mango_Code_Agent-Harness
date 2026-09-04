@@ -10,6 +10,49 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### A policy that lost a key stops the gate instead of feeding it a literal (DEC-043)
+
+Every Python policy reader defaulted on a *present* policy missing a key.
+`section.get(key, default)` cannot tell "this adopter has no policy file, so use
+the built-in" from "the policy governing this run no longer states this", and it
+answered the literal for both. The Node reader has thrown for the second case
+since it shipped (`policy.ts:58-69`), so the two stacks disagreed about whether
+a governance policy may be incomplete.
+
+The substituted value is always a *plausible* one, which is what makes the
+failure silent. Deleting `orchestrator.max_iterations` returned 10 and the loop
+ran on. Deleting `coverage.lines` returned 90 while the file a reviewer had been
+pointed at said nothing about coverage. Worst was
+`load_protected_patterns`, whose `[".github/**"]` fallback left one pattern
+matching — so the run printed `[PASS] Protected Paths` with the enforcement
+layer, the agent control surface and the runtime gates all unprotected.
+
+`policy_loader` resolves a block through `_Section`, which carries the data and
+whether a file backs it, so one call site expresses both outcomes and no
+accessor restates the rule. `coverage.optional_extras` keeps a separate
+`.optional` accessor: "this deployment declares no extras" is a statement, not a
+hole. `validate_invariants` drops both defaults.
+
+**Behaviour change.** `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and
+`MAX_SHIM_LINES` may now only *tighten* a budget; a loosening value is ignored
+and logged. They were returned verbatim, so anyone able to set an environment
+variable could switch a gate off while it went on printing its PASS line — and a
+gate whose report is indistinguishable from a real pass is worse than no gate,
+because it is trusted. A stricter local run still works.
+
+`governance/verify_zero_skips.py` resolves its decision-ID grammar on first use
+rather than at import. `_decision_id_regex` raises `SystemExit` on a malformed
+policy, which is right for a gate and fatal for an import: at module scope every
+importer inherited that exit as its own crash, with no call in the traceback
+that had asked for the grammar.
+
+Absence remains the adopter path throughout, and each fail-closed test is paired
+with a control proving the built-in defaults still apply when no policy file
+exists. Six mutation proofs, one of which failed on its first attempt: the
+import-purity test set `_POLICY_PATH` *after* importing, so it passed with the
+fix reverted. A module-scope read has no "after import"; it now stages a copy of
+the module beside a malformed policy.
+
 ### The containment layer grades what the shell produces, not what the model typed (DEC-042)
 
 Five defects on the agent's own product path, each reproduced by running the
