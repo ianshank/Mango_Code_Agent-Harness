@@ -102,7 +102,20 @@ def record_collect_skip(report: pytest.CollectReport) -> None:
         SKIP_ROWS.append(event)
 
 
+def is_xdist_worker(config: pytest.Config) -> bool:
+    """True inside a pytest-xdist worker process; xdist stamps `workerinput` on its config."""
+    return hasattr(config, "workerinput")
+
+
 def write_skip_evidence(session: pytest.Session) -> None:
+    # Under xdist every worker forwards its runtime and collection reports to
+    # the controller, so the controller's SKIP_ROWS is the complete set and the
+    # controller's session end is the last to run. A worker writing its partial
+    # set to the same path would only ever be overwritten -- unless the ordering
+    # ever changed, at which point the gate would read a fragment and pass on it.
+    # Writing from the controller alone removes that dependence on ordering.
+    if is_xdist_worker(session.config):
+        return
     path = _skip_events.events_path()
     count = _skip_events.write_events(path, SKIP_ROWS)
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")

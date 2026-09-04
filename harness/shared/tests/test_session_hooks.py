@@ -11,6 +11,7 @@ the original gap with a real pytest run over two sibling suites.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -282,3 +283,63 @@ class TestMainLoggerIsolation:
         # The autouse fixture unwinds both on teardown; the sibling test above is
         # what observes it, and pytest runs them in the order written.
         assert main.propagate is False
+
+
+class TestEvidenceIsCompleteAndWrittenOnceUnderXdist:
+    """`make coverage-python` runs under `-n auto` (audit H8), and that run is
+    also the one INV-2 reads. Measured before enabling it: xdist forwards both
+    runtime and collection-time skip reports to the controller. The subprocess
+    test below is that measurement, kept as a gate; the unit test pins that only
+    the controller writes, so the file's contents never depend on which process
+    happened to finish last.
+    """
+
+    def test_both_kinds_of_skip_reach_the_evidence_file_under_two_workers(
+        self, pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pytester.makeconftest(ROOT_CONFTEST.read_text(encoding="utf-8"))
+        pytester.makepyfile(
+            test_collect_skip=(
+                "import pytest\n"
+                "pytest.importorskip('a_module_that_does_not_exist_xyz')\n"
+                "def test_never_runs(): assert True\n"
+            ),
+            test_runtime=(
+                "import pytest\n"
+                "@pytest.mark.skip(reason='runtime (DEC-026)')\n"
+                "def test_runtime_skip(): ...\n"
+                "def test_ok(): assert True\n"
+                "def test_ok2(): assert True\n"
+            ),
+        )
+        events = pytester.path / "skips.tsv"
+        monkeypatch.setenv(_skip_events.SKIP_EVENTS_ENV, str(events))
+        monkeypatch.setenv("PYTHONPATH", str(REPO))
+        monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+        result = pytester.runpytest_subprocess("-p", "no:cacheprovider", "-p", "xdist", "-n", "2", ".")
+        result.assert_outcomes(passed=2, skipped=2)
+        rows = [line.split("\t") for line in events.read_text(encoding="utf-8").splitlines()]
+        assert sorted(row[0] for row in rows) == ["test_collect_skip.py", "test_runtime.py::test_runtime_skip"], (
+            "a skip produced on an xdist worker left no evidence row on the controller"
+        )
+
+    def test_a_worker_session_writes_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        events = tmp_path / "skips.tsv"
+        monkeypatch.setenv(_skip_events.SKIP_EVENTS_ENV, str(events))
+
+        class _Config:
+            workerinput = {"workerid": "gw0"}
+
+        class _Session:
+            config = _Config()
+
+        _session_hooks.write_skip_evidence(_Session())  # type: ignore[arg-type]
+        assert not events.exists(), "an xdist worker wrote a partial evidence file"
+
+    def test_the_controller_is_not_mistaken_for_a_worker(self) -> None:
+        """The control: a config without `workerinput` is the process that writes."""
+
+        class _Config:
+            pass
+
+        assert _session_hooks.is_xdist_worker(_Config()) is False  # type: ignore[arg-type]

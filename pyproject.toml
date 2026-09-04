@@ -45,10 +45,18 @@ markers = [
 # with `pytest -m live`. Each live suite also carries its own skipif, so the
 # two mechanisms are belt and braces rather than one point of failure.
 # --disable-socket is the egress floor (R-EGF-1): an attempted connection
-# raises instead of succeeding quietly. Tests that genuinely need a socket
-# carry @pytest.mark.enable_socket at the test or class, so every exception is
-# visible in the test rather than in this file (R-EGF-6).
-addopts = "--strict-markers -v --tb=short -m 'not live' --disable-socket"
+# raises instead of succeeding quietly. --allow-unix-socket keeps that floor
+# intact -- AF_UNIX cannot leave the host, so it is not egress -- while letting
+# asyncio's self-pipe socketpair and anyio's BlockingPortal (which FastAPI's
+# TestClient drives the app through) work without a per-test exemption. Before
+# it, 35 tests carried @pytest.mark.enable_socket for what was really a unix
+# socketpair, and the marks re-opened TCP as well (audit M12). A test that
+# genuinely needs TCP -- the egress-floor proof itself, and the live suites --
+# still carries @pytest.mark.enable_socket at the test or class with the TCP
+# need named, so every remaining exception is visible in the test rather than
+# in this file (R-EGF-6). test_egress_floor.py proves both halves: a TCP socket
+# still raises, a unix socketpair does not.
+addopts = "--strict-markers -v --tb=short -m 'not live' --disable-socket --allow-unix-socket"
 
 [tool.coverage.run]
 # branch = true makes coverage.py record branch arcs. Note the knock-on effect:

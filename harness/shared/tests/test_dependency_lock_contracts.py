@@ -262,7 +262,11 @@ class TestAuditingTheLockAloneIsNotAPartialAudit:
 
         makefile = (REPO / "Makefile").read_text(encoding="utf-8")
         recipe = makefile.split("audit-python:", 1)[1].split("\n.PHONY", 1)[0]
-        assert f"pip-audit --requirement {LOCK_NAME}" in recipe, (
+        # The scanner is invoked through the interpreter (`$(PIP_AUDIT)`, which
+        # is `python -m pip_audit`; DEC-013), so accept that spelling and the
+        # bare one, but require the lock as the sole requirement input.
+        scans_the_lock = rf"(?:\$\(PIP_AUDIT\)|pip-audit|-m pip_audit)\s+--requirement {re.escape(LOCK_NAME)}"
+        assert re.search(scans_the_lock, recipe), (
             "audit-python must scan the lock; a range file alongside it puts pip into "
             "--require-hashes mode and fails the whole scan"
         )

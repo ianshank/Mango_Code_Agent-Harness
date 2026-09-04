@@ -11,9 +11,25 @@ pytest==9.0.3; python_version >= "3.10"
 pytest==8.4.2; python_version < "3.10"
 pytest-cov==7.1.0
 pytest-mock==3.15.1
+# Order randomisation (audit H8): `make test-python`/`coverage-python` pass
+# `-p randomly`, so every run shuffles under a seed printed in the header and an
+# order coupling reproduces with `--randomly-seed=N`. The pin forks on the
+# interpreter like pytest's: 4.0 raised the floor to Python >=3.10, so the 3.9
+# leg keeps 3.16.0 until the floor moves (DEC-028).
+pytest-randomly==5.0.0; python_version >= "3.10"
+pytest-randomly==3.16.0; python_version < "3.10"
+# Parallel runs (audit H8): both Python runners pass `-n auto`. Enabled on the
+# coverage run only after measuring that pytest-cov combines the workers' data
+# and that INV-2's skip evidence stays complete under xdist (see the Makefile).
+pytest-xdist==3.8.0
 # Egress floor (R-EGF-1): sockets are disabled by default in addopts so an
 # attempted connection fails the test instead of succeeding quietly.
 pytest-socket==0.7.0
+# The audit gate's scanner (audit M15). Declared here rather than installed by
+# name in the workflow so it lands in the hashed lock and installs with
+# `--require-hashes` like every other tool; the Makefile reads this pin back as
+# PIP_AUDIT_VERSION. 2.9.0 is the newest release still declaring Python >=3.9.
+pip-audit==2.9.0
 # tomllib entered the stdlib in 3.11; tomli is its backport. The
 # configuration-liveness gates read pyproject.toml, so without this they would
 # fail to import on the 3.9 and 3.10 matrix legs.
