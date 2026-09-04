@@ -187,19 +187,27 @@ class _Section:
     outcomes, so every accessor below gets the behaviour without restating it.
     """
 
-    __slots__ = ("_data", "_name", "_backed")
+    #: The path is carried so the error can name it. The first version said
+    #: "missing from a present policy at this path" and then named no path,
+    #: which is the least useful shape an error can take: it tells the reader a
+    #: file is at fault and withholds which one. Every accessor takes an
+    #: optional `policy_path`, and the tests use `tmp_path` fixtures, so "which
+    #: policy?" is a real question at the moment the error is read. Reported by
+    #: a review bot on this PR.
+    __slots__ = ("_data", "_name", "_backed", "_path")
 
-    def __init__(self, data: dict, name: str, backed: bool) -> None:
+    def __init__(self, data: dict, name: str, backed: bool, path: Path) -> None:
         self._data = data
         self._name = name
         self._backed = backed
+        self._path = path
 
     def _value(self, key: str, default: object) -> object:
         if key in self._data:
             return self._data[key]
         if self._backed:
             raise PolicyError(
-                f"policy {self._name}.{key} is missing from a present policy at this path; "
+                f"policy {self._name}.{key} is missing from the policy at {self._path}; "
                 "refusing to substitute the built-in default, which would let a gate "
                 "report success against a threshold the policy no longer states"
             )
@@ -233,7 +241,7 @@ def _section(name: str, policy_path: Path | None = None) -> _Section:
     data = load_policy(path).get(name, {}) if backed else {}
     if not isinstance(data, dict):
         raise PolicyError(f"policy section {name!r} is not an object")
-    return _Section(data, name, backed)
+    return _Section(data, name, backed, path)
 
 
 def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:

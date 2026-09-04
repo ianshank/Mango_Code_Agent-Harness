@@ -340,8 +340,13 @@ class TestAPresentPolicyMissingAKeyFailsClosed:
         path = self._policy(tmp_path, block, {})
         with pytest.raises(PolicyError) as excinfo:
             getattr(policy_loader, accessor)(path)
-        assert key in str(excinfo.value), "the error must name the key that is missing"
-        assert "present policy" in str(excinfo.value)
+        message = str(excinfo.value)
+        assert key in message, "the error must name the key that is missing"
+        # The path, not the phrase "present policy". The message used to say
+        # that and name no file; naming the file is what makes the error
+        # actionable, and asserting on the phrase would have pinned the weaker
+        # wording in place. Reported by a review bot on this PR.
+        assert str(path) in message, "the error must name the policy it is about"
 
     @pytest.mark.parametrize(("accessor", "block", "key"), ACCESSORS)
     def test_an_absent_policy_still_yields_the_built_in(
@@ -388,3 +393,43 @@ class TestAPresentPolicyMissingAKeyFailsClosed:
         path.write_text(json.dumps({"coverage": {"lines": 90, "branches": 80}}), encoding="utf-8")
         assert coverage_optional_extras(path) == {}
         assert coverage_defaults(path) == {"lines": 90, "branches": 80}
+
+
+class TestTheErrorNamesThePolicyItIsAbout:
+    """An error that says "a file is at fault" without saying which one.
+
+    The first version read "missing from a present policy at this path" and
+    then named no path — the least useful shape an error can take. Every
+    accessor takes an optional `policy_path` and the tests use `tmp_path`
+    fixtures, so "which policy?" is a real question at the moment it is read.
+    Reported by a review bot on this PR.
+    """
+
+    def test_the_message_contains_the_policy_path(self, tmp_path: Path) -> None:
+        path = tmp_path / "governance-policy.json"
+        path.write_text(json.dumps({"orchestrator": {}}), encoding="utf-8")
+        with pytest.raises(PolicyError) as excinfo:
+            orchestrator_defaults(path)
+        assert str(path) in str(excinfo.value)
+
+    def test_two_policies_produce_distinguishable_errors(self, tmp_path: Path) -> None:
+        """The property that makes it worth naming: with two policies in play,
+        an unnamed one leaves the reader guessing which is at fault."""
+        messages = []
+        for name in ("first", "second"):
+            path = tmp_path / f"{name}.json"
+            path.write_text(json.dumps({"coverage": {}}), encoding="utf-8")
+            with pytest.raises(PolicyError) as excinfo:
+                coverage_defaults(path)
+            messages.append(str(excinfo.value))
+        assert messages[0] != messages[1]
+        assert "first.json" in messages[0] and "second.json" in messages[1]
+
+    def test_the_default_path_is_named_too(self) -> None:
+        """The accessor called with no argument still resolves a real file, and
+        the error must name that one rather than fall silent."""
+        from harness.shared import policy_loader
+
+        section = policy_loader._section("orchestrator")
+        with pytest.raises(PolicyError, match=r"governance-policy\.json"):
+            section.int("a-key-no-policy-states", 1)
