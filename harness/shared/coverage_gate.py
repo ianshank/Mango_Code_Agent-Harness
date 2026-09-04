@@ -45,7 +45,7 @@ try:
     from harness.shared.coverage_scope import (
         _waiving_extra as _waiving_extra,
     )
-    from harness.shared.json_logging import resolve_log_level
+    from harness.shared.json_logging import configure_gate_process_logging
 except ImportError:  # direct `python harness/shared/coverage_gate.py`
     from coverage_scope import (  # type: ignore[no-redef]
         OPTIONAL_EXTRAS_KEY,
@@ -58,7 +58,7 @@ except ImportError:  # direct `python harness/shared/coverage_gate.py`
     from coverage_scope import _importable as _importable  # type: ignore[no-redef]
     from coverage_scope import _load_json_object as _load_json_object  # type: ignore[no-redef]
     from coverage_scope import _waiving_extra as _waiving_extra  # type: ignore[no-redef]
-    from json_logging import resolve_log_level  # type: ignore[no-redef]
+    from json_logging import configure_gate_process_logging  # type: ignore[no-redef]
 
 #: Re-exported so `coverage_gate.<name>` keeps working for every existing caller
 #: and test after the scope concern moved to `coverage_scope.py`. The split is an
@@ -200,5 +200,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=resolve_log_level(), format="%(levelname)s: %(message)s")
+    configure_gate_process_logging()
     sys.exit(main())

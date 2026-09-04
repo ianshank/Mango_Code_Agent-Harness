@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,11 @@ class ExecutionLoop:
         self.api_timeout = api_timeout
         self.max_tool_calls_per_task = max_tool_calls_per_task
         self.conversation_history: list[dict[str, Any]] = []
+        #: One identifier per `execute_loop`, carried by every structured model
+        #: and tool event of that run (2026 standards audit H6). A bare
+        #: `execute_agent` outside a loop mints one and keeps it until the next
+        #: loop replaces it, so no event is ever emitted without one.
+        self.run_id: str | None = None
 
         if complete_chat_fn is None:
             self.complete_chat_fn = complete_chat
@@ -118,6 +124,34 @@ class ExecutionLoop:
     def _dump_debug_history(self, agent_name: str) -> None:
         write_dump(self.conversation_history, agent_name, api_key=self.api_key)
 
+    def _ensure_run_id(self) -> str:
+        if self.run_id is None:
+            self.run_id = uuid.uuid4().hex
+        return self.run_id
+
+    @staticmethod
+    def _log_model_call(
+        run_id: str, agent_name: str, iteration: int, started: float, response: Any
+    ) -> None:
+        """One structured event per model round-trip: who, which turn, how long,
+        and the token counts the response reports. Never the messages."""
+        usage = response.get("usage") if isinstance(response, dict) else None
+        if not isinstance(usage, dict):
+            usage = {}
+        logger.debug(
+            "model call by %s (iteration %d)",
+            agent_name, iteration,
+            extra={
+                "event": "model_call",
+                "run_id": run_id,
+                "agent": agent_name,
+                "iteration": iteration,
+                "latency_ms": int((time.monotonic() - started) * 1000),
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+            },
+        )
+
     def execute_agent(
         self,
         agent_name: str,
@@ -125,6 +159,7 @@ class ExecutionLoop:
         tools: list[dict[str, Any]] | None = None,
         budget: ToolBudget | None = None,
     ) -> str:
+        run_id = self._ensure_run_id()
         self.dispatcher.set_active_role(agent_name)
         self.hook_runner.run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
@@ -138,7 +173,8 @@ class ExecutionLoop:
         active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
         turn_budget = budget if budget is not None else ToolBudget(self.max_tool_calls_per_task)
 
-        for _iteration in range(self.max_iterations):
+        for iteration in range(self.max_iterations):
+            started = time.monotonic()
             try:
                 kwargs: dict[str, Any] = {
                     "messages": self.conversation_history,
@@ -156,6 +192,7 @@ class ExecutionLoop:
             except Exception as e:
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
+            self._log_model_call(run_id, agent_name, iteration, started, response)
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
@@ -178,7 +215,7 @@ class ExecutionLoop:
                     f"Agent {agent_name} exceeded the tool-call budget "
                     f"({turn_budget.limit} per task; policy agent_defaults.max_tool_calls_per_task)."
                 )
-            self.dispatcher.dispatch(self.conversation_history, tool_calls)
+            self.dispatcher.dispatch(self.conversation_history, tool_calls, run_id=run_id)
 
         self.hook_runner.run_hook(f"post-{agent_name}-run", status="timeout")
         raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
@@ -192,9 +229,18 @@ class ExecutionLoop:
         return derive_verdict(runner.run(self.verification_cwd))
 
     def execute_loop(self, initial_task: str) -> LoopOutcome:
+        self.run_id = uuid.uuid4().hex
+        # One budget for the task, spent by all three roles. `tool_budget.py`
+        # was written for exactly this and the loop then handed each role a
+        # fresh allowance, so `max_tool_calls_per_task` was enforced as three
+        # times its declared value (2026 standards audit M1).
+        budget = ToolBudget(self.max_tool_calls_per_task)
+        logger.debug(
+            "loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit}
+        )
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
         plan_started = time.monotonic()
-        plan = self.execute_agent("planner", planner_prompt, tools=[])
+        plan = self.execute_agent("planner", planner_prompt, tools=[], budget=budget)
         logger.info("Plan generated: %d bytes", len(plan))
 
         if shadow_planner_enabled():
@@ -216,11 +262,11 @@ class ExecutionLoop:
                 logger.exception("Orchestrator-level guard caught a shadow planner failure")
 
         reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
-        code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt)
+        code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt, budget=budget)
         logger.info("Code generation completed via tools: %d bytes", len(code_output))
 
         verifier_prompt = VERIFIER_PROMPT_TEMPLATE.format(code_output=code_output)
-        verification = self.execute_agent("verifier", verifier_prompt)
+        verification = self.execute_agent("verifier", verifier_prompt, budget=budget)
         logger.info("Verification result: %d bytes", len(verification))
 
         return LoopOutcome(self._harness_verdict(), verification, plan, code_output)

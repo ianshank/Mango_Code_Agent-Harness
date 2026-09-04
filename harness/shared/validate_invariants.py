@@ -352,14 +352,11 @@ def main(workspace_dir: Path | None = None, policy_path: Path | None = None) -> 
 
 if __name__ == "__main__":
     try:
-        from harness.shared.json_logging import resolve_log_level
+        from harness.shared.json_logging import configure_gate_process_logging
     except ImportError:  # direct `python harness/shared/validate_invariants.py`
-        from json_logging import resolve_log_level  # type: ignore[no-redef]
-    # resolve_log_level degrades an unusable level to the default; passing the raw
-    # env string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a
-    # red gate -- misconfigured verbosity must never fail a governance gate.
-    logging.basicConfig(
-        level=resolve_log_level(),
-        format="%(levelname)s: %(message)s",
-    )
+        from json_logging import configure_gate_process_logging  # type: ignore[no-redef]
+    # The shared gate sink degrades an unusable level to the default; passing the
+    # raw env string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS
+    # into a red gate -- misconfigured verbosity must never fail a governance gate.
+    configure_gate_process_logging()
     sys.exit(main())

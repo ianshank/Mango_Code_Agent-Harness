@@ -170,6 +170,7 @@ class TestGraphPolicyFailClosed:
                     "orchestrator": {
                         "max_iterations": 42,
                         "api_timeout_sec": 301,
+                        "verification_timeout_sec": 901,
                         "tool_timeout_sec": 31,
                         "max_command_bytes": 8193,
                         "max_healing_retries": 4,

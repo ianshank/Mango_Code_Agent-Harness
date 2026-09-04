@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from harness.shared.agent_authority import tool_is_permitted
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
+from harness.shared.tool_arg_validation import invalid_arguments_reason, parameter_schemas
 from harness.shared.tool_dispatch import (
     DEFAULT_HYPOTHESIS_CONFIDENCE,
     _normalize_tool_arguments,
@@ -21,6 +23,7 @@ from harness.shared.tool_executors import (
     execute_run_command,
     execute_write_file,
 )
+from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +36,18 @@ class ToolDispatcher:
         workspace_dir: Path,
         broker: ExecutionBroker,
         tool_timeout: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> None:
         self.workspace_dir = workspace_dir
         self.broker = broker
         self.tool_timeout = tool_timeout
         self.active_role: str = "nemotron-reasoner"
+        # The schemas the model is shown are the schemas its arguments are
+        # checked against (2026 standards audit H7): one declaration, in
+        # `tool_schemas`, read by both the offer and the check.
+        self.parameter_schemas: dict[str, Mapping[str, Any]] = parameter_schemas(
+            NEMOTRON_TOOLS if tools is None else tools
+        )
 
         self.tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
             "write_file": lambda args: self._execute_write_file(
@@ -96,35 +106,76 @@ class ToolDispatcher:
             self.tool_timeout,
         )
 
+    def _argument_denial(self, func_name: str, args: Mapping[str, Any]) -> str | None:
+        """Why the call must not reach its handler, or ``None`` when it may.
+
+        A handled tool with no advertised schema is refused too: the schema is
+        what the model was told, and a call that can only be checked against
+        nothing is not a call this module can vouch for.
+        """
+        schema = self.parameter_schemas.get(func_name)
+        if schema is None:
+            return f"tool {func_name!r} advertises no parameter schema"
+        return invalid_arguments_reason(schema, args)
+
     def dispatch(
-        self, messages: list[dict[str, Any]], tool_calls: list[dict[str, Any]]
+        self,
+        messages: list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
+        run_id: str | None = None,
     ) -> None:
         """Execute each requested tool via the registry and append the results
-        to ``messages`` so they feed back to the model."""
+        to ``messages`` so they feed back to the model.
+
+        One structured event per call carries ``run_id``, the tool name, whether
+        the call was permitted, its outcome and its duration -- and nothing
+        from the arguments or the result (2026 standards audit H6). Denials
+        are logged at WARNING, the rest at DEBUG.
+        """
         for tc in tool_calls:
+            started = time.monotonic()
             tc_id = tc.get("id")
             func_obj = tc.get("function") or {}
             func_name = str(func_obj.get("name") or "")
             args = _normalize_tool_arguments(func_obj.get("arguments"), func_name)
 
             handler = self.tool_handlers.get(func_name)
+            permitted = True
             if handler is not None and not tool_is_permitted(self.active_role, func_name):
-                logger.warning(
-                    "Refused tool %s for role %s: not permitted by the authority model",
-                    func_name, self.active_role,
-                )
-                handler = None
+                permitted, outcome = False, "denied_role"
                 tool_result = (
                     f"Error: tool '{func_name}' is not available to the {self.active_role} role"
                 )
             elif handler is None:
+                permitted, outcome = False, "unknown_tool"
                 tool_result = f"Error: Unknown tool '{func_name}'"
             else:
-                try:
-                    tool_result = handler(args)
-                except Exception as exc:
-                    logger.exception("Tool %s raised", func_name)
-                    tool_result = f"Error executing tool '{func_name}': {exc}"
+                reason = self._argument_denial(func_name, args)
+                if reason is not None:
+                    permitted, outcome = False, "invalid_arguments"
+                    tool_result = f"Error: invalid_arguments: {reason}"
+                else:
+                    try:
+                        tool_result = handler(args)
+                        outcome = "executed"
+                    except Exception as exc:
+                        logger.exception("Tool %s raised", func_name)
+                        tool_result = f"Error executing tool '{func_name}': {exc}"
+                        outcome = "raised"
 
+            event = logger.debug if permitted else logger.warning
+            event(
+                "tool call %s: %s for role %s",
+                func_name, outcome, self.active_role,
+                extra={
+                    "event": "tool_call",
+                    "run_id": run_id,
+                    "tool": func_name,
+                    "role": self.active_role,
+                    "permitted": permitted,
+                    "outcome": outcome,
+                    "duration_ms": int((time.monotonic() - started) * 1000),
+                },
+            )
             logger.info("Executed %s. Result length: %d", func_name, len(tool_result))
             messages.append({"role": "tool", "tool_call_id": tc_id, "name": func_name, "content": tool_result})

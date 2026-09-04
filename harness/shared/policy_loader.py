@@ -42,6 +42,7 @@ class OrchestratorLimits(TypedDict):
 
     max_iterations: int
     api_timeout_sec: int
+    verification_timeout_sec: int
     tool_timeout_sec: int
     max_command_bytes: int
     max_healing_retries: int
@@ -250,6 +251,15 @@ def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits
     resolved: OrchestratorLimits = {
         "max_iterations": section.int("max_iterations", 10),
         "api_timeout_sec": section.int("api_timeout_sec", 300),
+        # The ceiling on the harness's own verification run (`make test-python`
+        # through `VerificationRunner`), which is a test suite and not a model
+        # round-trip: it used to borrow `api_timeout_sec`, so a runner about
+        # four times slower than the 4-core container that finishes the suite
+        # in 70-85 s turned a passing change into BLOCKED/harness_fault
+        # (2026 standards audit H16). 900 s is roughly ten times the measured
+        # duration: enough for a cold cache, a shared runner and a suite that
+        # has doubled, while still bounding a hung subprocess (R-VP-5).
+        "verification_timeout_sec": section.int("verification_timeout_sec", 900),
         "tool_timeout_sec": section.int("tool_timeout_sec", 30),
         "max_command_bytes": section.int("max_command_bytes", 8192),
         "max_healing_retries": section.int("max_healing_retries", 3),

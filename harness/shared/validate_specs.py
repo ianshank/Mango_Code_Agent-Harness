@@ -18,9 +18,11 @@ import sys
 from pathlib import Path
 
 try:
+    from harness.shared.json_logging import configure_gate_process_logging
     from harness.shared.plan_rules import REQ_PATTERN, structural_findings, structural_line
 except ImportError:  # pragma: no cover - direct `python harness/shared/validate_specs.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from harness.shared.json_logging import configure_gate_process_logging
     from harness.shared.plan_rules import REQ_PATTERN, structural_findings, structural_line
 
 logger = logging.getLogger(__name__)
@@ -81,5 +83,6 @@ def main(specs_dir: Path | None = None) -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    # Level from LOG_LEVEL, not a hard-coded INFO (2026 standards audit M25).
+    configure_gate_process_logging()
     sys.exit(main())

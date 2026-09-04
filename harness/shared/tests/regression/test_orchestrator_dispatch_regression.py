@@ -91,7 +91,13 @@ class TestHandlerFailureContract:
             raise TimeoutError("could not acquire the register lock")
 
         orch.dispatcher.tool_handlers["knowledge_gap_log"] = boom
-        orch.dispatcher.dispatch(messages, [tool_call("knowledge_gap_log", {"question": "q"})])
+        # A schema-complete payload: since the H7 dispatch check, a call missing
+        # a required key is answered before any handler runs, and this test is
+        # about the handler *raising* -- the payload has to reach it.
+        orch.dispatcher.dispatch(
+            messages,
+            [tool_call("knowledge_gap_log", {"question": "q", "what_needed": "w", "proposed_approach": "p"})],
+        )
 
         results = _tool_messages(messages)
         assert len(results) == 1, "the wire protocol requires one tool message per tool call"
@@ -104,7 +110,11 @@ class TestHandlerFailureContract:
         orch.dispatcher.tool_handlers["knowledge_gap_log"] = lambda _a: (_ for _ in ()).throw(RuntimeError("nope"))
 
         calls = [
-            tool_call("knowledge_gap_log", {"question": "q"}, call_id="c1"),
+            tool_call(
+                "knowledge_gap_log",
+                {"question": "q", "what_needed": "w", "proposed_approach": "p"},
+                call_id="c1",
+            ),
             tool_call("does_not_exist", {}, call_id="c2"),
             tool_call("write_file", {"filepath": "ok.txt", "content": "x"}, call_id="c3"),
         ]

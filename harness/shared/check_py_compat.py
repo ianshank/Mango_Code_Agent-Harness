@@ -46,7 +46,7 @@ try:
     from harness.shared.ast_visitors import (
         has_future_annotations as has_future_annotations,
     )
-    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
+    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
     from ast_visitors import (  # type: ignore[no-redef]
         COMMON_TYPE_NAMES as COMMON_TYPE_NAMES,
@@ -63,7 +63,7 @@ except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is 
     from ast_visitors import (  # type: ignore[no-redef]
         has_future_annotations as has_future_annotations,
     )
-    from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
+    from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -254,9 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    # resolve_log_level degrades an unusable level to the default; passing the raw
-    # string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a red gate.
-    logging.basicConfig(level=resolve_log_level(str(args.log_level)), format="%(levelname)s: %(message)s")
+    # The shared gate sink degrades an unusable level to the default; passing the
+    # raw string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a
+    # red gate. It also defers to a process that already configured logging.
+    configure_gate_process_logging(args.log_level)
 
     repo_root = args.repo_root.resolve()
     min_version = resolve_min_version(repo_root, args.min_version)
