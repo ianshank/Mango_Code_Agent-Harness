@@ -256,17 +256,21 @@ graph TD
 
 ### 2.2 API surface (`harness/api_server/main.py`)
 
-The FastAPI gateway exposes one orchestration route and serves the static UI:
+The FastAPI gateway exposes one orchestration route, two unauthenticated probe
+routes, and serves the static UI:
 
 - `/api/orchestrate` — `POST`, guarded by the `X-API-Key` header (`API_SERVER_KEY`,
   compared with `secrets.compare_digest`); runs `MangoMASOrchestrator.execute_loop`
-  in a threadpool and returns the redacted history with the earned verdict.
+  in a threadpool and returns the redacted history, typed per role
+  (`harness/api_server/messages.py`), with the earned verdict.
+- `/healthz` — `GET`, liveness: 200 whenever the process answers.
+- `/readyz` — `GET`, readiness: 200 only when `API_SERVER_KEY` is set and the
+  governance policy loads; 503 with `{"api_key": bool, "policy": bool}` otherwise,
+  never a path.
 - `/` — the static dashboard under `harness/api_server/static/`, mounted with
   `html=True`; the directory is created by the lifespan hook, not at import.
 
-Health and readiness routes are being added by the 2026 remediation (B3/M14
-slice); they are not listed here until they exist, because every backticked path
-in this section is asserted against `app.routes` by
+Every backticked path in this section is asserted against `app.routes` by
 `TestDocumentedRoutesExist` in `test_documentation_truth.py`. An earlier revision
 listed three routes — a health probe, a versioned orchestrator-run path and a
 models list — none of which the server has ever registered (2026 standards
