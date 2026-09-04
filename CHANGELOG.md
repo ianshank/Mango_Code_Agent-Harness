@@ -23,9 +23,9 @@ That is a better result than the plan expected and a different one. It proves th
 pin form survives Dependabot's own rewrite as a one-line diff — the thing R-CQ-9
 needed and could not check until a bot did it — and it leaves five *accurate*
 major-bump proposals rather than five stale ones. DEC-045 deferred those majors
-deliberately, and `dependabot.yml` keeps the `github-actions` ecosystem enabled
-to "keep the majors moving", so they stay open as the queue for that deferred
-decision. Closing them as superseded would have recorded a false reason.
+deliberately, and `.github/dependabot.yml` keeps the `github-actions` ecosystem
+enabled to "keep the majors moving", so they stay open as the queue for that
+deferred decision. Closing them as superseded would have recorded a false reason.
 
 **#67 (mypy 1.11.2 → 2.3.1) is closed as blocked on NS-6**, measured rather than
 assumed. mypy 2.3.1 declares `Requires-Python >=3.10`, and
@@ -42,9 +42,9 @@ configurable around it; the floor has to move first.
 ecosystem stopped new PRs but could not close the ones already open, so four
 outlived the decision that retired them.
 
-**#69, #77, #78 stay open.** They are `npm`, an ecosystem `dependabot.yml`
-deliberately keeps; closing PRs the configuration exists to produce would
-contradict the configuration rather than tidy it.
+**#69, #77, #78 stay open.** They are `npm`, an ecosystem
+`.github/dependabot.yml` deliberately keeps; closing PRs the configuration
+exists to produce would contradict the configuration rather than tidy it.
 
 Five closed, eight open with a recorded reason each — not R-CQ-2's twelve
 closures.
