@@ -190,6 +190,7 @@ Severity reflects impact on the "meets 2026 standards" question, not merge risk 
 
 ### Low (abbreviated)
 
+- The test-suite egress floor is Python-socket-level only: `regression/test_guard_reachability_regression.py::test_the_same_identity_may_run_an_unguarded_command` executes `curl https://example.test` through the real `ExecutionBroker` and `ProcessBackend` with `human_approved: True`, and the child `curl` makes a genuine outbound `CONNECT` (observed at this container's egress proxy during `make coverage-python`). `pytest-socket` patches the interpreter's socket module and cannot see a subprocess. Put a refusing `curl` shim first on `PATH` in that test, or run the backend under `unshare -n` where available. `[Certain]`
 - `make secrets` fails after `make secrets-install` because `GOPATH/bin` is never added to `PATH` (reproduced). Add it to the recipe. `[Certain]`
 - `.claude/hooks/session-start.sh` installs unhashed `requirements-dev.txt` instead of `--require-hashes -r requirements-lock.txt`; in this container it aborted silently. `[Certain]`
 - Root `Makefile` lacks `.SHELLFLAGS := -eu -o pipefail -c` that both stack Makefiles set. `[Certain]`

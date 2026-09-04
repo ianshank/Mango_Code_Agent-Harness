@@ -455,7 +455,11 @@ PR per numbered step.
     `[Unreleased]` cap (H15); OS sandbox for `ProcessBackend` (B4 permanent);
     eval harness and nightly live smoke (H10); `mutmut` score floor (H9);
     context budget (H4); HITL interrupts (H5); `ChatProvider` boundary (M5);
-    meta-tool readers (M4); runtime-specific personas (M2).
+    meta-tool readers (M4); runtime-specific personas (M2); a subprocess-level
+    egress floor for the suite (a refusing `curl` shim on `PATH` or
+    `unshare -n` around `ProcessBackend` in tests), since `pytest-socket` cannot
+    see a child process and one regression test currently makes a real
+    outbound connection attempt (audit Low list).
 
 ## Files touched
 
