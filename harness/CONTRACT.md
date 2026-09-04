@@ -141,6 +141,38 @@ Full `--strict` (604) and `--disallow-untyped-defs` (533) are deferred: both
 are dominated by `no-untyped-def` on test functions, which buys annotations
 rather than correctness.
 
+## Policy resolution: what an adopter can rely on (`DEC-043`)
+
+Two states an adopter must be able to tell apart, because the harness now does:
+
+- **No `governance-policy.json` at all** — the adopter path. Every accessor
+  returns its built-in default and the harness works. This is supported and
+  covered by a control test per accessor; it is why the fix below is not simply
+  "raise when a key is missing".
+- **A policy file that exists but does not state a key an accessor reads** —
+  fail closed. `policy_loader` raises `PolicyError`; `validate_invariants` exits
+  1. Nothing substitutes a built-in, because the substituted value is always a
+  *plausible* one and the gate would go on reporting PASS against a threshold
+  the policy no longer declares. `policy.ts:58-69` has behaved this way since it
+  shipped; this brings the Python readers into line.
+
+Consequences for an adopter standing the harness up:
+
+- A policy is all-or-nothing per accessor. Adopt a block and you must state
+  every key it reads; the error names the missing key.
+- `"protected_paths": []` is honoured — an explicit "this adopter protects
+  nothing yet" is a decision. A *missing* `protected_paths` is not, and stops
+  the run.
+- `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and `MAX_SHIM_LINES` may only
+  **tighten** the corresponding budget. A value at or above the policy's is
+  ignored and logged. A stricter local run or a bisect still works; switching a
+  size gate off from the environment does not, and never did legitimately — the
+  gate went on printing its PASS line either way, which is the property that
+  made it worth removing.
+- Gate modules perform no policy I/O at import. `verify_zero_skips` resolves its
+  decision-ID grammar on first use, so a malformed policy stops the gate rather
+  than terminating any process that merely imported it.
+
 ## Configuration liveness
 
 Suppressions and allowlists are write-only unless something checks them, so two

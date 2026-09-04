@@ -241,6 +241,15 @@ tree dirty (`git checkout` cannot restore an untracked file, which happened
 here), and a "proof" run against a stale artifact — and
 `test_agent_surface_liveness.py` classifies it. **Depends on** nothing.
 
+**Landed**, and the skill has since grown two more failure modes it hit while
+being used, both the same shape: *an assertion looser than the property it
+claims to pin*. A fixture whose value coincides with the built-in default
+(asserting a timeout equals `orchestrator.api_timeout_sec`, which is 300, while
+the mutation restores the literal 300) and a probe that sets state after the
+import the mutation happens at. Both were caught by the procedure itself and
+recorded rather than quietly fixed — a proof that needed two attempts names a
+trap the next author would otherwise walk into.
+
 ### NS-21 · The hook surface has one live hook and no loop
 
 Five of six `.mango/hooks/` scripts are dormant by DEC-003, and the sixth

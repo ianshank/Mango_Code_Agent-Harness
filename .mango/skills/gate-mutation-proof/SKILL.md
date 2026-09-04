@@ -65,10 +65,10 @@ cp /tmp/target.bak harness/shared/target.py          # step 3
 $GATE                                                # step 4: MUST pass
 ```
 
-## Two failure modes this procedure has itself
+## Four failure modes this procedure has itself
 
-Both were hit while running it, and both make the proof worthless rather than
-merely awkward:
+All four were hit while running it, and all four make the proof worthless rather
+than merely awkward:
 
 - **A mutation that leaves the tree dirty.** `git checkout` does not restore an
   *untracked* file, and `git stash` will carry your mutation into the stash. Copy
@@ -79,6 +79,28 @@ merely awkward:
   `pytest-skips.tsv`) will happily re-read the *previous* run's output and report
   the answer you were hoping for. Regenerate the artifact inside the mutated
   state, or assert against the source rather than the artifact.
+- **A fixture whose value coincides with the default.** The one that has bitten
+  most often — three separate times in the change that wrote this file. A test
+  asserting `runner._timeout == orchestrator_defaults()["api_timeout_sec"]`
+  passes with the policy read reverted to a literal `300`, *because the policy
+  also says 300*. Same for any threshold whose fixture happens to equal the
+  built-in. **Pick a value no default equals** — 287, not 300 — and the proof
+  discriminates. `test_langgraph_policy.py::test_distinguishable_value_actually_flows_through`
+  is the pattern; it exists because the same thing happened there first.
+- **A probe that sets state the mutation reads at import.** Monkeypatching a
+  module attribute *after* importing cannot test anything module scope did. A
+  module-scope read has no "after import": `verify_zero_skips._POLICY_PATH`
+  derives from `__file__`, so the fixture has to be on disk beside the module
+  before the import statement runs — stage a copy of the module in a tmp tree.
+  The first version of that test set the attribute after importing and passed
+  with the fix reverted.
+
+The common shape of the last two: **an assertion looser than the property it
+claims to pin.** If the mutation passes, do not weaken the mutation — the test
+is what is wrong. Fix the test, re-run the mutation, and record that it failed
+first (see *Recording the result*): a proof that needed two attempts is more
+informative than one that worked, because it names a trap the next author will
+otherwise walk into.
 
 ## What counts as a mutation
 

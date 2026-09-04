@@ -10,6 +10,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The containment classifier is observable, and one more literal is linked
+
+`command_actions` had no logger at all. `Classification.reason` is the whole
+diagnostic — "the glob `*[a-z].pem` commits to `.pem` and can expand to
+`key.pem`" — and it reached the agent through `ExecutionResult.reason` and
+stopped there, so an operator reading logs saw an action name and nothing else.
+An **allowed** grading left no trace whatsoever, which is the shape that
+matters: a credential read that graded `read` would be invisible by
+construction. Four rounds of bypass fixes on this module were every one of them
+found by review, never by a log, because there was no log.
+
+`classify` is now a thin wrapper over `_classify` and logs each verdict at
+DEBUG from one place — five return points, each a security decision, and
+logging at each would be five chances to add a sixth that logs nothing. The
+command is redacted (`run_command` is exactly where a token appears) and
+truncated to 200 characters, guarded on `isEnabledFor` so nothing is paid for
+at the default level. The broker's denial warning now carries the reason it was
+already returning.
+
+`VerificationRunner`'s `timeout=300` default was `orchestrator.api_timeout_sec`
+written down a second time — the unlinked-literal shape R-CQ-7 removed from
+`HookRunner` — and now resolves from policy when the caller passes none.
+
 ### A policy that lost a key stops the gate instead of feeding it a literal (DEC-043)
 
 Every Python policy reader defaulted on a *present* policy missing a key.

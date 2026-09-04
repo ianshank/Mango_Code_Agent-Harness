@@ -108,7 +108,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (3,131 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (3,195 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
@@ -198,9 +198,9 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **3,107 automated tests** (123 Vitest + 2,984 Pytest across 7 tiers), measured 2026-09-03 by `pnpm exec vitest run` and `pytest --collect-only`
+- **Total Automated Tests:** **3,318 automated tests** (123 Vitest + 3,195 Pytest across 7 tiers), measured 2026-09-04 by `pnpm exec vitest run` and `pytest --collect-only`. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **99.29% Lines | 97.80% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 76 files with all 73 gated files meeting the per-file floor and **none waived**. Measured 2026-09-03 on the `langgraph`-installed configuration — the one `build-full` runs. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
+- **Python AQA Coverage:** **99.23% Lines | 97.87% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 76 files with all 73 gated files meeting the per-file floor and **none waived**. Measured 2026-09-04 on the `langgraph`-installed configuration — the one `build-full` runs. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
