@@ -348,7 +348,7 @@ class TestToolUsingRunsReachTheClient:
         unparseable text to "no arguments" and the run completes; the wire model
         must not then reject the same shape and turn a completed run into a 500
         (Copilot review on PR #86)."""
-        history = [
+        history: list[dict[str, object]] = [
             {"role": "user", "content": "go"},
             {
                 "role": "assistant",

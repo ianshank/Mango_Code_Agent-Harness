@@ -493,7 +493,14 @@ class TestTheVerificationTimeoutComesFromPolicy:
     down a second time, the same unlinked-literal shape R-CQ-7 removed from
     `HookRunner`. `MangoMASOrchestrator` already passed the policy value, so
     the literal was reachable only from direct construction, which is exactly
-    where a drift would go unnoticed."""
+    where a drift would go unnoticed.
+
+    The key is now `orchestrator.verification_timeout_sec`, not the model
+    latency key: the run is a test suite, and a runner four times slower than
+    the one `api_timeout_sec` was tuned for turned a passing change into
+    BLOCKED/harness_fault (2026 standards audit H16). The fixture moves *both*
+    keys to different distinguishable values so a runner that still read the
+    old one fails here rather than coinciding."""
 
     #: A value no built-in default equals, so a pass proves the policy was read
     #: rather than that two numbers happened to coincide. Asserting against
@@ -502,15 +509,20 @@ class TestTheVerificationTimeoutComesFromPolicy:
     #: 300 too. That is the "coincidence, not liveness" shape
     #: `test_langgraph_policy.py` already names, reproduced here.
     DISTINGUISHABLE_TIMEOUT = 287
+    DISTINGUISHABLE_API_TIMEOUT = 193
 
-    def _policy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _policy(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **overrides: int
+    ) -> None:
         from harness.shared import policy_loader
 
         fixture = tmp_path / "governance-policy.json"
         real = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
         # A complete block: since R-CQ-8 a present policy missing a key its
-        # reader asks for fails closed, so only the one value under test moves.
-        real["orchestrator"]["api_timeout_sec"] = self.DISTINGUISHABLE_TIMEOUT
+        # reader asks for fails closed, so only the values under test move.
+        real["orchestrator"]["verification_timeout_sec"] = self.DISTINGUISHABLE_TIMEOUT
+        real["orchestrator"]["api_timeout_sec"] = self.DISTINGUISHABLE_API_TIMEOUT
+        real["orchestrator"].update(overrides)
         fixture.write_text(json.dumps(real), encoding="utf-8")
         monkeypatch.setattr(policy_loader, "POLICY_PATH", fixture)
 
@@ -522,6 +534,45 @@ class TestTheVerificationTimeoutComesFromPolicy:
         self._policy(tmp_path, monkeypatch)
         runner = VerificationRunner(RecordingBroker(), "test-eval")
         assert runner._timeout == self.DISTINGUISHABLE_TIMEOUT
+
+    def test_moving_the_model_latency_key_does_not_move_the_verification_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Mutation-proof for H16: a runner reading `api_timeout_sec` follows
+        this change; one reading `verification_timeout_sec` does not."""
+        from harness.shared.governance.verification import VerificationRunner
+
+        self._policy(tmp_path, monkeypatch)
+        before = VerificationRunner(RecordingBroker(), "test-eval")._timeout
+        self._policy(tmp_path, monkeypatch, api_timeout_sec=self.DISTINGUISHABLE_API_TIMEOUT + 1000)
+        after = VerificationRunner(RecordingBroker(), "test-eval")._timeout
+        assert before == after == self.DISTINGUISHABLE_TIMEOUT
+
+    def test_a_present_policy_without_the_key_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DEC-043 applies to the new key: no substituted built-in, and the
+        error names the key so the adopter knows what to add."""
+        from harness.shared import policy_loader
+        from harness.shared.governance.verification import VerificationRunner
+
+        fixture = tmp_path / "governance-policy.json"
+        real = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+        del real["orchestrator"]["verification_timeout_sec"]
+        fixture.write_text(json.dumps(real), encoding="utf-8")
+        monkeypatch.setattr(policy_loader, "POLICY_PATH", fixture)
+        with pytest.raises(policy_loader.PolicyError, match="verification_timeout_sec"):
+            VerificationRunner(RecordingBroker(), "test-eval")
+
+    def test_the_shipped_value_leaves_headroom_over_the_model_latency_key(self) -> None:
+        """The suite takes 70-85 s on a 4-core container; the ceiling must sit
+        well above the model-latency budget it used to borrow, or the change
+        is a rename. The relation is pinned, not the number, so a reviewed
+        retune of either key does not turn this red for the wrong reason."""
+        from harness.shared.policy_loader import orchestrator_defaults
+
+        limits = orchestrator_defaults()
+        assert limits["verification_timeout_sec"] > limits["api_timeout_sec"]
 
     def test_an_explicit_timeout_still_wins(self) -> None:
         """Control: resolving from policy must not take the injection away —
@@ -551,3 +602,4 @@ class TestTheVerificationTimeoutComesFromPolicy:
         broker = RecordingBroker()
         VerificationRunner(broker, "test-eval").probe(Path("."))
         assert set(broker.timeouts) == {self.DISTINGUISHABLE_TIMEOUT}
+        assert self.DISTINGUISHABLE_API_TIMEOUT not in broker.timeouts

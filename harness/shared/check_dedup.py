@@ -29,10 +29,10 @@ from pathlib import Path
 
 try:
     from harness.shared.governance_json import read_json_object
-    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level
+    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
     from governance_json import read_json_object  # type: ignore[no-redef]
-    from json_logging import LOG_LEVEL_ENV_VAR, resolve_log_level  # type: ignore[no-redef]
+    from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -295,9 +295,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    # resolve_log_level degrades an unusable level to the default; passing the raw
-    # string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a red gate.
-    logging.basicConfig(level=resolve_log_level(str(args.log_level)), format="%(levelname)s: %(message)s")
+    # The shared gate sink degrades an unusable level to the default; passing the
+    # raw string to basicConfig raised ValueError, turning LOG_LEVEL=BOGUS into a
+    # red gate. It also defers to a process that already configured logging.
+    configure_gate_process_logging(args.log_level)
 
     repo_root = args.repo_root.resolve()
     cfg = load_config(repo_root, max_shim_lines=args.max_shim_lines)

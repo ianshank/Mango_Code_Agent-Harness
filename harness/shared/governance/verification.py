@@ -104,8 +104,15 @@ class VerificationRunner:
         # passes the policy value explicitly, so the literal was only reachable
         # from direct construction (every test here), which is exactly where a
         # drift would go unnoticed.
+        #
+        # The key is `verification_timeout_sec`, not `api_timeout_sec`: the
+        # latter bounds one model round-trip, and this bounds a test suite. A
+        # `TimeoutExpired` here is graded BROKER_FAILED and the verdict becomes
+        # BLOCKED/harness_fault, so a runner slower than the one the model
+        # latency was tuned for reported a passing change as a harness fault
+        # (2026 standards audit H16).
         self._timeout = (
-            orchestrator_defaults()["api_timeout_sec"] if timeout is None else timeout
+            orchestrator_defaults()["verification_timeout_sec"] if timeout is None else timeout
         )
         #: `(workspace, digests)` recorded by `snapshot_enforcement`. `None`
         #: until a caller records one; `run` then records its own and warns,

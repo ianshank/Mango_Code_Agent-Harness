@@ -21,10 +21,12 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 try:
+    from harness.shared.json_logging import configure_gate_process_logging
     from harness.shared.plan_rules import Finding, check_plan
     from harness.shared.validate_invariants import git_modified_files
 except ImportError:  # pragma: no cover - direct `python harness/shared/validate_plan.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from harness.shared.json_logging import configure_gate_process_logging
     from harness.shared.plan_rules import Finding, check_plan
     from harness.shared.validate_invariants import git_modified_files
 
@@ -81,13 +83,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="review every plan in --spec-dir, not just modified ones (report-only sweeps)",
     )
-    parser.add_argument("--log-level", default="INFO")
+    # No literal default: unset means "whatever LOG_LEVEL says", resolved by the
+    # shared gate sink, and a bogus value degrades to INFO instead of raising
+    # -- `args.log_level.upper()` fed straight to basicConfig crashed the gate
+    # on `--log-level BOGUS` before any plan was read (2026 standards audit M25).
+    parser.add_argument("--log-level", default=None)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=args.log_level.upper(), format="%(levelname)s: %(message)s")
+    configure_gate_process_logging(args.log_level)
     workspace = args.repo_root.resolve()
     spec_root = args.spec_dir if args.spec_dir.is_absolute() else workspace / args.spec_dir
 
