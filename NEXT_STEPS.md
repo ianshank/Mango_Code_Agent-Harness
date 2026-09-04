@@ -316,14 +316,15 @@ not, and neither was done: R-CQ-2 states the NS-2 credential must be rotated
 *before any Phase 1 slice merges*, so all six merged ahead of their own
 precondition. Phase 2 has started: R-CQ-9 landed, so all 20 `uses:` references
 are SHA pins with version comments (DEC-045), so this repository no longer asks
-adopters for something it had not done itself. The rest of Phase 2 and phases 3–7 are
-untouched, so the lock still carries no hashes, the `make` stage the shim test
-cites still does not exist, and five landed specs still show every acceptance
-box open.
+adopters for something it had not done itself, and R-CQ-10 landed too, so the
+lock carries artefact hashes and every install checks them (DEC-047). R-CQ-11
+and phases 3–7 are untouched, so the `make` stage the shim test cites still does
+not exist, the Dockerfile is unpinned, and five landed specs still show every
+acceptance box open.
 
 Behind that, unchanged: the two stacks disagree about which HTTP statuses to
-retry, the lock carries no hashes, a `make` stage the shim test cites does not
-exist, and five landed specs show every acceptance box open again. DEC-044
+retry, a `make` stage the shim test cites does not exist, and five landed specs
+show every acceptance box open again. DEC-044
 settles the ruleset shape NS-1 needs and removes the code-owner rule that made
 the export unappliable, but the import itself is still not done.
 

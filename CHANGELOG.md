@@ -10,6 +10,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The lock pinned versions; nothing pinned artefacts
+
+A version number is a name a registry resolves. `requirements-lock.txt` pinned
+79 distributions and carried zero hashes, so a file replaced under an existing
+pin would have installed with no diff here and no warning there — while
+`test_workflow_contracts.py` asserted CI installs "from the lock" and was
+satisfied. That test was true and not sufficient.
+
+All four `uv pip compile` recipes (`lock`, `lock-check`, `lock-upgrade-check`,
+`lock-upgrade`) now pass `--generate-hashes`. Regenerating changed **0 pins** and
+added **2,249 hash lines**, verified by diffing the pin lines of the old and new
+files. All **three** workflow install steps pass `--require-hashes` — the plan
+said two, and missed the one in `scheduled-drift.yml`. A hashed lock read by an
+install that does not check it is decoration.
+
+**`make audit-python` now scans the lock alone**, and that change was forced
+rather than chosen. pip enters `--require-hashes` mode as soon as *any* input
+file carries a hash, then demands `==` on every requirement in every file:
+
+```
+$ pip-audit -r requirements.txt -r requirements-langgraph.txt -r requirements-lock.txt
+ERROR: In --require-hashes mode, all requirements must have their versions
+pinned with ==. These do not:
+    fastapi<1.0,>=0.110 ... (from -r requirements.txt (line 5))
+
+$ pip-audit -r requirements-lock.txt
+No known vulnerabilities found
+```
+
+Scanning the lock alone is **broader** than what it replaces, not narrower.
+`requirements-dev.txt` opens with `-r requirements.txt` and the lock compiles
+from dev + langgraph, so all 15 distributions named across the three inputs are
+pinned in the lock — which carries 79. The other 64 are transitive dependencies
+the range files never mention and the old invocation scanned only as a
+by-product of resolution. The ranges were also the wrong thing to scan: a range
+resolves to whatever the index offers that day, so the old form audited versions
+no leg installs.
+
+`test_dependency_lock_contracts.py` makes that subsumption a gate rather than a
+comment, and takes the lock concern out of `test_workflow_contracts.py` at
+653/700 lines — the seam DEC-035 names: workflow *shape* there, dependency *set*
+here, with `_workflow_paths.py` holding what both read instead of a second copy.
+
+Five mutation proofs: stripping one requirement's hashes, removing
+`--generate-hashes` from the header, dropping `--require-hashes` from one
+install step, restoring a range file to the audit target, and breaking the
+range-file parser's `-r` skip each fail their tests.
+
 ### The Dependabot queue, dispositioned — and the plan was wrong about half of it
 
 R-CQ-2 predicted "#62–#66 superseded by the SHA pins of R-CQ-9". **They are not.**
@@ -23,9 +71,9 @@ That is a better result than the plan expected and a different one. It proves th
 pin form survives Dependabot's own rewrite as a one-line diff — the thing R-CQ-9
 needed and could not check until a bot did it — and it leaves five *accurate*
 major-bump proposals rather than five stale ones. DEC-045 deferred those majors
-deliberately, and `dependabot.yml` keeps the `github-actions` ecosystem enabled
-to "keep the majors moving", so they stay open as the queue for that deferred
-decision. Closing them as superseded would have recorded a false reason.
+deliberately, and `.github/dependabot.yml` keeps the `github-actions` ecosystem
+enabled to "keep the majors moving", so they stay open as the queue for that
+deferred decision. Closing them as superseded would have recorded a false reason.
 
 **#67 (mypy 1.11.2 → 2.3.1) is closed as blocked on NS-6**, measured rather than
 assumed. mypy 2.3.1 declares `Requires-Python >=3.10`, and
@@ -42,9 +90,9 @@ configurable around it; the floor has to move first.
 ecosystem stopped new PRs but could not close the ones already open, so four
 outlived the decision that retired them.
 
-**#69, #77, #78 stay open.** They are `npm`, an ecosystem `dependabot.yml`
-deliberately keeps; closing PRs the configuration exists to produce would
-contradict the configuration rather than tidy it.
+**#69, #77, #78 stay open.** They are `npm`, an ecosystem
+`.github/dependabot.yml` deliberately keeps; closing PRs the configuration
+exists to produce would contradict the configuration rather than tidy it.
 
 Five closed, eight open with a recorded reason each — not R-CQ-2's twelve
 closures.

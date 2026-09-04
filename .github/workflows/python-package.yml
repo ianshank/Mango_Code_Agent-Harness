@@ -59,7 +59,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-lock.txt
+          python -m pip install --require-hashes -r requirements-lock.txt
           python -m pip install -e . --no-deps
 
       # Dependencies come from requirements-lock.txt, a universal lock whose
@@ -113,7 +113,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-lock.txt
+          python -m pip install --require-hashes -r requirements-lock.txt
           python -m pip install -e . --no-deps
 
       # pnpm must be on PATH *before* actions/setup-node runs, because
