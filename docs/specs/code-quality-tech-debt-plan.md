@@ -598,7 +598,10 @@ change from a vacuous pass.
       passes against the shape the decision log records and fails on a `tmp_path`
       ruleset with the other two shapes; `git grep -n "NS-1" harness/node/.governance/decision-log.md`
       matches (today: no match) · stage: `make test-python` (R-CQ-1)
-      — **Partial:** the in-tree half is done. DEC-044 records the choice (the
+      — **Partial:** the in-tree half is done, and the `"NS-1"` grep in the line
+      above now matches (DEC-044 opens `R-CQ-1 / NS-1`); the `(today: …)`
+      parenthetical, per this section's preamble, states the result on `8c81bb6`
+      and not on HEAD. DEC-044 records the choice (the
       second shape: no human-approval rules, the nine checks unchanged, no
       bypass actor) and the reason the export had been unappliable all along —
       `.github/CODEOWNERS` routes `*` to the sole author, whose own approval

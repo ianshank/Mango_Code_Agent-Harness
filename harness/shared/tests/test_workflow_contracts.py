@@ -230,7 +230,14 @@ def unchosen_shape_reason(ruleset: dict[str, Any]) -> str | None:
             "a bypass actor exempts its holder from the required status checks too, "
             "not just from the review count; that is how #60 merged with every check red"
         )
-    rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
+    stated = ruleset.get("rules")
+    if not isinstance(stated, list) or any(not isinstance(rule, dict) or "type" not in rule for rule in stated):
+        return (
+            f"the export states no readable `rules` list ({stated!r}); a shape whose rules "
+            "cannot be read is a shape nobody has graded, so it is rejected rather than "
+            "raised — the caller wants a reason, not a KeyError from inside its own grader"
+        )
+    rules = {rule["type"]: rule.get("parameters", {}) for rule in stated}
     pull_request = rules.get("pull_request", {})
     count = pull_request.get("required_approving_review_count")
     if count != 0:
@@ -333,8 +340,33 @@ class TestTheOtherTwoShapesAreRejected:
         reason = unchosen_shape_reason(self._reshaped(tmp_path, restore_code_owner_review))
         assert reason is not None and "require_code_owner_review" in reason
 
+    @pytest.mark.parametrize(
+        "rules",
+        [
+            pytest.param(None, id="rules-key-absent"),
+            pytest.param("pull_request", id="rules-is-a-string"),
+            pytest.param([{"parameters": {}}], id="a-rule-has-no-type"),
+        ],
+    )
+    def test_an_export_whose_rules_cannot_be_read_is_rejected_not_raised(self, tmp_path: Path, rules: Any) -> None:
+        """A grader that raises instead of answering turns drift into a stack trace.
+
+        `unchosen_shape_reason` is what `test_nobody_can_bypass` asserts on, so
+        every way the export can be unreadable has to arrive as a reason. Each
+        of these three raised `KeyError` or `TypeError` before.
+        """
+
+        def break_the_rules(ruleset: dict[str, Any]) -> None:
+            if rules is None:
+                del ruleset["rules"]
+            else:
+                ruleset["rules"] = rules
+
+        reason = unchosen_shape_reason(self._reshaped(tmp_path, break_the_rules))
+        assert reason is not None and "`rules`" in reason
+
     def test_the_committed_export_is_the_shape_that_passes(self) -> None:
-        """Without this the three negatives above could all pass on a broken grader."""
+        """Without this the four negatives above could all pass on a broken grader."""
         assert unchosen_shape_reason(_committed_export()) is None
 
 
