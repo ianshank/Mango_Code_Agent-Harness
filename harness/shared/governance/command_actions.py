@@ -19,16 +19,20 @@ Spec: ``docs/specs/agent-containment.md``.
 
 from __future__ import annotations
 
+import logging
 import re
 import shlex
 import typing
 
+from harness.shared.debug_dump import redact_text
 from harness.shared.governance.shell_words import (
     WordListNotEnumerable,
     credential_word_reason,
 )
 from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.read_policy import CREDENTIAL_FILENAME_ALTERNATION
+
+logger = logging.getLogger(__name__)
 
 #: Re-exported so a reader following the credential path through this file,
 #: and the tests that address them, still find these names here.
@@ -69,8 +73,6 @@ UNCLASSIFIED_ACTION = "destructive"
 #: `UNCLASSIFIED_ACTION` rather than being parsed. Verified against a real
 #: shell: both printed the secret while grading `read`.
 _COMPOUND = re.compile(r"[;|]|(?<!>)&|\$[({']|[<>]\(|`|\n")
-
-
 
 #: A redirection that can write to a file. Every `>` counts -- `>`, `>>`, `1>`,
 #: `2>`, `&>`, `>|` and `<>` alike -- except descriptor duplication and closing
@@ -246,8 +248,36 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
 MAX_COMMAND_BYTES: int = orchestrator_defaults()["max_command_bytes"]
 
 
+#: Longest command echoed into a debug line. A command is bounded by
+#: ``MAX_COMMAND_BYTES`` (8 KiB by policy), which is a sane ceiling for a shell
+#: and a terrible one for a log line repeated once per tool call.
+_LOG_COMMAND_CHARS = 200
+
+
 def classify(command: str) -> Classification:
-    """Return the action ``command`` exercises, failing closed when unsure."""
+    """Return the action ``command`` exercises, failing closed when unsure.
+
+    Thin wrapper so every verdict is logged from one place. `_classify` has five
+    return points and each of them is a security decision; logging at each would
+    be five chances to add a sixth that logs nothing.
+    """
+    verdict = _classify(command)
+    if logger.isEnabledFor(logging.DEBUG):
+        # Redacted, because a command is model-supplied text that may carry a
+        # token -- `run_command` is exactly where one would appear. Guarded on
+        # `isEnabledFor` so neither the redaction nor the formatting is paid for
+        # on the default path; `policy_loader._log_resolution` does the same.
+        logger.debug(
+            "classified %r as %s: %s",
+            redact_text(command)[:_LOG_COMMAND_CHARS],
+            verdict.action,
+            verdict.reason,
+        )
+    return verdict
+
+
+def _classify(command: str) -> Classification:
+    """The grading itself. See ``classify`` for why this is split."""
     text = command.strip()
     if not text:
         return Classification("read", "an empty command does nothing")

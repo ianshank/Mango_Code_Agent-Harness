@@ -162,10 +162,20 @@ class ExecutionBroker:
         for required in [action, *extra_actions]:
             verdict = decide(agent_id, required, policy, human_approved=human_approved)
             if not verdict.allowed:
-                logger.warning("Policy denied execution: agent=%s action=%s", agent_id, required)
                 why = (
                     classification.reason if required == action
                     else "the command writes to a file, which requires the write action"
+                )
+                # The reason is logged, not only returned. It reached the *agent*
+                # in `ExecutionResult.reason` and stopped there, so an operator
+                # reading server logs saw `agent=verifier action=secret_access`
+                # with no way to learn which word triggered it -- and the reason
+                # is the whole diagnostic ("the glob '*[a-z].pem' commits to
+                # '.pem' and can expand to 'key.pem'"). Four rounds of bypass
+                # fixes on this classifier make "why did it grade that?" the
+                # question most likely to be asked of these logs.
+                logger.warning(
+                    "Policy denied execution: agent=%s action=%s: %s", agent_id, required, why
                 )
                 reason = f"BLOCKED: {verdict.reason} (classified as {required}: {why})"
                 return ExecutionResult(

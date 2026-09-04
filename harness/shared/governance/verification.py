@@ -33,6 +33,7 @@ import typing
 from pathlib import Path
 
 from harness.shared.governance.verdict import BLOCKED, BROKER_SUCCESS, HarnessCheck
+from harness.shared.policy_loader import orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,23 @@ class VerificationRunner:
         *,
         target: str | None = DEFAULT_TARGET,
         makefile: str = DEFAULT_MAKEFILE,
-        timeout: int = 300,
+        timeout: int | None = None,
     ) -> None:
         self._broker = broker
         self._agent_id = agent_id
         self._target = target
         self._makefile = makefile
-        self._timeout = timeout
+        # Resolved from policy, not a literal. The default was a bare `300`,
+        # which is `orchestrator.api_timeout_sec` written down a second time --
+        # the same unlinked-literal shape R-CQ-7 removed from `HookRunner`, and
+        # the same failure mode: raising the policy value would have left this
+        # caller on the old number silently. `MangoMASOrchestrator` already
+        # passes the policy value explicitly, so the literal was only reachable
+        # from direct construction (every test here), which is exactly where a
+        # drift would go unnoticed.
+        self._timeout = (
+            orchestrator_defaults()["api_timeout_sec"] if timeout is None else timeout
+        )
 
     @property
     def target(self) -> str | None:
