@@ -77,12 +77,28 @@ def _decision_id_regex() -> re.Pattern[str]:
     return re.compile(r"\b(" + body + r")\b")
 
 
-ID_RE = _decision_id_regex()
+#: Resolved on first use, not at import (R-CQ-8). `_decision_id_regex` reads the
+#: policy and raises `SystemExit` on a malformed one -- correct for a gate, fatal
+#: for an import. At module scope it meant `import verify_zero_skips` performed
+#: policy I/O and could terminate the interpreter, so any importer (a test
+#: collecting the module, a tool enumerating the package) inherited a gate's
+#: fail-closed exit as its own crash, with no call in the traceback to explain it.
+#: Deferring it keeps the fail-closed behaviour exactly where it belongs: on the
+#: first read of the grammar, inside the run that is being gated.
+_ID_RE: re.Pattern[str] | None = None
+
+
+def id_re() -> re.Pattern[str]:
+    """The decision-ID grammar, resolved once and cached."""
+    global _ID_RE
+    if _ID_RE is None:
+        _ID_RE = _decision_id_regex()
+    return _ID_RE
 
 
 def known_ids(path: str) -> set[str]:
     try:
-        return set(ID_RE.findall(Path(path).read_text(encoding="utf-8")))
+        return set(id_re().findall(Path(path).read_text(encoding="utf-8")))
     except OSError:
         return set()
 
@@ -173,7 +189,7 @@ def junit(events: str, registry: list[dict]) -> None:
                 ),
                 None,
             )
-        if waiver is None or waiver["decision_id"] not in ID_RE.findall(reason):
+        if waiver is None or waiver["decision_id"] not in id_re().findall(reason):
             bad.append(f"{display} [{unique_id}] — {reason or 'no reason'}")
     if bad:
         raise SystemExit("zero-skip: unapproved JUnit skip(s):\n  - " + "\n  - ".join(bad))

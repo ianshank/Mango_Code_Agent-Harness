@@ -631,7 +631,7 @@ change from a vacuous pass.
       timeout argument (today: runs to completion);
       `python -c "import inspect,harness.shared.governance.policy_decision as p; import sys; sys.exit(0 if inspect.signature(p.decide).parameters['human_approved'].kind is inspect.Parameter.KEYWORD_ONLY else 1)"`
       exits 0 (today: 1) · stage: `make test-python` (R-CQ-7)
-- [ ] AC-8: `pytest harness/shared/tests/test_policy_loader.py -k present_policy_missing_key`
+- [x] AC-8: `pytest harness/shared/tests/test_policy_loader.py -k present_policy_missing_key`
       asserts `PolicyError` on a `tmp_path` policy whose `orchestrator` block lacks
       `max_iterations` (today: returns 10);
       `pytest harness/shared/tests/test_validate_invariants.py -k "missing_protected_paths or env_override_tightens_only"`
@@ -640,6 +640,14 @@ change from a vacuous pass.
       `pytest harness/shared/tests/test_import_purity.py` passes with
       `governance/verify_zero_skips.py` importing under a malformed `tmp_path`
       policy (today: `SystemExit` at import) · stage: `make test-python` (R-CQ-8)
+      — **Result:** 6 passed / 2 passed / 233 passed on the three commands as
+      written. Six mutation proofs: reverting `_Section._value`, the `limits`
+      key check, the `protected_paths` key check, the `>= budget` guard, the
+      `MAX_SHIM_LINES` guard and the lazy `ID_RE` each fail their tests. The
+      import-purity test needed rebuilding to earn its proof: the first version
+      set `_POLICY_PATH` after importing, so it passed with the fix reverted;
+      it now stages a copy of the module beside a malformed policy, because a
+      module-scope read has no "after import".
 - [ ] AC-9: `git grep -nE "uses: [^@]+@v[0-9]" .github/workflows` returns nothing
       (today: 20 lines); `pytest harness/shared/tests/test_workflow_contracts.py -k "node24 or sha_pinned"`
       passes on the tree, fails on a `tmp_path` workflow with a tag reference, and

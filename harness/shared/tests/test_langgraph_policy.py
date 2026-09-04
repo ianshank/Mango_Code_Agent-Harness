@@ -160,9 +160,27 @@ class TestGraphPolicyFailClosed:
                         "max_concurrency": 17,
                         "plan_divergence_threshold": 0.01,
                     },
-                    "orchestrator": {"max_iterations": 42},
+                    # Complete blocks, not just the keys this test asserts on:
+                    # since R-CQ-8 a present policy that omits a key its reader
+                    # asks for fails closed, so a partial block would raise
+                    # before any value could be shown to flow through. The
+                    # unasserted values are still distinguishable from their
+                    # built-in defaults, which keeps this a liveness fixture
+                    # rather than one that happens to match.
+                    "orchestrator": {
+                        "max_iterations": 42,
+                        "api_timeout_sec": 301,
+                        "tool_timeout_sec": 31,
+                        "max_command_bytes": 8193,
+                        "max_healing_retries": 4,
+                        "max_output_bytes": 65537,
+                    },
                     "coverage": {"lines": 71, "branches": 61},
-                    "agent_defaults": {"max_delegation_depth": 9, "max_parallel_subagents": 13},
+                    "agent_defaults": {
+                        "max_delegation_depth": 9,
+                        "max_parallel_subagents": 13,
+                        "max_tool_calls_per_task": 101,
+                    },
                 }
             ),
             encoding="utf-8",

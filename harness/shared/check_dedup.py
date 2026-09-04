@@ -117,12 +117,30 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
             cfg.exempt = frozenset(str(x) for x in exempt)
         logger.debug("Loaded dedup config from %s: %s", policy_path, dedup)
 
+    # The override may only *tighten* the shim budget (R-CQ-8). It used to be
+    # assigned verbatim, so `MAX_SHIM_LINES=9999` turned the dedup gate off
+    # while it still printed `[PASS] N per-stack script(s) delegate` -- a gate
+    # whose report cannot be told apart from a real pass. A stricter local run
+    # stays possible; relaxing what the policy states does not.
     env_override = os.environ.get("MAX_SHIM_LINES")
     if env_override:
         try:
-            cfg.max_shim_lines = int(env_override)
+            requested = int(env_override)
         except ValueError:
             logger.warning("Ignoring non-integer MAX_SHIM_LINES=%r", env_override)
+        else:
+            if requested < cfg.max_shim_lines:
+                logger.info(
+                    "MAX_SHIM_LINES=%d tightens the shim budget from %d",
+                    requested, cfg.max_shim_lines,
+                )
+                cfg.max_shim_lines = requested
+            else:
+                logger.warning(
+                    "Ignoring MAX_SHIM_LINES=%d: an override may only tighten the shim budget "
+                    "(policy says %d)",
+                    requested, cfg.max_shim_lines,
+                )
 
     if max_shim_lines is not None:
         cfg.max_shim_lines = max_shim_lines

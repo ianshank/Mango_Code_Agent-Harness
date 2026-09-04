@@ -397,6 +397,21 @@ graph TD
 - The credential-filename alternation has one definition, in `write_policy`, re-exported by `read_policy` and composed by `command_actions` — three anchorings of one pattern (a whole path segment on each file door, a shell word in the classifier), pinned by object identity so they cannot drift. It moved there because the write side had no credential rule at all: `.env` is deliberately untracked, so `protected_paths` matched nothing and `write_denial_reason(".env")` returned `None` (`DEC-042`).
 - `apply_patch` consults `read_denial_reason` **first**, then the write policy. This corrects `DEC-012`'s account that it reuses `write_denial_reason` unchanged: a patch reads before it writes, and its `matched 0 times` / `matched 1 times` reply was a substring oracle over every file `read_file` refuses. `agent-policy.json` grants it no new action.
 - `command_actions.classify` grades the words the **shell** produces, not the command text: `bash -c` strips quotes, resolves backslashes, expands braces and expands globs before a program sees an argument, so a text-scanning rule was checking a string no filesystem call ever sees. `shell_words.py` owns that analysis; the classifier owns what a command *does*.
+- Every verdict is logged at DEBUG from one place — `classify` is a thin wrapper over `_classify` — with the command redacted and truncated, guarded on `isEnabledFor`. Before `DEC-043` this module had no logger at all: `Classification.reason` reached the agent through `ExecutionResult.reason` and stopped there, so an operator saw `action=secret_access` with no way to learn which word triggered it, and an **allowed** grading left no trace whatsoever. The second is the one that matters — a credential read that graded `read` would have been invisible by construction, which is why four rounds of bypass fixes on this module were all found by review and none by a log.
+
+### 4.5.1 Policy resolution: absence is an adopter, incompleteness is a fault (`DEC-043`)
+
+```
+governance-policy.json ──▶ policy_loader._Section(data, name, backed) ──▶ accessors
+                                    │
+        file absent ────────────────┤──▶ built-in default   (supported: the adopter path)
+        file present, key gone ─────┴──▶ PolicyError        (fail closed)
+```
+
+- Every operational threshold resolves through `policy_loader`, and `_Section` carries the block's data **and whether a policy file backs it**. One call site expresses both outcomes, so no accessor restates the rule. `coverage.optional_extras` keeps a separate `.optional` accessor, because "this deployment declares no extras" is a statement while a missing threshold is a hole.
+- `validate_invariants` states no defaults for `protected_paths` or `limits`. The former's old `[".github/**"]` fallback left one pattern matching, so the gate printed `[PASS] Protected Paths` while all three protected groups were unguarded.
+- `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and `MAX_SHIM_LINES` may only **tighten** a budget; a loosening value is ignored and logged. Returned verbatim, they let anyone who could set an environment variable switch a gate off while it still printed its PASS line.
+- `verify_zero_skips` resolves its decision-ID grammar on first use, not at import, so a gate's fail-closed `SystemExit` stays inside the run being gated rather than inside any importer's process.
 
 ### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
 

@@ -25,6 +25,7 @@ in-process import would be masked by whatever the test session already loaded.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -188,3 +189,88 @@ class TestWaiversStayHonest:
     def test_every_waiver_has_a_substantive_reason(self) -> None:
         for waived, reason in sorted(KNOWN_IMPORT_SIDE_EFFECTS.items()):
             assert len(reason.strip()) > 80, waived
+
+
+class TestAGatesFailClosedExitBelongsToTheRunNotTheImport:
+    """`verify_zero_skips` resolved its decision-ID grammar at module scope.
+
+    `_decision_id_regex()` reads the governance policy and raises `SystemExit`
+    on a malformed one -- correct for a gate, wrong for an import. At module
+    scope it meant `import verify_zero_skips` performed policy I/O and could
+    terminate the interpreter, so any importer inherited a gate's fail-closed
+    exit as its own crash: a test collecting the module, a tool walking the
+    package, a shim whose `except ImportError` cannot catch a `BaseException`.
+    The traceback names no call that asked for the grammar, because none did.
+
+    The scan above cannot see this. It imports from a poisoned *directory*, and
+    the policy path is absolute -- so the module reads the repository's own
+    valid policy and exits 0. The defect only shows against a policy that is
+    present and malformed, which is what this class supplies (R-CQ-8).
+    """
+
+    MODULE = REPO / "harness" / "shared" / "governance" / "verify_zero_skips.py"
+
+    def _staged_copy(self, tmp_path: Path, policy_body: str) -> Path:
+        """The module, copied into a tree carrying ``policy_body`` as its policy.
+
+        Setting ``m._POLICY_PATH`` after importing cannot test this, and my first
+        attempt at this class did exactly that -- so it passed with the fix
+        reverted, which is the failure mode this whole change is about. There is
+        no "after import" for a module-scope read: ``_POLICY_PATH`` is derived
+        from ``__file__``, so the malformed policy has to be sitting beside the
+        module *before* the import statement runs.
+
+        Copying one file is enough because ``verify_zero_skips`` is standalone
+        stdlib by design -- no harness imports -- which is the property that
+        makes it loadable from anywhere by path.
+        """
+        governance = tmp_path / "shared" / "governance"
+        governance.mkdir(parents=True)
+        shutil.copy2(self.MODULE, governance / "verify_zero_skips.py")
+        (tmp_path / "shared" / "governance-policy.json").write_text(policy_body, encoding="utf-8")
+        return governance / "verify_zero_skips.py"
+
+    def _run(self, module: Path, tail: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import importlib.util, sys;"
+                "spec = importlib.util.spec_from_file_location('vzs_probe', sys.argv[1]);"
+                "m = importlib.util.module_from_spec(spec);"
+                "spec.loader.exec_module(m);"  # the import itself
+                + tail,
+                str(module),
+            ],
+            capture_output=True, text=True, cwd=str(module.parent), check=False,
+        )
+
+    def test_importing_under_a_malformed_policy_does_not_exit(self, tmp_path: Path) -> None:
+        module = self._staged_copy(tmp_path, "{ this is not json")
+        result = self._run(module, "sys.exit(0)")
+        assert result.returncode == 0, (
+            "importing the module raised SystemExit; the gate's fail-closed exit "
+            f"escaped into an importer's process. stderr:\n{result.stderr}"
+        )
+
+    def test_the_grammar_still_fails_closed_when_it_is_actually_read(self, tmp_path: Path) -> None:
+        """The half that must NOT change. Deferring the read must not defer it
+        into nothing: the first real use still stops on a malformed policy."""
+        module = self._staged_copy(tmp_path, '{"decision_id_pattern": "not-anchored"}')
+        result = self._run(module, "m.id_re()")
+        assert result.returncode != 0, "a malformed grammar must still stop the run"
+        assert "decision_id_pattern" in result.stderr
+
+    def test_a_valid_policy_still_yields_the_policy_grammar(self, tmp_path: Path) -> None:
+        """Control: deferring the read must not disconnect it from the policy."""
+        module = self._staged_copy(tmp_path, '{"decision_id_pattern": "^(ZZZ-[0-9]+)$"}')
+        result = self._run(module, "print(m.id_re().findall('see ZZZ-7 and DEC-1'))")
+        assert result.returncode == 0, result.stderr
+        assert "ZZZ-7" in result.stdout and "DEC-1" not in result.stdout
+
+    def test_the_grammar_is_resolved_once(self, tmp_path: Path) -> None:
+        """Cached, so deferring the read does not turn one policy load into one
+        per skip line in a JUnit report."""
+        from harness.shared.governance import verify_zero_skips as vzs
+
+        assert vzs.id_re() is vzs.id_re()

@@ -39,42 +39,88 @@ SKIP_DIR_PARTS = frozenset({".venv", ".mypy_cache", ".pytest_cache", ".ruff_cach
 
 
 def _policy_limit(key: str, default: int, policy_path: Path | None, env_var: str) -> int:
-    """Resolve `limits.<key>` from policy, allowing `env_var` to override.
+    """Resolve `limits.<key>` from policy; `env_var` may only *tighten* it.
 
-    Fails closed on a *malformed* policy: an absent policy is the adopter path and
-    legitimately falls back to the built-in budget, but one that exists and cannot
-    be parsed is corruption, and silently substituting the default would relax the
-    gate on exactly the input that should stop it.
+    Fails closed three ways, and the second and third are R-CQ-8:
+
+    An absent policy is the adopter path and legitimately falls back to the
+    built-in budget. One that exists and cannot be parsed is corruption, and
+    silently substituting the default would relax the gate on exactly the input
+    that should stop it.
+
+    A *present* policy missing `limits` or missing this key is the same failure
+    wearing a valid-JSON costume: the file a reviewer was pointed at no longer
+    states the budget, while the gate goes on reporting PASS against a number
+    that exists only in this source file. `policy.ts:58-69` has always thrown
+    for it. Now so does this.
+
+    And the environment override can only lower the budget, never raise it.
+    `MAX_FILE_LINES=9999` used to be returned verbatim, so any caller that could
+    set an environment variable could switch the size gate off while it still
+    printed `[PASS] Size Budget` -- a gate whose own report is indistinguishable
+    from a real pass is worse than no gate. Tightening stays useful (a stricter
+    local run, a bisect) and cannot weaken what the policy says.
     """
-    override = os.environ.get(env_var)
-    if override:
-        try:
-            return int(override)
-        except ValueError:
-            logger.warning("Ignoring non-integer %s=%r; using policy default", env_var, override)
     policy_path = policy_path or DEFAULT_POLICY_PATH
     try:
         raw = policy_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         # A policy that is simply absent is the adopter path; defaults apply.
         logger.debug("No governance policy at %s; using the built-in %s", policy_path, key)
-        return default
+        budget = default
     except OSError as e:
         logger.error("[FAIL] Could not read governance policy %s: %s", policy_path, e)
         sys.exit(1)
+    else:
+        try:
+            policy = json.loads(raw)
+            if not isinstance(policy, dict):
+                raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
+            limits = policy.get("limits")
+            if not isinstance(limits, dict) or key not in limits:
+                raise TypeError(
+                    f"present policy does not state limits.{key}; refusing to substitute the "
+                    f"built-in {default}, which would let this gate pass against a budget the "
+                    "policy no longer declares"
+                )
+            stated = limits[key]
+            # Type-checked, not coerced. `int(stated)` accepted `"9999"` and
+            # `True` (which is 1), so a policy could state a budget as a string
+            # and this gate would enforce it while `policy_loader._Section.int`
+            # -- the strict reader this change added everywhere else -- would
+            # refuse the same value. Two readers of one policy disagreeing about
+            # what is valid is the drift this branch exists to remove. `bool` is
+            # excluded explicitly because it is a subclass of `int`.
+            # Reported by a review bot on this PR.
+            if isinstance(stated, bool) or not isinstance(stated, int):
+                raise TypeError(
+                    f"limits.{key} must be an integer, got {stated!r}; a coerced value would "
+                    "let this gate enforce a budget the strict policy reader would reject"
+                )
+            budget = stated
+        except (ValueError, TypeError) as e:
+            # A policy that exists but cannot be parsed is corruption, not an adopter
+            # default. Returning the built-in budget here let a malformed policy
+            # silently relax the gate -- the same fail-open inversion COV_MIN had.
+            logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
+            sys.exit(1)
+
+    override = os.environ.get(env_var)
+    if not override:
+        return budget
     try:
-        policy = json.loads(raw)
-        if not isinstance(policy, dict):
-            raise TypeError(f"policy root must be a JSON object, got {type(policy).__name__}")
-        limits = policy.get("limits", {})
-        budget = limits.get(key, default)
-        return int(budget)
-    except (ValueError, TypeError) as e:
-        # A policy that exists but cannot be parsed is corruption, not an adopter
-        # default. Returning the built-in budget here let a malformed policy
-        # silently relax the gate -- the same fail-open inversion COV_MIN had.
-        logger.error("[FAIL] Malformed governance policy %s: %s", policy_path, e)
-        sys.exit(1)
+        requested = int(override)
+    except ValueError:
+        logger.warning("Ignoring non-integer %s=%r; using policy default", env_var, override)
+        return budget
+    if requested >= budget:
+        logger.warning(
+            "Ignoring %s=%d: an override may only tighten %s (policy says %d)",
+            env_var, requested, key, budget,
+        )
+        return budget
+    logger.info("%s=%d tightens %s from the policy's %d", env_var, requested, key, budget)
+    return requested
 
 
 def size_budget_lines(policy_path: Path | None = None) -> int:
@@ -115,7 +161,29 @@ def load_protected_patterns(policy_path: Path) -> list[str]:
     """
     try:
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
-        patterns = list(policy.get("protected_paths", [".github/**"]))
+        # No default. The old `.get("protected_paths", [".github/**"])` meant a
+        # policy that lost the key kept protecting one directory and reported
+        # `[PASS] Protected Paths` for every other file in the set -- the
+        # enforcement layer, the agent control surface and the runtime gates all
+        # silently unprotected, with a green check over it (R-CQ-8).
+        if "protected_paths" not in policy:
+            raise KeyError(
+                "policy states no protected_paths; refusing to fall back to a one-pattern "
+                "default that would report PASS while protecting almost nothing"
+            )
+        # Type-checked before `list()`, because `list("Makefile")` is
+        # `['M','a','k',...]` -- eleven single-character patterns that match no
+        # path at all, so a policy stating `"protected_paths": "Makefile"`
+        # produced a gate that reported PASS while protecting nothing. That is
+        # the same fail-open as the `[".github/**"]` default removed above,
+        # reached by a different mistake. Reported by a review bot on this PR.
+        stated = policy["protected_paths"]
+        if not isinstance(stated, list) or any(not isinstance(p, str) for p in stated):
+            raise TypeError(
+                f"protected_paths must be a list of strings, got {stated!r}; a string would "
+                "be iterated character by character into patterns that match nothing"
+            )
+        patterns = list(stated)
         logger.debug("Loaded %d protected path patterns from %s", len(patterns), policy_path)
         return patterns
     except Exception as e:  # noqa: BLE001 - governance must fail closed with a reason

@@ -61,12 +61,20 @@ class TestSectionAccessors:
         p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
         assert orchestrator_defaults(p) == declared
 
-    def test_partial_section_fills_defaults(self, tmp_path: Path) -> None:
+    def test_a_partial_section_no_longer_fills_defaults(self, tmp_path: Path) -> None:
+        """Replaces `test_partial_section_fills_defaults`, which asserted the
+        defect R-CQ-8 removes: it pinned that a present policy declaring only
+        `nemotron.max_retries` silently resolved `max_tokens` to the built-in
+        4096. That is the behaviour, not a test artefact — so the test had to
+        change with it rather than be relaxed around it.
+
+        Filling from built-ins is still correct when *no policy file exists*;
+        `TestAPresentPolicyMissingAKeyFailsClosed` holds both halves.
+        """
         p = tmp_path / "policy.json"
         p.write_text(json.dumps({"nemotron": {"max_retries": 2}}), encoding="utf-8")
-        values = nemotron_defaults(p)
-        assert values["max_retries"] == 2
-        assert values["max_tokens"] == 4096
+        with pytest.raises(PolicyError, match="max_tokens|temperature|top_p|timeout_ms"):
+            nemotron_defaults(p)
 
     def test_wrong_type_fails_closed(self, tmp_path: Path) -> None:
         p = tmp_path / "policy.json"
@@ -162,7 +170,16 @@ class TestFloatValues:
         """The control: an int is a number and is normalised to float, so the
         rejection above is about type, not about the absence of a decimal point."""
         p = tmp_path / "policy.json"
-        p.write_text(json.dumps({"nemotron": {"temperature": 1}}), encoding="utf-8")
+        # A complete block: since R-CQ-8 a present policy must state every key
+        # this accessor reads, so a one-key fixture would raise on the *missing*
+        # keys before reaching the type check this test is about.
+        p.write_text(
+            json.dumps(
+                {"nemotron": {"temperature": 1, "top_p": 0.7, "max_tokens": 4096,
+                              "timeout_ms": 30000, "max_retries": 0}}
+            ),
+            encoding="utf-8",
+        )
         value = nemotron_defaults(p)["temperature"]
         assert value == 1.0 and isinstance(value, float)
 
@@ -283,3 +300,136 @@ class TestLimitsAreTyped:
     def test_the_blocks_are_still_plain_dicts_at_runtime(self) -> None:
         """Backward compatibility: adopters reading the block dynamically are unaffected."""
         assert isinstance(policy_loader.orchestrator_defaults(), dict)
+
+
+class TestAPresentPolicyMissingAKeyFailsClosed:
+    """R-CQ-8. A key that is gone is not a key that was never adopted.
+
+    `_int_value(section, key, default)` answered the built-in literal for both
+    cases, so a policy that lost `orchestrator.max_iterations` returned 10 and
+    the loop ran on; one that lost `coverage.lines` returned 90 while the file a
+    reviewer had been pointed at said nothing about coverage. The substituted
+    value is always a *plausible* one, which is exactly what makes the failure
+    silent. `policy.ts:58-69` has thrown for this since it shipped; the two
+    stacks disagreed about whether a governance policy may be incomplete.
+    """
+
+    #: Every accessor, the block it reads, and one key that must not be
+    #: defaultable. Parametrised rather than spot-checked because the defect was
+    #: in the shared helper: fixing one accessor and not the rest would leave
+    #: the same hole behind a passing test.
+    ACCESSORS = [
+        pytest.param("orchestrator_defaults", "orchestrator", "max_iterations", id="orchestrator"),
+        pytest.param("nemotron_defaults", "nemotron", "temperature", id="nemotron"),
+        pytest.param("langgraph_defaults", "langgraph", "recursion_limit", id="langgraph"),
+        pytest.param("coverage_defaults", "coverage", "lines", id="coverage"),
+        pytest.param("agent_defaults", "agent_defaults", "max_delegation_depth", id="agent"),
+        pytest.param("lats_defaults", "lats", "max_budget", id="lats"),
+    ]
+
+    def _policy(self, tmp_path: Path, block: str, body: dict) -> Path:
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({block: body}), encoding="utf-8")
+        return path
+
+    @pytest.mark.parametrize(("accessor", "block", "key"), ACCESSORS)
+    def test_present_policy_missing_key_raises(
+        self, tmp_path: Path, accessor: str, block: str, key: str
+    ) -> None:
+        """The AC's named case: a policy that exists and omits one key."""
+        path = self._policy(tmp_path, block, {})
+        with pytest.raises(PolicyError) as excinfo:
+            getattr(policy_loader, accessor)(path)
+        message = str(excinfo.value)
+        assert key in message, "the error must name the key that is missing"
+        # The path, not the phrase "present policy". The message used to say
+        # that and name no file; naming the file is what makes the error
+        # actionable, and asserting on the phrase would have pinned the weaker
+        # wording in place. Reported by a review bot on this PR.
+        assert str(path) in message, "the error must name the policy it is about"
+
+    @pytest.mark.parametrize(("accessor", "block", "key"), ACCESSORS)
+    def test_an_absent_policy_still_yields_the_built_in(
+        self, tmp_path: Path, accessor: str, block: str, key: str
+    ) -> None:
+        """Control, and the reason this is not simply `raise if key is missing`.
+
+        The adopter path is a supported deployment: a stack that has not adopted
+        `governance-policy.json` gets the built-in defaults and a working
+        harness. A fix that failed closed on *absence* too would break every
+        adopter to close a hole that only exists when a file is present.
+        """
+        resolved = getattr(policy_loader, accessor)(tmp_path / "nothing-here.json")
+        assert key in resolved
+
+    def test_a_present_policy_missing_the_whole_block_also_raises(self, tmp_path: Path) -> None:
+        """A missing block is every key missing at once, and is graded the same."""
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({"unrelated": {}}), encoding="utf-8")
+        with pytest.raises(PolicyError):
+            orchestrator_defaults(path)
+
+    def test_the_repository_policy_states_every_key_it_is_asked_for(self) -> None:
+        """The gate this change puts under the repository's own policy.
+
+        If `governance-policy.json` ever loses a key some accessor reads, every
+        caller now raises instead of quietly running on a literal — so this
+        asserts the policy is complete, and fails here rather than in whichever
+        gate happened to load first.
+        """
+        for param in self.ACCESSORS:
+            accessor, _block, key = (str(value) for value in param.values)
+            assert key in getattr(policy_loader, accessor)()
+
+    def test_an_optional_key_is_still_optional(self, tmp_path: Path) -> None:
+        """`coverage.optional_extras` documents its own absence as meaningful.
+
+        "This deployment declares no optional extras" is a statement; "this
+        policy no longer says what the line floor is" is a hole. `_Section`
+        separates them with `.optional`, and collapsing the two would either
+        break every policy without extras or reopen the defect.
+        """
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({"coverage": {"lines": 90, "branches": 80}}), encoding="utf-8")
+        assert coverage_optional_extras(path) == {}
+        assert coverage_defaults(path) == {"lines": 90, "branches": 80}
+
+
+class TestTheErrorNamesThePolicyItIsAbout:
+    """An error that says "a file is at fault" without saying which one.
+
+    The first version read "missing from a present policy at this path" and
+    then named no path — the least useful shape an error can take. Every
+    accessor takes an optional `policy_path` and the tests use `tmp_path`
+    fixtures, so "which policy?" is a real question at the moment it is read.
+    Reported by a review bot on this PR.
+    """
+
+    def test_the_message_contains_the_policy_path(self, tmp_path: Path) -> None:
+        path = tmp_path / "governance-policy.json"
+        path.write_text(json.dumps({"orchestrator": {}}), encoding="utf-8")
+        with pytest.raises(PolicyError) as excinfo:
+            orchestrator_defaults(path)
+        assert str(path) in str(excinfo.value)
+
+    def test_two_policies_produce_distinguishable_errors(self, tmp_path: Path) -> None:
+        """The property that makes it worth naming: with two policies in play,
+        an unnamed one leaves the reader guessing which is at fault."""
+        messages = []
+        for name in ("first", "second"):
+            path = tmp_path / f"{name}.json"
+            path.write_text(json.dumps({"coverage": {}}), encoding="utf-8")
+            with pytest.raises(PolicyError) as excinfo:
+                coverage_defaults(path)
+            messages.append(str(excinfo.value))
+        assert messages[0] != messages[1]
+        assert "first.json" in messages[0] and "second.json" in messages[1]
+
+    def test_the_default_path_is_named_too(self) -> None:
+        """The accessor called with no argument still resolves a real file, and
+        the error must name that one rather than fall silent."""
+        from harness.shared import policy_loader
+
+        section = policy_loader._section("orchestrator")
+        with pytest.raises(PolicyError, match=r"governance-policy\.json"):
+            section.int("a-key-no-policy-states", 1)

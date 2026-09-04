@@ -635,3 +635,4 @@ class TestTheWordCheckAndTheTextCheckAgree:
             ("cat secrets/id_rsa", "cat 'secrets/id_rsa'"),
         ]:
             assert classify(bare).action == classify(transformed).action
+

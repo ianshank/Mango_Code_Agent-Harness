@@ -144,10 +144,31 @@ def test_load_config_reads_policy(repo: Path):
     assert "json_logging.py" in cfg.exempt
 
 
-def test_load_config_env_overrides_policy(repo: Path, monkeypatch: pytest.MonkeyPatch):
+def test_load_config_env_may_only_tighten_the_policy(repo: Path, monkeypatch: pytest.MonkeyPatch):
+    """Replaces `test_load_config_env_overrides_policy`, which pinned that
+    `MAX_SHIM_LINES=99` raised a policy budget of 12 — so anyone who could set
+    an environment variable could switch the dedup gate off while it still
+    printed `[PASS] N per-stack script(s) delegate` (R-CQ-8).
+
+    Tightening keeps working, because a stricter local run is a real use and
+    cannot weaken what the policy states."""
     _policy(repo, {"max_shim_lines": 12})
     monkeypatch.setenv("MAX_SHIM_LINES", "99")
-    assert cd.load_config(repo).max_shim_lines == 99
+    assert cd.load_config(repo).max_shim_lines == 12, "an override must not raise the budget"
+    monkeypatch.setenv("MAX_SHIM_LINES", "5")
+    assert cd.load_config(repo).max_shim_lines == 5, "an override must still tighten it"
+
+
+def test_load_config_says_why_it_ignored_a_loosening_override(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, caplog
+):
+    """A silently ignored override is its own trap: the caller believes the
+    budget moved and reads the PASS as meaning something it does not."""
+    _policy(repo, {"max_shim_lines": 12})
+    monkeypatch.setenv("MAX_SHIM_LINES", "99")
+    with caplog.at_level(logging.WARNING, logger=cd.logger.name):
+        cd.load_config(repo)
+    assert "only tighten" in caplog.text and "99" in caplog.text and "12" in caplog.text
 
 
 def test_load_config_argument_overrides_env(repo: Path, monkeypatch: pytest.MonkeyPatch):

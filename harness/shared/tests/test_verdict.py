@@ -10,6 +10,7 @@ anything else.
 """
 from __future__ import annotations
 
+import json
 import typing
 from pathlib import Path
 
@@ -240,12 +241,18 @@ class RecordingBroker:
 
     def __init__(self, answers: dict[str, ExecutionResult] | None = None) -> None:
         self.commands: list[str] = []
+        #: The timeout each call was made with. Recorded so a test can assert
+        #: the *resolved* value reaches the broker: a timeout read from policy
+        #: and then not passed through is a policy read with no effect, and the
+        #: command list alone cannot tell the two apart.
+        self.timeouts: list[int] = []
         self._answers = answers or {}
 
     def execute_command(
         self, command: str, _ctx: dict, cwd: Path | None = None, timeout: int = 0
     ) -> ExecutionResult:
         self.commands.append(command)
+        self.timeouts.append(timeout)
         for fragment, answer in self._answers.items():
             if fragment in command:
                 return answer
@@ -479,3 +486,68 @@ class TestTheLoopReportsIt:
         outcome = orch.execute_loop("t")
         assert outcome.verdict.termination_reason == REENTRANT
         assert broker.commands == []
+
+
+class TestTheVerificationTimeoutComesFromPolicy:
+    """The default was a bare `300` — `orchestrator.api_timeout_sec` written
+    down a second time, the same unlinked-literal shape R-CQ-7 removed from
+    `HookRunner`. `MangoMASOrchestrator` already passed the policy value, so
+    the literal was reachable only from direct construction, which is exactly
+    where a drift would go unnoticed."""
+
+    #: A value no built-in default equals, so a pass proves the policy was read
+    #: rather than that two numbers happened to coincide. Asserting against
+    #: `orchestrator_defaults()["api_timeout_sec"]` was the first version of
+    #: this test and it passed with the literal `300` restored — the policy says
+    #: 300 too. That is the "coincidence, not liveness" shape
+    #: `test_langgraph_policy.py` already names, reproduced here.
+    DISTINGUISHABLE_TIMEOUT = 287
+
+    def _policy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from harness.shared import policy_loader
+
+        fixture = tmp_path / "governance-policy.json"
+        real = json.loads(policy_loader.POLICY_PATH.read_text(encoding="utf-8"))
+        # A complete block: since R-CQ-8 a present policy missing a key its
+        # reader asks for fails closed, so only the one value under test moves.
+        real["orchestrator"]["api_timeout_sec"] = self.DISTINGUISHABLE_TIMEOUT
+        fixture.write_text(json.dumps(real), encoding="utf-8")
+        monkeypatch.setattr(policy_loader, "POLICY_PATH", fixture)
+
+    def test_the_default_is_the_policy_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from harness.shared.governance.verification import VerificationRunner
+
+        self._policy(tmp_path, monkeypatch)
+        runner = VerificationRunner(RecordingBroker(), "test-eval")
+        assert runner._timeout == self.DISTINGUISHABLE_TIMEOUT
+
+    def test_an_explicit_timeout_still_wins(self) -> None:
+        """Control: resolving from policy must not take the injection away —
+        this class's docstring calls the timeout injected, and the orchestrator
+        relies on it."""
+        from harness.shared.governance.verification import VerificationRunner
+
+        assert VerificationRunner(RecordingBroker(), "test-eval", timeout=7)._timeout == 7
+
+    def test_the_policy_value_actually_reaches_the_broker(self) -> None:
+        """Liveness: a resolved value that never reaches `execute_command` would
+        be a policy read with no effect."""
+        from harness.shared.governance.verification import VerificationRunner
+
+        broker = RecordingBroker()
+        VerificationRunner(broker, "test-eval", timeout=11).probe(Path("."))
+        assert broker.timeouts and set(broker.timeouts) == {11}, broker.timeouts
+
+    def test_the_policy_default_reaches_the_broker_too(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The path that actually ships: no explicit timeout, so the resolved
+        policy value is the one that must arrive."""
+        from harness.shared.governance.verification import VerificationRunner
+
+        self._policy(tmp_path, monkeypatch)
+        broker = RecordingBroker()
+        VerificationRunner(broker, "test-eval").probe(Path("."))
+        assert set(broker.timeouts) == {self.DISTINGUISHABLE_TIMEOUT}
