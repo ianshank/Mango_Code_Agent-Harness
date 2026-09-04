@@ -111,7 +111,7 @@ class TestDelegatorsAreGradedAsWhatTheyRun:
     GATE_PROGRAMS = sorted(p for p, a in _BY_PROGRAM.items() if a == "test_execute")
 
     @pytest.mark.parametrize("program", GATE_PROGRAMS)
-    @pytest.mark.parametrize("delegator", ["pnpm exec", "npx", "npx --yes", "pnpm exec --"])
+    @pytest.mark.parametrize("delegator", ["pnpm exec", "npx"])
     def test_a_gate_program_through_a_delegator_is_a_gate_run(self, delegator: str, program: str) -> None:
         """The allowlist is `_BY_PROGRAM`'s own `test_execute` set, read through
         the delegator -- not a second list that could drift from it."""
@@ -131,6 +131,10 @@ class TestDelegatorsAreGradedAsWhatTheyRun:
             "npx",
             "npx tsx evil.ts",
             "npx -p pkg vitest",
+            "npx --package=evil vitest",
+            "npx --yes vitest",
+            "npx --call=evil vitest",
+            "pnpm exec -- vitest",
             "npx cowsay hi",
             "pnpm exec pnpm exec vitest",
         ],
@@ -153,7 +157,8 @@ class TestDelegatorsAreGradedAsWhatTheyRun:
 
     def test_delegated_argv_shapes(self) -> None:
         assert delegated_argv(["pnpm", "exec", "vitest", "run"]) == ("pnpm exec", ["vitest", "run"])
-        assert delegated_argv(["npx", "--yes", "tsc", "--noEmit"]) == ("npx", ["tsc", "--noEmit"])
+        assert delegated_argv(["npx", "--yes", "tsc", "--noEmit"]) == ("npx", [])
+        assert delegated_argv(["npx", "--package=evil", "vitest"]) == ("npx", [])
         assert delegated_argv(["pnpm", "exec"]) == ("pnpm exec", [])
         assert delegated_argv(["pnpm", "test"]) is None
         assert delegated_argv(["make", "ci"]) is None

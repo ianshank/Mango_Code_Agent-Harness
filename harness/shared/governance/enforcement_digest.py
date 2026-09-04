@@ -36,7 +36,14 @@ import os
 from pathlib import Path
 
 from harness.shared.validate_invariants import SKIP_DIR_PARTS, is_protected, load_protected_patterns
-from harness.shared.write_policy import DEFAULT_POLICY_PATH, policy_digest
+from harness.shared.write_policy import (
+    DEFAULT_POLICY_PATH,
+    _load_supplied_policy,
+    active_policy_path,
+    merge_protected_patterns,
+    pin_denial_reason,
+    policy_digest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,30 @@ class EnforcementDigestError(RuntimeError):
     """The enforcement set could not be established. Raised, never swallowed:
     a verdict issued without knowing what it was earned against would be the
     fail-open this module exists to remove."""
+
+
+def effective_protected_patterns(policy_path: Path | None = None) -> list[str]:
+    """The protected set the *write* door enforces, so the two doors agree.
+
+    The harness policy is the floor. A supplied policy -- ``policy_path`` here,
+    else ``MANGO_WRITE_POLICY_PATH`` as ``write_policy.active_policy_path``
+    resolves it -- is pinned by digest and unioned in, never substituted, exactly
+    as ``write_denial_reason`` composes it (R-PPP-1, R-PPP-3). Digesting only the
+    floor would let an adopter's protected execution surface change without
+    appearing in the baseline (Copilot review on PR #86).
+    """
+    floor = load_protected_patterns(DEFAULT_POLICY_PATH)
+    supplied = (policy_path or active_policy_path()).expanduser()
+    if supplied.resolve() == DEFAULT_POLICY_PATH.resolve():
+        return list(floor)
+    raw, mapping = _load_supplied_policy(supplied)
+    denial = pin_denial_reason(supplied, raw)
+    if denial is not None:
+        raise EnforcementDigestError(f"the supplied write policy is not trusted: {denial}")
+    merged, findings = merge_protected_patterns(list(floor), mapping)
+    for finding in findings:
+        logger.warning("enforcement digests: %s", finding)
+    return merged
 
 
 def enforcement_digests(workspace: Path, policy_path: Path | None = None) -> dict[str, str]:
@@ -61,7 +92,9 @@ def enforcement_digests(workspace: Path, policy_path: Path | None = None) -> dic
     """
     root = workspace.resolve()
     try:
-        patterns = load_protected_patterns(policy_path or DEFAULT_POLICY_PATH)
+        patterns = effective_protected_patterns(policy_path)
+    except EnforcementDigestError:
+        raise
     except (Exception, SystemExit) as exc:
         # Fail-closed boundary: `load_protected_patterns` exits for a CLI gate,
         # which here would kill the orchestrator instead of refusing one verdict.

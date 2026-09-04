@@ -46,6 +46,16 @@ Landed together with the slices recorded below, from
   exercises `max_tool_calls_per_task()`, and `tool_calls[].function.arguments`
   accepts every JSON shape the dispatcher degrades to "no arguments" (Copilot
   review on PR #86).
+- **Second review round.** The enforcement digest is re-checked after the
+  verification command exits, so a change that persists inside the run is
+  `BLOCKED/enforcement_tampered` too (the swap-and-restore residual is stated in
+  `SECURITY.md`); a baseline that could not be recorded is remembered and
+  refuses to grade rather than silently starting one; the MCP transport runs
+  the same schema gate as the dispatcher before any handler; `npx`/`pnpm exec`
+  with any leading option fails closed; a pinned supplied write policy widens
+  the digested set instead of replacing the harness floor; a failed model call
+  still emits a `model_call` event; `/readyz` checks the model credential; the
+  selector gate matches the whole node identity (Copilot review on PR #86).
 
 ### A ticked acceptance criterion must name a selector that collects something
 

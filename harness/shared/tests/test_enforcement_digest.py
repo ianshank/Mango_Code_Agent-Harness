@@ -75,11 +75,41 @@ class TestWhatIsDigested:
         assert {"GNUmakefile", "makefile", "pytest.ini", "tox.ini", "setup.cfg", "setup.py",
                 "sitecustomize.py", "usercustomize.py", "extra.pth", "src/nested.pth"} <= appeared
 
-    def test_a_supplied_policy_defines_its_own_set(self, workspace: Path, tmp_path: Path) -> None:
+    def test_a_pinned_supplied_policy_widens_the_floor(
+        self,
+        workspace: Path,
+        tmp_path_factory: pytest.TempPathFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A supplied policy is unioned with the harness floor, exactly as the
+        write door composes it (R-PPP-1), and only when pinned (R-PPP-3).
+        Substituting it would let an adopter's protected surface change without
+        appearing in the baseline (Copilot review on PR #86)."""
+        from harness.shared import write_policy
+
+        policy = workspace / "other-policy.json"
+        raw = json.dumps({"protected_paths": ["src/**"]}).encode("utf-8")
+        policy.write_bytes(raw)
+        # The pin record must live outside the governed tree (INV-6), so it
+        # gets its own temporary directory rather than a corner of ``workspace``.
+        pins = tmp_path_factory.mktemp("pins") / "pins.json"
+        pins.write_text(
+            json.dumps(
+                {"pinned_policies": {write_policy.pin_key(policy): write_policy.policy_digest(raw)}}
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv(write_policy.POLICY_PIN_RECORD_ENV, str(pins))
+
+        digests = enforcement_digests(workspace, policy_path=policy)
+        assert "src/feature.py" in digests, "the supplied pattern was not added"
+        assert "Makefile" in digests, "the harness floor was substituted away"
+
+    def test_an_unpinned_supplied_policy_is_refused(self, workspace: Path, tmp_path: Path) -> None:
         policy = tmp_path / "other-policy.json"
         policy.write_text(json.dumps({"protected_paths": ["src/**"]}), encoding="utf-8")
-        digests = enforcement_digests(workspace, policy_path=policy)
-        assert set(digests) == {"src/feature.py"}
+        with pytest.raises(EnforcementDigestError, match="not trusted"):
+            enforcement_digests(workspace, policy_path=policy)
 
     def test_the_result_is_deterministic(self, workspace: Path) -> None:
         assert enforcement_digests(workspace) == enforcement_digests(workspace)

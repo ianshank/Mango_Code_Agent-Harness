@@ -28,6 +28,7 @@ except ImportError:
 from harness.shared.agent_authority import tool_is_permitted, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.orchestrator.dispatcher import ToolDispatcher
+from harness.shared.tool_arg_validation import invalid_arguments_reason, parameter_schemas
 from harness.shared.tool_dispatch import _normalize_tool_arguments
 from harness.shared.tool_executors import authorize_write
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
@@ -96,7 +97,18 @@ def _loggable_argument_keys(name: str, arguments: Any) -> tuple[list[str], int]:
 #: fold the write/read policy's denial into ``Error writing file …`` /
 #: ``Error reading file …``; the broker's refusal of a command and the
 #: dispatcher's argument validation carry their own prefixes.
-_REFUSAL_PREFIXES = ("Denied", "Error writing file", "Error reading file", "Error executing tool", "Error:")
+_REFUSAL_PREFIXES = (
+    "Denied",
+    "Error writing file",
+    "Error reading file",
+    "Error patching file",
+    "Error executing tool",
+    "Error:",
+)
+
+#: The same per-tool schemas `ToolDispatcher` validates against, so the MCP
+#: door cannot hand an executor a call the in-process door would refuse.
+_PARAMETER_SCHEMAS = parameter_schemas(NEMOTRON_TOOLS)
 
 
 def _handler_refused(result: Any) -> bool:
@@ -194,6 +206,21 @@ def create_mcp_server(
             return [types.TextContent(type="text", text=f"Tool '{name}' denied: policy lookup failed.")]
 
         args = _normalize_tool_arguments(arguments, name)
+
+        # The schema gate `ToolDispatcher.dispatch` applies, applied here too:
+        # this path calls the handlers directly, so without it an MCP
+        # `write_file` missing `content` still reached the executor and
+        # `additionalProperties: false` was advertised, not enforced (Copilot
+        # review on PR #86). A refused call never starts the handler thread.
+        schema = _PARAMETER_SCHEMAS.get(name)
+        reason = invalid_arguments_reason(schema, args) if schema is not None else None
+        if reason is not None:
+            _log_tool_call(
+                name=name, role=role, permitted=False,
+                duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                unknown_key_count=unknown_key_count,
+            )
+            return [types.TextContent(type="text", text=f"Error: invalid_arguments: {reason}")]
 
         try:
             handler = tool_handlers.get(name)

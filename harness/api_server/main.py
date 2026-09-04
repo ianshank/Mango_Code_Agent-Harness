@@ -15,7 +15,8 @@ from harness.api_server.messages import HistoryMessage, parse_history
 from harness.shared.debug_dump import redact_history
 from harness.shared.json_logging import setup_json_logging
 from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
-from harness.shared.policy_loader import PolicyError, max_tool_calls_per_task, orchestrator_defaults
+from harness.shared.nemotron_bridge import resolve_environment
+from harness.shared.policy_loader import PolicyError, max_tool_calls_per_task, nemotron_defaults, orchestrator_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -169,10 +170,18 @@ def readiness_checks() -> dict[str, bool]:
         # block would otherwise report ready and then 500 on construction.
         orchestrator_defaults()
         max_tool_calls_per_task()
+        nemotron_defaults()
         checks["policy"] = True
     except PolicyError:
         logger.exception("Readiness check failed: governance policy did not load")
         checks["policy"] = False
+    # A run cannot start without the model credential: `complete_chat` raises
+    # when neither the environment nor the root `.env` supplies one, so "ready"
+    # without it is a 500 waiting for the first request (Copilot review on
+    # PR #86). The resolver is the bridge's own; the value never leaves it.
+    checks["model_credential"] = bool(resolve_environment().get("api_key"))
+    if not checks["model_credential"]:
+        logger.warning("Readiness check failed: no model credential is configured")
     return checks
 
 

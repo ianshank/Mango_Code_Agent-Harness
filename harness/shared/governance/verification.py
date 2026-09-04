@@ -118,6 +118,11 @@ class VerificationRunner:
         #: until a caller records one; `run` then records its own and warns,
         #: because a check with no baseline can only compare the tree to itself.
         self._baseline: tuple[Path, dict[str, str]] | None = None
+        #: Why the loop-start snapshot failed, if it was attempted and failed.
+        #: A run on such a runner is refused: recording the post-agent tree as
+        #: the reference would trust exactly the state the snapshot exists to
+        #: distrust (Copilot review on PR #86).
+        self._baseline_failed: str | None = None
 
     @property
     def target(self) -> str | None:
@@ -136,13 +141,25 @@ class VerificationRunner:
         to grade. Raises ``EnforcementDigestError`` rather than recording a
         partial baseline; the loop treats that as the same fault ``run`` would.
         """
-        digests = enforcement_digests(cwd)
+        try:
+            digests = enforcement_digests(cwd)
+        except Exception as exc:
+            # Remembered, not swallowed: `run` refuses until a snapshot succeeds.
+            self._baseline = None
+            self._baseline_failed = str(exc)
+            raise
         self._baseline = (cwd.resolve(), digests)
+        self._baseline_failed = None
         logger.info("verification: enforcement baseline recorded, %d protected file(s)", len(digests))
         return dict(digests)
 
     def _tampered_since_baseline(self, cwd: Path) -> list[str]:
         """Protected files that differ from the baseline, recording one if absent."""
+        if self._baseline_failed is not None:
+            raise EnforcementDigestError(
+                "the enforcement baseline could not be recorded at loop start "
+                f"({self._baseline_failed}); a verdict earned against an unknown tree is refused"
+            )
         current = enforcement_digests(cwd)
         if self._baseline is None or self._baseline[0] != cwd.resolve():
             logger.warning(
@@ -282,6 +299,40 @@ class VerificationRunner:
                 os.environ.pop(REENTRANCY_ENV, None)
             else:
                 os.environ[REENTRANCY_ENV] = previous
+
+        # After the run as well as before it. A script an agent was allowed to
+        # start can leave a process behind that rewrites the makefile between
+        # the check above and `make` reading it; a change that persists is
+        # caught here. A swap-and-restore inside that window is not -- that
+        # needs an immutable snapshot or OS isolation of the backend, which is
+        # Phase F of the remediation plan (Copilot review on PR #86).
+        try:
+            tampered_after = self._tampered_since_baseline(cwd)
+        except EnforcementDigestError as exc:
+            logger.warning("verification: enforcement set could not be re-read after the run: %s", exc)
+            return HarnessCheck(
+                target=target,
+                command=self.command,
+                status=BLOCKED,
+                exit_code=-1,
+                reason=f"the enforcement set could not be re-read after the run: {exc}",
+                probe_ok=True,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+        if tampered_after:
+            logger.warning(
+                "verification: refusing %s, enforcement files changed during the run: %s", target, tampered_after
+            )
+            return HarnessCheck(
+                target=target,
+                command=self.command,
+                status=BLOCKED,
+                exit_code=-1,
+                reason="protected files changed while the verdict was being earned: " + ", ".join(tampered_after),
+                probe_ok=True,
+                latency_ms=int((time.monotonic() - started) * 1000),
+                tampered_files=tuple(tampered_after),
+            )
 
         elapsed = int((time.monotonic() - started) * 1000)
         logger.info(

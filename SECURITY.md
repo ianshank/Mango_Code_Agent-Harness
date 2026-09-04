@@ -52,8 +52,13 @@ network. What the harness now guarantees is narrower than prevention — the
 verdict cannot be forged that way. `VerificationRunner` records the digest of
 every `protected_paths` file before the first agent turn and refuses to grade
 (`BLOCKED`, `enforcement_tampered`, naming the file) if any of them changed,
-appeared or vanished since. That is detection after the fact, not containment
-of the script. OS isolation of the process backend (container/namespace, with
+appeared or vanished since; the set is checked again after the verification
+command exits, so a background process that rewrites a file between the check
+and `make` reading it is caught if the change persists. A rewrite that is
+restored before the second check (swap-and-restore inside the run) is not —
+that needs an immutable snapshot or OS isolation of the backend, and is a
+known, accepted residual until then. That is detection after the fact, not
+containment of the script. OS isolation of the process backend (container/namespace, with
 `.git`, `.mango`, `.env` and the enforcement files masked or read-only, and no
 network) is the fix, and is a later capability profile that this repository's
 CI runners cannot yet exercise. Reports that widen the indirect door beyond

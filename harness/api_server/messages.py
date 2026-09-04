@@ -71,16 +71,22 @@ class ToolCallFunction(_WireModel):
     set. Rejecting a shape the dispatcher accepted would recreate the 500 this
     model exists to remove (Copilot review on PR #86)."""
 
-    name: str
+    name: Optional[str] = None
     arguments: Optional[Any] = None
 
 
 class ToolCall(_WireModel):
-    """One entry of an assistant message's ``tool_calls``."""
+    """One entry of an assistant message's ``tool_calls``.
 
-    id: Optional[str] = None
-    type: Optional[str] = None
-    function: ToolCallFunction
+    Every field is optional and ``id``/``type`` accept any JSON value: the
+    dispatcher deliberately treats a call with no ``function`` or ``name`` as an
+    unknown tool and records it, and preserves a non-string ``id`` on the tool
+    message. A wire model stricter than the loop turns those completed runs
+    back into a 500 (Copilot review on PR #86)."""
+
+    id: Optional[Any] = None
+    type: Optional[Any] = None
+    function: Optional[ToolCallFunction] = None
 
 
 class SystemMessage(_WireModel):
@@ -110,7 +116,7 @@ class ToolMessage(_WireModel):
 
     role: Literal["tool"]
     content: str
-    tool_call_id: Optional[str] = None
+    tool_call_id: Optional[Any] = None
     name: Optional[str] = None
 
 

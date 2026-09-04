@@ -619,3 +619,28 @@ def test_a_handler_denial_is_logged_as_denied(
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
     assert "permitted=False" in records[0].getMessage()
+
+
+def test_a_call_the_schema_rejects_never_starts_the_handler(tmp_path: Path, broker: ExecutionBroker) -> None:
+    """`write_file` without `content` used to reach the executor through the MCP
+    door and write an empty file; `additionalProperties: false` was advertised
+    and unenforced. The dispatcher's schema gate now runs here too."""
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    result = asyncio.run(server._call_tool_handler("write_file", {"filepath": "hole.txt"}))
+    assert result[0].text.startswith("Error: invalid_arguments:"), result[0].text
+    assert "content" in result[0].text
+    assert not (tmp_path / "hole.txt").exists(), "the executor ran on a call the schema rejects"
+
+    extra = asyncio.run(server._call_tool_handler("read_file", {"filepath": "a.txt", "sneaky": 1}))
+    assert extra[0].text.startswith("Error: invalid_arguments:"), extra[0].text
+
+
+def test_a_schema_rejection_is_logged_as_denied(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        asyncio.run(server._call_tool_handler("write_file", {"filepath": "hole.txt"}))
+    records = _tool_call_records(caplog)
+    assert len(records) == 1 and records[0].levelno == logging.WARNING
+    assert "permitted=False" in records[0].getMessage()

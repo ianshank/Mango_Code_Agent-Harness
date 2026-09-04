@@ -313,3 +313,69 @@ class TestTheLoopRecordsTheBaselineBeforeTheFirstAgentTurn:
     def test_the_result_type_is_unchanged(self) -> None:
         result = ExecutionResult("SUCCESS", "", "", 0)
         assert result.action == ""
+
+
+class TestTheBaselineFailureIsRemembered:
+    """A snapshot that fails at loop start must not be replaced by a fresh
+    baseline taken after the agents ran (Copilot review on PR #86)."""
+
+    def test_a_failed_loop_start_snapshot_refuses_the_verdict(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from harness.shared.governance import verification as verification_mod
+
+        real = verification_mod.enforcement_digests
+        calls = {"n": 0}
+
+        def _flaky(cwd: Path, policy_path: Path | None = None) -> dict[str, str]:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise enforcement_digest.EnforcementDigestError("protected file conftest.py could not be read")
+            return real(cwd, policy_path)
+
+        monkeypatch.setattr(verification_mod, "enforcement_digests", _flaky)
+        runner = _runner()
+        with pytest.raises(enforcement_digest.EnforcementDigestError):
+            runner.snapshot_enforcement(workspace)
+
+        check = runner.run(workspace)  # the tree is readable again; that must not help
+        assert check.status == BLOCKED
+        assert "could not be recorded at loop start" in check.reason
+        assert check.probe_ok is False
+
+    def test_a_later_successful_snapshot_clears_the_sentinel(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from harness.shared.governance import verification as verification_mod
+
+        real = verification_mod.enforcement_digests
+        monkeypatch.setattr(
+            verification_mod, "enforcement_digests",
+            lambda cwd, policy_path=None: (_ for _ in ()).throw(enforcement_digest.EnforcementDigestError("x")),
+        )
+        runner = _runner()
+        with pytest.raises(enforcement_digest.EnforcementDigestError):
+            runner.snapshot_enforcement(workspace)
+        monkeypatch.setattr(verification_mod, "enforcement_digests", real)
+        runner.snapshot_enforcement(workspace)
+        assert runner.run(workspace).status != BLOCKED
+
+
+class TestTamperingDuringTheRunIsCaught:
+    def test_a_makefile_rewritten_while_make_runs_is_refused(self, workspace: Path) -> None:
+        """A persistent rewrite between the pre-probe check and the recipe
+        finishing is caught by the post-run re-check. A swap-and-restore inside
+        that window is not; that needs OS isolation (plan Phase F)."""
+
+        class RewritingBroker(RecordingBroker):
+            def execute_command(self, command: str, _ctx: dict, cwd: Path | None = None, timeout: int = 0):
+                if "test-python" in command and " -n " not in command and cwd is not None:
+                    (cwd / "Makefile").write_text("test-python:\n\ttrue\n", encoding="utf-8")
+                return super().execute_command(command, _ctx, cwd=cwd, timeout=timeout)
+
+        runner = _runner(RewritingBroker({"-n": _ok("python -m pytest -q\n")}))
+        runner.snapshot_enforcement(workspace)
+        check = runner.run(workspace)
+        assert check.status == BLOCKED
+        assert "while the verdict was being earned" in check.reason
+        assert "Makefile" in check.tampered_files

@@ -280,16 +280,33 @@ def test_healthz_is_200_without_any_credential(client: TestClient, monkeypatch):
     assert response.json() == {"status": "ok"}
 
 
-def test_readyz_is_200_when_key_and_policy_are_in_place(client: TestClient, _api_server_key):
+def test_readyz_is_200_when_key_policy_and_credential_are_in_place(client: TestClient, _api_server_key, monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-credential")
     response = client.get("/readyz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "checks": {"api_key": True, "policy": True}}
+    assert response.json() == {
+        "status": "ready",
+        "checks": {"api_key": True, "policy": True, "model_credential": True},
+    }
+
+
+def test_readyz_is_503_without_the_model_credential(client: TestClient, _api_server_key, monkeypatch):
+    """`/api/orchestrate` cannot start a run without the Nemotron key, so the
+    probe must say so rather than report ready-then-500 (Copilot review)."""
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.setattr("harness.shared.nemotron_bridge.resolve_environment", dict)
+    response = client.get("/readyz")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["checks"]["model_credential"] is False
+    assert "nvapi" not in response.text
 
 
 def test_readyz_is_503_without_the_api_key(client: TestClient, monkeypatch):
     """The negative side of readiness: an unconfigured key is exactly the
     state `/api/orchestrate` would 500 on, so the probe must say so first."""
     monkeypatch.delenv("API_SERVER_KEY", raising=False)
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-credential")
     response = client.get("/readyz")
     assert response.status_code == 503
     body = response.json()
@@ -306,11 +323,13 @@ def test_readyz_is_503_when_the_policy_does_not_load(client: TestClient, _api_se
     broken.write_text("{not json", encoding="utf-8")
     monkeypatch.setattr("harness.shared.policy_loader.POLICY_PATH", broken)
 
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-credential")
     response = client.get("/readyz")
 
     assert response.status_code == 503
     body = response.json()
-    assert body["checks"] == {"api_key": True, "policy": False}
+    assert body["checks"]["policy"] is False
+    assert body["checks"]["api_key"] is True
     assert str(tmp_path) not in response.text
     assert "governance-policy.json" not in response.text
 
@@ -389,8 +408,9 @@ def test_readyz_is_503_when_a_block_the_orchestrator_needs_is_missing(
     partial.write_text(json.dumps(policy), encoding="utf-8")
     monkeypatch.setattr("harness.shared.policy_loader.POLICY_PATH", partial)
 
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-credential")
     response = client.get("/readyz")
 
     assert response.status_code == 503
-    assert response.json()["checks"] == {"api_key": True, "policy": False}
+    assert response.json()["checks"]["policy"] is False
     assert str(tmp_path) not in response.text

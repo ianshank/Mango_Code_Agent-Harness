@@ -131,12 +131,13 @@ def make_denial_reason(args: list[str]) -> str | None:
 def delegated_argv(argv: list[str]) -> tuple[str, list[str]] | None:
     """The ``(delegator, inner argv)`` a delegating program hands off to.
 
-    ``pnpm exec vitest run`` -> ``("pnpm exec", ["vitest", "run"])``;
-    ``npx --yes tsc --noEmit`` -> ``("npx", ["tsc", "--noEmit"])``. Flags before
-    the program are skipped, and a flag that takes a value (``npx -p pkg``)
-    makes the value look like the program -- which then fails the caller's
-    allowlist, the right direction to be wrong in. ``None`` when ``argv`` is
-    not a delegation, including a bare ``pnpm exec`` with nothing to run.
+    ``pnpm exec vitest run`` -> ``("pnpm exec", ["vitest", "run"])``. Any
+    option before the program (``npx --yes tsc``, ``npx --package=evil vitest``,
+    ``npx -p pkg vitest``) yields an empty inner argv, which the caller grades
+    as nothing safe to run: ``--package``/``--call`` change what actually
+    executes, and parsing a safe subset is a second allowlist that could drift
+    (Copilot review on PR #86). ``None`` when ``argv`` is not a delegation,
+    including a bare ``pnpm exec`` with nothing to run.
     """
     if not argv:
         return None
@@ -149,11 +150,9 @@ def delegated_argv(argv: list[str]) -> tuple[str, list[str]] | None:
             if not rest or rest[0] != prefix[1]:
                 continue
             rest = rest[1:]
-        inner = [token for token in rest if not token.startswith("-")]
-        if not inner:
+        if not rest or rest[0].startswith("-"):
             return label, []
-        start = rest.index(inner[0])
-        return label, rest[start:]
+        return label, rest
     return None
 
 

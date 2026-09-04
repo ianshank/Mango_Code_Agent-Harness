@@ -369,3 +369,24 @@ class TestOrchestrateWorkflow:
         assert res.verifier_message == "Verifier: done"
         assert res.verdict is not None
 
+
+
+class TestAFailedModelCallIsStillAnEvent:
+    def test_the_failure_path_emits_a_model_call_event(
+        self, mock_workspace: Path, mock_complete_chat, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A request that raises used to log a bare error with no run_id or
+        latency; the structured event now covers both outcomes (Copilot review
+        on PR #86)."""
+        mock_complete_chat.side_effect = RuntimeError("upstream 503")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator"), pytest.raises(RuntimeError):
+            orch.execute_loop("Do a task")
+
+        events = [r for r in caplog.records if getattr(r, "event", None) == "model_call"]
+        assert len(events) == 1
+        event = events[0]
+        assert getattr(event, "outcome", None) == "error"
+        assert getattr(event, "error_type", None) == "RuntimeError"
+        assert getattr(event, "run_id", None) == orch.run_id
+        assert event.levelno == logging.WARNING

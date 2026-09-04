@@ -131,22 +131,33 @@ class ExecutionLoop:
 
     @staticmethod
     def _log_model_call(
-        run_id: str, agent_name: str, iteration: int, started: float, response: Any
+        run_id: str,
+        agent_name: str,
+        iteration: int,
+        started: float,
+        response: Any,
+        error: BaseException | None = None,
     ) -> None:
-        """One structured event per model round-trip: who, which turn, how long,
-        and the token counts the response reports. Never the messages."""
+        """One structured event per model round-trip, on success and on failure:
+        who, which turn, how long, the outcome, and the token counts the
+        response reports. Never the messages. A failed request emits the same
+        event with ``outcome=error`` so error rate and latency stay correlatable
+        by ``run_id`` (Copilot review on PR #86)."""
         usage = response.get("usage") if isinstance(response, dict) else None
         if not isinstance(usage, dict):
             usage = {}
-        logger.debug(
-            "model call by %s (iteration %d)",
-            agent_name, iteration,
+        logger.log(
+            logging.WARNING if error is not None else logging.DEBUG,
+            "model call by %s (iteration %d)%s",
+            agent_name, iteration, f" failed: {type(error).__name__}" if error is not None else "",
             extra={
                 "event": "model_call",
                 "run_id": run_id,
                 "agent": agent_name,
                 "iteration": iteration,
                 "latency_ms": int((time.monotonic() - started) * 1000),
+                "outcome": "error" if error is not None else "ok",
+                "error_type": type(error).__name__ if error is not None else None,
                 "prompt_tokens": usage.get("prompt_tokens"),
                 "completion_tokens": usage.get("completion_tokens"),
             },
@@ -190,6 +201,7 @@ class ExecutionLoop:
 
                 response = self.complete_chat_fn(**kwargs)
             except Exception as e:
+                self._log_model_call(run_id, agent_name, iteration, started, None, error=e)
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
             self._log_model_call(run_id, agent_name, iteration, started, response)

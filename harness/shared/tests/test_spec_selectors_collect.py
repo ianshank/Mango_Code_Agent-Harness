@@ -179,14 +179,31 @@ def matches(selector: Selector) -> int:
     """How many statically discovered items the selector would collect."""
     items = discover_items(selector.paths)
     if selector.node_ids:
-        wanted = set()
+        # Full identity -- repo-relative path, class, function -- so
+        # `test_x.py::NoSuchClass::test_existing` cannot be certified by an
+        # unrelated class that happens to declare `test_existing`, and
+        # `other/test_x.py` cannot stand in for `here/test_x.py`.
+        wanted: set[tuple[str, str, str | None]] = set()
         for node_id in selector.node_ids:
             parts = node_id.split("::")
-            wanted.add((Path(parts[0]).name, parts[-1]))
-        items = [
-            it for it in items
-            if (it.path.name, it.func_name) in wanted or (it.path.name, it.class_name) in wanted
-        ]
+            rel = (REPO / parts[0]).resolve().relative_to(REPO).as_posix()
+            if len(parts) == 1:
+                wanted.add((rel, "", None))
+            elif len(parts) == 2:
+                wanted.add((rel, "", parts[1]))  # function, or a class selecting all its tests
+            else:
+                wanted.add((rel, parts[1], parts[2]))
+
+        def _selected(it: Item) -> bool:
+            rel = it.path.relative_to(REPO).as_posix()
+            return (
+                (rel, "", None) in wanted
+                or (rel, "", it.func_name) in wanted and it.class_name == ""
+                or (rel, "", it.class_name) in wanted
+                or (rel, it.class_name, it.func_name) in wanted
+            )
+
+        items = [it for it in items if _selected(it)]
     if selector.keyword is None:
         return len(items)
     expression = Expression.compile(selector.keyword)
@@ -211,6 +228,7 @@ class TestTickedCriteriaCollectSomething:
 
 EXECUTORS = "harness/shared/tests/test_tool_executors.py"
 ACTIONS = "harness/shared/tests/test_command_actions.py"
+FUNC = "test_patching_a_credential_file_is_refused"
 
 
 def _selector(
@@ -237,10 +255,25 @@ class TestTheMatcherItself:
         assert matches(sel_and) == 0
 
     def test_node_ids_are_resolved(self) -> None:
-        sel = _selector(node_ids=(f"{EXECUTORS}::test_patching_a_credential_file_is_refused",))
+        sel = _selector(node_ids=(f"{EXECUTORS}::TestApplyPatchConsultsTheReadPolicy::{FUNC}",))
         assert matches(sel) == 1
+        whole_class = _selector(node_ids=(f"{EXECUTORS}::TestApplyPatchConsultsTheReadPolicy",))
+        assert matches(whole_class) >= 1
+        # A function inside a class is not reachable as `file::function`; pytest
+        # would collect nothing for that id, so neither does the matcher.
+        unqualified = _selector(node_ids=(f"{EXECUTORS}::{FUNC}",))
+        assert matches(unqualified) == 0
         missing = _selector(node_ids=(f"{EXECUTORS}::test_no_such_function",))
         assert matches(missing) == 0
+
+    def test_node_ids_need_the_whole_identity(self) -> None:
+        """A wrong class or a wrong directory must not be certified by a
+        same-named function elsewhere (Copilot review on PR #86)."""
+        wrong_class = _selector(node_ids=(f"{EXECUTORS}::NoSuchClass::{FUNC}",))
+        assert matches(wrong_class) == 0
+        elsewhere = "harness/api_server/tests/test_tool_executors.py"
+        wrong_dir = _selector(node_ids=(f"{elsewhere}::TestApplyPatchConsultsTheReadPolicy::{FUNC}",))
+        assert matches(wrong_dir) == 0
 
     def test_unjudged_shapes_are_skipped_not_passed(self) -> None:
         assert _parse("pytest -m governance", "x.md", "AC-1") is None

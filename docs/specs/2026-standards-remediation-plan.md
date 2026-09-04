@@ -477,7 +477,10 @@ PR per numbered step.
 16. One PR each, any order, when there is slack: `ruff format` with
     `.git-blame-ignore-revs` (H11); PEP 621 metadata and `py.typed` (H12);
     ESLint `recommendedTypeChecked` (H13); `docs/decisions/` ADRs and the
-    `[Unreleased]` cap (H15); OS sandbox for `ProcessBackend` (B4 permanent);
+    `[Unreleased]` cap (H15); OS sandbox for `ProcessBackend` (B4 permanent —
+    the digest check runs before and after the verification command, so the
+    remaining window is a swap-and-restore inside the run, which only an
+    immutable snapshot or OS isolation closes; Copilot review on PR #86);
     eval harness and nightly live smoke (H10); `mutmut` score floor (H9);
     context budget (H4); HITL interrupts (H5); `ChatProvider` boundary (M5);
     meta-tool readers (M4); runtime-specific personas (M2); a subprocess-level

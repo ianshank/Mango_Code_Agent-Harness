@@ -363,3 +363,22 @@ class TestToolUsingRunsReachTheClient:
         response = self._post(client, server_key, history)
         assert response.status_code == 200, response.text
         assert response.json()["history"][1]["tool_calls"][0]["function"]["arguments"] == arguments
+
+    @pytest.mark.parametrize(
+        "tool_call",
+        [{}, {"id": 7, "function": {"arguments": "{}"}}, {"id": None, "type": 3, "function": None}],
+        ids=["no_function", "int_id_no_name", "null_function"],
+    )
+    def test_every_tool_call_shape_the_dispatcher_records_is_accepted(
+        self, client: TestClient, server_key: str, tool_call: dict[str, object]
+    ) -> None:
+        """`dispatcher.py` grades a call with no `function`/`name` as an unknown
+        tool and appends a result, and keeps a non-string `id`; the wire model
+        must accept what the loop recorded (Copilot review on PR #86)."""
+        history: list[dict[str, object]] = [
+            {"role": "assistant", "content": None, "tool_calls": [tool_call]},
+            {"role": "tool", "tool_call_id": tool_call.get("id"), "content": "Error: Unknown tool 'None'"},
+        ]
+        response = self._post(client, server_key, history)
+        assert response.status_code == 200, response.text
+        assert response.json()["history"][0]["tool_calls"] == [tool_call]

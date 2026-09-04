@@ -272,9 +272,9 @@ routes, and serves the static UI:
 - `/healthz` — `GET`, liveness: 200 whenever the process answers.
 - `/readyz` — `GET`, readiness: 200 only when `API_SERVER_KEY` is set and the
   governance policy loads (every accessor the orchestrator's constructor
-  resolves); otherwise 503 with the body
-  `{"status": "unavailable", "checks": {"api_key": bool, "policy": bool}}`,
-  never a path.
+  resolves) and the bridge can resolve a model credential; otherwise 503 with
+  the body `{"status": "unavailable", "checks": {"api_key": bool, "policy": bool, "model_credential": bool}}`,
+  never a path or a value.
 - `/` — the static dashboard under `harness/api_server/static/`, mounted with
   `html=True`; the directory is created by the lifespan hook, not at import.
 
