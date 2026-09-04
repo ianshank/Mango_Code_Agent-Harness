@@ -395,6 +395,64 @@ class TestGlobsAreGradedOnWhatTheyCanExpandTo:
         reason = classify("cat .en?").reason
         assert ".en?" in reason and ".env" in reason
 
+
+class TestABracketClassEndsAtItsClosingBracket:
+    """A wildcard is `*`, `?`, or a whole `[...]` -- and the third was the gap.
+
+    The commitment tail was computed from the last of `*?[`, which splits a
+    bracket class open rather than after it: `*[a-z].pem` yielded the tail
+    `a-z].pem`, ending no credential name, so the glob committed to nothing and
+    graded `read` -- the action every role holds -- while a real `bash -c`
+    printed the contents of `key.pem`. Reported by a review bot on this PR and
+    reproduced against a real shell before being fixed.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("cat *[a-z].pem", id="class-then-certificate-suffix"),
+            pytest.param("cat *id_[rd]sa", id="class-inside-an-ssh-key-name"),
+            pytest.param("cat id_[rd]sa", id="class-with-no-star"),
+            pytest.param("cat .en[v]", id="class-as-the-whole-wildcard"),
+            pytest.param("cat *[A-Z].PEM", id="case-folded-both-sides"),
+            pytest.param("cat .*[a-z]rc", id="leading-dot-reaches-npmrc"),
+            pytest.param("cat *[!x].pem", id="negated-class"),
+            pytest.param("cat *[]a-z].pem", id="literal-bracket-first-member"),
+        ],
+    )
+    def test_a_class_before_a_committing_literal_is_secret_access(self, command: str) -> None:
+        assert classify(command).action == "secret_access"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("cat src/*[a-z].py", id="python-sources"),
+            pytest.param("cat *[a-z]rc", id="dotglob-keeps-npmrc-unreachable"),
+            pytest.param("cat [.]env", id="a-class-is-not-a-literal-dot"),
+            pytest.param("cat file[.txt", id="unclosed-bracket-is-a-literal"),
+        ],
+    )
+    def test_a_class_that_reaches_no_credential_stays_ordinary(self, command: str) -> None:
+        """Verified against a real shell: with dotglob off, bash leaves each of
+        these unexpanded in a directory holding `.env`, `.npmrc`, `id_rsa` and
+        `key.pem`, so none of them can read a credential and denying them would
+        be collateral. `[.]env` is the one that looks like it should match --
+        the leading dot of a dotfile has to be *literal* in the pattern, and
+        inside a class it is not."""
+        assert classify(command).action == "read"
+
+    def test_the_scanner_ends_a_class_at_its_bracket(self) -> None:
+        """The unit under the behaviour above, so a regression names the cause
+        rather than only its symptom."""
+        from harness.shared.governance.shell_words import _glob_tokens
+
+        assert _glob_tokens("*[a-z].pem") == [(0, 1), (1, 6)]
+        assert _glob_tokens("id_[rd]sa") == [(3, 7)]
+        assert _glob_tokens("[]a-z]x") == [(0, 6)], "a leading `]` is a class member"
+        assert _glob_tokens("[!a-z]x") == [(0, 6)], "`!` negates rather than closing"
+        assert _glob_tokens("file[.txt") == [], "an unclosed `[` is a literal"
+        assert _glob_tokens("plain.txt") == []
+
     def test_every_representative_is_a_credential_filename(self) -> None:
         """Representatives -> pattern: nothing in the glob table is graded as a
         credential unless the read policy agrees it is one."""

@@ -30,7 +30,13 @@ closes quoting and escaping at the seam rather than by adding three more
 patterns to a regex. A glob must *commit* to a credential name — its literal
 prefix begins one, or its literal suffix ends one — so `ls src/*` and `cat *.py`
 stay ordinary reads, and dotglob is honoured so a dotless pattern cannot reach
-`.env`. `command_actions.py` passed its 500-line budget doing this and splits
+`.env`. That suffix is found by scanning for whole wildcard *tokens*, because a
+bracket class ends at its `]`: taking the last of `*?[` split `*[a-z].pem` into
+the tail `a-z].pem`, which ends no credential name, so `cat *[a-z].pem` and
+`cat *id_[rd]sa` committed to nothing and graded `read` while a real shell
+printed `key.pem` and `id_rsa`. Found by a review bot on the PR that introduced
+it and reproduced against `bash -c` before being fixed.
+`command_actions.py` passed its 500-line budget doing this and splits
 along the seam the defects drew: `shell_words.py` owns what a word can *reach*,
 the classifier owns what a command *does*.
 

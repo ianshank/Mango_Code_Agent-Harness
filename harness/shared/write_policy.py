@@ -108,13 +108,6 @@ CREDENTIAL_FILENAME_ALTERNATION = r"\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|
 
 #: Anchored to a whole path segment. Matching a *segment* rather than searching
 #: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
-#: while still catching ``secrets/id_rsa``.
-#:
-#: Case-insensitive: a case-sensitive match let ``.ENV``, ``ID_RSA`` and
-#: ``SECRETS.PEM`` -- valid names on the case-preserving filesystems this harness
-#: already targets -- through untouched.
-#: Anchored to a whole path segment. Matching a *segment* rather than searching
-#: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
 #: while still catching ``secrets/id_rsa``. Case-insensitive: a case-sensitive
 #: match let ``.ENV``, ``ID_RSA`` and ``SECRETS.PEM`` -- valid names on the
 #: case-preserving filesystems this harness targets -- through untouched.

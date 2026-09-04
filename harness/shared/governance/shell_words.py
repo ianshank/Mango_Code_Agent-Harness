@@ -30,6 +30,9 @@ from harness.shared.read_policy import is_credential_filename
 #: (`process_backend` runs every command through a shell), so an argument is not
 #: the filename it appears to be -- `.en?` is whatever `.en?` matches, and on this
 #: repository that is `.env`.
+#:
+#: Finding *where* a wildcard ends needs more than this character class, because
+#: `[` opens a bracket class that ends at its `]`. See `_glob_tokens`.
 _GLOB_CHARS = re.compile(r"[*?\[]")
 
 #: A brace expression bash expands into several words before it globs. Braces are
@@ -96,6 +99,49 @@ def _expand_braces(token: str) -> list[str] | None:
     return None if _BRACE.search("".join(results)) else results
 
 
+def _glob_tokens(segment: str) -> list[tuple[int, int]]:
+    """The half-open spans of the wildcard tokens in ``segment``.
+
+    A wildcard is ``*``, ``?``, or a whole bracket class ``[...]`` -- and the
+    third is why this exists. The commitment rule below asks what literal text a
+    glob *ends* with, and computing that from the last of ``*?[`` puts the split
+    at the ``[`` rather than at the ``]`` that closes it: ``*[a-z].pem`` yielded
+    the tail ``a-z].pem``, which ends no credential name, so the glob committed
+    to nothing and ``cat *[a-z].pem`` graded ``read`` while a real ``bash -c``
+    printed ``key.pem``. Same for ``cat *id_[rd]sa`` and ``id_rsa``. Reported by
+    a review bot on this PR and reproduced against a real shell before fixing.
+
+    A ``[`` with no closing ``]`` is a literal ``[`` to both bash and ``fnmatch``,
+    so it opens no span -- a word of literals is not a glob, and is left to the
+    literal rule that already ran.
+    """
+    spans: list[tuple[int, int]] = []
+    index = 0
+    length = len(segment)
+    while index < length:
+        char = segment[index]
+        if char in "*?":
+            spans.append((index, index + 1))
+            index += 1
+            continue
+        if char == "[":
+            close = index + 1
+            # `!` or `^` negates, and a `]` in first position is a literal member:
+            # `[]]` matches `]`. Both are bash and `fnmatch` semantics.
+            if close < length and segment[close] in "!^":
+                close += 1
+            if close < length and segment[close] == "]":
+                close += 1
+            while close < length and segment[close] != "]":
+                close += 1
+            if close < length:
+                spans.append((index, close + 1))
+                index = close + 1
+                continue
+        index += 1
+    return spans
+
+
 def credential_word_reason(argv: typing.Sequence[str]) -> str | None:
     """Why a word in ``argv`` names or reaches a credential file, or ``None``.
 
@@ -137,11 +183,14 @@ def credential_word_reason(argv: typing.Sequence[str]) -> str | None:
                 if is_credential_filename(segment):
                     return f"the command names {segment!r}, a credential-bearing file"
 
-                first = _GLOB_CHARS.search(segment)
-                if first is None:
+                spans = _glob_tokens(segment)
+                if not spans:
                     continue
-                prefix = segment[: first.start()].lower()
-                tail = segment[max(segment.rfind(c) for c in "*?[") + 1 :].lower()
+                # Literal text before the first wildcard and after the last one.
+                # `spans` ends a bracket class at its `]`, so `*[a-z].pem` tails
+                # with `.pem` rather than with `a-z].pem`.
+                prefix = segment[: spans[0][0]].lower()
+                tail = segment[spans[-1][1] :].lower()
                 lowered = segment.lower()
                 for name in _CREDENTIAL_REPRESENTATIVES:
                     if name.startswith(".") and not segment.startswith("."):

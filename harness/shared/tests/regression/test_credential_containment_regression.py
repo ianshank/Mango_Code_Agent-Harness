@@ -92,6 +92,12 @@ CREDENTIAL_READ_SPELLINGS = (
     pytest.param("cat {.env,README.md}", id="brace-expansion"),
     pytest.param("cat ./.env", id="dot-slash"),
     pytest.param("cat .*", id="every-dotfile"),
+    # A bracket class ends at its `]`, not at its `[`. Computing the commitment
+    # tail from the last of `*?[` left `.en[v]` and its peers committing to
+    # nothing; the premise test below runs each of these through a real shell.
+    pytest.param("cat .en[v]", id="bracket-class"),
+    pytest.param("cat .[a-z]nv", id="bracket-class-mid-word"),
+    pytest.param("cat .e[!x]v", id="bracket-class-negated"),
 )
 
 
