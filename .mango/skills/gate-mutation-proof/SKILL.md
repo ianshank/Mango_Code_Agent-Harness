@@ -30,10 +30,18 @@ came from mutation rather than from review:
   which matched only a pre-existing mocked test that passed with and without the
   fix under it.
 
-The procedure below found all three, and was run **ten times by hand** in the
-`code-quality-tech-debt-plan` Phase 1 change before being written down here. A
-repeated manual procedure with a mechanical shape and a history of finding real
-defects is a skill, not a habit (NS-20).
+The procedure below found all three, and was run on **every gate** the
+`code-quality-tech-debt-plan` Phase 1 change added or altered, repeatedly, before
+being written down here. A repeated manual procedure with a mechanical shape and
+a history of finding real defects is a skill, not a habit (NS-20).
+
+No running total is claimed, deliberately. An earlier draft of this file said
+"ten times", the PR body said "twelve", and neither could be reconstructed from
+the evidence — the same gate was mutated twice as its tests were strengthened,
+so "how many" depends on whether you are counting gates or runs. A count nobody
+can check is the kind of claim this skill exists to refuse (DEC-024). Record
+which mutation was run against which gate and what it produced; that is
+checkable, and a total is not.
 
 ## The loop
 
