@@ -97,16 +97,27 @@ def uses_lines(workflow_text: str) -> list[tuple[str, int]]:
     return [(m.group("action"), int(m.group("major"))) for m in PINNED_USES.finditer(workflow_text)]
 
 
-def unpinned_uses(workflow_text: str) -> list[str]:
-    """Every `uses:` line that is not a SHA pin with a version comment."""
-    offenders = []
+def pinnable_uses(workflow_text: str) -> list[str]:
+    """Every `uses:` line the pin rule applies to, stripped.
+
+    The `./`-relative exemption lives here and nowhere else. It was duplicated
+    once — `unpinned_uses` skipped local composite actions while the test that
+    reconciles the graded and reported sets counted them — which passed only
+    because neither workflow uses one, and would have failed the first time
+    either did.
+    """
+    lines = []
     for line in workflow_text.splitlines():
         reference = ANY_USES.match(line)
         if reference is None or reference.group("reference").startswith("./"):
             continue
-        if not PINNED_USES.match(line):
-            offenders.append(line.strip())
-    return offenders
+        lines.append(line.strip())
+    return lines
+
+
+def unpinned_uses(workflow_text: str) -> list[str]:
+    """Every `uses:` line that is not a SHA pin with a version comment."""
+    return [line for line in pinnable_uses(workflow_text) if not PINNED_USES.match(line)]
 
 
 def pip_install_lines(workflow_text: str) -> list[str]:
@@ -237,18 +248,40 @@ class TestActionsRunOnNode24:
             f"{path.name} has {len(offenders)} reference(s) that are not `@<40-hex sha> # vX.Y.Z`: {offenders}"
         )
 
-    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
-    def test_the_pin_check_sees_every_reference_it_grades(self, path: Path) -> None:
-        """Every `uses:` is either graded or reported — never neither.
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(WORKFLOW, id=WORKFLOW.name),
+            pytest.param(DRIFT_WORKFLOW, id=DRIFT_WORKFLOW.name),
+            # Neither real workflow uses a local composite action, so on those two
+            # alone this assertion cannot tell `pinnable_uses` from a raw count of
+            # every `uses:` line — which is how the exemption came to be stated in
+            # two places that disagreed. This case is the one that can.
+            pytest.param(
+                "jobs:\n"
+                "  one:\n"
+                "    steps:\n"
+                "      - uses: ./.github/actions/setup\n"
+                "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0\n"
+                "      - uses: actions/checkout@v5\n",
+                id="a-workflow-with-a-local-composite-action",
+            ),
+        ],
+    )
+    def test_the_pin_check_sees_every_reference_it_grades(self, source: Path | str) -> None:
+        """Every pinnable `uses:` is either graded or reported — never neither.
 
         `uses_lines` returning only well-formed references is what lets the Node
         24 table stay simple, and is also how an unpinned action could vanish
-        from every assertion at once. This pins the two halves to the whole.
+        from every assertion at once. This pins the two halves to the whole,
+        against the same set the exemption defines rather than a second count.
         """
-        text = path.read_text(encoding="utf-8")
-        every = [line.strip() for line in text.splitlines() if ANY_USES.match(line)]
+        text = source.read_text(encoding="utf-8") if isinstance(source, Path) else source
+        name = source.name if isinstance(source, Path) else "the probe"
+        every = pinnable_uses(text)
+        assert every, f"{name} has no pinnable `uses:` line; the parser or the file is broken"
         assert len(uses_lines(text)) + len(unpinned_uses(text)) == len(every), (
-            f"{path.name}: {len(every)} `uses:` lines, but only "
+            f"{name}: {len(every)} pinnable `uses:` lines, but only "
             f"{len(uses_lines(text))} graded and {len(unpinned_uses(text))} reported"
         )
 
@@ -300,6 +333,33 @@ class TestActionsRunOnNode24:
         workflow = tmp_path / "probe.yml"
         workflow.write_text("jobs:\n  one:\n    steps:\n      - uses: ./.github/actions/setup\n", encoding="utf-8")
         assert unpinned_uses(workflow.read_text(encoding="utf-8")) == []
+
+    def test_the_exemption_holds_when_a_workflow_actually_uses_one(self, tmp_path: Path) -> None:
+        """The reconciliation and the exemption have to agree on the same set.
+
+        Neither workflow has a local composite action today, so a reconciliation
+        counting *every* `uses:` line while `unpinned_uses` skipped `./` ones
+        passed anyway — and would have failed the first time either grew one.
+        This is that workflow, written by hand.
+        """
+        workflow = tmp_path / "probe.yml"
+        workflow.write_text(
+            "jobs:\n"
+            "  one:\n"
+            "    steps:\n"
+            "      - uses: ./.github/actions/setup\n"
+            "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0\n"
+            "      - uses: actions/checkout@v5\n",
+            encoding="utf-8",
+        )
+        text = workflow.read_text(encoding="utf-8")
+        assert pinnable_uses(text) == [
+            "- uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0",
+            "- uses: actions/checkout@v5",
+        ], "the local action must be excluded from the set the pin rule applies to"
+        assert uses_lines(text) == [("actions/checkout", 5)]
+        assert unpinned_uses(text) == ["- uses: actions/checkout@v5"]
+        assert len(uses_lines(text)) + len(unpinned_uses(text)) == len(pinnable_uses(text))
 
     def test_dependabot_keeps_the_actions_moving(self) -> None:
         text = DEPENDABOT.read_text(encoding="utf-8")

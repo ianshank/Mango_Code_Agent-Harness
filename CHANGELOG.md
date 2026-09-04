@@ -51,6 +51,18 @@ the reason it names pins nothing. It now carries a valid comment and is joined
 by an over-long and an upper-case case, so the quantifier and the character
 class are each pinned from both sides.
 
+Review then found the same shape one level up: the `./` composite-action
+exemption was stated **twice**. `unpinned_uses` skipped local actions; the test
+reconciling the graded and reported sets counted them. It passed only because
+neither workflow has a local action, and would have failed the first time either
+grew one. The exemption now lives in `pinnable_uses` alone, which both read.
+
+The first proof of *that* fix was incomplete too, and the mutation run said so:
+reverting the reconciliation to a raw count still passed, because it ran against
+the two real workflows and neither can tell the two counts apart. It is now
+parametrised over a third case that has a local composite action, and the revert
+fails on it.
+
 ### The `main` ruleset asks for an approval that could never be given
 
 `.github/rulesets/main.json` has been committed, pinned by a test, and cited by

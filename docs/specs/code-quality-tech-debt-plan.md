@@ -677,7 +677,11 @@ change from a vacuous pass.
       the first attempt — the short-SHA case carried no version comment, so the
       pattern rejected it for the comment and the loosened quantifier changed
       nothing; the case now carries a valid comment and is joined by an
-      over-long and an upper-case case.
+      over-long and an upper-case case. Review then found the `./`
+      composite-action exemption stated in two places that disagreed; it now
+      lives only in `pinnable_uses`, and the reconciliation test is parametrised
+      over a workflow that has a local action, because the two real workflows
+      cannot tell the correct count from the wrong one.
 - [ ] AC-10: `pytest harness/shared/tests/test_workflow_contracts.py -k require_hashes`
       fails on a `tmp_path` lock with one requirement line not followed by a
       `--hash=` line and on an install step without `--require-hashes`, and passes
