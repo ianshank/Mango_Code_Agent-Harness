@@ -10,6 +10,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The workflows pin what they run, and the repository stops exempting itself
+
+`harness/CONTRACT.md` has required adopters to SHA-pin their GitHub Actions
+since before this repository did it. All 20 `uses:` references were tags. A tag
+is a moving reference: `@v5` is whatever the owner last pointed `v5` at, so an
+upstream account compromise reaches these runners with no commit here for the
+diff review or the secret scan to see. Every reference is now
+`@<40-hex commit sha> # vX.Y.Z`.
+
+Every SHA came from `git ls-remote --tags` against the action's own repository,
+never from memory. Annotated tags need their peeled `^{}` value: `pnpm/action-setup`
+v5.0.0 has tag object `b307475…` and commit `fc06bc12…`, and pinning the tag
+object would resolve to nothing at run time.
+
+The version comment is load-bearing rather than decorative. `NODE24_ACTION_MAJORS`
+is enforced against the major the comment states, so a bare SHA would drop a
+reference out of the Node 24 check silently — which is why a SHA without a
+comment is itself a finding.
+
+**Pinned at the majors already in use**, not the ones the open Dependabot PRs
+propose. `actions/checkout` v7, `actions/setup-python` v7, `actions/setup-node`
+v7, `actions/setup-go` v7 and `pnpm/action-setup` v6 all exist; taking them
+would fold five untested major bumps into a supply-chain change whose entire
+point is that what CI runs stops moving. #62–#66 are superseded in mechanism —
+Dependabot now updates the SHA and its comment, and a tag-bump PR no longer
+applies as written — not in substance. Whether to take the bumps is its own PR.
+
+`uses_lines` now parses only the strict form, and `unpinned_uses` reports
+everything it rejects. Splitting them is deliberate: a malformed reference
+arriving at `uses_lines` as a silently missing row is how an unpinned action
+would pass the Node 24 table by being invisible to it, so a test asserts every
+`uses:` line is either graded or reported. A `./`-relative composite action is
+exempt — it lives here and has no SHA to pin.
+
+Six mutation proofs, and the fix failed one of them first. The short-SHA case
+carried no version comment, so the pattern rejected it for the missing comment
+and loosening `{40}` to `+` left the test passing — a case that cannot fail for
+the reason it names pins nothing. It now carries a valid comment and is joined
+by an over-long and an upper-case case, so the quantifier and the character
+class are each pinned from both sides.
+
 ### The `main` ruleset asks for an approval that could never be given
 
 `.github/rulesets/main.json` has been committed, pinned by a test, and cited by

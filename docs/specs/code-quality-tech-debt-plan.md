@@ -662,10 +662,22 @@ change from a vacuous pass.
       set `_POLICY_PATH` after importing, so it passed with the fix reverted;
       it now stages a copy of the module beside a malformed policy, because a
       module-scope read has no "after import".
-- [ ] AC-9: `git grep -nE "uses: [^@]+@v[0-9]" .github/workflows` returns nothing
+- [x] AC-9: `git grep -nE "uses: [^@]+@v[0-9]" .github/workflows` returns nothing
       (today: 20 lines); `pytest harness/shared/tests/test_workflow_contracts.py -k "node24 or sha_pinned"`
       passes on the tree, fails on a `tmp_path` workflow with a tag reference, and
       fails on a SHA with no version comment · stage: `make test-python` (R-CQ-9)
+      — **Result:** the grep returns nothing (was 20 lines); the `-k` selector
+      runs 16 passed / 32 deselected. All 20 references pinned from SHAs resolved
+      by `git ls-remote --tags` against each action's own repository, taking the
+      peeled `^{}` commit for annotated tags. Pinned at the majors already in
+      use, not the majors Dependabot #62–#66 propose; DEC-045 records why.
+      Six mutation proofs (one reference back to a tag; the version comments
+      stripped; the reporter gutted; the pattern loosened on SHA length; on SHA
+      case; every reference treated as `./`-local). The length mutation survived
+      the first attempt — the short-SHA case carried no version comment, so the
+      pattern rejected it for the comment and the loosened quantifier changed
+      nothing; the case now carries a valid comment and is joined by an
+      over-long and an upper-case case.
 - [ ] AC-10: `pytest harness/shared/tests/test_workflow_contracts.py -k require_hashes`
       fails on a `tmp_path` lock with one requirement line not followed by a
       `--hash=` line and on an install step without `--require-hashes`, and passes

@@ -53,7 +53,27 @@ NODE24_ACTION_MAJORS: dict[str, int] = {
     "actions/setup-node": 5,
     "actions/setup-go": 6,
     "pnpm/action-setup": 5,
+    # Not in use yet; R-CQ-23's build caching is the reference that will need it.
+    "actions/cache": 4,
 }
+
+#: The only `uses:` form this repository accepts (R-CQ-9): a full 40-hex commit
+#: SHA followed by the version comment Dependabot writes. A tag is a moving
+#: reference — `@v5` is whatever the owner last pointed `v5` at, so an account
+#: compromise upstream reaches this repository's runners without a commit here.
+#: The comment is not decoration: a bare SHA says nothing about what it is, and
+#: `NODE24_ACTION_MAJORS` is enforced against the major *it* states.
+PINNED_USES = re.compile(
+    r"^\s*(?:-\s*)?uses:\s*"
+    r"(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+    r"@(?P<sha>[0-9a-f]{40})"
+    r"\s+#\s*v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)\s*$",
+    re.M,
+)
+#: Any `uses:` at all, so a reference the strict form rejects is reported rather
+#: than skipped. A `./`-relative composite action lives in this repository and
+#: has no SHA to pin, so it is not a finding.
+ANY_USES = re.compile(r"^\s*(?:-\s*)?uses:\s*(?P<reference>\S.*?)\s*$")
 
 
 def job_sections(workflow_text: str) -> dict[str, str]:
@@ -67,11 +87,26 @@ def job_sections(workflow_text: str) -> dict[str, str]:
 
 
 def uses_lines(workflow_text: str) -> list[tuple[str, int]]:
-    """Every `uses: owner/action@vN` as (action, major)."""
-    return [
-        (m.group(1), int(m.group(2)))
-        for m in re.finditer(r"^\s*(?:-\s*)?uses:\s*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@v(\d+)", workflow_text, re.M)
-    ]
+    """Every SHA-pinned `uses:` as (action, major), the major read off its comment.
+
+    Only well-formed references are returned. Anything the strict form rejects
+    is `unpinned_uses`' to report — splitting them keeps a malformed reference
+    from arriving here as a silently missing row, which is how an unpinned
+    action would otherwise pass the Node 24 table by being invisible to it.
+    """
+    return [(m.group("action"), int(m.group("major"))) for m in PINNED_USES.finditer(workflow_text)]
+
+
+def unpinned_uses(workflow_text: str) -> list[str]:
+    """Every `uses:` line that is not a SHA pin with a version comment."""
+    offenders = []
+    for line in workflow_text.splitlines():
+        reference = ANY_USES.match(line)
+        if reference is None or reference.group("reference").startswith("./"):
+            continue
+        if not PINNED_USES.match(line):
+            offenders.append(line.strip())
+    return offenders
 
 
 def pip_install_lines(workflow_text: str) -> list[str]:
@@ -186,6 +221,85 @@ class TestActionsRunOnNode24:
         in_use = {action for action, _ in uses_lines(path.read_text(encoding="utf-8"))}
         unknown = sorted(in_use - set(NODE24_ACTION_MAJORS))
         assert not unknown, f"add these to NODE24_ACTION_MAJORS after checking their runtime: {unknown}"
+
+    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
+    def test_every_reference_is_sha_pinned(self, path: Path) -> None:
+        """R-CQ-9: a tag is whatever its owner last pointed it at.
+
+        `@v5` resolves at run time, so an upstream account compromise reaches
+        this repository's runners with no commit here and nothing for the secret
+        scan or the diff review to catch. A pin is a commit, and the version
+        comment is what keeps the pin readable and what the Node 24 table below
+        is enforced against.
+        """
+        offenders = unpinned_uses(path.read_text(encoding="utf-8"))
+        assert not offenders, (
+            f"{path.name} has {len(offenders)} reference(s) that are not `@<40-hex sha> # vX.Y.Z`: {offenders}"
+        )
+
+    @pytest.mark.parametrize("path", [WORKFLOW, DRIFT_WORKFLOW], ids=lambda p: p.name)
+    def test_the_pin_check_sees_every_reference_it_grades(self, path: Path) -> None:
+        """Every `uses:` is either graded or reported — never neither.
+
+        `uses_lines` returning only well-formed references is what lets the Node
+        24 table stay simple, and is also how an unpinned action could vanish
+        from every assertion at once. This pins the two halves to the whole.
+        """
+        text = path.read_text(encoding="utf-8")
+        every = [line.strip() for line in text.splitlines() if ANY_USES.match(line)]
+        assert len(uses_lines(text)) + len(unpinned_uses(text)) == len(every), (
+            f"{path.name}: {len(every)} `uses:` lines, but only "
+            f"{len(uses_lines(text))} graded and {len(unpinned_uses(text))} reported"
+        )
+
+    @pytest.mark.parametrize(
+        ("reference", "why"),
+        [
+            pytest.param("actions/checkout@v5", "a tag", id="a-bare-tag"),
+            pytest.param(
+                "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+                "a SHA with no version comment",
+                id="a-sha-with-no-comment",
+            ),
+            pytest.param(
+                "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5",
+                "a comment that states no patch version",
+                id="a-comment-without-a-full-version",
+            ),
+            # Both length cases carry a valid version comment on purpose. The
+            # first draft did not, so the pattern rejected them for the missing
+            # comment and loosening `{40}` to `+` left them passing — a case
+            # that cannot fail for the reason it names pins nothing.
+            pytest.param(
+                "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c0 # v5.1.0",
+                "a 39-hex reference, which is a branch name as far as GitHub is concerned",
+                id="a-short-sha",
+            ),
+            pytest.param(
+                "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c099 # v5.1.0",
+                "a 41-hex reference, which resolves to nothing",
+                id="an-over-long-sha",
+            ),
+            pytest.param(
+                "actions/checkout@FBC6F3992D24B796D5A048FF273F7FCC4A7B6C09 # v5.1.0",
+                "an upper-case reference, which git does not resolve",
+                id="an-upper-case-sha",
+            ),
+        ],
+    )
+    def test_a_workflow_that_is_not_pinned_is_a_finding(self, tmp_path: Path, reference: str, why: str) -> None:
+        """Without these the pin check would pass on a file with no actions at all."""
+        workflow = tmp_path / "probe.yml"
+        workflow.write_text(f"jobs:\n  one:\n    steps:\n      - uses: {reference}\n", encoding="utf-8")
+        text = workflow.read_text(encoding="utf-8")
+        assert unpinned_uses(text) == [f"- uses: {reference}"], f"{why} must be reported"
+        assert uses_lines(text) == [], f"{why} must not be graded as a pin"
+
+    def test_a_local_composite_action_is_not_a_finding(self, tmp_path: Path) -> None:
+        """A `./`-relative action is in this repository; there is no SHA to pin."""
+        workflow = tmp_path / "probe.yml"
+        workflow.write_text("jobs:\n  one:\n    steps:\n      - uses: ./.github/actions/setup\n", encoding="utf-8")
+        assert unpinned_uses(workflow.read_text(encoding="utf-8")) == []
 
     def test_dependabot_keeps_the_actions_moving(self) -> None:
         text = DEPENDABOT.read_text(encoding="utf-8")
@@ -379,8 +493,13 @@ class TestParserIsNotVacuous:
         assert job_sections(text) == {"one": "    runs-on: a", "two": "    runs-on: b\n"}
 
     def test_uses_lines_reads_both_list_and_mapping_forms(self) -> None:
-        text = "      - uses: actions/checkout@v5\n      - name: x\n        uses: actions/setup-go@v6\n"
+        text = (
+            "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0\n"
+            "      - name: x\n"
+            "        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0\n"
+        )
         assert uses_lines(text) == [("actions/checkout", 5), ("actions/setup-go", 6)]
+        assert unpinned_uses(text) == []
 
 
 class TestTheAttestationCheckRunsWhereItCanBeRead:

@@ -314,14 +314,16 @@ earlier revision of this paragraph said "Phase 1 is now complete", counting the
 Phase 0 prerequisites AC-1 and AC-2 as if they were Phase 1 slices. They are
 not, and neither was done: R-CQ-2 states the NS-2 credential must be rotated
 *before any Phase 1 slice merges*, so all six merged ahead of their own
-precondition. Phases 2–7 are untouched, so the actions are still unpinned, the
-lock carries no hashes, the `make` stage the shim test cites still does not
-exist, and five landed specs still show every acceptance box open.
+precondition. Phase 2 has started: R-CQ-9 landed, so all 20 `uses:` references
+are SHA pins with version comments (DEC-045) and this repository stops requiring
+of adopters what it did not do itself. The rest of Phase 2 and phases 3–7 are
+untouched, so the lock still carries no hashes, the `make` stage the shim test
+cites still does not exist, and five landed specs still show every acceptance
+box open.
 
 Behind that, unchanged: the two stacks disagree about which HTTP statuses to
-retry, no GitHub Action is SHA-pinned although `harness/CONTRACT.md` requires it
-of adopters, the lock carries no hashes, a `make` stage the shim test cites does
-not exist, and five landed specs show every acceptance box open again. DEC-044
+retry, the lock carries no hashes, a `make` stage the shim test cites does not
+exist, and five landed specs show every acceptance box open again. DEC-044
 settles the ruleset shape NS-1 needs and removes the code-owner rule that made
 the export unappliable, but the import itself is still not done.
 
@@ -335,12 +337,13 @@ whose premise test runs every credential-read spelling through a real `bash -c`
 so the suite fails if a spelling stops reaching the file it claims to reach.
 
 **Done when.** Its 35 acceptance boxes are ticked, each by the command it names;
-7 are ticked — AC-3 through AC-8, which is all six of Phase 1's product-path
-slices, plus AC-30. Phase 0's two boxes are the ones still open: AC-1 waits on
-the NS-1 import (DEC-044 decided the shape; the branches API is the evidence)
-and AC-2 waits on the NS-2 rotation, which is off-tree, and on a Dependabot
-disposition that cannot be written honestly until Phase 2's SHA pins land, since
-the entry it calls for records #62–#66 as *superseded by* those pins. Phase 0
+8 are ticked — AC-3 through AC-8, which is all six of Phase 1's product-path
+slices, plus AC-30 and now AC-9. Phase 0's two boxes are the ones still open:
+AC-1 waits on the NS-1 import (DEC-044 decided the shape; the branches API is
+the evidence) and AC-2 waits on the NS-2 rotation, which is off-tree. AC-2's
+other half is now unblocked rather than done: R-CQ-9's pins have landed, so the
+Dependabot disposition entry can finally record #62–#66 as superseded by them
+without saying something untrue, and it is the next slice to write. Phase 0
 also lands NS-20 (landed: `.mango/skills/gate-mutation-proof/`); Phase 1 is the
 product path; the rest is ordered there.
 
