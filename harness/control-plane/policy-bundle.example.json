@@ -2,7 +2,7 @@
   "policy_id": "agentic-ssd-governance",
   "version": "2.0.0",
   "governance_policy_sha256": "9ed7f3ea8a0aee174143670ef9b0c4af982fb3823ac4ed3434b5a7fe2ea5a460",
-  "agent_policy_sha256": "2d163c065dac75a545035a92c07551f6a0c92c98ac2ed58a1a814198fba439c5",
+  "agent_policy_sha256": "e7b84b674aeb107d722d67de7aef311620667705f661bed7266d0b98fc3c5d24",
   "deny_if_digest_mismatch": true,
   "human_approval_categories": [
     "external_write",

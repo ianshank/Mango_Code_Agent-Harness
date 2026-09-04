@@ -191,7 +191,28 @@ class ExecutionLoop:
             return reentrant(runner.target)
         return derive_verdict(runner.run(self.verification_cwd))
 
+    def _record_enforcement_baseline(self) -> None:
+        """Digest the protected files before any agent has had a turn.
+
+        The verdict at the end of the loop is refused if any of them changed in
+        between, so this has to run first: a baseline taken after the reasoner
+        would record the forgery as the reference. Guarded the same way
+        `_harness_verdict` is, so a loop that will not verify does not walk the
+        tree for nothing. A baseline that cannot be taken is left to `run`,
+        which refuses the verdict for the same reason rather than raising here
+        and losing the agents' work.
+        """
+        runner = self.verification
+        if runner.target is None or runner.is_reentrant():
+            return
+        try:
+            runner.snapshot_enforcement(self.verification_cwd)
+        except Exception:
+            # Broad on purpose: `run` refuses the verdict for the same fault.
+            logger.exception("The enforcement baseline could not be recorded; the verdict will refuse")
+
     def execute_loop(self, initial_task: str) -> LoopOutcome:
+        self._record_enforcement_baseline()
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
         plan_started = time.monotonic()
         plan = self.execute_agent("planner", planner_prompt, tools=[])

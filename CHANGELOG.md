@@ -122,6 +122,42 @@ so it lands in the hashed lock and installs with `--require-hashes`, as does
 the drift workflow's `uv`; every workflow job carries `timeout-minutes`, and
 the PR workflow cancels superseded runs per ref (the scheduled one deliberately
 does not -- a cancelled run there is a lost notification). Decision: DEC-048.
+### The verdict was forgeable by the agent it judges (audit B4, DEC-049)
+
+`write_file Makefile` is refused; `write_file forge.py` then `run_command
+python3 forge.py` was not, and the script rewrote the protected `Makefile` so
+the next `VerificationRunner.run` returned `VERIFIED` on a failing suite —
+reproduced through the real dispatcher, broker and process backend. `-f
+Makefile` pinned *which* file was read; nothing pinned *what it said*.
+
+- `protected_paths` gains the code-execution surfaces the verifier's own
+  `make test-python` would honour: `GNUmakefile`, `makefile`, `setup.py`,
+  `setup.cfg`, `pytest.ini`, `tox.ini`, `sitecustomize.py`,
+  `usercustomize.py`, `*.pth`, `**/conftest.py`. Nine are declared dormant in
+  `test_protected_path_liveness.py` — no such file is tracked; the pattern arms
+  the guard before an agent creates one.
+- `make` is graded by what it is told to read (`governance/indirect_exec.py`):
+  `-f <anything but Makefile>`, `-C`, `--eval`, `-I`, a bundled short flag or a
+  `NAME=value` override all grade `destructive`. `pnpm exec <x>` / `npx <x>`
+  grade as `<x>`, accepted only for the programs `_BY_PROGRAM` already grades
+  `test_execute` — one table, read through the delegator.
+- `VerificationRunner.snapshot_enforcement` digests every protected file
+  before the first agent turn (`ExecutionLoop.execute_loop`); `run` refuses
+  with `BLOCKED` / `enforcement_tampered` naming the files if any changed,
+  appeared or vanished. `HarnessCheck.tampered_files` carries the evidence so
+  `derive_verdict` cannot grade past it. The digest is the sha256 the control
+  plane pins the bundle with; a test pins the three copies agree.
+- `SECURITY.md` and `agent-policy.json` now say what `broker.py` says:
+  containment, not isolation. **Still open:** the script still runs, and can
+  read the on-disk `.env`, write `.git/hooks/*` and open sockets. The verdict
+  is unforgeable by that route; the script's other effects are not prevented.
+  OS isolation of `ProcessBackend` is the fix and its own spec.
+
+Regression tier: `regression/test_verdict_forgery_regression.py` drives the
+audit's recipe through `bash -c` in the real backend, proves the forged
+makefile passes on its own, and asserts the harness refuses it —
+plus the negative controls (untouched passing tree → VERIFIED; untouched
+failing tree → FAILED; forgery reverted to the exact bytes → the real suite runs).
 
 ### The lock pinned versions; nothing pinned artefacts
 

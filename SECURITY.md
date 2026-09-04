@@ -30,14 +30,47 @@ kernel itself:
   file (`harness/shared/debug_dump.py` and `validate_invariants.py`'s
   `check_hardcoded_secrets` exist specifically to prevent this class).
 
+## What the runtime governance does and does not guarantee
+
+The execution path an agent's `run_command` takes (`ExecutionBroker` →
+`ProcessBackend`, `harness/shared/governance/broker.py`) **contains but does
+not isolate**. It grades the command against an allowlist, checks the acting
+role holds the graded action, applies the write policy to every path the
+command would create, pins the working directory, bounds the runtime, caps the
+output and strips credentials from the child environment. It confines neither
+the filesystem nor the network: a process it starts can still read and write
+any file the harness's own user can, and can still open sockets (DEC-010,
+INV-13 in `harness/CONTRACT.md`).
+
+The direct doors are shut: `read_file .env`, `write_file Makefile`,
+`write_file GNUmakefile`, `curl`, `make -f <other file>` and `pnpm exec
+<arbitrary program>` are all refused for every role. **The indirect door is
+open and known.** Executing a workspace script (`python3 forge.py`, `pytest`)
+is a permitted action, and the script it runs is not governed: it can read the
+on-disk `.env`, write any protected file, install a git hook, and reach the
+network. What the harness now guarantees is narrower than prevention — the
+verdict cannot be forged that way. `VerificationRunner` records the digest of
+every `protected_paths` file before the first agent turn and refuses to grade
+(`BLOCKED`, `enforcement_tampered`, naming the file) if any of them changed,
+appeared or vanished since. That is detection after the fact, not containment
+of the script. OS isolation of the process backend (container/namespace, with
+`.git`, `.mango`, `.env` and the enforcement files masked or read-only, and no
+network) is the fix, and is a later capability profile that this repository's
+CI runners cannot yet exercise. Reports that widen the indirect door beyond
+what this paragraph already states — a way to forge the verdict *despite* the
+digest check, or to reach a credential through a door listed above as shut —
+are the ones to file.
+
 ## Existing automated scanning
 
-This repository already runs `gitleaks` (working tree + full commit history)
-and `pip-audit`/`osv-scanner` (dependency vulnerabilities) on every PR — see
-`.github/workflows/python-package.yml`. A report that reproduces something
-these gates should have caught, but didn't, is especially useful: it usually
-points at a real gap in the gate itself (see `harness/node/.governance/decision-log.md`
-for examples of exactly this class of finding, e.g. DEC-014).
+This repository already runs `gitleaks` (working tree, plus the commit history
+of the current branch — `--log-opts="HEAD"`, DEC-014; other refs are not
+scanned) and `pip-audit`/`osv-scanner` (dependency vulnerabilities) on every
+PR — see `.github/workflows/python-package.yml`. A report that reproduces
+something these gates should have caught, but didn't, is especially useful: it
+usually points at a real gap in the gate itself (see
+`harness/node/.governance/decision-log.md` for examples of exactly this class
+of finding, e.g. DEC-014).
 
 ## Supported versions
 

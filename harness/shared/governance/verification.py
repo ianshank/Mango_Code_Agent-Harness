@@ -21,6 +21,16 @@ Three details are load-bearing rather than defensive:
 * ``-n`` is also why the probe cannot invoke what it probes. A probe that runs the
   target to find out whether the target runs would recurse here, because the
   configured target runs the suite that contains this module.
+* ``-f Makefile`` protects against a *second* makefile, not against the first
+  being rewritten. ``Makefile`` is a protected path and ``write_file`` refuses
+  it, but a script the agent wrote and ran through ``run_command`` -- graded
+  ``test_execute``, which every role holds -- rewrote it, and the next check
+  returned ``VERIFIED`` on a failing suite (2026 standards audit, B4). The
+  runner therefore records the digest of every protected file in the workspace
+  when the loop starts (``snapshot_enforcement``) and refuses to run the check
+  if any of them changed, appeared or vanished since: ``BLOCKED`` with
+  ``enforcement_tampered`` naming the files. Containment, not isolation -- the
+  script still ran; what it cannot do is have its rewrite graded.
 """
 from __future__ import annotations
 
@@ -32,6 +42,12 @@ import time
 import typing
 from pathlib import Path
 
+from harness.shared.governance.enforcement_digest import (
+    EnforcementDigestError,
+    enforcement_digests,
+    tampered_files,
+)
+from harness.shared.governance.indirect_exec import CANONICAL_MAKEFILE
 from harness.shared.governance.verdict import BLOCKED, BROKER_SUCCESS, HarnessCheck
 from harness.shared.policy_loader import orchestrator_defaults
 
@@ -54,7 +70,10 @@ REENTRANCY_ENV = "MANGO_VERIFICATION_ACTIVE"
 #: The cost is that a pass here does not imply lint, types, coverage or the
 #: governance validators -- which is why the verdict carries the command.
 DEFAULT_TARGET = "test-python"
-DEFAULT_MAKEFILE = "Makefile"
+#: The same name the command classifier accepts for ``make -f``: any other file
+#: grades as a program the agent chose, so the runner's own command must name
+#: this one or it would be denied by the broker it runs through.
+DEFAULT_MAKEFILE = CANONICAL_MAKEFILE
 
 
 class VerificationRunner:
@@ -88,10 +107,45 @@ class VerificationRunner:
         self._timeout = (
             orchestrator_defaults()["api_timeout_sec"] if timeout is None else timeout
         )
+        #: `(workspace, digests)` recorded by `snapshot_enforcement`. `None`
+        #: until a caller records one; `run` then records its own and warns,
+        #: because a check with no baseline can only compare the tree to itself.
+        self._baseline: tuple[Path, dict[str, str]] | None = None
 
     @property
     def target(self) -> str | None:
         return self._target
+
+    @property
+    def baseline(self) -> dict[str, str] | None:
+        """The digests recorded at loop start, or ``None`` if none were."""
+        return None if self._baseline is None else dict(self._baseline[1])
+
+    def snapshot_enforcement(self, cwd: Path) -> dict[str, str]:
+        """Record the digest of every protected file under ``cwd``.
+
+        Called by the loop before its first agent turn. Anything an agent
+        changes in that set afterwards -- by any door -- makes ``run`` refuse
+        to grade. Raises ``EnforcementDigestError`` rather than recording a
+        partial baseline; the loop treats that as the same fault ``run`` would.
+        """
+        digests = enforcement_digests(cwd)
+        self._baseline = (cwd.resolve(), digests)
+        logger.info("verification: enforcement baseline recorded, %d protected file(s)", len(digests))
+        return dict(digests)
+
+    def _tampered_since_baseline(self, cwd: Path) -> list[str]:
+        """Protected files that differ from the baseline, recording one if absent."""
+        current = enforcement_digests(cwd)
+        if self._baseline is None or self._baseline[0] != cwd.resolve():
+            logger.warning(
+                "verification: no enforcement baseline was recorded for %s before this run; "
+                "recording one now, so a change made before this point is not detectable",
+                cwd,
+            )
+            self._baseline = (cwd.resolve(), current)
+            return []
+        return tampered_files(self._baseline[1], current)
 
     @property
     def command(self) -> str:
@@ -168,6 +222,34 @@ class VerificationRunner:
         """Probe, then run, and report. The only constructor of ``HarnessCheck``."""
         target = str(self._target)
         started = time.monotonic()
+
+        # Before the probe. The probe reads the makefile, and a probe result
+        # obtained against a rewritten one describes the forgery, not the change.
+        try:
+            tampered = self._tampered_since_baseline(cwd)
+        except EnforcementDigestError as exc:
+            logger.warning("verification: enforcement set could not be established: %s", exc)
+            return HarnessCheck(
+                target=target,
+                command=self.command,
+                status=BLOCKED,
+                exit_code=-1,
+                reason=f"the enforcement set could not be established: {exc}",
+                probe_ok=False,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+        if tampered:
+            logger.warning("verification: refusing to grade %s, enforcement files changed: %s", target, tampered)
+            return HarnessCheck(
+                target=target,
+                command=self.command,
+                status=BLOCKED,
+                exit_code=-1,
+                reason="protected files changed since the loop started: " + ", ".join(tampered),
+                probe_ok=False,
+                latency_ms=int((time.monotonic() - started) * 1000),
+                tampered_files=tuple(tampered),
+            )
 
         probe_ok, detail = self.probe(cwd)
         if not probe_ok:
