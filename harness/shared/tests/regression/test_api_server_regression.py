@@ -13,6 +13,13 @@ Defects reproduced here (all present on ``main`` before this change):
    manifests rather than merely leaking a secret.
 3. ``STATIC_DIR.mkdir()`` ran at module import, so merely importing the app
    (every pytest collection included) mutated the working tree.
+4. ``TaskResponse.history`` was typed ``list[dict[str, str]]``, which admits
+   only the system and user turns. A tool-using run appends an assistant turn
+   with ``content: None`` and a ``tool_calls`` list, then a ``tool`` turn with
+   ``tool_call_id``; pydantic rejected each, the blanket ``except`` converted
+   the ``ValidationError`` to "Internal orchestration error", and every real
+   run returned HTTP 500 with the verdict it had earned discarded
+   (``docs/reports/2026-STANDARDS-AUDIT.md`` finding **B3**, Blocker).
 
 The server lives in ``harness/api_server`` but its regressions live here with
 the rest of the tier, so ``make test-regression`` asks one question in one
@@ -273,3 +280,62 @@ class TestEveryCredentialIsRedactedOnTheWayOut:
 
         assert "evidence-hmac-key-value" not in serialised, "the evidence signing key left over HTTP"
         assert "api-server-key-value" not in serialised, "the API server key left over HTTP"
+
+
+# Declared, not exempted (R-EGF-6): FastAPI's TestClient drives the app over a
+# real loopback socket, so these genuinely need one. The declaration is visible
+# here at the class rather than hidden in a global allow-list.
+@pytest.mark.enable_socket
+class TestToolUsingRunsReachTheClient:
+    """Defect 4 (audit B3). Each case is one of the three shapes the audit
+    reproduced a 500 on; the assistant/tool pair is what ``loop.py:166`` and
+    ``dispatcher.py:130`` append on every tool call."""
+
+    def _post(self, client: TestClient, key: str, history: list[dict[str, object]]):
+        with patch("harness.api_server.main.MangoMASOrchestrator") as orchestrator_cls:
+            instance = orchestrator_cls.return_value
+            instance.execute_loop.return_value = _passing_outcome("PASS")
+            instance.conversation_history = history
+            return client.post("/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": key})
+
+    def test_assistant_tool_call_and_tool_result_round_trip(self, client: TestClient, server_key: str) -> None:
+        history: list[dict[str, object]] = [
+            {"role": "user", "content": "x"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}],
+            },
+            {"role": "tool", "tool_call_id": "c1", "name": "read_file", "content": "contents"},
+            {"role": "assistant", "content": "PASS"},
+        ]
+        response = self._post(client, server_key, history)
+        assert response.status_code == 200, response.text
+        assert response.json()["history"] == history
+
+    def test_empty_content_with_tool_calls_is_accepted(self, client: TestClient, server_key: str) -> None:
+        """The audit's strengthening: a provider that sends ``""`` rather than
+        ``null`` still failed, on the ``tool_calls`` list."""
+        history: list[dict[str, object]] = [
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "f", "arguments": None}}]},
+        ]
+        assert self._post(client, server_key, history).status_code == 200
+
+    def test_tool_result_for_a_call_without_id_is_accepted(self, client: TestClient, server_key: str) -> None:
+        """``dispatcher.py`` writes ``tool_call_id: None`` when the provider
+        sent no ``id``; that is history, not an error."""
+        history: list[dict[str, object]] = [
+            {"role": "tool", "tool_call_id": None, "name": "f", "content": "r"},
+        ]
+        response = self._post(client, server_key, history)
+        assert response.status_code == 200
+        assert response.json()["history"][0]["tool_call_id"] is None
+
+    def test_an_unknown_role_is_still_refused_opaquely(self, client: TestClient, server_key: str) -> None:
+        """Loosening to ``list[dict[str, Any]]`` would also have fixed the 500;
+        the typed models are chosen because they keep refusing shapes the
+        orchestrator never produces, without echoing them."""
+        response = self._post(client, server_key, [{"role": "wizard", "content": "spell"}])
+        assert response.status_code == 500
+        assert response.json() == {"detail": "Internal orchestration error"}
+        assert "wizard" not in response.text
