@@ -44,7 +44,7 @@ make validate   # `python harness/shared/validate_invariants.py` is denied from 
 | Check | Predicts a failure in | Typical remedy |
 |---|---|---|
 | `coverage` (a separate gate, `coverage_gate.py`, not this validator) | `governance-policy.json` → `coverage.lines` and `coverage.branches`, plus the per-file lines floor when `coverage.per_file` is true | write unit tests |
-| `protected_paths` | The enforcement layer (Makefile, workflows, validators, roots of trust) and the agent control surface (CLAUDE.md, agent-policy, skills, hooks) | land the change with the `infra-reviewed` human attestation, or use `knowledge_gap_log` |
+| `protected_paths` | The enforcement layer (Makefile, workflows, validators, roots of trust), the agent control surface (CLAUDE.md, agent-policy, skills, hooks), and the runtime enforcement layer -- the modules that execute and gate a tool call (`tool_executors.py`, `orchestrator/**`, `nemotron_bridge.py`, `tool_schemas.py`, `agent_prompts.py`, `tool_dispatch.py`, root `conftest.py`; DEC-042) | land the change with the `infra-reviewed` human attestation, or use `knowledge_gap_log` |
 | `size_budget` | `governance-policy.json` → `limits.size_budget_lines` (per-file ceiling on non-test Python) | split the module |
 | `no_hardcoded_secrets` | CI secret scan | move strings to `.env.example` and read from `os.environ` |
 

@@ -273,25 +273,38 @@ stays empty and why — so the three unfired names stop reading as an oversight.
 
 **Why now.** Round 2 (`docs/specs/tech-debt-hardening-plan.md`) closed all 29 of
 its boxes and left the gates green and advisory. The third audit, peer-reviewed
-into revision 2, found that the product path is bypassable today: `cat .en?` and
-process substitution classify as `read` for every role, the write side has no
-credential-file rule so a patch to `.env` redirects the API key on the next call,
-and the modules that enforce this are agent-writable. Behind that: the two stacks
-disagree about which HTTP statuses to retry, no GitHub Action is SHA-pinned
-although `harness/CONTRACT.md` requires it of adopters, the lock carries no hashes,
-a `make` stage the shim test cites does not exist, and five landed specs show every
-acceptance box open again. The committed ruleset (NS-1) cannot be applied as it
-stands: one required code-owner approval, no bypass actor, one code owner.
+into revision 2, found the product path bypassable: `cat .en?` and process
+substitution classified as `read` for every role, the write side had no
+credential-file rule so a patch to `.env` redirected the API key on the next call,
+and the modules that enforce this were agent-writable. Those four are closed —
+Phase 1 landed R-CQ-3..R-CQ-7 and R-CQ-30, and adversarial re-review closed three
+more spellings the first fix missed (quoting and backslash escaping, brace
+expansion, then parameter expansion and ANSI-C quoting) plus a second write door
+that derived its action from a synthesised command. **Phase 1 is not complete:**
+AC-8 / R-CQ-8 (policy readers that fail closed rather than defaulting permissive)
+is still open, and the plan's remaining phases are untouched.
+
+Behind that, unchanged: the two stacks disagree about which HTTP statuses to
+retry, no GitHub Action is SHA-pinned although `harness/CONTRACT.md` requires it
+of adopters, the lock carries no hashes, a `make` stage the shim test cites does
+not exist, and five landed specs show every acceptance box open again. The
+committed ruleset (NS-1) cannot be applied as it stands: one required code-owner
+approval, no bypass actor, one code owner.
 
 **Evidence.** `docs/specs/code-quality-tech-debt-plan.md`, problem items 1–16 and
 the Review record, each with the file, line or command that reproduces it on
 `487870a`; the four bypasses were reproduced by running the real `classify`,
-`write_denial_reason` and `execute_apply_patch`.
+`write_denial_reason` and `execute_apply_patch`. Each is now pinned by an
+end-to-end reproduction in
+`harness/shared/tests/regression/test_credential_containment_regression.py`,
+whose premise test runs every credential-read spelling through a real `bash -c`
+so the suite fails if a spelling stops reaching the file it claims to reach.
 
-**Done when.** Its 35 acceptance boxes are ticked, each by the command it names.
-Phase 0 decides the ruleset shape, rotates the NS-2 credential, dispositions the
-Dependabot queue and lands NS-20; Phase 1 is the product path; the rest is ordered
-there.
+**Done when.** Its 35 acceptance boxes are ticked, each by the command it names;
+7 are ticked. Phase 0 decides the ruleset shape, rotates the NS-2 credential,
+dispositions the Dependabot queue and lands NS-20 (landed:
+`.mango/skills/gate-mutation-proof/`); Phase 1 is the product path; the rest is
+ordered there.
 
 **Depends on.** NS-2 (rotation) before any Phase 1 slice merges; NS-20 (the
 mutation-proof skill) is written in Phase 0; NS-3 (a settled release) before the

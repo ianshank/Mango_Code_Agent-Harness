@@ -395,16 +395,43 @@ class TestGlobsAreGradedOnWhatTheyCanExpandTo:
         reason = classify("cat .en?").reason
         assert ".en?" in reason and ".env" in reason
 
-    def test_representatives_match_the_read_policy(self) -> None:
-        """The representatives are a restatement of the alternation unless something
-        holds them to it. A credential class added to `read_policy` without a
-        representative here would leave globs onto it ungraded."""
-        from harness.shared.governance import command_actions
+    def test_every_representative_is_a_credential_filename(self) -> None:
+        """Representatives -> pattern: nothing in the glob table is graded as a
+        credential unless the read policy agrees it is one."""
+        from harness.shared.governance import shell_words
         from harness.shared.read_policy import CREDENTIAL_FILENAME_PATTERN
 
-        assert command_actions._CREDENTIAL_REPRESENTATIVES
-        for name in command_actions._CREDENTIAL_REPRESENTATIVES:
+        assert shell_words._CREDENTIAL_REPRESENTATIVES
+        for name in shell_words._CREDENTIAL_REPRESENTATIVES:
             assert CREDENTIAL_FILENAME_PATTERN.match(name), f"{name} is not a credential filename"
+
+    def test_every_credential_class_has_a_representative(self) -> None:
+        """Pattern -> representatives, the direction that actually catches a gap.
+
+        The check above only proves the table names *nothing extra*; it passes on
+        a table of one entry. This is the coverage claim: every branch of
+        `CREDENTIAL_FILENAME_ALTERNATION` is stood for by at least one concrete
+        filename, so a class added to the read policy without a representative
+        fails here instead of leaving globs onto it graded `read`.
+
+        Splitting on `|` is sound for this alternation specifically -- no branch
+        contains an alternation of its own, and the character classes it does
+        contain (`[\\w-]`, `[rd]`, `[\\w.-]`) hold no `|`. A branch that acquired
+        one would split into pieces that compile but match nothing, and the
+        assertion below would fail rather than pass quietly.
+        """
+        import re
+
+        from harness.shared.governance import shell_words
+        from harness.shared.read_policy import CREDENTIAL_FILENAME_ALTERNATION
+
+        branches = CREDENTIAL_FILENAME_ALTERNATION.split("|")
+        assert len(branches) > 1, "the alternation stopped being an alternation"
+        for branch in branches:
+            compiled = re.compile(rf"^(?:{branch})$", re.IGNORECASE)
+            assert any(
+                compiled.match(name) for name in shell_words._CREDENTIAL_REPRESENTATIVES
+            ), f"no representative stands for the credential class {branch!r}"
 
 
 class TestProcessSubstitutionIsACommandChain:
@@ -427,3 +454,98 @@ class TestProcessSubstitutionIsACommandChain:
         """Control: `>` followed by a filename must keep grading as a write, or
         the new `[<>]\\(` alternative would have swallowed ordinary redirection."""
         assert classify("echo hi > out.txt").action == "write"
+
+
+# ── The shell transforms a word before the program sees it (R-CQ-3, round 2) ──
+#
+# The first fix graded globs and left three older holes open, each found by
+# running the real shell rather than by reading the regex. `_BY_SHAPE`'s
+# credential rule scans the raw command text with `(?:^|[\s/])` boundaries, and
+# quoting, backslash-escaping and brace expansion each defeat those boundaries
+# while `bash -c` still opens the file. `shlex.split` already undoes the first
+# two, so the check moved onto the words rather than gaining three more patterns.
+
+
+class TestQuotingAndEscapingDoNotHideACredential:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("cat '.env'", id="single-quoted"),
+            pytest.param('cat ".env"', id="double-quoted"),
+            pytest.param("cat \\.env", id="backslash-escaped"),
+            pytest.param("cat '.env' README.md", id="quoted-among-others"),
+            pytest.param("head -n 5 \"secrets/id_rsa\"", id="quoted-nested"),
+        ],
+    )
+    def test_a_quoted_or_escaped_credential_is_still_secret_access(self, command: str) -> None:
+        assert classify(command).action == "secret_access"
+
+    def test_a_quoted_ordinary_file_is_still_a_read(self) -> None:
+        """Control: unquoting must not make every quoted argument suspicious."""
+        assert classify("cat 'my notes.md'").action == "read"
+        assert classify('grep -n "foo bar" src/app.py').action == "read"
+
+
+class TestBraceExpansionIsGradedOnTheWordsItProduces:
+    """`{a,b}` is expanded by the shell before globbing, so the token is a word
+    list rather than a filename. Braces are neither a glob character nor a
+    command chain, so nothing looked at them."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("cat {.env,README.md}", id="credential-first"),
+            pytest.param("cat {README.md,.env}", id="credential-second"),
+            pytest.param("cat {.,}env", id="split-across-the-brace"),
+            pytest.param("cat .{env,}", id="suffix-brace"),
+            pytest.param("cat {a,b}/{c,.env}", id="two-braces"),
+        ],
+    )
+    def test_a_brace_that_expands_onto_a_credential_is_secret_access(self, command: str) -> None:
+        assert classify(command).action == "secret_access"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("git log --format={%h}", id="no-comma-is-not-an-expansion"),
+            pytest.param("cat {a,b}.txt", id="ordinary-alternatives"),
+            pytest.param("mkdir -p build/{lib,bin}", id="ordinary-directories"),
+        ],
+    )
+    def test_ordinary_braces_are_unaffected(self, command: str) -> None:
+        assert classify(command).action in {"read", "write", "test_execute"}
+
+    def test_an_unboundable_expansion_fails_closed(self) -> None:
+        """A brace expression that multiplies past the bound cannot be enumerated,
+        and a word list that cannot be enumerated cannot be shown to name no
+        credential. It must not be graded on its program."""
+        from harness.shared.governance.shell_words import _BRACE_EXPANSION_LIMIT
+
+        explosive = "cat " + "{a,b}" * 8  # 256 words, past the bound
+        result = classify(explosive)
+        assert result.action != "read"
+        assert str(_BRACE_EXPANSION_LIMIT) in result.reason
+
+    def test_the_expander_returns_the_words_bash_would(self) -> None:
+        from harness.shared.governance.shell_words import _expand_braces
+
+        assert _expand_braces("{.env,README.md}") == [".env", "README.md"]
+        assert _expand_braces("plain.txt") == ["plain.txt"]
+        assert _expand_braces("{%h}") == ["{%h}"], "no comma means no expansion"
+
+        nested = _expand_braces("{a,b}/{c,d}")
+        assert nested is not None, "two braces are within the depth bound"
+        assert sorted(nested) == ["a/c", "a/d", "b/c", "b/d"]
+
+
+class TestTheWordCheckAndTheTextCheckAgree:
+    def test_both_spellings_of_the_same_read_are_graded_the_same(self) -> None:
+        """The raw-text rule stays as belt-and-braces; the word rule is what
+        holds under shell transformation. A command they disagree about is a
+        command one of them is wrong about."""
+        for bare, transformed in [
+            ("cat .env", "cat '.env'"),
+            ("cat .env", "cat \\.env"),
+            ("cat secrets/id_rsa", "cat 'secrets/id_rsa'"),
+        ]:
+            assert classify(bare).action == classify(transformed).action

@@ -40,6 +40,7 @@ from harness.shared.write_policy import (
     ALWAYS_DENIED_SEGMENTS,
     CREDENTIAL_FILENAME_ALTERNATION,
     CREDENTIAL_FILENAME_PATTERN,
+    is_credential_filename,
 )
 
 
@@ -89,7 +90,7 @@ def read_denial_reason(relpath: str) -> str | None:
     # directory, and being stricter than `command_actions` on the read side keeps
     # the parity property one-directional and safe.
     for segment in segments:
-        if CREDENTIAL_FILENAME_PATTERN.match(segment):
+        if is_credential_filename(segment):
             return (
                 f"{candidate} names a credential-bearing file; reading it is the "
                 "secret_access action, which no agent role holds"
@@ -100,5 +101,6 @@ def read_denial_reason(relpath: str) -> str | None:
 __all__ = [
     "CREDENTIAL_FILENAME_ALTERNATION",
     "CREDENTIAL_FILENAME_PATTERN",
+    "is_credential_filename",
     "read_denial_reason",
 ]

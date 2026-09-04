@@ -58,6 +58,13 @@ STANDALONE_SKILLS = {
         "judgement about whether a new signal field could reach a control path, which no gate "
         "can decide."
     ),
+    "gate-mutation-proof": (
+        "The procedure for proving a gate catches the defect it names: mutate, assert fail, "
+        "restore, assert pass. It cannot be wired into a target, because the mutation is a "
+        "deliberate edit to source a human or agent makes and then undoes -- a `make` recipe "
+        "that mutated the tree is a recipe that can leave it mutated. Its output is evidence "
+        "pasted into a PR (NS-20, C-CQ-3)."
+    ),
     "coverage-gate": (
         "Explains how to read and act on the coverage gate. The gate itself is enforced by "
         "coverage_gate.py in `make coverage-python`; the skill is the operator's guide to it, "

@@ -16,6 +16,11 @@ from harness.shared.write_policy import active_policy_path, write_denial_reason
 if TYPE_CHECKING:
     from harness.shared.governance.broker import ExecutionBroker
 
+#: The action a file write requires, named once. `authorize_write` asks the
+#: policy decision point for exactly this and cannot be steered off it by a
+#: filename, which is how a `-find` filepath previously graded `read`.
+WRITE_ACTION = "write"
+
 logger = logging.getLogger(__name__)
 
 
@@ -249,25 +254,29 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
 def authorize_write(broker: ExecutionBroker, active_role: str, filepath: str) -> str | None:
     """Return why the policy decision point refuses this role a write, or ``None``.
 
-    The PDP is asked the same question the broker asks for `run_command`, phrased
-    as the command that would perform the write (``tee <path>``), so one action
-    model grades both doors: a role without the `write` action is refused here
-    exactly as `run_command` would refuse it, and `human_approval_required_for`
-    is reached on the same terms.
+    The `write` action is asked for **directly**. The first version of this
+    function synthesised a command (``tee <path>``) and let `classify` derive the
+    action from it, which put model-controlled text between the caller and the
+    question being asked -- and the text won. A `filepath` of ``-find`` makes
+    `classify` return `read` (the `find` shape rule matches the substring) and
+    `write_targets` return nothing (a leading `-` reads as a flag), so the
+    verifier and the planner -- neither of which holds `write` -- created files
+    through *both* transports. A filepath containing a space graded the wrong
+    token; one containing a quote graded `destructive`.
 
-    This was `mcp_server._broker_authorize_write`, called before `write_file` and
-    `apply_patch` there -- and nowhere else. `ToolDispatcher`, the path the
-    orchestrator actually runs, asked the PDP nothing at all: it went straight to
+    Deriving an action from a command is right when the input *is* a command:
+    `run_command` must be graded on what it will do. It is wrong here, where the
+    action is known before the call. `decide` is asked for `write` and cannot be
+    told otherwise, so no filename can change the question.
+
+    This began as `mcp_server._broker_authorize_write`, called before `write_file`
+    and `apply_patch` there -- and nowhere else. `ToolDispatcher`, the path the
+    orchestrator actually runs, asked the PDP nothing: it went straight to
     `execute_write_file`, which enforces the *write policy* (protected paths,
-    credential names, containment) but knows nothing about which role is acting.
-    So the verifier, which holds no `write` action, was refused by the MCP
-    transport and permitted by the in-process one. Two copies of one control
-    disagreeing about who may write is the drift this module's own
-    `_resolve_in_workspace` comment warns about, one layer up
+    credential names, containment) but knows nothing about which role is acting
     (code-quality-tech-debt-plan R-CQ-5).
     """
-    denial = broker._policy_decision(f"tee {filepath}", {"agent_id": execution_identity(active_role)})
-    return None if denial is None else denial.reason
+    return broker.authorize_action(execution_identity(active_role), WRITE_ACTION)
 
 
 def execute_run_command(
@@ -292,6 +301,8 @@ def execute_run_command(
 
 
 __all__ = [
+    "WRITE_ACTION",
+    "authorize_write",
     "execute_apply_patch",
     "execute_read_file",
     "execute_run_command",
