@@ -12,10 +12,16 @@ ungoverned, ``read_file(".env")`` would return ``NVIDIA_API_KEY`` into
 the exact inversion ``command_actions`` documents at its credential rule: *the
 action model grades the effect rather than the tool*.
 
-This module is that door's policy, and it is the single source of the pattern
-both doors match. ``command_actions`` composes its command-scanning form from
-``CREDENTIAL_FILENAME_ALTERNATION`` here rather than restating it, because two
-spellings of one control are two controls that drift.
+This module is that door's policy. The credential pattern both doors match has a
+single definition, and it is no longer here: it lives in ``write_policy`` and is
+re-exported below. It moved because the write side had no credential rule at all
+while this one did, and the fix could not import the pattern from here without a
+cycle -- this module already imports ``ALWAYS_DENIED_SEGMENTS`` from there. So it
+moved up the edge that already existed. ``command_actions`` composes its
+command-scanning form from the re-exported ``CREDENTIAL_FILENAME_ALTERNATION``
+rather than restating it, because two spellings of one control are two controls
+that drift. ``test_write_policy.py`` pins the two re-exported names to the
+definitions by object identity, so this module cannot acquire a second copy.
 
 It deliberately does **not** consult ``protected_paths``. The agent has to read
 the Makefile, the policies and its own contracts to do its work; reading is not

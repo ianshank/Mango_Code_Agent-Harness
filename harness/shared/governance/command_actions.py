@@ -24,6 +24,7 @@ import shlex
 import typing
 
 from harness.shared.governance.shell_words import (
+    WordListNotEnumerable,
     credential_word_reason,
 )
 from harness.shared.policy_loader import orchestrator_defaults
@@ -297,9 +298,17 @@ def _classify_program(text: str) -> Classification:
 
     best_shape: Classification | None = None
     if tokenize_error is None:
-        token_reason = credential_word_reason(argv)
-        if token_reason is not None:
-            best_shape = Classification("secret_access", token_reason)
+        try:
+            token_reason = credential_word_reason(argv)
+        except WordListNotEnumerable as exc:
+            # Not a credential finding: the check could not be completed. Grading
+            # it `secret_access` would assert a fact about the command that
+            # nothing established -- and both actions are denied to every role
+            # today only by coincidence of the current authority model.
+            best_shape = Classification(UNCLASSIFIED_ACTION, str(exc))
+        else:
+            if token_reason is not None:
+                best_shape = Classification("secret_access", token_reason)
     for pattern, action, why in _BY_SHAPE:
         if pattern.search(text):
             cand = Classification(action, why)

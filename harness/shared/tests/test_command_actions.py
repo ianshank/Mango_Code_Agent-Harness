@@ -576,13 +576,41 @@ class TestBraceExpansionIsGradedOnTheWordsItProduces:
     def test_an_unboundable_expansion_fails_closed(self) -> None:
         """A brace expression that multiplies past the bound cannot be enumerated,
         and a word list that cannot be enumerated cannot be shown to name no
-        credential. It must not be graded on its program."""
+        credential. It must not be graded on its program.
+
+        The grade is `UNCLASSIFIED_ACTION`, asserted exactly rather than as
+        `!= "read"`. The looser assertion is what let this pass while the code
+        returned `secret_access`: "the check could not be completed" is not
+        "this command reads a credential", and grading it as the latter asserts
+        a fact nothing established. Both are denied to every role in today's
+        authority model, so this was a contract defect rather than an
+        exploitable one -- and stops being only that the moment `secret_access`
+        becomes separately grantable. Reported by a review bot on this PR.
+        """
         from harness.shared.governance.shell_words import _BRACE_EXPANSION_LIMIT
 
         explosive = "cat " + "{a,b}" * 8  # 256 words, past the bound
         result = classify(explosive)
-        assert result.action != "read"
+        assert result.action == UNCLASSIFIED_ACTION
+        assert result.action != "secret_access", "an unenumerable word list is not a finding"
         assert str(_BRACE_EXPANSION_LIMIT) in result.reason
+
+    def test_the_unenumerable_case_is_its_own_signal(self) -> None:
+        """`credential_word_reason` answers one question and raises for the other.
+
+        Folding them into one `str | None` return is what made the caller grade
+        an unbounded expansion `secret_access`: every non-`None` reason looked
+        like a credential finding.
+        """
+        from harness.shared.governance.shell_words import (
+            WordListNotEnumerable,
+            credential_word_reason,
+        )
+
+        assert credential_word_reason(["cat", "notes.md"]) is None
+        assert credential_word_reason(["cat", ".env"]) is not None
+        with pytest.raises(WordListNotEnumerable):
+            credential_word_reason(["cat", "{a,b}" * 8])
 
     def test_the_expander_returns_the_words_bash_would(self) -> None:
         from harness.shared.governance.shell_words import _expand_braces

@@ -99,6 +99,27 @@ def _expand_braces(token: str) -> list[str] | None:
     return None if _BRACE.search("".join(results)) else results
 
 
+class WordListNotEnumerable(Exception):
+    """The words a token expands to cannot be listed within this module's bounds.
+
+    Distinct from "this word names a credential", and deliberately not folded
+    into it. ``credential_word_reason`` used to return an ordinary reason string
+    for a brace expression past ``_BRACE_EXPANSION_LIMIT``, and the caller turned
+    every non-``None`` reason into ``secret_access`` -- so a command nobody had
+    shown to touch a credential was graded as one. The two are different
+    findings: one asserts a fact about the command, the other admits the check
+    could not be completed, and only the second should reach
+    ``UNCLASSIFIED_ACTION``. Both are denied to every role today, which is why
+    this was a contract defect rather than an exploitable one; it stops being
+    only a contract defect the moment ``secret_access`` becomes separately
+    grantable, which is the whole point of modelling it as its own action.
+
+    Raised rather than returned so the ``str | None`` contract of the normal
+    path stays a straight answer to a straight question. Reported by a review
+    bot on the PR that introduced the bound.
+    """
+
+
 def _glob_tokens(segment: str) -> list[tuple[int, int]]:
     """The half-open spans of the wildcard tokens in ``segment``.
 
@@ -145,6 +166,10 @@ def _glob_tokens(segment: str) -> list[tuple[int, int]]:
 def credential_word_reason(argv: typing.Sequence[str]) -> str | None:
     """Why a word in ``argv`` names or reaches a credential file, or ``None``.
 
+    Raises ``WordListNotEnumerable`` when a token's expansion exceeds the bounds
+    above -- a different answer from either of those two, and the caller grades
+    it ``UNCLASSIFIED_ACTION`` rather than ``secret_access``.
+
     This grades the words the *shell* produces, which is the only list that
     matters: ``process_backend`` runs every command through ``bash -c``, so by
     the time a program sees an argument the shell has already stripped its
@@ -170,7 +195,7 @@ def credential_word_reason(argv: typing.Sequence[str]) -> str | None:
     for token in argv:
         words = _expand_braces(token)
         if words is None:
-            return (
+            raise WordListNotEnumerable(
                 f"the brace expression {token!r} expands past the "
                 f"{_BRACE_EXPANSION_LIMIT}-word bound, so the files it names cannot be enumerated"
             )
