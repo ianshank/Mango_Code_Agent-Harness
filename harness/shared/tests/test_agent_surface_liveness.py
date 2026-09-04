@@ -107,6 +107,13 @@ STANDALONE_SKILLS = {
         "It acts as a protocol specification for agents to read and write persistent data, "
         "rather than an automated CI step."
     ),
+    "standards-audit": (
+        "A yearly (or baseline-moving) external-standards audit: gates executed in a clean "
+        "environment, six review lenses, GitHub API cross-checks, then an adversarial "
+        "falsification pass over the draft. Its mechanical residue is already a gate -- "
+        "test_spec_selectors_collect.py catches the vacuous-selector class it found by hand -- "
+        "and the rest is judgement about a report, which no per-PR target should run."
+    ),
 }
 
 

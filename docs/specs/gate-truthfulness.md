@@ -93,8 +93,11 @@ Three findings carry direct evidence that the recorded diagnosis was wrong:
       makes `prettier --check` report `policy.json`, and reformatting that file
       makes `validate_adoption.py` fail on the root-of-trust digest — the two
       outcomes this exclusion exists to keep apart — verified by
-      `pytest -k test_governance_tree_is_excluded_from_prettier`
+      `pytest -k governance_tree_is_excluded_from_prettier`
       · stage: `make ci` (R-GT-2, C-GT-2)
+      — selector corrected 2026-09-04: the test is named
+      `test_the_governance_tree_is_excluded_from_prettier`, so the original
+      `-k test_governance_tree_…` substring collected zero tests
 - [x] AC-3: Adding any first-party source file to the coverage `omit` list makes
       the gate exit 1 naming that file, and a run measuring zero files also
       exits 1 rather than reporting a vacuous pass — verified by
@@ -111,8 +114,13 @@ Three findings carry direct evidence that the recorded diagnosis was wrong:
 - [x] AC-6: Each of the three agent-surface mutations is rejected by name — a
       `SKILL.md` naming `make no-such-target`, a `verifier` persona declaring
       `write_file`, and a mapping table with two rows swapped — verified by
-      `pytest -k TestAgentSurfaceTruth`
+      `pytest -k "SkillsNameRealTargets or AgentContractsMatchThePolicy or mapping_table_matches"`
       · stage: `make ci` (R-GT-6)
+      — selector corrected 2026-09-04: no class `TestAgentSurfaceTruth` exists;
+      the three mutations are rejected by `TestSkillsNameRealTargets`,
+      `TestAgentContractsMatchThePolicy` (test_agent_surface_liveness.py) and
+      `test_the_mapping_table_matches_the_authority_model_row_by_row`
+      (test_agent_harness_wiring.py)
 - [x] AC-7: A skip added to an already-waived module is reported as unapproved
       by `make verify-zero-skips-python`, while every skip present today stays
       approved — verified by `pytest -k TestWaiversAreNodeScoped`

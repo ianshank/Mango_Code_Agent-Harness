@@ -331,7 +331,9 @@ Constraints.
 ## Acceptance criteria
 
 - [x] AC-1: the ruleset export committed as `.github/rulesets/main.json` lists
-      exactly the check names `pytest harness/shared/tests/test_ci_gate_coverage.py -k TestRequiredStatusChecksListIsAccurate`
+      exactly the check names `pytest harness/shared/tests/test_ci_gate_required_checks.py -k TestRequiredStatusChecksListIsAccurate`
+      (file corrected 2026-09-04: the class moved to `test_ci_gate_required_checks.py`;
+      the original path collected zero tests)
       derives, asserted by a new test in `harness/shared/tests/test_workflow_contracts.py` that
       fails on any difference · stage: `make test-python` (R-TDH-1)
 - [x] AC-2: `git grep -n "verification claim" CLAUDE.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md`
@@ -365,8 +367,9 @@ Constraints.
 - [x] AC-9: `make lock-check` exits 0 on the committed lock and exits 1 after
       a requirement is edited without `make lock`; every `python -m pip install -r`
       line in both workflows names `requirements-lock.txt` and every `-e .`
-      carries `--no-deps` (`pytest harness/shared/tests/test_workflow_contracts.py -k Lock`
-      fails otherwise) · stage: `make ci` (R-TDH-9)
+      carries `--no-deps` (`pytest harness/shared/tests/test_dependency_lock_contracts.py -k Lock`
+      fails otherwise; file corrected 2026-09-04: the lock tests moved to their own
+      module along DEC-035's seam and the original path collected zero tests) · stage: `make ci` (R-TDH-9)
 - [x] AC-10: PRs #38–#46 are each merged or closed (recorded in the `DEC-`
       entry); `make lint` exits 0 with the bumped `ruff` pin;
       `pytest harness/shared/tests/test_workflow_contracts.py -k node24`
