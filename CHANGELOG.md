@@ -63,6 +63,18 @@ the two real workflows and neither can tell the two counts apart. It is now
 parametrised over a third case that has a local composite action, and the revert
 fails on it.
 
+And two of the three form cases carried reasons that were **false**. `git
+rev-parse` resolves an abbreviated object id, and resolves an upper-case one —
+both verified against a real git, both the opposite of what the case claimed.
+The cases are right and the rule is right; the reasons were invented. Each now
+states the rule being enforced, which is this repository's and not git's: one
+canonical 40-hex lowercase form, because an abbreviation stays unambiguous only
+until the upstream repository grows a colliding prefix, and because `git
+ls-remote` and Dependabot both emit lowercase — one spelling is what keeps pins
+comparable by eye and Dependabot's rewrite a one-line diff. A failure message
+stating a false reason is worse than one stating none: it misleads exactly the
+person who hit the gate.
+
 ### The `main` ruleset asks for an approval that could never be given
 
 `.github/rulesets/main.json` has been committed, pinned by a test, and cited by

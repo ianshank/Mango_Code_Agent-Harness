@@ -315,8 +315,8 @@ Phase 0 prerequisites AC-1 and AC-2 as if they were Phase 1 slices. They are
 not, and neither was done: R-CQ-2 states the NS-2 credential must be rotated
 *before any Phase 1 slice merges*, so all six merged ahead of their own
 precondition. Phase 2 has started: R-CQ-9 landed, so all 20 `uses:` references
-are SHA pins with version comments (DEC-045) and this repository stops requiring
-of adopters what it did not do itself. The rest of Phase 2 and phases 3–7 are
+are SHA pins with version comments (DEC-045), so this repository no longer asks
+adopters for something it had not done itself. The rest of Phase 2 and phases 3–7 are
 untouched, so the lock still carries no hashes, the `make` stage the shim test
 cites still does not exist, and five landed specs still show every acceptance
 box open.

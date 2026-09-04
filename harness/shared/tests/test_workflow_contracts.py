@@ -299,23 +299,35 @@ class TestActionsRunOnNode24:
                 "a comment that states no patch version",
                 id="a-comment-without-a-full-version",
             ),
-            # Both length cases carry a valid version comment on purpose. The
-            # first draft did not, so the pattern rejected them for the missing
-            # comment and loosening `{40}` to `+` left them passing — a case
-            # that cannot fail for the reason it names pins nothing.
+            # The three form cases below carry a valid version comment on
+            # purpose. The first draft of the 39-hex case did not, so the
+            # pattern rejected it for the missing comment and loosening `{40}`
+            # to `+` left it passing — a case that cannot fail for the reason it
+            # names pins nothing.
+            #
+            # Two of these were first written with reasons that were simply
+            # untrue: git resolves an abbreviated object id, and resolves an
+            # upper-case one, both verified against a real `git rev-parse`. The
+            # rule they enforce is this repository's, not git's — one canonical
+            # 40-hex lowercase form — and each case now says so, because a
+            # failure message stating a false reason misleads whoever hits it.
             pytest.param(
                 "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c0 # v5.1.0",
-                "a 39-hex reference, which is a branch name as far as GitHub is concerned",
+                "an abbreviated object id: git resolves one today, but an abbreviation is only "
+                "unambiguous until the upstream repository grows a colliding prefix, and a pin "
+                "has to stay resolvable for as long as the workflow does",
                 id="a-short-sha",
             ),
             pytest.param(
                 "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c099 # v5.1.0",
-                "a 41-hex reference, which resolves to nothing",
+                "41 hex characters, which is not an object id at all and resolves to nothing",
                 id="an-over-long-sha",
             ),
             pytest.param(
                 "actions/checkout@FBC6F3992D24B796D5A048FF273F7FCC4A7B6C09 # v5.1.0",
-                "an upper-case reference, which git does not resolve",
+                "an upper-case object id: git resolves it, but `git ls-remote` and Dependabot both "
+                "emit lowercase, and one canonical spelling is what lets a reviewer compare pins by "
+                "eye and keeps Dependabot's rewrite a one-line diff",
                 id="an-upper-case-sha",
             ),
         ],
