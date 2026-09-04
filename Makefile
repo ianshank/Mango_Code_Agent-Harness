@@ -12,7 +12,22 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 PYTHON   ?= python
-PYTEST   ?= $(PYTHON) -m pytest
+# `-I` (isolated mode) keeps the workspace off the interpreter's import path.
+# `python -m pytest` puts the current directory first on sys.path, so a
+# `pytest.py` or `pytest/__main__.py` written into the workspace -- neither a
+# protected path -- was imported in place of the installed pytest, and a
+# verification run graded by exit status was forgeable without touching a
+# single digested file (Copilot review on PR #86). Test modules still import
+# `harness` through pytest's own `pythonpath = ["."]` in pyproject.toml, which
+# pytest applies after it has loaded itself and its plugins. `-I` also ignores
+# PYTHON* environment variables and the user site directory; nothing in this
+# repository's recipes relies on either.
+PYTEST   ?= $(PYTHON) -I -m pytest
+# The same protection for the xdist workers, which execnet starts with
+# `python -u -c ...` and which therefore begin with the current directory on
+# their path regardless of the parent's flags. Honoured by Python 3.11 and
+# later; earlier interpreters ignore it, and SECURITY.md states that residual.
+export PYTHONSAFEPATH := 1
 # Both Python test runners load pytest-randomly explicitly (`-p randomly`): the
 # plugin shuffles module, class and test order under a seed it prints in the run
 # header (`Using --randomly-seed=N`), so an order coupling surfaces as a failure

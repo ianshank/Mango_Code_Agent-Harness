@@ -618,7 +618,38 @@ def test_a_handler_denial_is_logged_as_denied(
     records = _tool_call_records(caplog)
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
-    assert "permitted=False" in records[0].getMessage()
+    message = records[0].getMessage()
+    assert "permitted=False" in message and "outcome=denied_policy" in message
+
+
+def test_a_successful_read_of_a_file_that_begins_with_error_is_logged_as_permitted(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The outcome is carried on the result, not parsed out of its text: a
+    prefix test logged this read as a denial because the *file* starts with
+    `Error:` (Copilot review on PR #86)."""
+    (tmp_path / "log.txt").write_text("Error: this is the file's own content\n", encoding="utf-8")
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        result = asyncio.run(server._call_tool_handler("read_file", {"filepath": "log.txt"}))
+
+    assert result[0].text.startswith("Error: this is the file's own content")
+    records = _tool_call_records(caplog)
+    assert len(records) == 1
+    assert records[0].levelno == logging.DEBUG
+    message = records[0].getMessage()
+    assert "permitted=True" in message and "outcome=executed" in message
+
+
+def test_a_missing_file_is_logged_as_a_permitted_failure_not_a_denial(
+    tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
+    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__):
+        asyncio.run(server._call_tool_handler("read_file", {"filepath": "absent.txt"}))
+    (record,) = _tool_call_records(caplog)
+    assert record.levelno == logging.DEBUG
+    assert "permitted=True" in record.getMessage() and "outcome=failed" in record.getMessage()
 
 
 def test_a_call_the_schema_rejects_never_starts_the_handler(tmp_path: Path, broker: ExecutionBroker) -> None:

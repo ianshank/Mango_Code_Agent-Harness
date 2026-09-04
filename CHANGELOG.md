@@ -56,6 +56,20 @@ Landed together with the slices recorded below, from
   the digested set instead of replacing the harness floor; a failed model call
   still emits a `model_call` event; `/readyz` checks the model credential; the
   selector gate matches the whole node identity (Copilot review on PR #86).
+- **Third review round (DEC-051).** A workspace `pytest.py` was the pytest the
+  verification recipe ran: `PYTEST` is now `$(PYTHON) -I -m pytest` and the
+  Makefile exports `PYTHONSAFEPATH=1` for the xdist workers, with a regression
+  proving the forgery under the old recipe shape and its absence under the new.
+  The enforcement digest walks the whole workspace (only `.git` skipped) so a
+  virtualenv's `*.pth` and `sitecustomize.py` are in the set the write door
+  protects; `**/sitecustomize.py` and `**/usercustomize.py` join
+  `protected_paths`. `make` long options are recognised by exact spelling or
+  refused, closing GNU make's unique-prefix expansion (`--dir=`, `--ev=`), and
+  `-e` is refused. Tool outcomes are typed on the result
+  (`tool_result_format.ToolText`) instead of inferred from its text, so the
+  dispatcher's `tool_call` event and the MCP log report the executor's own
+  decision (`denied_policy`, `failed`, `executed`). `SECURITY.md` names the
+  three residuals that remain until OS isolation.
 
 ### A ticked acceptance criterion must name a selector that collects something
 

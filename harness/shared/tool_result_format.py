@@ -22,6 +22,69 @@ import typing
 # (tech-debt-hardening-plan R-TDH-14).
 from harness.shared.governance.verdict import BROKER_BLOCKED
 
+#: How a tool call ended, as the dispatcher and the MCP transport log it. One
+#: vocabulary, declared where every result is rendered, so the two transports
+#: cannot spell the same outcome two ways.
+EXECUTED = "executed"
+DENIED_POLICY = "denied_policy"
+DENIED_ROLE = "denied_role"
+UNKNOWN_TOOL = "unknown_tool"
+INVALID_ARGUMENTS = "invalid_arguments"
+POLICY_LOOKUP_FAILED = "policy_lookup_failed"
+FAILED = "failed"
+RAISED = "raised"
+
+#: The outcomes in which the call was refused before or by the handler. The
+#: rest -- executed, failed, raised -- are calls the harness permitted.
+DENIALS = frozenset({DENIED_POLICY, DENIED_ROLE, UNKNOWN_TOOL, INVALID_ARGUMENTS, POLICY_LOOKUP_FAILED})
+
+
+class ToolText(str):
+    """A tool result that knows how it ended.
+
+    Every executor returns a ``str`` the model reads, and every caller appends
+    it to a message or writes it to a transport unchanged. The outcome used to
+    be inferred back out of that text by prefix (``Error writing file …``), so a
+    refused write graded ``executed`` in the dispatcher's event and a successful
+    ``read_file`` of a file that happens to begin with ``Error:`` graded as a
+    denial in the MCP transport's (Copilot review on PR #86). This is the same
+    string with the outcome attached by the executor that made the decision;
+    nothing downstream parses the text.
+
+    It *is* a ``str``: equality, hashing, JSON encoding and ``str()`` are the
+    plain string's, so no caller changes. Only ``tool_outcome`` reads the
+    attribute.
+    """
+
+    outcome: str
+
+    def __new__(cls, text: str, outcome: str = EXECUTED) -> ToolText:
+        self = super().__new__(cls, text)
+        self.outcome = outcome
+        return self
+
+
+def denied(text: str) -> ToolText:
+    """The call was refused: a policy, containment or authority decision."""
+    return ToolText(text, DENIED_POLICY)
+
+
+def failed(text: str) -> ToolText:
+    """The call was permitted and did not succeed: an I/O error, a missing
+    file, a patch that matched zero or several times."""
+    return ToolText(text, FAILED)
+
+
+def tool_outcome(result: object) -> str:
+    """The outcome a result carries. A plain string is a result that succeeded:
+    the executors only wrap what did not."""
+    return result.outcome if isinstance(result, ToolText) else EXECUTED
+
+
+def is_permitted(outcome: str) -> bool:
+    """Whether the harness let the call proceed, whatever became of it after."""
+    return outcome not in DENIALS
+
 
 class _Renderable(typing.Protocol):
     """The shape this needs off a broker result.
@@ -48,7 +111,8 @@ class _Renderable(typing.Protocol):
 
 
 def format_execution_result(result: _Renderable) -> str:
-    """Render ``result`` for the model. Always returns a string."""
+    """Render ``result`` for the model. Always returns a string; a blocked or
+    failed result returns one that carries its outcome (``ToolText``)."""
     if result.status == BROKER_BLOCKED:
         if result.stderr:
             try:
@@ -62,13 +126,13 @@ def format_execution_result(result: _Renderable) -> str:
                         "normalized_message": parsed_violation.get("message", result.reason or result.stderr),
                         "redacted": False,
                     }
-                    return "Error: Critique received.\n" + json.dumps(critique, separators=(",", ":"))
+                    return denied("Error: Critique received.\n" + json.dumps(critique, separators=(",", ":")))
             except ValueError:
                 pass
-        return f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip()
+        return denied(f"Error: Command blocked by policy guard. {result.reason or result.stderr}".strip())
 
     if result.reason:
-        return f"Error: {result.reason}"
+        return failed(f"Error: {result.reason}")
     output = result.stdout
     if result.stderr:
         output += "\n[STDERR]\n" + result.stderr

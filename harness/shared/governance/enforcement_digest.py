@@ -35,8 +35,9 @@ import logging
 import os
 from pathlib import Path
 
-from harness.shared.validate_invariants import SKIP_DIR_PARTS, is_protected, load_protected_patterns
+from harness.shared.validate_invariants import is_protected, load_protected_patterns
 from harness.shared.write_policy import (
+    ALWAYS_DENIED_SEGMENTS,
     DEFAULT_POLICY_PATH,
     _load_supplied_policy,
     active_policy_path,
@@ -81,10 +82,21 @@ def effective_protected_patterns(policy_path: Path | None = None) -> list[str]:
 def enforcement_digests(workspace: Path, policy_path: Path | None = None) -> dict[str, str]:
     """``{workspace-relative posix path: sha256}`` for every protected file present.
 
-    Walks ``workspace`` once, pruning the directories ``validate_invariants``
-    already declares as not first-party (virtualenvs, caches, ``node_modules``,
-    ``.git``). Symlinked directories are not followed; a symlinked *file* that
-    matches is digested by content, which is what the recipe would read.
+    Walks the whole of ``workspace`` once, skipping only the directories the
+    write door refuses outright (``write_policy.ALWAYS_DENIED_SEGMENTS``:
+    ``.git``). It does **not** prune the virtualenv and cache directories
+    ``validate_invariants`` skips for the CI gate: that gate reads tracked
+    files, while this set must be the set the write door protects, and the
+    write door prunes nothing. ``*.pth`` and ``**/sitecustomize.py`` reach into
+    ``.venv/lib/*/site-packages``, which is exactly where the interpreter the
+    recipe starts loads them from; with ``.venv`` pruned, a startup file could
+    change there under both digest checks (Copilot review on PR #86). The cost
+    is a directory walk, not a hash of everything: only matching files are
+    read, and the walk measures about 0.5 s over this repository with its
+    ``node_modules`` in place.
+
+    Symlinked directories are not followed; a symlinked *file* that matches is
+    digested by content, which is what the recipe would read.
 
     ``policy_path`` names the policy whose ``protected_paths`` define the set;
     it defaults to the harness policy, the floor every supplied policy is
@@ -102,7 +114,7 @@ def enforcement_digests(workspace: Path, policy_path: Path | None = None) -> dic
 
     digests: dict[str, str] = {}
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_PARTS)
+        dirnames[:] = sorted(d for d in dirnames if d not in ALWAYS_DENIED_SEGMENTS)
         for name in sorted(filenames):
             path = Path(dirpath) / name
             rel = path.relative_to(root).as_posix()

@@ -43,28 +43,44 @@ any file the harness's own user can, and can still open sockets (DEC-010,
 INV-13 in `harness/CONTRACT.md`).
 
 The direct doors are shut: `read_file .env`, `write_file Makefile`,
-`write_file GNUmakefile`, `curl`, `make -f <other file>` and `pnpm exec
-<arbitrary program>` are all refused for every role. **The indirect door is
-open and known.** Executing a workspace script (`python3 forge.py`, `pytest`)
-is a permitted action, and the script it runs is not governed: it can read the
-on-disk `.env`, write any protected file, install a git hook, and reach the
-network. What the harness now guarantees is narrower than prevention — the
-verdict cannot be forged that way. `VerificationRunner` records the digest of
-every `protected_paths` file before the first agent turn and refuses to grade
-(`BLOCKED`, `enforcement_tampered`, naming the file) if any of them changed,
-appeared or vanished since; the set is checked again after the verification
-command exits, so a background process that rewrites a file between the check
-and `make` reading it is caught if the change persists. A rewrite that is
-restored before the second check (swap-and-restore inside the run) is not —
-that needs an immutable snapshot or OS isolation of the backend, and is a
-known, accepted residual until then. That is detection after the fact, not
-containment of the script. OS isolation of the process backend (container/namespace, with
-`.git`, `.mango`, `.env` and the enforcement files masked or read-only, and no
+`write_file GNUmakefile`, `write_file .venv/…/sitecustomize.py`, `curl`,
+`make -f <other file>`, `make --dir=…` (any abbreviated or unknown long option)
+and `pnpm exec <arbitrary program>` are all refused for every role. **The
+indirect door is open and known.** Executing a workspace script (`python3
+forge.py`, `pytest`) is a permitted action, and the script it runs is not
+governed: it can read the on-disk `.env`, write any protected file, install a
+git hook, and reach the network. What the harness now guarantees is narrower
+than prevention — the verdict cannot be forged by the routes below.
+`VerificationRunner` records the digest of every `protected_paths` file in the
+workspace before the first agent turn — the whole workspace, a virtualenv's
+`site-packages/*.pth` and `sitecustomize.py` included, since that is where the
+interpreter loads them from — and refuses to grade (`BLOCKED`,
+`enforcement_tampered`, naming the file) if any of them changed, appeared or
+vanished since; the set is checked again after the verification command exits,
+so a background process that rewrites a file between the check and `make`
+reading it is caught if the change persists. The verification recipe starts
+the interpreter in isolated mode (`python -I -m pytest`) and exports
+`PYTHONSAFEPATH=1` to the xdist workers, so a `pytest.py` or `pytest/`
+package written into the workspace — neither a protected path — is not the
+pytest that runs.
+
+Three residuals are known and accepted until OS isolation lands. A rewrite of
+a digested file that is restored before the second check (swap-and-restore
+inside the run) is not caught. On Python older than 3.11 `PYTHONSAFEPATH` is
+ignored, so an xdist worker there still begins with the workspace on its
+import path. And the toolchain itself lives in the workspace's virtualenv:
+its startup files are digested, its packages are not, so a script that
+rewrites `site-packages/_pytest/…` forges the verdict through the indirect
+door. Each needs an immutable, out-of-tree toolchain or OS isolation of the
+backend. That is detection after the fact, not containment of the script. OS
+isolation of the process backend (container/namespace, with `.git`, `.mango`,
+`.env`, the enforcement files and the toolchain masked or read-only, and no
 network) is the fix, and is a later capability profile that this repository's
 CI runners cannot yet exercise. Reports that widen the indirect door beyond
-what this paragraph already states — a way to forge the verdict *despite* the
-digest check, or to reach a credential through a door listed above as shut —
-are the ones to file.
+what this section already states — a way to forge the verdict *despite* the
+digest check and the import isolation, other than the three residuals named,
+or to reach a credential through a door listed above as shut — are the ones
+to file.
 
 ## Existing automated scanning
 

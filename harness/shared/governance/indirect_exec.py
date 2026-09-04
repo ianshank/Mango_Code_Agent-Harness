@@ -44,11 +44,63 @@ MAKEFILE_OPTIONS = frozenset({"-f", "--file", "--makefile"})
 DIRECTORY_OPTIONS = frozenset({"-C", "--directory"})
 EVAL_OPTIONS = frozenset({"-E", "--eval"})
 INCLUDE_DIR_OPTIONS = frozenset({"-I", "--include-dir"})
+#: ``-e`` makes every environment variable override the makefile's own, which
+#: is ``NAME=value`` by another route: ``PYTEST=evil make -e test-python`` runs
+#: ``evil`` as the test suite without an assignment on make's command line.
+ENVIRONMENT_OVERRIDE_OPTIONS = frozenset({"-e", "--environment-overrides"})
 
-#: The short letters of every option above, so a cluster such as ``-nf`` or
-#: ``-kC`` is caught rather than read as one harmless flag.
+#: Long options ``make`` accepts that select no makefile text, spelled in full.
+#: GNU getopt_long resolves any unique *prefix* of a long option, so ``--dir=x``
+#: reaches make as ``--directory=x`` and ``--ev=`` as ``--eval=`` while a
+#: comparison against the full spellings above sees neither (Copilot review on
+#: PR #86). A long option is therefore recognised by its exact spelling or not
+#: at all, and one recognised nowhere is refused -- an unknown option is a
+#: usage error to make anyway, and an abbreviation is one this table must not
+#: expand on make's behalf. None of these takes a value that names a file or
+#: makefile text; the value of ``--jobs`` and friends is a number or a switch.
+HARMLESS_LONG_OPTIONS = frozenset({
+    "--always-make",
+    "--assume-new",
+    "--assume-old",
+    "--check-symlink-times",
+    "--debug",
+    "--dry-run",
+    "--help",
+    "--ignore-errors",
+    "--jobs",
+    "--just-print",
+    "--keep-going",
+    "--load-average",
+    "--max-load",
+    "--new-file",
+    "--no-builtin-rules",
+    "--no-builtin-variables",
+    "--no-keep-going",
+    "--no-print-directory",
+    "--old-file",
+    "--output-sync",
+    "--print-data-base",
+    "--print-directory",
+    "--question",
+    "--quiet",
+    "--recon",
+    "--silent",
+    "--stop",
+    "--touch",
+    "--trace",
+    "--version",
+    "--warn-undefined-variables",
+    "--what-if",
+})
+
+#: The short letters of every refused option above, so a cluster such as
+#: ``-nf`` or ``-kC`` is caught rather than read as one harmless flag.
 _SELECTING_LETTERS = frozenset(
-    opt[1] for opt in (*MAKEFILE_OPTIONS, *DIRECTORY_OPTIONS, *EVAL_OPTIONS, *INCLUDE_DIR_OPTIONS)
+    opt[1]
+    for opt in (
+        *MAKEFILE_OPTIONS, *DIRECTORY_OPTIONS, *EVAL_OPTIONS, *INCLUDE_DIR_OPTIONS,
+        *ENVIRONMENT_OVERRIDE_OPTIONS,
+    )
     if len(opt) == 2
 )
 
@@ -117,7 +169,24 @@ def make_denial_reason(args: list[str]) -> str | None:
             return f"{option} injects makefile text from the command line"
         if option in INCLUDE_DIR_OPTIONS:
             return f"{option} changes where included makefiles are resolved"
-        if not token.startswith("--") and len(token) > 2:
+        if option in ENVIRONMENT_OVERRIDE_OPTIONS:
+            return (
+                f"{option} lets every environment variable override the recipe's own, "
+                "the same effect as a NAME=value argument"
+            )
+        if token.startswith("--"):
+            if option not in HARMLESS_LONG_OPTIONS:
+                return (
+                    f"{option!r} is not a long option of make spelled in full; make resolves any "
+                    "unique prefix (--dir is --directory, --ev is --eval), so an abbreviated or "
+                    "unknown long option is refused rather than expanded here"
+                )
+            # A recognised harmless option never consumes the next token: make
+            # treats `--jobs 4` as a switch and a target, and consuming `4`
+            # would also swallow a `NAME=value` that follows the option.
+            i += 1
+            continue
+        if len(token) > 2:
             # A short-flag cluster. `-nf Makefile` is legal to make; refusing
             # the cluster rather than parsing it fails closed, and the
             # verification runner spells its flags separately.
@@ -160,7 +229,9 @@ __all__ = [
     "CANONICAL_MAKEFILE",
     "DELEGATING_PROGRAMS",
     "DIRECTORY_OPTIONS",
+    "ENVIRONMENT_OVERRIDE_OPTIONS",
     "EVAL_OPTIONS",
+    "HARMLESS_LONG_OPTIONS",
     "INCLUDE_DIR_OPTIONS",
     "MAKEFILE_OPTIONS",
     "delegated_argv",

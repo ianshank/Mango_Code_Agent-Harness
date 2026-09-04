@@ -23,6 +23,15 @@ from harness.shared.tool_executors import (
     execute_run_command,
     execute_write_file,
 )
+from harness.shared.tool_result_format import (
+    DENIED_ROLE,
+    INVALID_ARGUMENTS,
+    RAISED,
+    UNKNOWN_TOOL,
+    denied,
+    is_permitted,
+    tool_outcome,
+)
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -82,7 +91,7 @@ class ToolDispatcher:
         denial = authorize_write(self.broker, self.active_role, filepath)
         if denial is not None:
             logger.warning("Refused write for role %s: %s", self.active_role, denial)
-            return f"Denied: {denial}"
+            return denied(f"Denied: {denial}")
         return execute_write_file(self.workspace_dir, filepath, content)
 
     def _execute_read_file(
@@ -94,7 +103,7 @@ class ToolDispatcher:
         denial = authorize_write(self.broker, self.active_role, filepath)
         if denial is not None:
             logger.warning("Refused patch for role %s: %s", self.active_role, denial)
-            return f"Denied: {denial}"
+            return denied(f"Denied: {denial}")
         return execute_apply_patch(self.workspace_dir, filepath, old_text, new_text)
 
     def _execute_run_command(self, command: str) -> str:
@@ -131,6 +140,11 @@ class ToolDispatcher:
         the call was permitted, its outcome and its duration -- and nothing
         from the arguments or the result (2026 standards audit H6). Denials
         are logged at WARNING, the rest at DEBUG.
+
+        The outcome is the handler's own, not "the handler returned": the
+        executors report a policy denial or a failure as text for the model,
+        and that text carries its outcome (``ToolText``), so a refused write
+        is logged as the denial it was (Copilot review on PR #86).
         """
         for tc in tool_calls:
             started = time.monotonic()
@@ -140,29 +154,29 @@ class ToolDispatcher:
             args = _normalize_tool_arguments(func_obj.get("arguments"), func_name)
 
             handler = self.tool_handlers.get(func_name)
-            permitted = True
             if handler is not None and not tool_is_permitted(self.active_role, func_name):
-                permitted, outcome = False, "denied_role"
+                outcome = DENIED_ROLE
                 tool_result = (
                     f"Error: tool '{func_name}' is not available to the {self.active_role} role"
                 )
             elif handler is None:
-                permitted, outcome = False, "unknown_tool"
+                outcome = UNKNOWN_TOOL
                 tool_result = f"Error: Unknown tool '{func_name}'"
             else:
                 reason = self._argument_denial(func_name, args)
                 if reason is not None:
-                    permitted, outcome = False, "invalid_arguments"
+                    outcome = INVALID_ARGUMENTS
                     tool_result = f"Error: invalid_arguments: {reason}"
                 else:
                     try:
                         tool_result = handler(args)
-                        outcome = "executed"
+                        outcome = tool_outcome(tool_result)
                     except Exception as exc:
                         logger.exception("Tool %s raised", func_name)
                         tool_result = f"Error executing tool '{func_name}': {exc}"
-                        outcome = "raised"
+                        outcome = RAISED
 
+            permitted = is_permitted(outcome)
             event = logger.debug if permitted else logger.warning
             event(
                 "tool call %s: %s for role %s",

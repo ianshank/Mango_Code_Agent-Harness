@@ -31,6 +31,15 @@ from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.tool_arg_validation import invalid_arguments_reason, parameter_schemas
 from harness.shared.tool_dispatch import _normalize_tool_arguments
 from harness.shared.tool_executors import authorize_write
+from harness.shared.tool_result_format import (
+    DENIED_ROLE,
+    INVALID_ARGUMENTS,
+    POLICY_LOOKUP_FAILED,
+    RAISED,
+    UNKNOWN_TOOL,
+    is_permitted,
+    tool_outcome,
+)
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -93,37 +102,16 @@ def _loggable_argument_keys(name: str, arguments: Any) -> tuple[list[str], int]:
     return known, len(arguments) - len(known)
 
 
-#: How the executors spell a refusal or a failure. ``write_file``/``read_file``
-#: fold the write/read policy's denial into ``Error writing file …`` /
-#: ``Error reading file …``; the broker's refusal of a command and the
-#: dispatcher's argument validation carry their own prefixes.
-_REFUSAL_PREFIXES = (
-    "Denied",
-    "Error writing file",
-    "Error reading file",
-    "Error patching file",
-    "Error executing tool",
-    "Error:",
-)
-
 #: The same per-tool schemas `ToolDispatcher` validates against, so the MCP
 #: door cannot hand an executor a call the in-process door would refuse.
 _PARAMETER_SCHEMAS = parameter_schemas(NEMOTRON_TOOLS)
-
-
-def _handler_refused(result: Any) -> bool:
-    """Whether the shared handler refused or failed the call after the static
-    role check passed: a read/write-policy denial, a broker PDP refusal, a
-    validation failure, or an execution error. The registry lambdas return the
-    executor's string verbatim, so the prefix is the structural signal."""
-    return isinstance(result, str) and result.startswith(_REFUSAL_PREFIXES)
 
 
 def _log_tool_call(
     *,
     name: str,
     role: str,
-    permitted: bool,
+    outcome: str,
     duration_ms: float,
     argument_keys: list[str],
     unknown_key_count: int = 0,
@@ -131,16 +119,23 @@ def _log_tool_call(
     """One structured line per call, sink-agnostic (``json_logging`` wraps the
     root handler; this only chooses the fields and the level).
 
+    ``outcome`` is the handler's own verdict on the call, carried on the
+    result it returned (``tool_result_format.ToolText``), never inferred from
+    the result's text: a prefix test logged a successful ``read_file`` of a
+    file beginning with ``Error:`` as a denial (Copilot review on PR #86).
+
     Argument *names* are logged; argument *values* never are. ``write_file``'s
     ``content`` and ``run_command``'s ``command`` are exactly the kind of
     payload that carries credentials, and a log line is the one place a
     credential-containment gate does not look.
     """
+    permitted = is_permitted(outcome)
     level = logging.DEBUG if permitted else logging.WARNING
     logger.log(
         level,
-        "mcp_tool_call tool=%s role=%s permitted=%s duration_ms=%.3f argument_keys=%s unknown_key_count=%d",
-        name, role, permitted, duration_ms, argument_keys,
+        "mcp_tool_call tool=%s role=%s permitted=%s outcome=%s duration_ms=%.3f argument_keys=%s "
+        "unknown_key_count=%d",
+        name, role, permitted, outcome, duration_ms, argument_keys,
         unknown_key_count,
     )
 
@@ -191,7 +186,7 @@ def create_mcp_server(
         try:
             if not tool_is_permitted(role, name):
                 _log_tool_call(
-                    name=name, role=role, permitted=False,
+                    name=name, role=role, outcome=DENIED_ROLE,
                     duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
                     unknown_key_count=unknown_key_count,
                 )
@@ -199,7 +194,7 @@ def create_mcp_server(
         except Exception as e:  # noqa: BLE001
             logger.error("Policy lookup failed for tool '%s': %s", name, e)
             _log_tool_call(
-                name=name, role=role, permitted=False,
+                name=name, role=role, outcome=POLICY_LOOKUP_FAILED,
                 duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
                 unknown_key_count=unknown_key_count,
             )
@@ -216,30 +211,34 @@ def create_mcp_server(
         reason = invalid_arguments_reason(schema, args) if schema is not None else None
         if reason is not None:
             _log_tool_call(
-                name=name, role=role, permitted=False,
+                name=name, role=role, outcome=INVALID_ARGUMENTS,
                 duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
                 unknown_key_count=unknown_key_count,
             )
             return [types.TextContent(type="text", text=f"Error: invalid_arguments: {reason}")]
 
-        try:
-            handler = tool_handlers.get(name)
-            if handler is None:
-                raise ValueError(f"Unknown tool: {name}")
-            # Every handler is synchronous and `run_command` blocks on
-            # `subprocess.run`; awaited inline, one long command froze the
-            # transport for every other request on the loop (audit M9). The
-            # default executor keeps the loop free to serve them.
-            result = await asyncio.to_thread(handler, args)
-        except Exception as e:
-            logger.exception("Error executing tool %s", name)
-            result = f"Error executing tool '{name}': {e}"
+        handler = tool_handlers.get(name)
+        if handler is None:
+            outcome: str = UNKNOWN_TOOL
+            result: str = f"Error executing tool '{name}': Unknown tool: {name}"
+        else:
+            try:
+                # Every handler is synchronous and `run_command` blocks on
+                # `subprocess.run`; awaited inline, one long command froze the
+                # transport for every other request on the loop (audit M9). The
+                # default executor keeps the loop free to serve them.
+                result = await asyncio.to_thread(handler, args)
+                # The static role check above is necessary, not sufficient: the
+                # shared handler consults the read/write policy and the broker
+                # PDP, and its result carries that decision.
+                outcome = tool_outcome(result)
+            except Exception as e:
+                logger.exception("Error executing tool %s", name)
+                result = f"Error executing tool '{name}': {e}"
+                outcome = RAISED
 
-        # The static role check above is necessary, not sufficient: the shared
-        # handler consults the read/write policy and the broker PDP, and a
-        # denial there must be logged as one (Copilot review on PR #86).
         _log_tool_call(
-            name=name, role=role, permitted=not _handler_refused(result),
+            name=name, role=role, outcome=outcome,
             duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
             unknown_key_count=unknown_key_count,
         )

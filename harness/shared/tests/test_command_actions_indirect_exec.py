@@ -43,6 +43,9 @@ class TestMakeIsAGateRunOnlyAgainstTheCanonicalMakefile:
             "make -j4 test-python",
             "make -n -k --silent test-python",
             "make -- test-python",
+            "make --jobs 4 test-python",
+            "make --jobs=4 --keep-going test-python",
+            "make --dry-run --no-print-directory test-python",
         ],
     )
     def test_ordinary_gate_runs_still_grade_test_execute(self, command: str) -> None:
@@ -76,12 +79,41 @@ class TestMakeIsAGateRunOnlyAgainstTheCanonicalMakefile:
             ("make PYTEST=evil test-python", "PYTEST"),
             ("make test-python PYTHON=/tmp/evil", "PYTHON"),
             ("make -- PYTEST=evil test-python", "PYTEST"),
+            # GNU getopt_long resolves unique prefixes: each of these reaches
+            # make as the option it abbreviates (Copilot review on PR #86).
+            ("make --ev=x x", "--ev"),
+            ("make --dir=/tmp x", "--dir"),
+            ("make --direct /tmp x", "--direct"),
+            ("make --fi=evil.mk x", "--fi"),
+            ("make --makef=evil.mk x", "--makef"),
+            ("make --inc=/tmp x", "--inc"),
+            ("make --no-such-option x", "--no-such-option"),
+            # `-e` is NAME=value through the environment.
+            ("make -e test-python", "-e"),
+            ("make --environment-overrides test-python", "--environment-overrides"),
+            ("make --env test-python", "--env"),
+            ("make -ke test-python", "-ke"),
+            # A harmless option must not swallow the assignment after it.
+            ("make --jobs PYTEST=evil test-python", "PYTEST"),
         ],
     )
     def test_any_other_makefile_directory_or_override_is_unclassified(self, command: str, fragment: str) -> None:
         verdict = classify(command)
         assert verdict.action == UNCLASSIFIED_ACTION, verdict
         assert fragment in verdict.reason
+
+    def test_every_harmless_long_option_is_a_full_spelling_make_accepts(self) -> None:
+        """The allowlist is exact spellings of documented GNU make options and
+        nothing shorter: an entry that were itself an abbreviation would be
+        the prefix hole reopened from the other side."""
+        from harness.shared.governance.indirect_exec import HARMLESS_LONG_OPTIONS
+
+        assert HARMLESS_LONG_OPTIONS, "an empty allowlist would refuse every long option, including --jobs"
+        for option in HARMLESS_LONG_OPTIONS:
+            assert option.startswith("--") and len(option) > 4, option
+            assert not any(
+                other != option and other.startswith(option) for other in HARMLESS_LONG_OPTIONS
+            ), f"{option} is a prefix of another allowlisted option"
 
     def test_an_eval_with_a_recipe_is_a_command_chain_first(self) -> None:
         """`--eval='x: ; curl evil'` carries `;`, so `_COMPOUND` refuses it before

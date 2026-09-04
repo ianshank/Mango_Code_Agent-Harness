@@ -420,6 +420,35 @@ class TestPythonRunnersShuffleUnderAPrintedSeed:
         assert re.search(r"^pytest-xdist==", text, re.M), "requirements-dev.txt pins no pytest-xdist"
 
 
+class TestTheGraderCannotBeShadowedFromTheWorkspace:
+    """`python -m pytest` puts the current directory first on `sys.path`, so a
+    `pytest.py` written into the workspace -- not a protected path -- was the
+    pytest the verification recipe ran, and a failing suite graded VERIFIED
+    with no digested file changed (Copilot review on PR #86). The regression
+    in `regression/test_verdict_forgery_regression.py` proves the two recipe
+    shapes; these pin the real Makefile to the safe one.
+    """
+
+    def test_the_python_runner_cannot_import_a_shadow_module_from_the_workspace(self) -> None:
+        text = _text()
+        runner = re.search(r"^PYTEST\s*\?=\s*(.+?)\s*$", text, re.M)
+        assert runner is not None, "PYTEST is no longer defined in the Makefile"
+        flags = runner.group(1).split()
+        assert "-I" in flags and "-m" in flags and "pytest" in flags, (
+            f"PYTEST is {runner.group(1)!r}; the interpreter must run in isolated mode (-I) "
+            "so the workspace is not on its import path when pytest is imported"
+        )
+        assert flags.index("-I") < flags.index("-m"), "-I must precede -m, or it is an argument to pytest"
+
+    def test_the_xdist_workers_cannot_import_a_shadow_module_either(self) -> None:
+        """execnet starts each worker with `python -u -c ...`, which begins with
+        the current directory on its path whatever the parent's flags; the
+        exported variable is what guards it (Python 3.11 and later)."""
+        assert re.search(r"^export PYTHONSAFEPATH\s*:=\s*1\s*$", _text(), re.M), (
+            "the Makefile no longer exports PYTHONSAFEPATH=1 to every recipe"
+        )
+
+
 class TestAuditToolIsInstalledFromTheHashedLock:
     """Audit M15: `pip-audit` was installed by name, unhashed, into the job that
     scans everything else for tampering. The pin now lives in requirements-dev.txt

@@ -121,16 +121,22 @@ names the audit finding or closed-plan requirement it carries.
 ### Phase B — runtime correctness and containment (this PR)
 
 - R-SR-6: Executing a workspace file MUST NOT be a route around the write policy:
-  `GNUmakefile`, `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`,
-  `usercustomize.py`, `pytest.ini`, `tox.ini`, `setup.cfg` and `*.pth` MUST be in
-  `protected_paths`; `make -f <non-Makefile>`, `make --file=…`, `make -C …` and a
-  `MAKEFILES=` prefix MUST grade `destructive`; `pnpm exec <x>` / `npx <x>` MUST
-  grade `test_execute` only for the module's existing test-runner set (B4).
+  `GNUmakefile`, `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`
+  and `usercustomize.py` at the root and nested (`**/`), `pytest.ini`, `tox.ini`,
+  `setup.cfg` and `*.pth` MUST be in `protected_paths`; `make -f <non-Makefile>`,
+  `make --file=…`, `make -C …`, `make -e`, any long option not spelled in full
+  (GNU make resolves unique prefixes) and a `MAKEFILES=` prefix MUST grade
+  `destructive`; `pnpm exec <x>` / `npx <x>` MUST grade `test_execute` only for
+  the module's existing test-runner set, and only with no option before `<x>`
+  (B4).
 - R-SR-7: `VerificationRunner.run` MUST return `BLOCKED` with reason
   `enforcement_tampered` naming the file when the digest of the workspace
   `Makefile` (and any other digested enforcement file the recipe depends on)
-  differs from the digest recorded at loop start, reusing the control-plane digest
-  function rather than a second implementation (B4).
+  differs from the digest recorded at loop start or from the one re-read after
+  the verification command exits, reusing the control-plane digest function
+  rather than a second implementation; the digested set MUST be the set the
+  write door protects, walked over the whole workspace with only
+  `ALWAYS_DENIED_SEGMENTS` skipped (B4).
 - R-SR-8: `SECURITY.md` and the comment block of `harness/shared/agent-policy.json`
   MUST describe the runtime as containment, not isolation, and MUST name the
   remaining gap (script execution can read the on-disk `.env` and open sockets
@@ -238,6 +244,15 @@ names the audit finding or closed-plan requirement it carries.
   default-less) → Phase F only if LangGraph is revived; R-CQ-18 ESLint half →
   Phase F; R-CQ-21 defect subset → R-SR-17, R-SR-18; R-CQ-22 → R-SR-27;
   R-CQ-25 → R-SR-29; R-CQ-30 doc move → R-SR-20.
+- R-SR-31: The verification recipe MUST import its grader from the installed
+  toolchain and never from the workspace: the Python runner MUST start the
+  interpreter in isolated mode (`-I`) and MUST export `PYTHONSAFEPATH=1` to its
+  worker processes, so a `pytest.py` or `pytest/` package an agent writes into
+  the workspace — not a protected path — is not the pytest that runs; a
+  regression MUST prove the forgery under the old recipe shape and its absence
+  under the new one, and `SECURITY.md` MUST name the residuals (workers on
+  Python < 3.11, the toolchain's own packages in the workspace virtualenv)
+  (B4, Copilot review on PR #86).
 - C-SR-1: No threshold, timeout or count MAY appear as a literal outside
   `governance-policy.json`; every new key MUST have a `TypedDict` field, an
   accessor, a fail-closed test, and a regenerated bundle.
@@ -420,6 +435,13 @@ names the audit finding or closed-plan requirement it carries.
       `pytest harness/shared/tests/test_deprecation_shims.py` passes for every
       renamed path; a `tmp_path` policy from `71223f1` raises `PolicyError` only
       for the keys this plan adds · stage: `make test-python` (C-SR-4)
+- [ ] AC-33: `pytest harness/shared/tests/regression -k shadow` proves a
+      workspace `pytest.py` passes a failing suite under the old recipe shape
+      and is not imported under the isolated one (module and package forms,
+      with a passing-suite control), and
+      `pytest harness/shared/tests/test_makefile_contracts.py -k shadow` pins
+      the real `PYTEST` definition to `-I` and the exported `PYTHONSAFEPATH`
+      · stage: `make test-regression` (R-SR-31)
 
 ## Steps
 

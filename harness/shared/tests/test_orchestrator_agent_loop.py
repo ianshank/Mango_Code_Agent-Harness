@@ -342,6 +342,40 @@ class TestStructuredRunEvents:
         assert secret_path not in event.getMessage()
         assert all(secret_path not in str(v) for v in vars(event).values())
 
+    def test_a_policy_denial_inside_the_handler_is_logged_as_a_denial(
+        self, mock_workspace: Path, mock_complete_chat, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The role check passes (the reasoner holds `write_file`); the write
+        policy refuses the credential file inside the handler. The event used
+        to say `permitted=True, outcome=executed` because the handler returned
+        normally -- the refusal is text for the model. The result now carries
+        its outcome (Copilot review on PR #86)."""
+        mock_complete_chat.side_effect = [
+            _resp(None, tool_calls=[_tool_call("write_file", {"filepath": ".env", "content": "K=v"})]),
+            _resp("done"),
+        ]
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator"):
+            orch.execute_agent("nemotron-reasoner", "go")
+        (event,) = self._events(caplog, "tool_call")
+        fields = (event.levelno, getattr(event, "permitted", None), getattr(event, "outcome", None))
+        assert fields == (logging.WARNING, False, "denied_policy")
+        assert not (mock_workspace / ".env").exists()
+
+    def test_a_permitted_call_that_fails_is_not_a_denial(
+        self, mock_workspace: Path, mock_complete_chat, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        mock_complete_chat.side_effect = [
+            _resp(None, tool_calls=[_tool_call("read_file", {"filepath": "absent.txt"})]),
+            _resp("done"),
+        ]
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5)
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator"):
+            orch.execute_agent("nemotron-reasoner", "go")
+        (event,) = self._events(caplog, "tool_call")
+        fields = (event.levelno, getattr(event, "permitted", None), getattr(event, "outcome", None))
+        assert fields == (logging.DEBUG, True, "failed")
+
 
 class TestOrchestrateWorkflow:
     def test_orchestrate_with_shadow_planner_exception(

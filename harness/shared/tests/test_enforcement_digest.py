@@ -21,8 +21,7 @@ from harness.shared.governance.enforcement_digest import (
     tampered_files,
 )
 from harness.shared.tests._helpers import CONTROL_PLANE, imported_module
-from harness.shared.validate_invariants import SKIP_DIR_PARTS
-from harness.shared.write_policy import policy_digest
+from harness.shared.write_policy import ALWAYS_DENIED_SEGMENTS, policy_digest
 
 pytestmark = pytest.mark.governance
 
@@ -53,14 +52,40 @@ class TestWhatIsDigested:
         assert "src/feature.py" not in digests
         assert "tests/test_x.py" not in digests
 
-    @pytest.mark.parametrize("skipped", sorted(SKIP_DIR_PARTS))
-    def test_directories_validate_invariants_skips_are_pruned(self, workspace: Path, skipped: str) -> None:
-        """Reuses `validate_invariants.SKIP_DIR_PARTS` rather than a second list:
-        a virtualenv holds thousands of files and no recipe input."""
-        inside = workspace / skipped
-        inside.mkdir()
-        (inside / "Makefile").write_text("x:\n\ttrue\n", encoding="utf-8")
-        assert f"{skipped}/Makefile" not in enforcement_digests(workspace)
+    def test_the_interpreters_startup_files_are_digested_wherever_they_live(self, workspace: Path) -> None:
+        """The write door prunes nothing: `*.pth` and `**/sitecustomize.py`
+        reach into a virtualenv's site-packages, which is where the interpreter
+        the recipe starts loads them from. The digest used to prune `.venv`
+        (reusing the CI gate's skip list), so a startup file could change there
+        under both digest checks with the verdict still issued (Copilot review
+        on PR #86). The set is now the write door's set."""
+        site = workspace / ".venv" / "lib" / "python3.11" / "site-packages"
+        site.mkdir(parents=True)
+        (site / "extra.pth").write_text("import evil\n", encoding="utf-8")
+        (site / "sitecustomize.py").write_text("x = 1\n", encoding="utf-8")
+        (site / "usercustomize.py").write_text("y = 1\n", encoding="utf-8")
+        shipped = workspace / "node_modules" / "pkg"
+        shipped.mkdir(parents=True)
+        (shipped / "conftest.py").write_text("# shipped with a package\n", encoding="utf-8")
+
+        digests = enforcement_digests(workspace)
+
+        assert {
+            ".venv/lib/python3.11/site-packages/extra.pth",
+            ".venv/lib/python3.11/site-packages/sitecustomize.py",
+            ".venv/lib/python3.11/site-packages/usercustomize.py",
+            "node_modules/pkg/conftest.py",
+        } <= set(digests)
+
+    @pytest.mark.parametrize("segment", sorted(ALWAYS_DENIED_SEGMENTS))
+    def test_only_the_always_denied_segments_are_left_out(self, workspace: Path, segment: str) -> None:
+        """`.git` is the one directory no agent write may target at all
+        (`write_policy.ALWAYS_DENIED_SEGMENTS`), so it is the one the walk
+        skips -- the same constant, not a second list."""
+        inside = workspace / segment / "hooks"
+        inside.mkdir(parents=True)
+        (inside / "conftest.py").write_text("# not a recipe input\n", encoding="utf-8")
+        assert not any(path.startswith(f"{segment}/") for path in enforcement_digests(workspace))
 
     def test_armed_patterns_catch_files_that_appear(self, workspace: Path) -> None:
         """The nine dormant patterns exist for this: a `GNUmakefile` or a

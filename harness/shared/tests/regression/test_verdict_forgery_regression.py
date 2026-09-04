@@ -67,6 +67,22 @@ FORGE = (
     "print('forged')\n"
 )
 
+#: A real pytest run over a real failing test, in the two recipe shapes. The
+#: first is the root Makefile's `test-python` recipe as it was: `python -m
+#: pytest` puts the current directory first on `sys.path`. The second is the
+#: recipe as it is now (pinned by `test_makefile_contracts.py`): the
+#: interpreter in isolated mode, the workers' path guarded by the exported
+#: variable.
+LEAKY_PYTEST_SUITE = f"test-python:\n\t{PYTHON} -m pytest -q -p no:cacheprovider tests\n"
+ISOLATED_PYTEST_SUITE = (
+    "export PYTHONSAFEPATH := 1\n"
+    f"test-python:\n\t{PYTHON} -I -m pytest -q -p no:cacheprovider tests\n"
+)
+#: What the agent writes where `pytest` is imported from: exits 0 before any
+#: test runs. Not a protected path, so `write_file` permits it.
+SHADOW_PYTEST = "import sys\nprint('forged: the workspace pytest ran')\nsys.exit(0)\n"
+REAL_FAILING_TEST = "def test_the_real_suite():\n    assert False, 'the real suite fails'\n"
+
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -217,6 +233,70 @@ class TestTheControlsThatKeepTheRefusalHonest:
         assert verdict.termination_reason != TAMPERED
 
 
+class TestTheGraderIsImportedFromTheToolchainNotTheWorkspace:
+    """A `pytest.py` in the workspace is not a protected path, and `python -m
+    pytest` imported it in place of the installed pytest: the recipe ran the
+    agent's module, which exited 0, and no digested file had changed, so the
+    digest check had nothing to refuse (Copilot review on PR #86). The recipe
+    now starts the interpreter in isolated mode and exports PYTHONSAFEPATH for
+    the xdist workers. The fixture makefiles carry the two recipe shapes;
+    `test_makefile_contracts.py` pins the real one to the second."""
+
+    @staticmethod
+    def _make(workspace: Path) -> subprocess.CompletedProcess[str]:
+        command = ["make", "-f", "Makefile", "test-python"]
+        return subprocess.run(command, cwd=workspace, capture_output=True, text=True, timeout=120)
+
+    @staticmethod
+    def _real_suite(workspace: Path, recipe: str) -> None:
+        (workspace / "Makefile").write_text(recipe, encoding="utf-8")
+        (workspace / "tests").mkdir(exist_ok=True)
+        (workspace / "tests" / "test_real.py").write_text(REAL_FAILING_TEST, encoding="utf-8")
+
+    def test_the_premise_a_shadow_pytest_module_passed_the_old_recipe(self, workspace: Path) -> None:
+        """Executed, not asserted: under the old shape the workspace module is
+        what `-m pytest` runs, and the failing suite reports success."""
+        self._real_suite(workspace, LEAKY_PYTEST_SUITE)
+        assert self._make(workspace).returncode != 0, "the real suite must fail on its own"
+        assert _reasoner(workspace)._execute_write_file("pytest.py", SHADOW_PYTEST).startswith("Success")
+        forged = self._make(workspace)
+        assert forged.returncode == 0 and "forged" in forged.stdout, forged.stdout + forged.stderr
+
+    @pytest.mark.parametrize("shadow", ["module", "package"])
+    def test_a_shadow_pytest_is_not_imported_by_the_isolated_recipe(self, workspace: Path, shadow: str) -> None:
+        """The same forgery against the recipe as it is now: the write is still
+        permitted (the file is not protected and this is not tampering), the
+        installed pytest runs, and the verdict is the real suite's -- FAILED,
+        not VERIFIED and not a tamper refusal."""
+        self._real_suite(workspace, ISOLATED_PYTEST_SUITE)
+        runner = _runner()
+        runner.snapshot_enforcement(workspace)
+        reasoner = _reasoner(workspace)
+        if shadow == "module":
+            assert reasoner._execute_write_file("pytest.py", SHADOW_PYTEST).startswith("Success")
+        else:
+            # A regular package wins over the installed one only with an
+            # `__init__.py`; a bare `pytest/__main__.py` is a namespace portion
+            # the import system ranks below any regular package on the path.
+            assert reasoner._execute_write_file("pytest/__init__.py", SHADOW_PYTEST).startswith("Success")
+            assert reasoner._execute_write_file("pytest/__main__.py", SHADOW_PYTEST).startswith("Success")
+
+        verdict = derive_verdict(runner.run(workspace))
+
+        assert verdict.status == FAILED, verdict
+        assert verdict.termination_reason != TAMPERED
+        assert not verdict.is_pass
+
+    def test_the_isolated_recipe_still_verifies_a_passing_suite(self, workspace: Path) -> None:
+        """Negative control: isolation must not turn every run into a failure."""
+        self._real_suite(workspace, ISOLATED_PYTEST_SUITE)
+        (workspace / "tests" / "test_real.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        runner = _runner()
+        runner.snapshot_enforcement(workspace)
+        verdict = derive_verdict(runner.run(workspace))
+        assert verdict.status == VERIFIED, verdict
+
+
 class TestTheDirectDoorIsShut:
     """Defect 3: the surfaces an agent could create with `write_file` alone and
     have `make`/pytest/the interpreter honour, and the `make` arguments that
@@ -225,7 +305,13 @@ class TestTheDirectDoorIsShut:
     @pytest.mark.parametrize(
         "relpath",
         ["GNUmakefile", "makefile", "setup.py", "setup.cfg", "pytest.ini", "tox.ini",
-         "sitecustomize.py", "usercustomize.py", "extra.pth", "harness/shared/tests/conftest.py", "tests/conftest.py"],
+         "sitecustomize.py", "usercustomize.py", "extra.pth", "harness/shared/tests/conftest.py", "tests/conftest.py",
+         # The nested forms the interpreter honours from any sys.path entry
+         # (Copilot review on PR #86).
+         ".venv/lib/python3.11/site-packages/sitecustomize.py",
+         ".venv/lib/python3.11/site-packages/usercustomize.py",
+         ".venv/lib/python3.11/site-packages/extra.pth",
+         "harness/usercustomize.py"],
     )
     def test_write_file_refuses_each_code_execution_surface(self, workspace: Path, relpath: str) -> None:
         assert write_denial_reason(relpath) is not None, f"{relpath} is writable"
@@ -243,6 +329,8 @@ class TestTheDirectDoorIsShut:
             "make -C sub pwn",
             "make PYTHON=/bin/false test-python",
             "make -f Makefile PYTHON=/bin/false test-python",
+            "make --dir=sub pwn",
+            "make --fi=GNUmakefile pwn",
             "pnpm exec node forge.js",
             "npx tsx forge.ts",
         ],
