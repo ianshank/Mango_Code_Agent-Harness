@@ -24,10 +24,26 @@ found by review, never by a log, because there was no log.
 `classify` is now a thin wrapper over `_classify` and logs each verdict at
 DEBUG from one place — five return points, each a security decision, and
 logging at each would be five chances to add a sixth that logs nothing. The
-command is redacted (`run_command` is exactly where a token appears) and
-truncated to 200 characters, guarded on `isEnabledFor` so nothing is paid for
-at the default level. The broker's denial warning now carries the reason it was
-already returning.
+command **and the reason** are both redacted and truncated to 200 characters,
+guarded on `isEnabledFor` so nothing is paid for at the default level. The
+broker's denial warning now carries the reason it was already returning,
+redacted the same way — and at WARNING, which ships by default.
+
+Redacting the reason is not belt-and-braces. Almost every reason quotes the
+fragment it is about — `"{segment!r}, a credential-bearing file"`, `"the brace
+expression {token!r}"`, `"{argv[0]} is not a modelled program"` — so the first
+version of this change masked the key in one field and printed it verbatim in
+the next:
+
+```
+classified 'NVIDIA_API_KEY=<REDACTED_API_KEY> pytest -q' as destructive:
+NVIDIA_API_KEY=nvapi-0123...  is not a modelled program
+```
+
+Logging added to make containment observable was itself a credential sink,
+found by a review bot on the PR. The agent still receives the unredacted reason
+in `ExecutionResult.reason`: it sent the command, so nothing is disclosed there
+it did not have, and the reason is the whole diagnostic value of a refusal.
 
 `VerificationRunner`'s `timeout=300` default was `orchestrator.api_timeout_sec`
 written down a second time — the unlinked-literal shape R-CQ-7 removed from
@@ -54,7 +70,16 @@ layer, the agent control surface and the runtime gates all unprotected.
 whether a file backs it, so one call site expresses both outcomes and no
 accessor restates the rule. `coverage.optional_extras` keeps a separate
 `.optional` accessor: "this deployment declares no extras" is a statement, not a
-hole. `validate_invariants` drops both defaults.
+hole. `validate_invariants` drops both defaults, and type-checks what it reads
+rather than coercing it. `int(limits[key])` accepted `"9999"` and `True` (a
+bool is an int, and `int(True)` is 1), so a policy could state a budget as a
+string, have the gate enforce it, and have the strict reader refuse the
+identical file — two readers of one policy disagreeing about what is valid,
+which is the drift this change exists to remove. `list(policy["protected_paths"])`
+on a bare string was worse: `list("Makefile")` is eleven single-character
+patterns matching no path at all, so the gate reported `[PASS] Protected Paths`
+over nothing — the same fail-open as the removed default, reached by a
+different mistake. Both found by a review bot on the PR.
 
 **Behaviour change.** `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and
 `MAX_SHIM_LINES` may now only *tighten* a budget; a loosening value is ignored
