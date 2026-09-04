@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import posixpath
+import re
 import warnings
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
@@ -92,6 +93,52 @@ _PROBE_FILLERS = (("aa", "bb"), ("cc", "dd"))
 #: It must also not catch ``.gitignore`` or ``.gitleaks.toml``, which share the
 #: prefix but are ordinary files; both are pinned by tests.
 ALWAYS_DENIED_SEGMENTS = (".git",)
+
+#: The credential-filename alternation, unanchored, so each caller composes the
+#: boundaries its own input needs: this module and ``read_policy`` anchor it to a
+#: whole path segment, while ``command_actions`` wraps it in
+#: ``(?:^|[\s/])...(?:\s|$)`` to find it inside a command string. One alternation,
+#: three anchorings -- not three patterns.
+#:
+#: It lives here, on the write side, because ``read_policy`` already imports
+#: ``ALWAYS_DENIED_SEGMENTS`` from this module and the reverse edge would be a
+#: cycle. ``read_policy`` re-exports both names, so its published surface is
+#: unchanged.
+CREDENTIAL_FILENAME_ALTERNATION = r"\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|id_[rd]sa|[\w.-]+\.pem"
+
+#: Anchored to a whole path segment. Matching a *segment* rather than searching
+#: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
+#: while still catching ``secrets/id_rsa``. Case-insensitive: a case-sensitive
+#: match let ``.ENV``, ``ID_RSA`` and ``SECRETS.PEM`` -- valid names on the
+#: case-preserving filesystems this harness targets -- through untouched.
+CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION})$", re.IGNORECASE)
+
+#: Placeholder files that share a credential's name and carry none of its bytes.
+#: ``.env.example`` is tracked in this repository, ``.gitleaks.toml`` already
+#: declares ``.*\.example.*`` non-secret, and an agent asked to document
+#: configuration has to be able to write one. Denying them was a regression
+#: introduced with the write-side credential rule, not a property of it:
+#: ``.env.production`` still matches, because ``production`` is not a placeholder.
+CREDENTIAL_PLACEHOLDER_SUFFIXES = ("example", "sample", "template", "dist", "defaults")
+
+_CREDENTIAL_PLACEHOLDER = re.compile(
+    rf"\.(?:{'|'.join(CREDENTIAL_PLACEHOLDER_SUFFIXES)})$", re.IGNORECASE
+)
+
+
+def is_credential_filename(segment: str) -> bool:
+    """Whether one path segment names a credential-bearing file.
+
+    The single decision every door asks, so the placeholder carve-out and the
+    trailing-character normalisation cannot be applied by one caller and
+    forgotten by another. A trailing dot or space is stripped first: Win32
+    removes them when opening a file, so ``.env `` and ``.env.`` name ``.env``
+    there while matching the anchored pattern nowhere.
+    """
+    candidate = segment.rstrip(" .") or segment
+    if _CREDENTIAL_PLACEHOLDER.search(candidate):
+        return False
+    return bool(CREDENTIAL_FILENAME_PATTERN.match(candidate))
 
 #: The pre-segment-matching name. No first-party caller imports it; it is served
 #: through ``__getattr__`` below with a DeprecationWarning for one minor release
@@ -343,6 +390,26 @@ def write_denial_reason(
     for denied in ALWAYS_DENIED_SEGMENTS:
         if denied in segments:
             return f"{candidate} is inside a {denied} directory, which no agent write may target"
+
+    # A credential file is denied on the way *in* as well as on the way out.
+    # `read_policy` has refused to read `.env` since it shipped, and the write
+    # side did not refuse to write one: `protected_paths` names control-surface
+    # files, and `.env` is deliberately untracked, so it matched nothing.
+    #
+    # That asymmetry was a key-exfiltration path rather than an untidiness.
+    # `nemotron_bridge.resolve_environment` reads `NVIDIA_BASE_URL` from the
+    # repository-root `.env` whenever the process environment does not supply it,
+    # and the API server's workspace is that root -- so a single
+    # `apply_patch(".env", ...)` redirected the next `complete_chat` to a host of
+    # the model's choosing, with the real bearer token attached. Writing a
+    # credential file is the `secret_access` action either way, and no role holds
+    # it. Decided before any policy is read, like the segments above.
+    for segment in segments:
+        if is_credential_filename(segment):
+            return (
+                f"{candidate} names a credential-bearing file; writing it is the "
+                "secret_access action, which no agent role holds"
+            )
 
     try:
         patterns = load_protected_patterns(DEFAULT_POLICY_PATH)

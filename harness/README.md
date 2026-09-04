@@ -1,4 +1,4 @@
-# Agentic SSD Governance Harness v2.0
+# Agentic SSD Governance Harness
 
 This package is a resynthesis of the original Node/JVM governance harness after adversarial peer review. It separates **execution-time policy enforcement** from **repository conformance evidence**, centralizes security-critical policy logic, and adds first-class agent/sub-agent governance.
 

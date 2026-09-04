@@ -201,11 +201,12 @@ graph TD
                 Broker --> Actions
                 Broker --> GovGuards
             end
-            WritePolicy[write_policy.py<br/>protected_paths at tool-call time<br/>+ any .git segment]
+            WritePolicy["write_policy.py<br/>protected_paths at tool-call time<br/>+ any .git segment<br/>+ credential filenames"]
             Authority[agent_authority.py<br/>per-role tool exposure, derived from agent-policy.json]
             RootValidators["Root Validators<br/>policy, adoption, agent-policy"]
             Orchestrator -->|run_command| Broker
             Orchestrator -->|write_file target| WritePolicy
+            Orchestrator -->|write_file / apply_patch role check| Broker
             Broker -->|write targets of a command| WritePolicy
             Orchestrator -->|tools_for_role / execution_identity| Authority
             Orchestrator -.->|guarded, observation-only| Shadow
@@ -303,6 +304,7 @@ classDiagram
         +execute_read_file(workspace_dir, filepath, start_line, end_line) str
         +execute_apply_patch(workspace_dir, filepath, old_text, new_text) str
         +execute_run_command(broker, active_role, workspace_dir, command, timeout) str
+        +authorize_write(broker, active_role, filepath) str|None
     }
 
     class ExecutionBroker {
@@ -335,7 +337,7 @@ classDiagram
     MangoMASOrchestrator --> ToolExecutors : invokes operations
     MangoMASOrchestrator --> NemotronBridge : requests chat completions
     MangoMASOrchestrator --> VerificationRunner : derives terminal verdict
-    ToolExecutors --> ExecutionBroker : brokers run_command only
+    ToolExecutors --> ExecutionBroker : brokers run_command; asks the PDP for write/patch
     ExecutionBroker --> ProcessBackend : executes with budget & containment
 ```
 
@@ -390,10 +392,11 @@ graph TD
 
 ### 4.5 Direct File I/O Governance: Read/Patch Parity (`DEC-012`)
 
-- `read_file` and `apply_patch` read and write the filesystem directly from `ToolExecutors` — they do **not** pass through `ExecutionBroker`, the PDP, or the PreToolUse guard, because they are not shell commands. That path is `run_command`'s alone.
-- Direct file I/O is governed instead by two symmetric, in-process policy modules consulted at tool-call granularity: `write_policy.write_denial_reason` (denies `protected_paths` matches and any `.git` path segment) and its read-side counterpart `read_policy.read_denial_reason` (denies credential-bearing filenames and any `.git` segment).
-- Both modules compose the same credential-filename alternation (`read_policy.CREDENTIAL_FILENAME_ALTERNATION`) that `command_actions.classify` uses to grade `cat <credential-file>` as `secret_access` — a single source, so the shell-command door and the direct-read door cannot independently drift apart.
-- `apply_patch` reuses `write_denial_reason` unchanged, so it reaches no path `write_file` cannot reach; `agent-policy.json` grants it no new action.
+- `read_file`, `write_file` and `apply_patch` read and write the filesystem directly from `ToolExecutors`, so they never reach the PreToolUse guard or `ProcessBackend` — those stay `run_command`'s alone. They **do** reach the policy decision point: `tool_executors.authorize_write` calls the public `ExecutionBroker.authorize_action(agent_id, "write")`, asking for the action directly, and returns the denial reason or `None` so one action model grades both doors (`DEC-042`). It is deliberately *not* phrased as a synthesised command: an earlier form asked `classify("tee <path>")` and let the action be derived, which a filepath of `-find` turned into `read` — an action every role holds — so the verifier and planner wrote files through both doors. Before that, `ToolDispatcher` asked nothing while `mcp_server` asked — they were refused by one transport and admitted by the other.
+- Path-level governance is two in-process policy modules consulted at tool-call granularity: `write_policy.write_denial_reason` (denies `protected_paths` matches, any `.git` path segment, and credential-bearing filenames) and `read_policy.read_denial_reason` (denies credential-bearing filenames and any `.git` segment). The two questions are distinct and both are asked: the PDP decides *who* may write, the write policy decides *what* may be written.
+- The credential-filename alternation has one definition, in `write_policy`, re-exported by `read_policy` and composed by `command_actions` — three anchorings of one pattern (a whole path segment on each file door, a shell word in the classifier), pinned by object identity so they cannot drift. It moved there because the write side had no credential rule at all: `.env` is deliberately untracked, so `protected_paths` matched nothing and `write_denial_reason(".env")` returned `None` (`DEC-042`).
+- `apply_patch` consults `read_denial_reason` **first**, then the write policy. This corrects `DEC-012`'s account that it reuses `write_denial_reason` unchanged: a patch reads before it writes, and its `matched 0 times` / `matched 1 times` reply was a substring oracle over every file `read_file` refuses. `agent-policy.json` grants it no new action.
+- `command_actions.classify` grades the words the **shell** produces, not the command text: `bash -c` strips quotes, resolves backslashes, expands braces and expands globs before a program sees an argument, so a text-scanning rule was checking a string no filesystem call ever sees. `shell_words.py` owns that analysis; the classifier owns what a command *does*.
 
 ### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
 

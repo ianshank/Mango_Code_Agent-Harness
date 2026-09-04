@@ -32,7 +32,7 @@
         "scripts/check_projections.py": "0593677337e2a6f536ddfdafc9d1ff2a3508e421e788c30f7a9ec81032efe361",
         "package.json": "2d619119e00700b7f4a06820172aef8624385f38d2a1201e0cf07d0f14591ecd",
         "tsconfig.json": "02cde8fb8e4061ecd3ab1a8f99a8973455b740b4a4f77516fc8d5f512eefc6a6",
-        "vitest.config.ts": "1858ccbbe2862971968a33a9580e946958ff069df79d9e9c50a707e098e10d48",
+        "vitest.config.ts": "d45a03aa495783748fdb0d7ea1cc7be03210d2300d66519692fbd62564ef6765",
         "tests/governance/meta.test.ts": "47e948abb93aa1d83b544095e2784e12701fe52c2d5d7bbb75beee9f93fbafde"
       }
     },

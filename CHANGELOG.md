@@ -10,6 +10,72 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### The containment layer grades what the shell produces, not what the model typed (DEC-042)
+
+Five defects on the agent's own product path, each reproduced by running the
+real modules before it was fixed, all present on `main` at `487870a`.
+
+`process_backend` runs every command through `bash -c`, so by the time a program
+receives an argument the shell has stripped its quotes, resolved its
+backslashes, expanded its braces and expanded its globs. `command_actions`
+scanned the raw command text with `(?:^|[\s/])` boundaries instead — a string no
+filesystem call ever sees. Five spellings of one credential read therefore
+graded `read`, the action **every** role holds including the verifier, while
+opening the file: `cat .en?`, `head .e*`, `cat '.env'`, `cat \.env` and
+`cat {.env,README.md}`. Process substitution `<(` was missing from the
+compound-command set, so it ran a second command under the same grade.
+
+The check now runs over `shlex.split` output with bounded brace expansion, which
+closes quoting and escaping at the seam rather than by adding three more
+patterns to a regex. A glob must *commit* to a credential name — its literal
+prefix begins one, or its literal suffix ends one — so `ls src/*` and `cat *.py`
+stay ordinary reads, and dotglob is honoured so a dotless pattern cannot reach
+`.env`. That suffix is found by scanning for whole wildcard *tokens*, because a
+bracket class ends at its `]`: taking the last of `*?[` split `*[a-z].pem` into
+the tail `a-z].pem`, which ends no credential name, so `cat *[a-z].pem` and
+`cat *id_[rd]sa` committed to nothing and graded `read` while a real shell
+printed `key.pem` and `id_rsa`. Found by a review bot on the PR that introduced
+it and reproduced against `bash -c` before being fixed.
+`command_actions.py` passed its 500-line budget doing this and splits
+along the seam the defects drew: `shell_words.py` owns what a word can *reach*,
+the classifier owns what a command *does*.
+
+`write_denial_reason` had no credential rule. `protected_paths` names
+control-surface files and `.env` is deliberately untracked, so it matched
+nothing and returned `None` — while `resolve_environment` reads
+`NVIDIA_BASE_URL` from the repository-root `.env`, which is the API server's
+workspace. One `apply_patch` redirected the next `complete_chat` to a host of
+the model's choosing with the real bearer token attached. The alternation moved
+to `write_policy` and both doors compose it; `read_policy` re-exports, pinned by
+object identity. `apply_patch` consults the read policy *first*, because its
+`matched 0 times` / `matched 1 times` reply was a substring oracle over every
+file `read_file` refuses.
+
+`mcp_server` asked the policy decision point whether the acting role holds
+`write`; `ToolDispatcher`, the path the orchestrator actually runs, asked
+nothing. `authorize_write` now lives in `tool_executors` and both transports
+call it. **Behaviour change**: the planner and verifier can no longer write or
+patch in-process. They hold no `write` action in `agent-policy.json` and were
+already refused on the MCP transport; the loop now honours what the model always
+declared.
+
+Seven runtime-enforcement modules join `protected_paths` — `tool_executors.py`,
+`orchestrator/**`, `nemotron_bridge.py`, `tool_schemas.py`, `agent_prompts.py`,
+`tool_dispatch.py` and the root `conftest.py` — a third group beside the
+enforcement layer and the agent control surface, because the verifier's verdict
+is a `make test-python` run that imports that `conftest.py`. `HookRunner`
+resolves `orchestrator.tool_timeout_sec` rather than storing `None` and handing
+it to `subprocess.run`, where it means no timeout at all;
+`policy_decision.decide` takes `human_approved` keyword-only.
+
+`regression/test_credential_containment_regression.py` reproduces every one of
+the five end to end, through the broker and dispatcher an agent turn actually
+uses, and executes real `bash` to prove each spelling reaches the secret — a
+gate proved against a threat that does not exist is worse than no gate. Every
+fix carries a mutation proof, and the procedure behind them is now
+`.mango/skills/gate-mutation-proof/SKILL.md` (NS-20), written after running it
+ten times by hand in this change.
+
 ### End-to-end tests for the wiring no unit test reached
 
 Every gate this branch added ran the real thing in its unit tests — real git

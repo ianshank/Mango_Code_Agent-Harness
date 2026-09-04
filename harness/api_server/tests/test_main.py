@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
-# Ensure fastapi is installed before importing anything from the module
-pytest.importorskip("fastapi")
-
+# fastapi's presence is gated once, by this directory's conftest; the duplicate
+# `importorskip` that stood here skipped nothing the conftest had not already
+# decided (code-quality-tech-debt-plan R-CQ-30).
 from fastapi.testclient import TestClient
 
 from harness.api_server.main import app

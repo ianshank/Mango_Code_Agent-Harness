@@ -15,6 +15,7 @@ from harness.shared.tool_dispatch import (
     _normalize_tool_arguments,
 )
 from harness.shared.tool_executors import (
+    authorize_write,
     execute_apply_patch,
     execute_read_file,
     execute_run_command,
@@ -62,6 +63,16 @@ class ToolDispatcher:
         self.active_role = role
 
     def _execute_write_file(self, filepath: str, content: str) -> str:
+        # The policy decision point is asked before the write policy, because the
+        # two answer different questions: `write_denial_reason` decides whether
+        # *anyone* may write this path, and the PDP decides whether *this role*
+        # may write at all. Only the MCP transport asked the second one, so the
+        # verifier -- which holds no `write` action -- was refused there and
+        # permitted here (R-CQ-5).
+        denial = authorize_write(self.broker, self.active_role, filepath)
+        if denial is not None:
+            logger.warning("Refused write for role %s: %s", self.active_role, denial)
+            return f"Denied: {denial}"
         return execute_write_file(self.workspace_dir, filepath, content)
 
     def _execute_read_file(
@@ -70,6 +81,10 @@ class ToolDispatcher:
         return execute_read_file(self.workspace_dir, filepath, start_line, end_line)
 
     def _execute_apply_patch(self, filepath: str, old_text: str, new_text: str) -> str:
+        denial = authorize_write(self.broker, self.active_role, filepath)
+        if denial is not None:
+            logger.warning("Refused patch for role %s: %s", self.active_role, denial)
+            return f"Denied: {denial}"
         return execute_apply_patch(self.workspace_dir, filepath, old_text, new_text)
 
     def _execute_run_command(self, command: str) -> str:

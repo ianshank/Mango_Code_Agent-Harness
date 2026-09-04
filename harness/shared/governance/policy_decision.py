@@ -47,12 +47,19 @@ def decide(
     agent_id: str,
     action: str,
     policy: typing.Mapping[str, typing.Any],
+    *,
     human_approved: bool = False,
 ) -> Decision:
     """Evaluate one request against the authority model.
 
     Mirrors ``tool_broker_reference.py`` exactly, including the order of its three
     denials, so the reference and the live path cannot diverge silently.
+
+    ``human_approved`` is keyword-only. It is the one argument that turns a
+    denial into an allow, and positionally it is a bare ``True`` four arguments
+    into a call -- invisible at the call site and one argument-order slip away
+    from being passed by accident. Both in-tree callers already name it, so this
+    costs nothing and closes the shape (code-quality-tech-debt-plan R-CQ-7).
     """
     agents = policy.get("agents")
     if not isinstance(agents, list):

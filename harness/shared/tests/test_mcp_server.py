@@ -90,7 +90,12 @@ def broker() -> ExecutionBroker:
     mock.execute_command.return_value = ExecutionResult(
         status="SUCCESS", stdout="test stdout", stderr="", exit_code=0, reason="", action=""
     )
-    mock._policy_decision.return_value = None  # PDP approves all writes by default
+    # `authorize_action` is the public seam the write path now asks. It replaced a
+    # `_policy_decision("tee <path>")` round-trip, where a filepath of `-find`
+    # made the classifier answer `read` and let roles holding no `write` action
+    # write files (DEC-042). `spec=ExecutionBroker` means this stub fails the
+    # moment the real method is renamed or removed.
+    mock.authorize_action.return_value = None  # PDP approves all writes by default
     return mock
 
 
@@ -337,10 +342,8 @@ def test_run_mcp_server_awaits_the_server_on_the_stdio_streams(tmp_path: Path, m
 
 def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBroker) -> None:
     """AC-3 (C-MCP-1): broker PDP denial for write_file is honoured before the write executes."""
-    from harness.shared.governance.broker import ExecutionResult as ER
-    broker._policy_decision.return_value = ER(  # type: ignore[attr-defined]
-        status="BLOCKED", stdout="", stderr="", exit_code=1,
-        reason="BLOCKED: write denied by policy", action="write",
+    broker.authorize_action.return_value = (  # type: ignore[attr-defined]
+        "action 'write' is not granted to implementer"
     )
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
     result = asyncio.run(server._call_tool_handler("write_file", {"filepath": "x.py", "content": ""}))
@@ -351,14 +354,12 @@ def test_mcp_server_broker_pdp_blocks_write(tmp_path: Path, broker: ExecutionBro
 
 def test_mcp_server_broker_pdp_blocks_apply_patch(tmp_path: Path, broker: ExecutionBroker) -> None:
     """AC-3 (C-MCP-1): broker PDP denial applies to apply_patch too, not just write_file --
-    both go through the same _broker_authorize_write check in _build_tool_handlers, but
+    both go through the same authorize_write check in _build_tool_handlers, but
     only write_file's denial path had a test before this."""
-    from harness.shared.governance.broker import ExecutionResult as ER
     target = tmp_path / "x.py"
     target.write_text("hello", encoding="utf-8")
-    broker._policy_decision.return_value = ER(  # type: ignore[attr-defined]
-        status="BLOCKED", stdout="", stderr="", exit_code=1,
-        reason="BLOCKED: write denied by policy", action="write",
+    broker.authorize_action.return_value = (  # type: ignore[attr-defined]
+        "action 'write' is not granted to implementer"
     )
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
     result = asyncio.run(

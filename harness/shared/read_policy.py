@@ -12,10 +12,16 @@ ungoverned, ``read_file(".env")`` would return ``NVIDIA_API_KEY`` into
 the exact inversion ``command_actions`` documents at its credential rule: *the
 action model grades the effect rather than the tool*.
 
-This module is that door's policy, and it is the single source of the pattern
-both doors match. ``command_actions`` composes its command-scanning form from
-``CREDENTIAL_FILENAME_ALTERNATION`` here rather than restating it, because two
-spellings of one control are two controls that drift.
+This module is that door's policy. The credential pattern both doors match has a
+single definition, and it is no longer here: it lives in ``write_policy`` and is
+re-exported below. It moved because the write side had no credential rule at all
+while this one did, and the fix could not import the pattern from here without a
+cycle -- this module already imports ``ALWAYS_DENIED_SEGMENTS`` from there. So it
+moved up the edge that already existed. ``command_actions`` composes its
+command-scanning form from the re-exported ``CREDENTIAL_FILENAME_ALTERNATION``
+rather than restating it, because two spellings of one control are two controls
+that drift. ``test_write_policy.py`` pins the two re-exported names to the
+definitions by object identity, so this module cannot acquire a second copy.
 
 It deliberately does **not** consult ``protected_paths``. The agent has to read
 the Makefile, the policies and its own contracts to do its work; reading is not
@@ -28,27 +34,20 @@ Spec: ``docs/specs/agent-read-patch-tools.md`` (R-RPT-2, R-RPT-3).
 from __future__ import annotations
 
 import posixpath
-import re
 from pathlib import Path, PurePosixPath
 
-from harness.shared.write_policy import ALWAYS_DENIED_SEGMENTS
-
-#: The filename alternation, unanchored, so each caller composes the boundaries
-#: its own input needs: this module anchors it to a whole path segment, while
-#: ``command_actions`` wraps it in ``(?:^|[\s/])...(?:\s|$)`` to find it inside a
-#: command string. One alternation, two anchorings -- not two patterns.
-CREDENTIAL_FILENAME_ALTERNATION = r"\.env(?:\.[\w-]+)?|\.netrc|\.npmrc|\.pypirc|id_[rd]sa|[\w.-]+\.pem"
-
-#: Anchored to a whole path segment. Matching a *segment* rather than searching
-#: the string keeps ``prod.pem.txt`` and ``notenv`` from reading as credentials
-#: while still catching ``secrets/id_rsa``.
-#:
-#: Case-insensitive: a case-sensitive match let ``.ENV``, ``ID_RSA`` and
-#: ``SECRETS.PEM`` -- valid names on the case-preserving filesystems this harness
-#: already targets (macOS default, Windows, and any Linux checkout an agent could
-#: simply create by that name) -- through both this policy and
-#: ``command_actions.classify`` untouched, since neither carried ``re.IGNORECASE``.
-CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION})$", re.IGNORECASE)
+#: Both names are defined in ``write_policy`` and re-exported here, unchanged.
+#: They used to live in this module, which made the read side the only door with
+#: a credential rule: ``write_denial_reason(".env")`` returned ``None``, and the
+#: write side could not import the pattern to fix that without a cycle (this
+#: module already imports ``ALWAYS_DENIED_SEGMENTS`` from there). Moving the
+#: definition up the edge that already exists gives both doors one pattern.
+from harness.shared.write_policy import (
+    ALWAYS_DENIED_SEGMENTS,
+    CREDENTIAL_FILENAME_ALTERNATION,
+    CREDENTIAL_FILENAME_PATTERN,
+    is_credential_filename,
+)
 
 
 def _normalise(relpath: str) -> str:
@@ -97,7 +96,7 @@ def read_denial_reason(relpath: str) -> str | None:
     # directory, and being stricter than `command_actions` on the read side keeps
     # the parity property one-directional and safe.
     for segment in segments:
-        if CREDENTIAL_FILENAME_PATTERN.match(segment):
+        if is_credential_filename(segment):
             return (
                 f"{candidate} names a credential-bearing file; reading it is the "
                 "secret_access action, which no agent role holds"
@@ -108,5 +107,6 @@ def read_denial_reason(relpath: str) -> str | None:
 __all__ = [
     "CREDENTIAL_FILENAME_ALTERNATION",
     "CREDENTIAL_FILENAME_PATTERN",
+    "is_credential_filename",
     "read_denial_reason",
 ]

@@ -4,7 +4,7 @@
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-16).
+A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-17).
 
 ---
 
@@ -27,11 +27,12 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 13 reusable skills; the only skill root
+│   ├── skills/                          # 14 reusable skills; the only skill root
 │   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
+│   │   ├── gate-mutation-proof/         # Prove a gate catches the defect it names
 │   │   ├── harness-engineering/         # Harness inspection & extension rules
 │   │   ├── nemotron-reasoner/           # NVIDIA Nemotron AI operational cheatsheet
 │   │   ├── openspec-peer-review/        # Architecture/SDLC/QA/Product peer review
@@ -50,7 +51,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
 │   ├── reports/                         # Historical hygiene, peer-review and test reports
-│   └── specs/                           # 22 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
+│   └── specs/                           # 24 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
@@ -86,14 +87,14 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── decorators.py            # @with_authority & @budgeted runtime gates
 │   │   │   └── ablation.py              # MCTS ablation & hypothetical state channels
 │   │   ├── agent_prompts.py             # Persona prompts, guardrails & hook names
-│   │   ├── tool_executors.py            # Isolated tool executors (file write & brokered command)
+│   │   ├── tool_executors.py            # Tool executors + the shared PDP write authorization
 │   │   ├── tool_dispatch.py             # Tool call argument normalization & dispatch
 │   │   ├── tool_schemas.py              # OpenAI/Nemotron-compatible tool definitions
 │   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
 │   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
 │   │   ├── meta_tools.py                # Meta-learning, context state, and file_lock
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
-│   │   ├── write_policy.py              # Runtime write gate: protected_paths at tool-call time
+│   │   ├── write_policy.py              # Runtime write gate: protected_paths, .git, credentials
 │   │   ├── agent_authority.py           # Per-role tool exposure derived from agent-policy.json
 │   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
 │   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
@@ -107,7 +108,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (2,676 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (3,131 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 32 tests: StateGraph invariants, calling & reductions
@@ -161,8 +162,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **`ExecutionBroker`** (`broker.py`): the approved execution path INV-8 names, reached from the orchestrator's `run_command`. `execute_command` derives the action from the command (`command_actions.classify`), obtains an in-process policy verdict (`policy_decision.decide`, mirroring `tool_broker_reference.py` and pinned by `test_policy_decision.py`), runs `check_command()`, then executes via `ProcessBackend` with a pinned working directory, a timeout and a byte-capped output. `sandbox_available` defaults to probing the backend; an unavailable backend returns `BLOCKED` and never falls through (INV-9), and a denial is terminal (INV-10). **The backend contains but does not isolate** — it confines neither the filesystem nor the network — so INV-13's sandbox digest is not yet satisfiable (DEC-010).
 - **`command_actions.py`**: classifies a command into a declared policy action. An allowlist, not a denylist: anything unmodelled resolves to an action no role holds, so an unrecognised command denies for every agent.
 - **`policy_decision.py`**: the verdict, in process. Replaces a host subprocess that ran *before* the command guard, from a path inside the agent's workspace (DEC-009).
-- **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment, which `validate_invariants` structurally cannot see (DEC-007).
-- **`read_policy.py`**: the read-side counterpart to `write_policy.py`. `command_actions.classify` already denies reading a credential through `run_command` (graded `secret_access`, an action no role holds); `read_policy.read_denial_reason` closes the same gap for the orchestrator's `read_file` handler, which reads the filesystem directly and so is invisible to that classifier. Both compose one shared credential-filename pattern rather than two that can drift (DEC-012).
+- **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment and any credential-bearing filename (`.env*`, `.netrc`, `.npmrc`, `.pypirc`, `id_[rd]sa`, `*.pem`) — three classes `validate_invariants` structurally cannot see, the last because `.env` is untracked and so matched no `protected_paths` pattern at all (DEC-007, DEC-042).
+- **`read_policy.py`**: the read-side counterpart to `write_policy.py`. `command_actions.classify` already denies reading a credential through `run_command` (graded `secret_access`, an action no role holds); `read_policy.read_denial_reason` closes the same gap for the orchestrator's `read_file` handler, which reads the filesystem directly and so is invisible to that classifier. The pattern has one definition, in `write_policy`, re-exported here and composed by `command_actions` — three anchorings of one alternation rather than three that can drift (DEC-012, DEC-042).
 - **`agent_authority.py`**: derives each active role's tool exposure from `agent-policy.json`. The verifier holds no `write_file` (DEC-008) or `apply_patch` (DEC-012) — both grade as the `write` action, which every canonical contract the verifier maps to already denied in prose — but does hold `read_file`.
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.

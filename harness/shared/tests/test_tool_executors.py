@@ -231,3 +231,172 @@ class TestWriteFileIsUnchanged:
 
     def test_path_escapes_workspace(self, mock_workspace: Path) -> None:
         assert "path escapes workspace" in execute_write_file(mock_workspace, "../../etc/passwd", "pwned")
+
+
+class TestApplyPatchConsultsTheReadPolicy:
+    """A patch reads before it writes (code-quality-tech-debt-plan R-CQ-4).
+
+    `execute_apply_patch` reported `matched 0 times` or `matched 1 times`, which
+    answers a question about the file's contents. Over a file the read policy
+    refuses, that is a substring oracle: an attacker recovers `.env` a character
+    at a time without ever calling `read_file`.
+
+    Every assertion here names the *read* policy's wording. The write policy now
+    refuses `.env` too, so an assertion on `"credential-bearing"` alone -- a
+    phrase both policies use -- passes with the read gate deleted, which is the
+    only gate this class exists to pin. `reading it is` appears in
+    `read_denial_reason` and nowhere else.
+    """
+
+    #: The read policy's own sentence fragment, absent from `write_denial_reason`
+    #: (which says `writing it is`). Asserting on it is what makes these tests
+    #: fail when the read gate is removed rather than passing on the write gate.
+    READ_GATE_PHRASE = "reading it is the secret_access action"
+
+    def test_patching_a_credential_file_is_refused(self, mock_workspace: Path) -> None:
+        (mock_workspace / ".env").write_text("NVIDIA_API_KEY=nvapi-secret\n", encoding="utf-8")
+        result = execute_apply_patch(mock_workspace, ".env", "nvapi-s", "x")
+        assert self.READ_GATE_PHRASE in result, f"the write gate answered instead: {result}"
+        assert "matched" not in result
+
+    def test_the_read_gate_answers_before_the_write_gate(self, mock_workspace: Path) -> None:
+        """Order is the property, not just refusal.
+
+        Both policies refuse `.env`, so a refusal proves only that one of them
+        ran. The read gate has to be the one that answers: it is the gate that
+        exists for `apply_patch`'s `matched N times` oracle, and a future
+        relaxation of the write policy (a credential file the agent may
+        *rewrite* but not read) must not silently take the read gate with it.
+        """
+        (mock_workspace / ".env").write_text("k=v\n", encoding="utf-8")
+        result = execute_apply_patch(mock_workspace, ".env", "k=v", "k=w")
+        assert self.READ_GATE_PHRASE in result
+        assert "writing it is" not in result
+
+    def test_the_oracle_answers_identically_for_present_and_absent_text(
+        self, mock_workspace: Path
+    ) -> None:
+        """The refusal must not depend on the file's contents, or the denial
+        itself becomes the oracle it replaced."""
+        (mock_workspace / ".env").write_text("NVIDIA_API_KEY=nvapi-secret\n", encoding="utf-8")
+        present = execute_apply_patch(mock_workspace, ".env", "nvapi-s", "x")
+        absent = execute_apply_patch(mock_workspace, ".env", "nvapi-ZZZZ", "x")
+        assert present == absent
+        assert self.READ_GATE_PHRASE in present
+
+    def test_the_credential_file_is_not_modified(self, mock_workspace: Path) -> None:
+        target = mock_workspace / ".env"
+        original = "NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1\n"
+        target.write_text(original, encoding="utf-8")
+        execute_apply_patch(mock_workspace, ".env", "https://integrate.api.nvidia.com/v1", "http://evil")
+        assert target.read_text(encoding="utf-8") == original
+
+    def test_a_git_directory_file_is_refused_by_the_read_gate(self, mock_workspace: Path) -> None:
+        (mock_workspace / ".git").mkdir(exist_ok=True)
+        (mock_workspace / ".git" / "config").write_text("[remote]\n", encoding="utf-8")
+        assert "no agent read may target" in execute_apply_patch(
+            mock_workspace, ".git/config", "[remote]", "[x]"
+        )
+
+    def test_an_ordinary_file_still_patches(self, mock_workspace: Path) -> None:
+        """Control: the added gate must not close the tool it guards."""
+        (mock_workspace / "notes.md").write_text("hello world\n", encoding="utf-8")
+        assert "Success" in execute_apply_patch(mock_workspace, "notes.md", "world", "there")
+        assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello there\n"
+
+
+class TestOneWriteAuthorizationPath:
+    """Both transports ask the same question before writing (R-CQ-5).
+
+    `mcp_server` asked the policy decision point whether the acting role may
+    write; `ToolDispatcher` -- the path the orchestrator actually runs -- asked
+    nothing and went straight to the executor. `execute_write_file` enforces the
+    write *policy* (protected paths, credential names, containment) but knows
+    nothing about roles, so the verifier, which holds no `write` action, was
+    refused by one door and admitted by the other.
+    """
+
+    def test_the_two_transports_share_one_function(self) -> None:
+        from harness.shared import mcp_server
+        from harness.shared.orchestrator import dispatcher
+        from harness.shared.tool_executors import authorize_write
+
+        assert mcp_server._broker_authorize_write is authorize_write
+        assert dispatcher.authorize_write is authorize_write
+
+    @pytest.mark.parametrize("role", ["verifier", "planner"])
+    def test_a_role_without_the_write_action_is_refused_by_the_dispatcher(
+        self, mock_workspace: Path, role: str
+    ) -> None:
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+        d.set_active_role(role)
+
+        assert d._execute_write_file("notes.md", "x").startswith("Denied:")
+        assert d._execute_apply_patch("notes.md", "x", "y").startswith("Denied:")
+        assert not (mock_workspace / "notes.md").exists(), "the write happened despite the denial"
+
+    def test_the_implementing_role_still_writes(self, mock_workspace: Path) -> None:
+        """Control: an authority check that refuses everyone is an outage."""
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+        d.set_active_role("nemotron-reasoner")
+
+        assert "Success" in d._execute_write_file("notes.md", "hello")
+        assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello"
+        assert "Success" in d._execute_apply_patch("notes.md", "hello", "goodbye")
+
+    #: What the authority model says about `write`, per role, asserted rather
+    #: than derived. Symmetry alone (`mcp_denied == loop_denied`) is satisfied by
+    #: deleting the gate from *both* transports, which is the regression this
+    #: class exists to catch; pinning the expected verdict makes a removal on
+    #: either side a failure. Sourced from `agent-policy.json`: only the
+    #: implementing role holds `write`.
+    EXPECTED_WRITE_DENIAL = {
+        "nemotron-reasoner": False,
+        "planner": True,
+        "verifier": True,
+    }
+
+    def test_both_doors_agree_for_every_role(self, mock_workspace: Path) -> None:
+        """The property the split lost: one action model, two transports, one answer."""
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.mcp_server import _build_tool_handlers
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        for role, expected_denied in self.EXPECTED_WRITE_DENIAL.items():
+            broker = ExecutionBroker()
+            handlers = _build_tool_handlers(mock_workspace, broker, role)
+            mcp_denied = handlers["write_file"]({"filepath": "probe.md", "content": "x"}).startswith(
+                "Denied:"
+            )
+
+            d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+            d.set_active_role(role)
+            loop_denied = d._execute_write_file("probe.md", "x").startswith("Denied:")
+
+            assert mcp_denied == loop_denied, (
+                f"the two transports disagree about whether {role} may write"
+            )
+            assert mcp_denied is expected_denied, (
+                f"both transports agree about {role}, but on the wrong answer: "
+                f"denied={mcp_denied}, expected denied={expected_denied}"
+            )
+
+    def test_the_expected_verdicts_are_the_authority_model_s(self) -> None:
+        """`EXPECTED_WRITE_DENIAL` is a second copy of `agent-policy.json` unless
+        something holds it to the first. A role gaining or losing `write` there
+        must fail here rather than silently re-baselining the table above."""
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.tool_executors import WRITE_ACTION, execution_identity
+
+        broker = ExecutionBroker()
+        for role, expected_denied in self.EXPECTED_WRITE_DENIAL.items():
+            reason = broker.authorize_action(execution_identity(role), WRITE_ACTION)
+            assert (reason is not None) is expected_denied, (
+                f"the authority model and this table disagree about {role}: reason={reason!r}"
+            )

@@ -99,6 +99,30 @@ class ExecutionBroker:
             logger.warning("Backend availability probe failed; treating the backend as unavailable")
             return False
 
+    def authorize_action(self, agent_id: str, action: str) -> str | None:
+        """Return why ``agent_id`` may not perform ``action``, or ``None``.
+
+        The action is given, not derived. ``_policy_decision`` derives one from a
+        command because its input *is* a command; a caller that already knows the
+        action must not round-trip through a synthesised string to ask about it.
+        ``tool_executors.authorize_write`` did exactly that -- it asked about
+        ``tee <path>`` -- and a ``filepath`` of ``-find`` made the classifier
+        answer ``read``, so roles holding no ``write`` action wrote files through
+        both transports (DEC-042).
+
+        Fails closed: an unreadable authority model denies.
+        """
+        try:
+            policy = _load_json(self._agent_policy_path)
+        except Exception as exc:  # noqa: BLE001 - an unreadable authority model denies
+            logger.warning("Authority model unreadable while authorizing %s: %s", action, exc)
+            return f"the authority model could not be read: {exc}"
+        verdict = decide(agent_id, action, policy)
+        if verdict.allowed:
+            return None
+        logger.warning("Policy denied %s for agent=%s", action, agent_id)
+        return verdict.reason
+
     def _policy_decision(self, command: str, context: Mapping[str, Any]) -> ExecutionResult | None:
         """Return a BLOCKED result when policy denies, else ``None``."""
         agent_id = context.get("agent_id", "unknown")

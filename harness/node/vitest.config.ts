@@ -8,7 +8,8 @@ import { defineConfig } from 'vitest/config';
 // forbids hard-coded values precisely because a duplicated number drifts silently:
 // this block previously restated lines/statements/branches/functions/perFile and
 // nothing detected divergence from the policy it was copied from.
-// `test_node_coverage_thresholds.py` fails if this file stops reading the policy.
+// `test_coverage_policy_enforcement.py` and `test_harness.py` fail if this file
+// stops reading the policy.
 const POLICY_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../shared/governance-policy.json',

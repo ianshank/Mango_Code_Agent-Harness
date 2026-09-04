@@ -96,8 +96,7 @@ class TestCompositeTargetsStayInStep:
         the target appears rather than failing before it does.
         """
         ci_python = _prerequisites("ci-python")
-        if not ci_python:
-            pytest.skip("ci-python does not exist on this branch yet")
+        assert ci_python, "ci-python has no prerequisites; the comparison below would be vacuous"
         difference = set(_prerequisites("ci")) - set(ci_python)
         assert difference == {"lint-node", "test-node", "verify-zero-skips"}, (
             f"ci and ci-python differ by {sorted(difference)}; the only legitimate difference "

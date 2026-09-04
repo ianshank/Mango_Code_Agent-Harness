@@ -16,6 +16,11 @@ from harness.shared.write_policy import active_policy_path, write_denial_reason
 if TYPE_CHECKING:
     from harness.shared.governance.broker import ExecutionBroker
 
+#: The action a file write requires, named once. `authorize_write` asks the
+#: policy decision point for exactly this and cannot be steered off it by a
+#: filename, which is how a `-find` filepath previously graded `read`.
+WRITE_ACTION = "write"
+
 logger = logging.getLogger(__name__)
 
 
@@ -201,9 +206,22 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
         logger.warning("Denied patch outside the workspace: %s", filepath)
         return f"Error patching file {filepath}: {denial}"
 
-    denial = write_denial_reason(
-        str(target_path.relative_to(workspace)), policy_path=active_policy_path()
-    )
+    relpath = str(target_path.relative_to(workspace))
+
+    # The read policy is consulted first because a patch *reads* before it
+    # writes, and the count it reports is an answer about the file's contents:
+    # `matched 0 times` and `matched 1 times` distinguish `old_text` present from
+    # absent, one call at a time. That made `apply_patch` a substring oracle over
+    # every file `read_file` refuses -- `.env` included, whose bytes could
+    # therefore be recovered a character at a time without ever calling the tool
+    # that is gated. Checking write first would hide this behind the write
+    # denial and leave the oracle live for any path the write policy allowed.
+    denial = read_denial_reason(relpath)
+    if denial is not None:
+        logger.warning("Denied patch reading a governed path: %s (%s)", filepath, denial)
+        return f"Error patching file {filepath}: {denial}"
+
+    denial = write_denial_reason(relpath, policy_path=active_policy_path())
     if denial is not None:
         logger.warning("Denied patch of a governed path: %s (%s)", filepath, denial)
         return f"Error patching file {filepath}: {denial}"
@@ -233,6 +251,34 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
     return f"Success: patched {filepath}"
 
 
+def authorize_write(broker: ExecutionBroker, active_role: str, filepath: str) -> str | None:
+    """Return why the policy decision point refuses this role a write, or ``None``.
+
+    The `write` action is asked for **directly**. The first version of this
+    function synthesised a command (``tee <path>``) and let `classify` derive the
+    action from it, which put model-controlled text between the caller and the
+    question being asked -- and the text won. A `filepath` of ``-find`` makes
+    `classify` return `read` (the `find` shape rule matches the substring) and
+    `write_targets` return nothing (a leading `-` reads as a flag), so the
+    verifier and the planner -- neither of which holds `write` -- created files
+    through *both* transports. A filepath containing a space graded the wrong
+    token; one containing a quote graded `destructive`.
+
+    Deriving an action from a command is right when the input *is* a command:
+    `run_command` must be graded on what it will do. It is wrong here, where the
+    action is known before the call. `decide` is asked for `write` and cannot be
+    told otherwise, so no filename can change the question.
+
+    This began as `mcp_server._broker_authorize_write`, called before `write_file`
+    and `apply_patch` there -- and nowhere else. `ToolDispatcher`, the path the
+    orchestrator actually runs, asked the PDP nothing: it went straight to
+    `execute_write_file`, which enforces the *write policy* (protected paths,
+    credential names, containment) but knows nothing about which role is acting
+    (code-quality-tech-debt-plan R-CQ-5).
+    """
+    return broker.authorize_action(execution_identity(active_role), WRITE_ACTION)
+
+
 def execute_run_command(
     broker: ExecutionBroker,
     active_role: str,
@@ -255,6 +301,8 @@ def execute_run_command(
 
 
 __all__ = [
+    "WRITE_ACTION",
+    "authorize_write",
     "execute_apply_patch",
     "execute_read_file",
     "execute_run_command",

@@ -21,9 +21,11 @@ Harness = Instructions + Constraints + Feedback + Memory + Evaluation + Governan
 3. Prefer updating an existing hook/rule over adding a duplicate one.
 4. Make new rules enforceable where practical. Of the three classic options, only
    one is reachable from inside the loop: a **test** (tests are writable, except
-   `test_protected_path_liveness.py`, `test_ci_gate_coverage.py` and
-   `test_coverage_policy_enforcement.py`, which are protected). A hook or a lint
-   rule is a protected-path change.
+   `test_protected_path_liveness.py`, `test_ci_gate_coverage.py`,
+   `test_coverage_policy_enforcement.py` and the repository-root `conftest.py`,
+   which are protected -- the last because the verifier's verdict is a
+   `make test-python` run that imports it, DEC-042). A hook or a lint rule is a
+   protected-path change.
 5. If a failure pattern recurs, record it with `knowledge_gap_log` rather than in a
    file. `.mango/FAILURE_MEMORY.md` does not exist and is gitignored.
 6. After any harness change, state what changed, why, and how to verify it — with a

@@ -7,6 +7,14 @@ import hashlib
 import json
 from pathlib import Path
 
+#: Length of a hex-encoded SHA-256 digest, computed rather than typed.
+#: `publish_policy_artifact.py` declares the same bound as a triaged constant,
+#: but this file is meant to be deployed and run on its own from the protected
+#: control plane, so importing that one would trade a magic number for a
+#: dependency that breaks standalone use. Deriving it from `hashlib` needs
+#: neither: there is no second value that can drift from the first.
+SHA256_HEX_LEN = len(hashlib.sha256(b"").hexdigest())
+
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -15,7 +23,7 @@ def digest(path: Path) -> str:
 def require_digest(path: Path, expected: str, label: str) -> None:
     if not path.is_file():
         raise SystemExit(f"DENY: required protected file missing: {label}")
-    if len(expected) != 64:
+    if len(expected) != SHA256_HEX_LEN:
         raise SystemExit(f"DENY: protected bundle has invalid digest for {label}")
     actual = digest(path)
     if actual.lower() != expected.lower():
