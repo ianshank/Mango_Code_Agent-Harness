@@ -435,13 +435,14 @@ names the audit finding or closed-plan requirement it carries.
       `pytest harness/shared/tests/test_deprecation_shims.py` passes for every
       renamed path; a `tmp_path` policy from `71223f1` raises `PolicyError` only
       for the keys this plan adds · stage: `make test-python` (C-SR-4)
-- [ ] AC-33: `pytest harness/shared/tests/regression -k shadow` proves a
+- [x] AC-33: `pytest harness/shared/tests/regression -k shadow` proves a
       workspace `pytest.py` passes a failing suite under the old recipe shape
       and is not imported under the isolated one (module and package forms,
       with a passing-suite control), and
       `pytest harness/shared/tests/test_makefile_contracts.py -k shadow` pins
       the real `PYTEST` definition to `-I` and the exported `PYTHONSAFEPATH`
       · stage: `make test-regression` (R-SR-31)
+      — verified 2026-09-04 on `e1232d4`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (3,757 passed, 1 skipped under DEC-026, lines 99.19 %, branches 97.88 %, 78 files at the per-file floor, 0 waived); the premise test runs the old recipe shape against a real failing suite and reports exit 0 with the shadow module's output, and the same forgery under the isolated shape yields `FAILED`, not `VERIFIED` and not `enforcement_tampered`; the passing-suite control yields `VERIFIED`; the first `make ci` on `84bb85a` caught the premise test inheriting the Makefile's own `PYTHONSAFEPATH` export, fixed in the fixture
 
 ## Steps
 
