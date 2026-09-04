@@ -277,3 +277,70 @@ class TestApplyPatchConsultsTheReadPolicy:
         (mock_workspace / "notes.md").write_text("hello world\n", encoding="utf-8")
         assert "Success" in execute_apply_patch(mock_workspace, "notes.md", "world", "there")
         assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello there\n"
+
+
+class TestOneWriteAuthorizationPath:
+    """Both transports ask the same question before writing (R-CQ-5).
+
+    `mcp_server` asked the policy decision point whether the acting role may
+    write; `ToolDispatcher` -- the path the orchestrator actually runs -- asked
+    nothing and went straight to the executor. `execute_write_file` enforces the
+    write *policy* (protected paths, credential names, containment) but knows
+    nothing about roles, so the verifier, which holds no `write` action, was
+    refused by one door and admitted by the other.
+    """
+
+    def test_the_two_transports_share_one_function(self) -> None:
+        from harness.shared import mcp_server
+        from harness.shared.orchestrator import dispatcher
+        from harness.shared.tool_executors import authorize_write
+
+        assert mcp_server._broker_authorize_write is authorize_write
+        assert dispatcher.authorize_write is authorize_write
+
+    @pytest.mark.parametrize("role", ["verifier", "planner"])
+    def test_a_role_without_the_write_action_is_refused_by_the_dispatcher(
+        self, mock_workspace: Path, role: str
+    ) -> None:
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+        d.set_active_role(role)
+
+        assert d._execute_write_file("notes.md", "x").startswith("Denied:")
+        assert d._execute_apply_patch("notes.md", "x", "y").startswith("Denied:")
+        assert not (mock_workspace / "notes.md").exists(), "the write happened despite the denial"
+
+    def test_the_implementing_role_still_writes(self, mock_workspace: Path) -> None:
+        """Control: an authority check that refuses everyone is an outage."""
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+        d.set_active_role("nemotron-reasoner")
+
+        assert "Success" in d._execute_write_file("notes.md", "hello")
+        assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello"
+        assert "Success" in d._execute_apply_patch("notes.md", "hello", "goodbye")
+
+    def test_both_doors_agree_for_every_role(self, mock_workspace: Path) -> None:
+        """The property the split lost: one action model, two transports, one answer."""
+        from harness.shared.governance.broker import ExecutionBroker
+        from harness.shared.mcp_server import _build_tool_handlers
+        from harness.shared.orchestrator.dispatcher import ToolDispatcher
+
+        for role in ("nemotron-reasoner", "planner", "verifier"):
+            broker = ExecutionBroker()
+            handlers = _build_tool_handlers(mock_workspace, broker, role)
+            mcp_denied = handlers["write_file"]({"filepath": "probe.md", "content": "x"}).startswith(
+                "Denied:"
+            )
+
+            d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
+            d.set_active_role(role)
+            loop_denied = d._execute_write_file("probe.md", "x").startswith("Denied:")
+
+            assert mcp_denied == loop_denied, (
+                f"the two transports disagree about whether {role} may write"
+            )

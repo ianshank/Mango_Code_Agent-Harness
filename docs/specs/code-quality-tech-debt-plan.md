@@ -2,9 +2,10 @@
 
 > Status: IN PROGRESS, revision 2 (peer-reviewed) · Date: 2026-09-04 · Base: `main` @ `487870a` (PR #76)
 >
-> Phase 1 (R-CQ-3 … R-CQ-7) and R-CQ-30 landed in `7129bd4`; their acceptance
-> boxes below are ticked with the command that proves each. Phase 0 and Phases
-> 2–7 are open, and Phase 0's ruleset shape is still the owner's decision.
+> Phase 1 (R-CQ-3 … R-CQ-7) and R-CQ-30 are landed; their acceptance boxes below
+> are ticked with the command that proves each, and every gate they add is
+> mutation-proved. Phase 0 and Phases 2–7 are open, and Phase 0's ruleset shape
+> is still the owner's decision.
 >
 > Revision 2 is the output of the `openspec-peer-review` step: five independent
 > reviewers (Architect, SDLC/CI, QA, Product, Security) with no part in writing
@@ -615,7 +616,7 @@ change from a vacuous pass.
       asserts `execute_apply_patch(ws, ".env", "nvapi-", "x")` returns a denial
       string rather than `matched` (today: returns a match count)
       · stage: `make test-python` (R-CQ-4)
-- [ ] AC-5: `git grep -n "def _broker_authorize_write\|def authorize_write" harness/shared`
+- [x] AC-5: `git grep -n "def _broker_authorize_write\|def authorize_write" harness/shared`
       reports one definition site imported by both `mcp_server.py` and
       `orchestrator/dispatcher.py` (today: one site, one importer);
       `pytest harness/shared/tests -k "dispatcher and write_denied"` fails on a

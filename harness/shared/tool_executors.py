@@ -246,6 +246,30 @@ def execute_apply_patch(workspace_dir: Path, filepath: str, old_text: str, new_t
     return f"Success: patched {filepath}"
 
 
+def authorize_write(broker: ExecutionBroker, active_role: str, filepath: str) -> str | None:
+    """Return why the policy decision point refuses this role a write, or ``None``.
+
+    The PDP is asked the same question the broker asks for `run_command`, phrased
+    as the command that would perform the write (``tee <path>``), so one action
+    model grades both doors: a role without the `write` action is refused here
+    exactly as `run_command` would refuse it, and `human_approval_required_for`
+    is reached on the same terms.
+
+    This was `mcp_server._broker_authorize_write`, called before `write_file` and
+    `apply_patch` there -- and nowhere else. `ToolDispatcher`, the path the
+    orchestrator actually runs, asked the PDP nothing at all: it went straight to
+    `execute_write_file`, which enforces the *write policy* (protected paths,
+    credential names, containment) but knows nothing about which role is acting.
+    So the verifier, which holds no `write` action, was refused by the MCP
+    transport and permitted by the in-process one. Two copies of one control
+    disagreeing about who may write is the drift this module's own
+    `_resolve_in_workspace` comment warns about, one layer up
+    (code-quality-tech-debt-plan R-CQ-5).
+    """
+    denial = broker._policy_decision(f"tee {filepath}", {"agent_id": execution_identity(active_role)})
+    return None if denial is None else denial.reason
+
+
 def execute_run_command(
     broker: ExecutionBroker,
     active_role: str,

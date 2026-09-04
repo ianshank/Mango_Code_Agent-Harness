@@ -24,11 +24,12 @@ except ImportError:
     Server = None  # type: ignore[assignment,misc]
     stdio_server = None  # type: ignore[assignment]
 
-from harness.shared.agent_authority import execution_identity, tool_is_permitted, tools_for_role
+from harness.shared.agent_authority import tool_is_permitted, tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.tool_dispatch import DEFAULT_HYPOTHESIS_CONFIDENCE, _normalize_tool_arguments
 from harness.shared.tool_executors import (
+    authorize_write,
     execute_apply_patch,
     execute_read_file,
     execute_run_command,
@@ -38,15 +39,12 @@ from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
 
-
-def _broker_authorize_write(broker: ExecutionBroker, role: str, filepath: str) -> str | None:
-    """Return a denial reason string if the broker's PDP blocks the write, else None."""
-    denial = broker._policy_decision(
-        f"tee {filepath}", {"agent_id": execution_identity(role)}
-    )
-    if denial is not None:
-        return denial.reason
-    return None
+#: The authorization this module used to define for itself. It now lives beside
+#: the executors it guards, so `ToolDispatcher` reaches the same function instead
+#: of reaching nothing (R-CQ-5). Kept as a name here because the transport's own
+#: tests address it, and because a reader following the write path through this
+#: file should still find it named.
+_broker_authorize_write = authorize_write
 
 
 def _build_tool_handlers(
