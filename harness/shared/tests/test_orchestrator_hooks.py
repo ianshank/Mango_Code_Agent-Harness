@@ -240,3 +240,75 @@ class TestHookPathRelativeToWorkspace:
 
         ((cmd, _),) = seen
         assert cmd == ["bash", ".mango/hooks/pre-nemotron-run.sh"]
+
+
+class TestHookExecutionIsAlwaysBounded:
+    """A hook runs agent-adjacent shell on the host, and it must not run forever.
+
+    `tool_timeout` defaulted to `None` and was stored as given, then handed to
+    `subprocess.run(timeout=...)`, where `None` means *no timeout at all*. The
+    facade resolved the value from policy before constructing a `HookRunner`, so
+    the unbounded path was reachable only by constructing one directly -- the
+    shape `write_policy` names as "a helper that only holds when its caller
+    already checked". A hook that never returns hung the agent loop, and through
+    `run_in_threadpool` an API worker with it (code-quality-tech-debt-plan
+    R-CQ-7).
+    """
+
+    def _spawn_recorder(self, monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+        seen: list[dict] = []
+
+        def record(cmd, **kwargs):
+            seen.append(kwargs)
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", record)
+        return seen
+
+    def test_a_runner_built_with_no_timeout_resolves_one_from_policy(self, tmp_path: Path) -> None:
+        from harness.shared.policy_loader import orchestrator_defaults
+
+        runner = HookRunner(workspace_dir=tmp_path, hooks_dir=tmp_path)
+        assert runner.tool_timeout is not None
+        assert runner.tool_timeout == orchestrator_defaults()["tool_timeout_sec"]
+
+    def test_the_resolved_timeout_reaches_the_subprocess(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The attribute is not the control; what `subprocess.run` receives is."""
+        hooks = tmp_path / ".mango" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "pre-nemotron-run.sh").write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks).run_hook("pre-nemotron-run", task="t")
+
+        (kwargs,) = seen
+        assert kwargs["timeout"] is not None, "the hook ran with no timeout at all"
+        assert kwargs["timeout"] > 0
+
+    def test_an_explicit_timeout_still_wins(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Control: resolving a default must not override a caller that chose one."""
+        hooks = tmp_path / ".mango" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "pre-nemotron-run.sh").write_text("echo ran\n", encoding="utf-8")
+        seen = self._spawn_recorder(monkeypatch)
+
+        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks, tool_timeout=7).run_hook(
+            "pre-nemotron-run", task="t"
+        )
+
+        (kwargs,) = seen
+        assert kwargs["timeout"] == 7
+
+    def test_the_timeout_follows_the_policy_rather_than_a_literal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A literal default would pass every assertion above while ignoring the
+        policy key it claims to read."""
+        import harness.shared.orchestrator.hook_runner as hook_module
+
+        monkeypatch.setattr(
+            hook_module, "orchestrator_defaults", lambda: {"tool_timeout_sec": 41}
+        )
+        assert HookRunner(workspace_dir=tmp_path, hooks_dir=tmp_path).tool_timeout == 41
