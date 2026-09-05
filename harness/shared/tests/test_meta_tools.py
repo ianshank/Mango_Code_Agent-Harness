@@ -14,8 +14,6 @@ from harness.shared.meta_tools import (
 )
 from harness.shared.tests._helpers import REPO
 
-
-
 SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
 
 
