@@ -10,9 +10,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### LangGraph follow-up: conclusive counts fail closed on malformed rows
+
+Copilot review leftovers from PR #87. `_conclusive` now requires both `passed`
+and `failed` to be present non-boolean non-negative integers before summing;
+malformed or incomplete rows grade inconclusive instead of raising or reaching
+`VERIFIED`. CHANGELOG/spec defect counts and skip wording aligned with what
+shipped (six defects; DEC-026 skipif acknowledged).
+
 ### LangGraph: the graph fails closed on errors and on absent evidence
 
-Spec `docs/specs/langgraph-fail-open-hardening.md`; DEC-052. Five defects, each
+Spec `docs/specs/langgraph-fail-open-hardening.md`; DEC-052. Six defects, each
 reproduced against the real `langgraph` package (1.2.11) rather than read off
 the source.
 
@@ -52,7 +60,7 @@ the source.
 
 Three assertions that pinned the vacuous pass are rewritten to assert the
 graded outcome, including one reading `verdict in ("VERIFIED", "FAILED",
-"BLOCKED", "")` — the channel's whole domain. No skip, `xfail` or waiver added.
+"BLOCKED", "")` — the channel's whole domain. No `xfail` or waiver added; the DEC-026 `@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, ...)` conditional remains for the optional extra.
 `CHANGELOG`-adjacent docs re-synced: `c4_architecture.md` §4.7 now documents
 `INV-LG-5` (live in code and cited by the LATS spec, but never listed) plus the
 two new invariants, and README's regression-suite count and coverage figures

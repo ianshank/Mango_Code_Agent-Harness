@@ -6,7 +6,7 @@
 
 ## Problem statement
 
-Five defects in `harness/shared/langgraph/` were reproduced against the real
+Six defects in `harness/shared/langgraph/` were reproduced against the real
 `langgraph` package (1.2.11, installed from `requirements-langgraph.txt`) on
 2026-09-04. Each is a run of the compiled graph, not a reading of the source,
 and every line reference below is to the file as it stood before this change.
@@ -119,6 +119,19 @@ and every line reference below is to the file as it stood before this change.
    `plan_divergence: 0.0`; it becomes reachable on the first real divergence
    computation.
 
+
+6. **A denial still cost one write.** Checking the blocking error only at
+   `quality_gate` (downstream of `implementer`) made a denial terminal in
+   *verdict* while the write-capable node had already run:
+
+   ```
+   verdict: BLOCKED | revision_count: 1 | patches: 1 ['stub.py']
+   ```
+
+   The blocking-error exit must be the first branch in `_route_plan_gate`,
+   ahead of every route that can reach `implementer`, so a denial costs zero
+   writes (R-LGH-3).
+
 **Scope note.** This spec hardens the existing topology and changes no node
 from stub to real. `peer_reviewer` and `security_reviewer` are registered with
 no incoming edge (`build_graph` adds them at `graph.py:114-115` and never
@@ -137,9 +150,11 @@ change below survives R-SR-27's relocation of this package under
   non-blocking, because INV-16 requires an observation-mode producer's failure
   to leave the incumbent path unaffected.
 - R-LGH-2: `quality_gate_node` MUST NOT report `pass` on an inconclusive
-  verification result — an empty `test_results` channel, or a latest entry
-  whose `passed` and `failed` counts are both zero. Zero executed tests is an
+  verification result: an empty `test_results` channel, a latest entry whose
+  `passed` and `failed` counts are both zero, or a latest entry whose counts
+  are missing, non-integral, boolean, or negative. Zero executed tests is an
   absence of evidence, and DEC-024 makes an absence of evidence a non-pass.
+  Malformed counts MUST grade inconclusive without raising.
 - R-LGH-3: A control-plane error MUST route to `escalate` rather than consume
   revision budget: the `errors` channel is an `operator.add` accumulator that
   no node clears, so a retry can never remove the entry that failed the gate,

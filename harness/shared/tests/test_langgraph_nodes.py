@@ -295,6 +295,28 @@ class TestQualityGateNode:
         assert result["gate_status"]["quality_gate"] == "fail"
         assert result["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
 
+    @pytest.mark.parametrize(
+        "row",
+        [
+            {"suite": "pytest", "passed": 2, "failed": -1},
+            {"suite": "pytest", "passed": -1, "failed": 0},
+            {"suite": "pytest", "passed": "1", "failed": 0},
+            {"suite": "pytest", "passed": 1, "failed": "0"},
+            {"suite": "pytest", "passed": True, "failed": 0},
+            {"suite": "pytest", "passed": 1, "failed": False},
+            {"suite": "pytest", "passed": 1},  # incomplete: failed missing
+            {"suite": "pytest", "failed": 0},  # incomplete: passed missing
+        ],
+    )
+    def test_fails_on_inconclusive_malformed_or_incomplete_counts(
+        self, row: dict
+    ) -> None:
+        """Malformed counts must not raise or reach VERIFIED (PR #87 follow-up)."""
+        result = quality_gate_node({**DEFAULT_STATE, "test_results": [row]})
+        assert result["gate_status"]["quality_gate"] == "fail"
+        assert result["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
+        assert result["verdict"] != VERIFIED
+
     def test_fails_on_failing_suite(self) -> None:
         result = quality_gate_node(
             {**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 1, "failed": 2}]}
