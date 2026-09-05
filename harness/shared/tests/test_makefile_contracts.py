@@ -194,6 +194,19 @@ class TestDeadCodeAndSkipGatesAreWired:
         assert "vulture" in recipe and "vulture_whitelist.py" in recipe, "lint-python must run the dead-code gate"
         assert "--min-confidence" in recipe, "the confidence floor must be explicit, not vulture's default"
 
+    def test_lint_python_runs_ruff_format_check(self) -> None:
+        """NS-33 / audit H11: formatting is a gate, not a local habit.
+
+        `ruff check` alone does not enforce the formatter that replaced E/W
+        layout rules; without `format --check` on this target, CI's
+        `make ci-python` would stay green while the tree drifts.
+        """
+        recipe = _targets().get("lint-python", "")
+        assert "format --check" in recipe, (
+            "lint-python must run `ruff format --check` so formatting is gated "
+            "the same way `ruff check` already is (NS-33)"
+        )
+
     def test_python_zero_skip_gate_is_a_direct_prerequisite_of_both_pipelines(self) -> None:
         assert "verify-zero-skips-python" in _prerequisites("ci")
         assert "verify-zero-skips-python" in _prerequisites("ci-python")

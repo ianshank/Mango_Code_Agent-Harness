@@ -10,6 +10,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Adopt `ruff format` (NS-33 / audit H11)
+
+`[tool.ruff.format]` is declared (inherits `line-length` / `target-version` from
+`[tool.ruff]`; no new magic numbers). `make lint-python` runs
+`ruff format --check` beside `ruff check`, so CI's `make ci-python` / `make ci`
+gate formatting the same way it already gates lint. The tree-wide reformat is a
+separate commit listed in `.git-blame-ignore-revs`.
+
 ### LangGraph follow-up: conclusive counts fail closed on malformed rows
 
 Copilot review leftovers from PR #87 / PR #88. `_conclusive` requires both
