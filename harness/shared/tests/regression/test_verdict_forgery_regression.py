@@ -116,6 +116,10 @@ def _runner() -> VerificationRunner:
     return VerificationRunner(ExecutionBroker(), "test-eval", timeout=120)
 
 
+@pytest.mark.skipif(
+    not __import__("shutil").which("make"),
+    reason="GNU Make not installed; forgery proof runs on Linux CI where make is always present [DEC-058]",
+)
 class TestThePremiseIsReal:
     """Executed, not asserted. Without these the refusals below could be
     measured against a forgery the shell would never have honoured."""
@@ -141,6 +145,10 @@ class TestThePremiseIsReal:
         assert (workspace / "Makefile").read_text(encoding="utf-8") == PASSING_SUITE
 
 
+@pytest.mark.skipif(
+    not __import__("shutil").which("make"),
+    reason="GNU Make not installed; forge-refusal tests run on Linux CI where make is always present [DEC-058]",
+)
 class TestTheForgedVerdictIsRefused:
     def test_the_audits_recipe_now_yields_blocked_enforcement_tampered(self, workspace: Path) -> None:
         """Defects 1 and 2, in the order the audit ran them, through the real
@@ -207,6 +215,10 @@ class TestTheForgedVerdictIsRefused:
         assert shadow in verdict.reason
 
 
+@pytest.mark.skipif(
+    not __import__("shutil").which("make"),
+    reason="GNU Make not installed; control tests run on Linux CI where make is always present [DEC-058]",
+)
 class TestTheControlsThatKeepTheRefusalHonest:
     def test_an_untampered_passing_workspace_is_verified(self, workspace: Path) -> None:
         """Negative control. A runner that refused every workspace would pass
@@ -238,6 +250,10 @@ class TestTheControlsThatKeepTheRefusalHonest:
         assert verdict.termination_reason != TAMPERED
 
 
+@pytest.mark.skipif(
+    not __import__("shutil").which("make"),
+    reason="GNU Make not installed; grader isolation proof runs on Linux CI where make is always present [DEC-058]",
+)
 class TestTheGraderIsImportedFromTheToolchainNotTheWorkspace:
     """A `pytest.py` in the workspace is not a protected path, and `python -m
     pytest` imported it in place of the installed pytest: the recipe ran the
@@ -370,6 +386,10 @@ class TestTheDirectDoorIsShut:
         assert "destructive" in output or "blocked" in output.lower()
         assert not marker.exists(), f"{command!r} executed for {role}"
 
+    @pytest.mark.skipif(
+        not __import__("shutil").which("make"),
+        reason="GNU Make not installed; canonical gate-run control test requires make [DEC-058]",
+    )
     def test_the_canonical_gate_run_still_reaches_the_backend(self, workspace: Path) -> None:
         """Control: `make -f Makefile test-python` runs (and here, fails, which
         is the real suite's honest answer -- not a broker denial)."""

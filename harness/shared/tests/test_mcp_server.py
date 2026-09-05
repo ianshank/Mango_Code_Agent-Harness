@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import sys
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -21,10 +22,18 @@ from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
-# No socket exemption here. The asyncio event loop these tests drive needs a
-# unix socketpair (its self-pipe), which `--allow-unix-socket` in addopts
-# permits; the module-wide `enable_socket` that stood here re-opened TCP for
-# every test in the file for a need that was never TCP (audit M12).
+# No socket exemption here on Linux CI. The asyncio event loop these tests
+# drive needs a unix socketpair (its self-pipe), which `--allow-unix-socket` in
+# addopts permits; the module-wide `enable_socket` that stood here re-opened
+# TCP for every test in the file for a need that was never TCP (audit M12).
+#
+# Windows portability note (DEC-059): on Windows Python builds without AF_UNIX,
+# Python's asyncio self-pipe falls back to a loopback TCP socketpair. The
+# SelectorEventLoop uses the same fallback. `enable_socket` is enabled below
+# *only on win32* so the self-pipe can be established; it does not affect
+# Linux CI where AF_UNIX is always available and the TCP floor holds.
+if sys.platform == "win32":
+    pytestmark = pytest.mark.enable_socket
 
 
 class MockTool:

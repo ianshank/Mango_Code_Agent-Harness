@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -30,6 +31,10 @@ REQUIREMENTS_DEV = REPO / "requirements-dev.txt"
 REGRESSION_DIR = REPO / "harness" / "shared" / "tests" / "regression"
 
 pytestmark = pytest.mark.governance
+
+#: Applied to test classes whose methods invoke ``make`` as a subprocess.
+#: Skip on platforms where GNU Make is absent (Windows dev machines). (DEC-058)
+_MAKE_SKIP = pytest.mark.skipif(not shutil.which("make"), reason="GNU Make not found on this system (DEC-058)")
 
 
 def _text() -> str:
@@ -327,6 +332,8 @@ class TestGoInstalledToolsAreFoundWhereGoPutThem:
     resolution is exercised, not just read.
     """
 
+    pytestmark = _MAKE_SKIP
+
     @pytest.mark.parametrize(
         ("path", "tools"),
         [
@@ -462,6 +469,8 @@ class TestAuditToolIsInstalledFromTheHashedLock:
     scans everything else for tampering. The pin now lives in requirements-dev.txt
     (so it is in the lock) and the install target installs the lock.
     """
+
+    pytestmark = _MAKE_SKIP
 
     def test_requirements_dev_pins_pip_audit(self) -> None:
         assert re.search(r"^pip-audit==\d", REQUIREMENTS_DEV.read_text(encoding="utf-8"), re.M)

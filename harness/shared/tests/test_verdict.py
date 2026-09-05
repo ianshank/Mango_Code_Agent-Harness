@@ -504,6 +504,19 @@ class TestTheVerificationTimeoutComesFromPolicy:
     DISTINGUISHABLE_TIMEOUT = 287
     DISTINGUISHABLE_API_TIMEOUT = 193
 
+    @pytest.fixture(autouse=True)
+    def _ensure_make_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Patch shutil.which so probe() doesn't exit early on Windows (no GNU Make).
+
+        probe() calls shutil.which("make") as a pre-flight and returns immediately
+        if it is absent, leaving broker.timeouts empty. These tests drive
+        RecordingBroker to assert the timeout reaches the broker -- not to test
+        make availability. The same fix is applied in TestTheRunner. [DEC-058]
+        """
+        from harness.shared.governance import verification as _verification_mod
+
+        monkeypatch.setattr(_verification_mod.shutil, "which", lambda _name: "/usr/bin/make")
+
     def _policy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **overrides: int) -> None:
         from harness.shared import policy_loader
 

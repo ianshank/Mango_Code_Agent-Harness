@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from harness.shared.governance import check_secret_allowlist as gate
+from harness.shared.tests.conftest import POSIX_ONLY
 
 pytestmark = pytest.mark.governance
 
@@ -198,7 +199,15 @@ class TestMainFailsClosed:
 
 
 class TestScanFindings:
-    """The subprocess boundary, driven with a stub binary rather than gitleaks."""
+    """The subprocess boundary, driven with a stub binary rather than gitleaks.
+
+    The stub is a `#!/bin/sh` script: POSIX-only. The same contract is covered
+    on Linux CI where gitleaks is installed (``make secrets-allowlist-check``).
+    These unit tests are skipped on Windows; the gate still rejects a missing
+    gitleaks (TestMainFailsClosed) on every platform. [DEC-058]
+    """
+
+    pytestmark = POSIX_ONLY
 
     def _stub(self, tmp_path: Path, body: str) -> str:
         script = tmp_path / "fake-gitleaks"

@@ -109,6 +109,105 @@
       "reason": "The real mcp package is not installable on Python 3.9 (its floor is 3.10); every other leg installs it from the lock and runs the test",
       "owner": "governance-maintainers",
       "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_egress_floor.py::test_a_unix_socketpair_is_permitted_while_tcp_still_raises",
+      "test": "*",
+      "decision_id": "DEC-057",
+      "reason": "AF_UNIX is not available on Windows Python unless the optional Windows feature is enabled; the TCP block (test_the_socket_guard_is_actually_active) still runs on all platforms. Proof runs on Linux CI where AF_UNIX is always present.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_check_secret_allowlist.py::TestScanFindings::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestScanFindings uses #!/bin/sh stubs that cannot execute on Windows. The real gitleaks scan is covered on Linux CI via `make secrets-allowlist-check`; all other TestMainFailsClosed tests run on every platform.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_verdict_forgery_regression.py::TestThePremiseIsReal::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestThePremiseIsReal invokes real GNU Make to prove the forgery is real; skipped on Windows where Make is absent. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_verdict_forgery_regression.py::TestTheForgedVerdictIsRefused::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestTheForgedVerdictIsRefused uses real GNU Make for verification; skipped on Windows where Make is absent. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_verdict_forgery_regression.py::TestTheControlsThatKeepTheRefusalHonest::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestTheControlsThatKeepTheRefusalHonest uses real GNU Make; skipped on Windows where Make is absent. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_verdict_forgery_regression.py::TestTheGraderIsImportedFromTheToolchainNotTheWorkspace::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestTheGraderIsImportedFromTheToolchainNotTheWorkspace uses real GNU Make; skipped on Windows where Make is absent. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_verdict_forgery_regression.py::TestTheDirectDoorIsShut::test_the_canonical_gate_run_still_reaches_the_backend",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "test_the_canonical_gate_run_still_reaches_the_backend invokes real GNU Make; skipped on Windows where Make is absent. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_gate_truthfulness_e2e.py::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "test_gate_truthfulness_e2e.py invokes GNU Make via subprocess for every test; the whole module is skipped on systems without Make (Windows dev machines). All tests run on Linux CI. Scoped to the full module because every test uses the module-level _make() helper (R-GT-7 exception: each test is individually named).",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_enforcement_digest.py::TestItFailsClosed::test_an_unreadable_protected_file_raises",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX-only: creating symlinks requires SeCreateSymbolicLinkPrivilege on Windows (elevated or Developer Mode). The same fail-closed behaviour is covered by TestItFailsClosed::test_a_policy_without_protected_paths_raises on all platforms. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_makefile_contracts.py::TestGoInstalledToolsAreFoundWhereGoPutThem::*",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "TestGoInstalledToolsAreFoundWhereGoPutThem drives the real Makefile with a fake `go` via subprocess. Skipped on systems without GNU Make. All tests run on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/test_makefile_contracts.py::TestAuditToolIsInstalledFromTheHashedLock::test_the_makefile_reads_the_pin_rather_than_restating_it",
+      "test": "*",
+      "decision_id": "DEC-058",
+      "reason": "test_the_makefile_reads_the_pin_rather_than_restating_it invokes make --eval to evaluate PIP_AUDIT_VERSION. Skipped on systems without GNU Make. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
     }
   ]
 }

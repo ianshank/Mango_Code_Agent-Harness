@@ -48,6 +48,13 @@ from harness.api_server.main import app, verify_api_key  # noqa: E402
 
 MAIN_PY = REPO / "harness" / "api_server" / "main.py"
 
+# Windows portability (DEC-059): asyncio self-pipe falls back to a loopback TCP
+# socketpair on Windows Python builds without AF_UNIX. enable_socket is applied
+# only on win32 so pytest-socket does not block the event loop's self-pipe.
+# On Linux CI the TCP floor is unaffected.
+if sys.platform == "win32":
+    pytestmark = pytest.mark.enable_socket
+
 
 def _passing_outcome(message: str = "PASS: verified"):
     """A LoopOutcome a stubbed orchestrator can return.

@@ -153,7 +153,7 @@ def is_protected(path: str, protected_patterns: list[str]) -> bool:
     therefore matches nothing at all, silently. This predicate is the single place
     that semantic is defined, so the liveness suite measures the real matcher.
     """
-    return any(fnmatch.fnmatch(path, pattern) for pattern in protected_patterns)
+    return any(fnmatch.fnmatchcase(path, pattern) for pattern in protected_patterns)
 
 
 def load_protected_patterns(policy_path: Path) -> list[str]:
