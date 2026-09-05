@@ -167,10 +167,7 @@ def validate_signal_dict(data: typing.Mapping[str, typing.Any]) -> CognitiveSign
         if not isinstance(value, str) or not value:
             _reject(f"field '{field}' must be a non-empty string")
     if data["schema_version"] != ACCEPTED_SCHEMA_VERSION:
-        _reject(
-            f"unsupported schema_version {data['schema_version']!r}; "
-            f"accepted: {ACCEPTED_SCHEMA_VERSION}"
-        )
+        _reject(f"unsupported schema_version {data['schema_version']!r}; accepted: {ACCEPTED_SCHEMA_VERSION}")
     if not SIGNAL_TYPE_PATTERN.match(data["signal_type"]):
         _reject(f"malformed signal_type {data['signal_type']!r}")
     try:
@@ -246,11 +243,7 @@ class CognitiveSignalSink:
         """Workspace-scoped sink; MANGO_SIGNAL_DIR overrides (operator trust)."""
         env = os.environ if environ is None else environ
         override = env.get(SIGNAL_DIR_ENV)
-        base = (
-            Path(override).resolve()
-            if override
-            else (Path(workspace_dir) / DEFAULT_SIGNAL_SUBDIR).resolve()
-        )
+        base = Path(override).resolve() if override else (Path(workspace_dir) / DEFAULT_SIGNAL_SUBDIR).resolve()
         return cls(base, **kwargs)
 
     @property

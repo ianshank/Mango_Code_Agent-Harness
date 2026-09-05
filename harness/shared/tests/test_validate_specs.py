@@ -61,9 +61,7 @@ def _run(spec_dir: Path, **env_overrides: str) -> subprocess.CompletedProcess[st
     """
     env = {**os.environ, "SPEC_DIR": str(spec_dir)}
     env.update(env_overrides)
-    return subprocess.run(
-        ["bash", str(SCRIPT)], capture_output=True, text=True, env=env, cwd=REPO
-    )
+    return subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, env=env, cwd=REPO)
 
 
 @pytest.fixture
@@ -165,9 +163,7 @@ class TestStructuralTierRejects:
 
     def test_all_violations_are_reported_not_just_the_first(self, spec_dir: Path):
         """A gate that stops at the first failure costs a CI round trip per rule."""
-        bad = VALID_SPEC.replace("## Requirements", "## Nope").replace(
-            "## Acceptance criteria", "## Nah"
-        )
+        bad = VALID_SPEC.replace("## Requirements", "## Nope").replace("## Acceptance criteria", "## Nah")
         _write(spec_dir, "widget.md", bad)
         result = _run(spec_dir)
         assert "missing ## Requirements" in result.stderr
@@ -201,9 +197,7 @@ class TestStrictTier:
         assert result.returncode == 1
         assert "failing closed" in result.stderr
 
-    def test_absent_validator_warns_loudly_but_still_runs_the_structural_tier(
-        self, spec_dir: Path
-    ):
+    def test_absent_validator_warns_loudly_but_still_runs_the_structural_tier(self, spec_dir: Path):
         """The degraded path must stay *audible*. A silent skip is how a two-tier
         gate comes to advertise a tier it never runs."""
         _write(spec_dir, "widget.md", VALID_SPEC)
@@ -250,7 +244,10 @@ class TestVerbosityComesFromTheEnvironment:
         env = {**os.environ, **env_overrides}
         return subprocess.run(
             [sys.executable, str(REPO / "harness" / "shared" / "validate_specs.py")],
-            capture_output=True, text=True, env=env, cwd=REPO,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=REPO,
         )
 
     def test_the_pass_diagnostic_follows_log_level(self):

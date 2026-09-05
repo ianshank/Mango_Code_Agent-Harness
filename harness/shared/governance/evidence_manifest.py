@@ -7,6 +7,7 @@ The signing key is resolved in priority order:
 This makes the class fully testable without environment mutation while preserving
 backwards-compatible behaviour for callers that rely solely on the env var.
 """
+
 from __future__ import annotations
 
 import hashlib

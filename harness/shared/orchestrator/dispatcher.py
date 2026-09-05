@@ -59,9 +59,7 @@ class ToolDispatcher:
         )
 
         self.tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
-            "write_file": lambda args: self._execute_write_file(
-                args.get("filepath") or "", args.get("content") or ""
-            ),
+            "write_file": lambda args: self._execute_write_file(args.get("filepath") or "", args.get("content") or ""),
             "read_file": lambda args: self._execute_read_file(
                 args.get("filepath") or "", args.get("start_line"), args.get("end_line")
             ),
@@ -73,7 +71,8 @@ class ToolDispatcher:
                 args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
             ),
             "hypothesis_register": lambda args: hypothesis_register(
-                args.get("claim") or "", args.get("reasoning") or "",
+                args.get("claim") or "",
+                args.get("reasoning") or "",
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
             ),
         }
@@ -94,9 +93,7 @@ class ToolDispatcher:
             return denied(f"Denied: {denial}")
         return execute_write_file(self.workspace_dir, filepath, content)
 
-    def _execute_read_file(
-        self, filepath: str, start_line: int | None = None, end_line: int | None = None
-    ) -> str:
+    def _execute_read_file(self, filepath: str, start_line: int | None = None, end_line: int | None = None) -> str:
         return execute_read_file(self.workspace_dir, filepath, start_line, end_line)
 
     def _execute_apply_patch(self, filepath: str, old_text: str, new_text: str) -> str:
@@ -156,9 +153,7 @@ class ToolDispatcher:
             handler = self.tool_handlers.get(func_name)
             if handler is not None and not tool_is_permitted(self.active_role, func_name):
                 outcome = DENIED_ROLE
-                tool_result = (
-                    f"Error: tool '{func_name}' is not available to the {self.active_role} role"
-                )
+                tool_result = f"Error: tool '{func_name}' is not available to the {self.active_role} role"
             elif handler is None:
                 outcome = UNKNOWN_TOOL
                 tool_result = f"Error: Unknown tool '{func_name}'"
@@ -180,7 +175,9 @@ class ToolDispatcher:
             event = logger.debug if permitted else logger.warning
             event(
                 "tool call %s: %s for role %s",
-                func_name, outcome, self.active_role,
+                func_name,
+                outcome,
+                self.active_role,
                 extra={
                     "event": "tool_call",
                     "run_id": run_id,

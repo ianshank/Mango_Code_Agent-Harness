@@ -232,4 +232,3 @@ def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.Monke
     # this is the data-loss-prevention behavior the RuntimeError exists for.
     assert target.read_text(encoding="utf-8") == "invalid"
     assert not list(tmp_path.glob("locked.json.malformed.*"))
-

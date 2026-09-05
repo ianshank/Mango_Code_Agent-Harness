@@ -101,7 +101,7 @@ DECLARED_NOT_YET_ENFORCED = {
     "synthesis.critique_schema_version": (
         "Pinned but unconsumed -- a different state from its siblings below, which "
         "are unpinned *and* unconsumed. test_neurosym_synthesis.py asserts the value "
-        "is exactly \"1.0\", so it cannot drift silently, but no production path "
+        'is exactly "1.0", so it cannot drift silently, but no production path '
         "reads it: there is no critique.py and no repair loop (INV-11 is declared "
         "dormant in test_invariant_liveness.py for that reason). DEC-NS-002, which "
         "proposes this exact value, is still marked BLOCKING in a DRAFT openspec "
@@ -132,9 +132,7 @@ def _load(path: Path) -> dict:
 def _lookup(policy: dict, dotted: str):
     node = policy
     for part in dotted.split("."):
-        assert isinstance(node, dict) and part in node, (
-            f"policy path {dotted!r} broke at {part!r}"
-        )
+        assert isinstance(node, dict) and part in node, f"policy path {dotted!r} broke at {part!r}"
         node = node[part]
     return node
 
@@ -158,9 +156,7 @@ class TestSharedPolicyIsTheTemplate:
         shared = _load(SHARED_POLICY)
         instance = _load(STACK_POLICIES[stack])
         drifted = sorted(
-            k
-            for k in instance
-            if k in shared and k not in DIVERGENT_COMMON_KEYS and shared[k] != instance[k]
+            k for k in instance if k in shared and k not in DIVERGENT_COMMON_KEYS and shared[k] != instance[k]
         )
         assert not drifted, (
             f"{stack} policy drifted from the shared template on {drifted}; "
@@ -177,8 +173,7 @@ class TestSharedPolicyIsTheTemplate:
                 assert len(reason.strip()) > 80, f"DIVERGENT_COMMON_KEYS[{key!r}] needs a real reason"
                 assert key in instance, f"{stack}: divergence declared for absent key {key!r}"
                 assert shared[key] != instance[key], (
-                    f"{stack}: {key!r} no longer diverges from the shared template; "
-                    "drop it from DIVERGENT_COMMON_KEYS"
+                    f"{stack}: {key!r} no longer diverges from the shared template; drop it from DIVERGENT_COMMON_KEYS"
                 )
 
     def test_the_two_stacks_agree_with_each_other(self):
@@ -204,9 +199,7 @@ class TestDeclaredNotYetEnforced:
         parent_path, _, leaf = dotted.rpartition(".")
         parent = _lookup(policy, parent_path) if parent_path else policy
         assert isinstance(parent, dict), f"policy path {parent_path!r} is not an object"
-        assert leaf in parent, (
-            f"DECLARED_NOT_YET_ENFORCED classifies {dotted!r}, which the policy no longer has"
-        )
+        assert leaf in parent, f"DECLARED_NOT_YET_ENFORCED classifies {dotted!r}, which the policy no longer has"
 
     @pytest.mark.parametrize("dotted", sorted(DECLARED_NOT_YET_ENFORCED))
     def test_each_entry_has_a_substantive_reason(self, dotted):
@@ -232,7 +225,7 @@ def _string_literal_from_source(path: Path, name: str) -> str:
             and isinstance(node.value.value, str)
         ):
             return cast(str, node.value.value)
-    raise AssertionError(f"no `{name} = \"...\"` assignment found in {path}")
+    raise AssertionError(f'no `{name} = "..."` assignment found in {path}')
 
 
 class TestDecisionIdPatternIsSingleSourced:
@@ -301,8 +294,7 @@ class TestAgentDefaultsMirrorAgentPolicy:
         limits = _load(AGENT_POLICIES[stack])["limits"]
         for key in self.LIMIT_KEYS:
             assert defaults[key] == limits[key], (
-                f"{stack}: agent_defaults.{key}={defaults[key]!r} != "
-                f"agent-policy.json limits.{key}={limits[key]!r}"
+                f"{stack}: agent_defaults.{key}={defaults[key]!r} != agent-policy.json limits.{key}={limits[key]!r}"
             )
 
     @pytest.mark.parametrize("stack", sorted(AGENT_POLICIES))
@@ -327,9 +319,7 @@ class TestPinnedToolVersions:
             m = self.VERSION_RE.search(path.read_text(encoding="utf-8"))
             assert m, f"{path}: no `GITLEAKS_VERSION ?=` assignment found"
             versions[label] = m.group(1)
-        assert len(set(versions.values())) == 1, (
-            f"pinned gitleaks versions drifted: {versions}; bump all together"
-        )
+        assert len(set(versions.values())) == 1, f"pinned gitleaks versions drifted: {versions}; bump all together"
 
 
 class TestFallbackConstantsMirrorPolicy:
@@ -389,10 +379,7 @@ class TestFallbackConstantsMirrorPolicy:
         from harness.shared.governance import process_backend
 
         assert process_backend.DEFAULT_TIMEOUT_SEC == policy_loader.orchestrator_defaults()["tool_timeout_sec"]
-        assert (
-            process_backend.DEFAULT_TIMEOUT_SEC
-            == _load(SHARED_POLICY)["orchestrator"]["tool_timeout_sec"]
-        )
+        assert process_backend.DEFAULT_TIMEOUT_SEC == _load(SHARED_POLICY)["orchestrator"]["tool_timeout_sec"]
 
 
 class TestGraphPolicyDefaultsMirrorPolicyLoaderFallbacks:

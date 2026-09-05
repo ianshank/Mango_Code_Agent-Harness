@@ -45,19 +45,13 @@ class TestBuild:
         regenerate_bundle_digests.py never touches) fails here as well as in CI."""
         bundle = bpb.build({"node": REPO / "harness" / "node", "jvm": REPO / "harness" / "jvm"})
         committed = json.loads(BUNDLE.read_text(encoding="utf-8"))
-        assert bundle == committed, (
-            "policy-bundle.example.json is stale; run `make digest-regen` and commit"
-        )
+        assert bundle == committed, "policy-bundle.example.json is stale; run `make digest-regen` and commit"
 
     def test_top_level_digests_track_the_per_stack_policies(self):
         bundle = bpb.build({"node": REPO / "harness" / "node", "jvm": REPO / "harness" / "jvm"})
         node = REPO / "harness" / "node" / ".governance"
-        assert bundle["governance_policy_sha256"] == hashlib.sha256(
-            (node / "policy.json").read_bytes()
-        ).hexdigest()
-        assert bundle["agent_policy_sha256"] == hashlib.sha256(
-            (node / "agent-policy.json").read_bytes()
-        ).hexdigest()
+        assert bundle["governance_policy_sha256"] == hashlib.sha256((node / "policy.json").read_bytes()).hexdigest()
+        assert bundle["agent_policy_sha256"] == hashlib.sha256((node / "agent-policy.json").read_bytes()).hexdigest()
 
     def test_missing_protected_file_fails_closed_and_names_it(self, tmp_path: Path):
         """A stack root lacking a protected file must abort, not emit a thin bundle."""
@@ -71,9 +65,12 @@ class TestBuild:
     def test_main_writes_the_bundle_and_is_idempotent(self, tmp_path: Path):
         out = tmp_path / "bundle.json"
         argv = [
-            "--node", str(REPO / "harness" / "node"),
-            "--jvm", str(REPO / "harness" / "jvm"),
-            "--output", str(out),
+            "--node",
+            str(REPO / "harness" / "node"),
+            "--jvm",
+            str(REPO / "harness" / "jvm"),
+            "--output",
+            str(out),
         ]
         assert bpb.main(argv) == 0
         first = out.read_text(encoding="utf-8")

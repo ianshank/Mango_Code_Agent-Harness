@@ -1,4 +1,5 @@
 """Tests for governance/verification: VerificationRunner with mock broker."""
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,7 @@ from harness.shared.governance.verification import (
 @dataclass(frozen=True)
 class _MockResult:
     """Minimal stand-in for ExecutionResult."""
+
     status: str
     exit_code: int
     stdout: str = ""
@@ -135,7 +137,10 @@ class TestVerificationRunner:
 
     @patch("shutil.which", side_effect=_mock_which)
     def test_reentrancy_env_set_during_run(
-        self, mock_which: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        mock_which: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """REENTRANCY_ENV must be set during the actual run and restored after."""
         monkeypatch.delenv(REENTRANCY_ENV, raising=False)

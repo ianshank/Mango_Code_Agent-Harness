@@ -219,22 +219,44 @@ class Excluded:
 #: describes something that is already true, and a governance threshold for it
 #: would be a threshold nobody could act on.
 EXCLUDED: tuple[Excluded, ...] = (
-    Excluded("harness.control_plane.publish_policy_artifact", "POLICY_VERSION_HEX_LEN",
-             "width of a hex digest field, fixed by the format it parses"),
-    Excluded("harness.control_plane.publish_policy_artifact", "SHA256_HEX_LEN",
-             "SHA-256 is 64 hex characters; a policy could not change that"),
-    Excluded("harness.shared.shadow_planner", "POLICY_VERSION_HEX_LEN",
-             "width of a hex digest field, fixed by the format it parses"),
-    Excluded("harness.shared.shadow_planner", "TASK_ID_HEX_LEN",
-             "width of the generated task id, fixed by its own format"),
-    Excluded("harness.shared.governance.pretooluse_guard", "ALLOW_EXIT",
-             "Claude Code hook protocol exit code; the protocol defines it, not this repo"),
-    Excluded("harness.shared.governance.pretooluse_guard", "BLOCK_EXIT",
-             "Claude Code hook protocol exit code; the protocol defines it, not this repo"),
-    Excluded("harness.shared.langgraph.graph", "EXPECTED_NODE_COUNT",
-             "a structural fact about the compiled graph that a test pins; not a limit"),
-    Excluded("harness.shared.langgraph.state", "CHANNEL_COUNT",
-             "a structural fact about the state schema that a test pins; not a limit"),
+    Excluded(
+        "harness.control_plane.publish_policy_artifact",
+        "POLICY_VERSION_HEX_LEN",
+        "width of a hex digest field, fixed by the format it parses",
+    ),
+    Excluded(
+        "harness.control_plane.publish_policy_artifact",
+        "SHA256_HEX_LEN",
+        "SHA-256 is 64 hex characters; a policy could not change that",
+    ),
+    Excluded(
+        "harness.shared.shadow_planner",
+        "POLICY_VERSION_HEX_LEN",
+        "width of a hex digest field, fixed by the format it parses",
+    ),
+    Excluded(
+        "harness.shared.shadow_planner", "TASK_ID_HEX_LEN", "width of the generated task id, fixed by its own format"
+    ),
+    Excluded(
+        "harness.shared.governance.pretooluse_guard",
+        "ALLOW_EXIT",
+        "Claude Code hook protocol exit code; the protocol defines it, not this repo",
+    ),
+    Excluded(
+        "harness.shared.governance.pretooluse_guard",
+        "BLOCK_EXIT",
+        "Claude Code hook protocol exit code; the protocol defines it, not this repo",
+    ),
+    Excluded(
+        "harness.shared.langgraph.graph",
+        "EXPECTED_NODE_COUNT",
+        "a structural fact about the compiled graph that a test pins; not a limit",
+    ),
+    Excluded(
+        "harness.shared.langgraph.state",
+        "CHANNEL_COUNT",
+        "a structural fact about the state schema that a test pins; not a limit",
+    ),
 )
 
 #: First-party roots scanned for module-level constants. `harness/control-plane`
@@ -311,8 +333,9 @@ class TestTheInventoryIsComplete:
     def test_every_discovered_constant_is_triaged_or_excluded(self) -> None:
         accounted = {(row.module, row.symbol) for row in TRIAGE if row.is_python}
         accounted |= {(item.module, item.symbol) for item in EXCLUDED}
-        unaccounted = [f"{module}.{symbol}" for module, symbol in discovered_constants()
-                       if (module, symbol) not in accounted]
+        unaccounted = [
+            f"{module}.{symbol}" for module, symbol in discovered_constants() if (module, symbol) not in accounted
+        ]
         assert not unaccounted, (
             "these module-level numeric constants are neither triaged nor excluded: "
             f"{', '.join(unaccounted)}. Add a TRIAGE row citing a policy key or a DEC- id, "

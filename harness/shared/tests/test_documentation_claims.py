@@ -51,7 +51,11 @@ def tracked_yaml_files(root: Path) -> list[Path]:
     """Every tracked ``*.yml`` / ``*.yaml``, workflows and examples alike."""
     listing = subprocess.run(
         ["git", "ls-files", "--", "*.yml", "*.yaml", "**/*.yml", "**/*.yaml"],
-        cwd=str(root), capture_output=True, text=True, timeout=60, check=True,
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
     ).stdout.splitlines()
     return [root / line for line in listing if line.strip()]
 

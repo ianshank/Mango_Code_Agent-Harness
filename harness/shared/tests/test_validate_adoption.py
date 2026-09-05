@@ -1,4 +1,5 @@
 """Tests for validate_adoption: check_adoption and main CLI entry point."""
+
 from __future__ import annotations
 
 import hashlib

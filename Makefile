@@ -119,8 +119,9 @@ VULTURE       ?= $(PYTHON) -m vulture
 VULTURE_MIN_CONFIDENCE ?= 80
 
 .PHONY: lint-python
-lint-python: ## Run ruff check + mypy + vulture across all first-party Python (sources, tools, and tests)
+lint-python: ## Run ruff check + ruff format --check + mypy + vulture across all first-party Python (sources, tools, and tests)
 	$(RUFF) check .
+	$(RUFF) format --check .
 	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases $(MYPY_FLAGS)
 	$(VULTURE) $(MYPY_TARGETS) vulture_whitelist.py --min-confidence $(VULTURE_MIN_CONFIDENCE) --exclude '*/tests/*'
 

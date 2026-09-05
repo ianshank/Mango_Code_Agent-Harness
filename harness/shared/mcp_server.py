@@ -13,6 +13,7 @@ try:
     import mcp.types as types
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
+
     MCP_AVAILABLE = True
 except ImportError:
     # No pragma: this arc is the Python 3.9 leg's real code path (the mcp SDK's
@@ -133,17 +134,19 @@ def _log_tool_call(
     level = logging.DEBUG if permitted else logging.WARNING
     logger.log(
         level,
-        "mcp_tool_call tool=%s role=%s permitted=%s outcome=%s duration_ms=%.3f argument_keys=%s "
-        "unknown_key_count=%d",
-        name, role, permitted, outcome, duration_ms, argument_keys,
+        "mcp_tool_call tool=%s role=%s permitted=%s outcome=%s duration_ms=%.3f argument_keys=%s unknown_key_count=%d",
+        name,
+        role,
+        permitted,
+        outcome,
+        duration_ms,
+        argument_keys,
         unknown_key_count,
     )
 
 
 def create_mcp_server(
-    workspace_dir: Path,
-    role: str = "nemotron-reasoner",
-    broker: ExecutionBroker | None = None
+    workspace_dir: Path, role: str = "nemotron-reasoner", broker: ExecutionBroker | None = None
 ) -> Any:
     """Create and configure the MCP server instance."""
     if not MCP_AVAILABLE or Server is None:
@@ -186,16 +189,22 @@ def create_mcp_server(
         try:
             if not tool_is_permitted(role, name):
                 _log_tool_call(
-                    name=name, role=role, outcome=DENIED_ROLE,
-                    duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                    name=name,
+                    role=role,
+                    outcome=DENIED_ROLE,
+                    duration_ms=(time.perf_counter() - started) * 1000.0,
+                    argument_keys=argument_keys,
                     unknown_key_count=unknown_key_count,
                 )
                 return [types.TextContent(type="text", text=f"Tool '{name}' is not permitted for role '{role}'.")]
         except Exception as e:  # noqa: BLE001
             logger.error("Policy lookup failed for tool '%s': %s", name, e)
             _log_tool_call(
-                name=name, role=role, outcome=POLICY_LOOKUP_FAILED,
-                duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                name=name,
+                role=role,
+                outcome=POLICY_LOOKUP_FAILED,
+                duration_ms=(time.perf_counter() - started) * 1000.0,
+                argument_keys=argument_keys,
                 unknown_key_count=unknown_key_count,
             )
             return [types.TextContent(type="text", text=f"Tool '{name}' denied: policy lookup failed.")]
@@ -211,8 +220,11 @@ def create_mcp_server(
         reason = invalid_arguments_reason(schema, args) if schema is not None else None
         if reason is not None:
             _log_tool_call(
-                name=name, role=role, outcome=INVALID_ARGUMENTS,
-                duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+                name=name,
+                role=role,
+                outcome=INVALID_ARGUMENTS,
+                duration_ms=(time.perf_counter() - started) * 1000.0,
+                argument_keys=argument_keys,
                 unknown_key_count=unknown_key_count,
             )
             return [types.TextContent(type="text", text=f"Error: invalid_arguments: {reason}")]
@@ -238,8 +250,11 @@ def create_mcp_server(
                 outcome = RAISED
 
         _log_tool_call(
-            name=name, role=role, outcome=outcome,
-            duration_ms=(time.perf_counter() - started) * 1000.0, argument_keys=argument_keys,
+            name=name,
+            role=role,
+            outcome=outcome,
+            duration_ms=(time.perf_counter() - started) * 1000.0,
+            argument_keys=argument_keys,
             unknown_key_count=unknown_key_count,
         )
         return [types.TextContent(type="text", text=str(result))]

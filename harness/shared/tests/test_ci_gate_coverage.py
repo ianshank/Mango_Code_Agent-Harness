@@ -107,27 +107,21 @@ PARTIAL_COVERAGE: dict[str, str] = {
 class TestEveryRequiredGateIsAccountedFor:
     def test_every_required_gate_is_mapped_or_declared_a_gap(self, required_gates):
         """No gate may be silently unaccounted for — the failure mode `specs` hit."""
-        unaccounted = sorted(
-            g for g in required_gates if g not in GATE_TO_ROOT_TARGET and g not in KNOWN_GAPS
-        )
+        unaccounted = sorted(g for g in required_gates if g not in GATE_TO_ROOT_TARGET and g not in KNOWN_GAPS)
         assert not unaccounted, (
             f"ci_required_targets entries with no root mapping and no declared gap: "
             f"{unaccounted}. Add a root target and map it in GATE_TO_ROOT_TARGET, or "
             "declare it in KNOWN_GAPS with a reason."
         )
 
-    def test_mapped_gates_resolve_to_targets_reachable_from_ci(
-        self, required_gates, ci_reachable, makefile
-    ):
+    def test_mapped_gates_resolve_to_targets_reachable_from_ci(self, required_gates, ci_reachable, makefile):
         """A mapping that points at a target `make ci` never reaches is not coverage."""
         broken = {}
         for gate in required_gates:
             target = GATE_TO_ROOT_TARGET.get(gate)
             if target is None:
                 continue
-            if not _make_prerequisites(makefile, target) and not re.search(
-                rf"^{re.escape(target)}:", makefile, re.M
-            ):
+            if not _make_prerequisites(makefile, target) and not re.search(rf"^{re.escape(target)}:", makefile, re.M):
                 broken[gate] = f"root target '{target}' does not exist"
             elif target not in ci_reachable:
                 broken[gate] = f"root target '{target}' is not reachable from `make ci`"
@@ -182,9 +176,7 @@ class TestEveryRequiredGateIsAccountedFor:
             assert gate in GATE_TO_ROOT_TARGET, (
                 f"PARTIAL_COVERAGE['{gate}'] describes a gate that is not mapped as covered"
             )
-            assert gate in required_gates, (
-                f"PARTIAL_COVERAGE['{gate}'] describes a gate the policy no longer requires"
-            )
+            assert gate in required_gates, f"PARTIAL_COVERAGE['{gate}'] describes a gate the policy no longer requires"
             assert len(PARTIAL_COVERAGE[gate].strip()) > 40, (
                 f"PARTIAL_COVERAGE['{gate}'] needs a real reason, not a placeholder"
             )
@@ -202,10 +194,7 @@ class TestEveryRequiredGateIsAccountedFor:
             for text in [*_root_workflow_texts(), ROOT_MAKEFILE.read_text(encoding="utf-8")]
         )
         assert enforced_at_root == ("specs" not in PARTIAL_COVERAGE), (
-            "the root pipeline now sets REQUIRE_STRICT_SPEC_VALIDATOR=1; drop the "
-            "PARTIAL_COVERAGE['specs'] waiver"
+            "the root pipeline now sets REQUIRE_STRICT_SPEC_VALIDATOR=1; drop the PARTIAL_COVERAGE['specs'] waiver"
             if enforced_at_root
-            else "the strict spec tier is unenforced at root but no longer declared in "
-            "PARTIAL_COVERAGE['specs']"
+            else "the strict spec tier is unenforced at root but no longer declared in PARTIAL_COVERAGE['specs']"
         )
-

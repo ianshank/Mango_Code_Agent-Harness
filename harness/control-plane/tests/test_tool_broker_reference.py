@@ -39,7 +39,6 @@ def _run_main(monkeypatch: pytest.MonkeyPatch, script: Path, args: list) -> None
     runpy.run_path(str(script), run_name="__main__")
 
 
-
 def test_import_has_no_side_effects(capsys: pytest.CaptureFixture):
     """Importing must neither parse argv nor exit; it only defines main()."""
     module = _load(SCRIPT)

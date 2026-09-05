@@ -5,6 +5,7 @@ Standalone stdlib script by design (like validate_invariants.py): per-stack
 shims runpy this file as __main__ from arbitrary CWDs, so it imports nothing
 from the harness package.
 """
+
 import argparse
 import json
 import re

@@ -61,9 +61,7 @@ class TestParseRetryAfter:
     def test_very_old_date_clamps_like_any_past_date(self) -> None:
         assert parse_retry_after("Mon, 01 Jan 2001 00:00:00 GMT") == 0.0
 
-    def test_a_date_whose_timestamp_overflows_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_date_whose_timestamp_overflows_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``timestamp()`` raises OverflowError/OSError for dates outside the
         platform epoch range -- on some platforms, not all. Injected rather
         than provoked with a literal date, so the defensive branch is covered
@@ -82,9 +80,7 @@ class TestParseRetryAfter:
 
     def test_a_parser_returning_none_is_handled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Python 3.9's parser returns None where 3.10+ raises."""
-        monkeypatch.setattr(
-            "harness.shared.retry_policy.email.utils.parsedate_to_datetime", lambda _text: None
-        )
+        monkeypatch.setattr("harness.shared.retry_policy.email.utils.parsedate_to_datetime", lambda _text: None)
         assert parse_retry_after("whatever") is None
 
 

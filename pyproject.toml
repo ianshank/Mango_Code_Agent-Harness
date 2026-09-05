@@ -89,6 +89,11 @@ show_missing = true
 target-version = "py39"   # oldest supported runtime; keep in sync with the CI matrix
 line-length = 120
 
+[tool.ruff.format]
+# Inherits line-length and target-version from [tool.ruff] above — no separate
+# magic numbers. Declared so `ruff format` is an adopted, configured gate
+# (NS-33 / audit H11), not an accidental default.
+
 [tool.ruff.lint]
 # Expansion is measured, never speculative: every rule below was run against
 # the tree first, and every rule NOT selected is recorded in

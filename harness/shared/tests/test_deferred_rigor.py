@@ -44,7 +44,8 @@ class Deferral:
 # R-TDH-10); the earlier numbers were under 0.6.9.
 DEFERRED_RUFF_RULES = (
     Deferral(
-        "T20", 40,
+        "T20",
+        40,
         "All 30 source hits are gate scripts printing their verdict line (`zero-skip: passed`, "
         "`projections: passed`). That stdout is the gates' CLI contract, pinned by "
         "test_gate_logging.py; converting it to logging would break the contract for no "
@@ -52,7 +53,8 @@ DEFERRED_RUFF_RULES = (
         revisit_below=5,
     ),
     Deferral(
-        "TRY400", 20,
+        "TRY400",
+        20,
         "Every site is a `[FAIL] <verdict>` line for an *expected* validation failure, inside "
         "an except clause that already names narrow exception types. logging.exception would "
         "replace a one-line operator-facing verdict with a traceback whose content is already "
@@ -60,45 +62,52 @@ DEFERRED_RUFF_RULES = (
         revisit_below=3,
     ),
     Deferral(
-        "TRY003", 143,
+        "TRY003",
+        143,
         "Long messages inside raise statements. Fixing them means inventing 90 exception "
         "subclasses; the messages are already specific and the change buys no behaviour.",
         revisit_below=20,
     ),
     Deferral(
-        "S", 2517,
+        "S",
+        2517,
         "Bandit. 1100+ are assert-in-test (S101), and the remaining source hits are the "
         "subprocess calls that gate scripts exist to make. Enabling it needs blanket waivers, "
         "which CLAUDE.md forbids without decision-log entries.",
         revisit_below=100,
     ),
     Deferral(
-        "PT", 181,
+        "PT",
+        181,
         "pytest style, entirely in tests. Large mechanical churn across a suite this programme "
         "is already reshaping; the two changes would be impossible to review separately.",
         revisit_below=30,
     ),
     Deferral(
-        "ARG", 144,
+        "ARG",
+        144,
         "Unused arguments. Exactly one is in source; the other 39 are pytest fixture parameters "
         "requested for their side effects, which is the idiomatic way to use a fixture.",
         revisit_below=5,
     ),
     Deferral(
-        "PLW1510", 39,
+        "PLW1510",
+        39,
         "subprocess.run without an explicit check=. Several sites deliberately tolerate a "
         "non-zero exit and inspect returncode themselves, so a blanket fix would change "
         "behaviour. Needs a site-by-site review, not a rule flip.",
         revisit_below=5,
     ),
     Deferral(
-        "PTH", 34,
+        "PTH",
+        34,
         "os.path -> pathlib. Cosmetic in a codebase that already uses pathlib for new code; "
         "three source sites, the rest tests.",
         revisit_below=5,
     ),
     Deferral(
-        "SIM", 50,
+        "SIM",
+        50,
         "Simplifications. Four source sites, and several 'simplifications' would fold apart "
         "branches whose separation is deliberate for readability in the gates.",
         revisit_below=5,
@@ -107,14 +116,16 @@ DEFERRED_RUFF_RULES = (
 
 DEFERRED_MYPY_FLAGS = (
     Deferral(
-        "--strict", 604,
+        "--strict",
+        604,
         "533 of the 604 are no-untyped-def on test functions. Strict mode here buys annotations, "
         "not correctness. The correctness-bearing subset (--check-untyped-defs, 14 findings) was "
         "enabled instead, and all 14 were fixed.",
         revisit_below=100,
     ),
     Deferral(
-        "--disallow-untyped-defs", 533,
+        "--disallow-untyped-defs",
+        533,
         "The same 533 test-function annotations, without even the strict-mode extras. Annotating "
         "the suite is a separate project with its own review.",
         revisit_below=100,
@@ -152,7 +163,7 @@ def _enabled_rule_codes() -> set[str]:
 
 
 def _rule_family(code: str) -> str:
-    """"BLE001" -> "BLE". Splits on the first digit, which is how ruff codes
+    """ "BLE001" -> "BLE". Splits on the first digit, which is how ruff codes
     are structured (letters identify the linter, digits the rule)."""
     match = re.match(r"([A-Z]+)", code)
     return match.group(1) if match else code
@@ -174,20 +185,19 @@ class TestDeferralsAreHonest:
         """An entry naming an enabled rule is stale cover: it reads as a
         considered decision while describing something that already happened."""
         assert deferral.rule not in _selected_ruff_rules(), (
-            f"{deferral.rule} is in the ruff select set but still recorded as deferred. "
-            "Delete the entry."
+            f"{deferral.rule} is in the ruff select set but still recorded as deferred. Delete the entry."
         )
         # And catch it being enabled through a broader selector -- selecting
         # "TRY" would enable "TRY400" without naming it.
         enabled = _enabled_rule_codes()
         matching = {
-            code for code in enabled
+            code
+            for code in enabled
             if code == deferral.rule
             or (code.startswith(deferral.rule) and _rule_family(code) == _rule_family(deferral.rule + "0"))
         }
         assert not matching, (
-            f"{deferral.rule} is enabled via a broader selector ({sorted(matching)[:3]}); "
-            "delete its deferral entry."
+            f"{deferral.rule} is enabled via a broader selector ({sorted(matching)[:3]}); delete its deferral entry."
         )
 
     @pytest.mark.parametrize("deferral", DEFERRED_RUFF_RULES, ids=lambda d: d.rule)
@@ -201,17 +211,13 @@ class TestDeferralsAreHonest:
             "gone -- enable it, or rewrite the reason."
         )
 
-    @pytest.mark.parametrize(
-        "deferral", DEFERRED_RUFF_RULES + DEFERRED_MYPY_FLAGS, ids=lambda d: d.rule
-    )
+    @pytest.mark.parametrize("deferral", DEFERRED_RUFF_RULES + DEFERRED_MYPY_FLAGS, ids=lambda d: d.rule)
     def test_every_deferral_has_a_substantive_reason(self, deferral: Deferral) -> None:
         assert len(deferral.reason.strip()) > 100, (
             f"{deferral.rule} needs a reason someone can disagree with, not a placeholder"
         )
 
-    @pytest.mark.parametrize(
-        "deferral", DEFERRED_RUFF_RULES + DEFERRED_MYPY_FLAGS, ids=lambda d: d.rule
-    )
+    @pytest.mark.parametrize("deferral", DEFERRED_RUFF_RULES + DEFERRED_MYPY_FLAGS, ids=lambda d: d.rule)
     def test_every_deferral_carries_a_measured_number(self, deferral: Deferral) -> None:
         """'Too expensive' with no number is an opinion. The count is what makes
         the trade-off reviewable."""
@@ -233,8 +239,7 @@ class TestEnabledRulesStayEnabled:
     @pytest.mark.parametrize("rule", sorted(HARD_WON))
     def test_rule_is_still_selected(self, rule: str) -> None:
         assert rule in _selected_ruff_rules(), (
-            f"{rule} was removed from the ruff select set. It was enabled deliberately: "
-            f"{self.HARD_WON[rule]}."
+            f"{rule} was removed from the ruff select set. It was enabled deliberately: {self.HARD_WON[rule]}."
         )
 
     def test_check_untyped_defs_is_wired_into_the_lint_targets(self) -> None:

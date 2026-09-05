@@ -98,8 +98,10 @@ def test_dot_prefixed_paths_are_not_mangled() -> None:
 
 @pytest.mark.parametrize(
     ("given", "equivalent"),
-    [("./harness/shared/governance-policy.json", "harness/shared/governance-policy.json"),
-     ("harness/shared/../shared/governance-policy.json", "harness/shared/governance-policy.json")],
+    [
+        ("./harness/shared/governance-policy.json", "harness/shared/governance-policy.json"),
+        ("harness/shared/../shared/governance-policy.json", "harness/shared/governance-policy.json"),
+    ],
 )
 def test_equivalent_paths_reach_the_same_verdict(given: str, equivalent: str) -> None:
     """A gate that can be evaded by spelling the path differently is not a gate."""

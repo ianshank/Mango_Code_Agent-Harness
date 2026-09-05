@@ -74,6 +74,7 @@ class TestGateLogger:
         stderr logger. The first call attaches exactly one handler; a second call
         must reuse it -- otherwise every re-import in a session would duplicate
         each diagnostic line."""
+
         def unavailable(name: str | None = None) -> logging.Logger:
             raise RuntimeError("json_logging unavailable")
 

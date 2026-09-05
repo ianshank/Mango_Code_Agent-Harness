@@ -43,9 +43,7 @@ class MockSandboxProcessBackend(ProcessBackend):
         self.calls.append((command, result))
         return result
 
-    def _simulate_or_run(
-        self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int
-    ) -> ExecutionResult:
+    def _simulate_or_run(self, command: str, cwd: Path | None, timeout: int, max_output_bytes: int) -> ExecutionResult:
         # Check if the command or the file it runs contains network calls
         has_network = False
         if "curl" in command or "requests.get" in command:
@@ -129,40 +127,48 @@ class TestNeurosymSandboxE2E:
             if call_count == 1:
                 # Planner output (plain text plan)
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Plan: 1. Run echo hello using run_command.",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Plan: 1. Run echo hello using run_command.",
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 2:
                 # Reasoner execution
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Executing command.",
-                            "tool_calls": [{
-                                "id": "call-inv9-1",
-                                "type": "function",
-                                "function": {
-                                    "name": "run_command",
-                                    "arguments": '{"command": "echo hello"}',
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Executing command.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-inv9-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "run_command",
+                                            "arguments": '{"command": "echo hello"}',
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             else:
                 # Final answer / Verifier
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Execution blocked: Sandbox unavailable. FAIL",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Execution blocked: Sandbox unavailable. FAIL",
+                            }
                         }
-                    }]
+                    ]
                 }
 
         original_complete_chat = orchestrator.execution_loop.complete_chat_fn
@@ -207,78 +213,94 @@ class TestNeurosymSandboxE2E:
             if call_count == 1:
                 # Planner response
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Plan: 1. Write fetch.py. 2. Run it. 3. If denied, write mock data.",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Plan: 1. Write fetch.py. 2. Run it. 3. If denied, write mock data.",
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 2:
                 # Reasoner writes the script that will trip the sandbox
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Writing fetch.py.",
-                            "tool_calls": [{
-                                "id": "call-net-0",
-                                "type": "function",
-                                "function": {
-                                    "name": "write_file",
-                                    "arguments": (
-                                        '{"filepath": "fetch.py", '
-                                        '"content": "import requests\\nrequests.get(\\"http://example.com\\")"}'
-                                    ),
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Writing fetch.py.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-net-0",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "write_file",
+                                            "arguments": (
+                                                '{"filepath": "fetch.py", '
+                                                '"content": "import requests\\nrequests.get(\\"http://example.com\\")"}'
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 3:
                 # Reasoner execution
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Running fetch.py.",
-                            "tool_calls": [{
-                                "id": "call-net-1",
-                                "type": "function",
-                                "function": {
-                                    "name": "run_command",
-                                    "arguments": json.dumps({"command": run_script}),
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Running fetch.py.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-net-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "run_command",
+                                            "arguments": json.dumps({"command": run_script}),
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 4:
                 # Reasoner repair
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Repairing with mock data after network denial.",
-                            "tool_calls": [{
-                                "id": "call-net-2",
-                                "type": "function",
-                                "function": {
-                                    "name": "write_file",
-                                    "arguments": '{"filepath": "data.txt", "content": "MOCK_DATA"}',
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Repairing with mock data after network denial.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-net-2",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "write_file",
+                                            "arguments": '{"filepath": "data.txt", "content": "MOCK_DATA"}',
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             else:
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Repaired the denial in the isolated sandbox. PASS",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Repaired the denial in the isolated sandbox. PASS",
+                            }
                         }
-                    }]
+                    ]
                 }
 
         orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
@@ -330,100 +352,122 @@ class TestNeurosymSandboxE2E:
             if call_count == 1:
                 # Planner response
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Plan: 1. Write app.py 2. Run pytest 3. Repair if network denied.",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Plan: 1. Write app.py 2. Run pytest 3. Repair if network denied.",
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 2:
                 # First attempt: write the live file
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Writing the file with requests.",
-                            "tool_calls": [{
-                                "id": "call-1",
-                                "type": "function",
-                                "function": {
-                                    "name": "write_file",
-                                    "arguments": (
-                                        '{"filepath": "weather_cli/app.py", '
-                                        '"content": "import requests\\nrequests.get(\\"http://example.com/api\\")"}'
-                                    ),
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Writing the file with requests.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "write_file",
+                                            "arguments": (
+                                                '{"filepath": "weather_cli/app.py", '
+                                                '"content": "import requests\\nrequests.get(\\"http://example.com/api\\")"}'
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 3:
                 # Second attempt: run the file
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Running tests.",
-                            "tool_calls": [{
-                                "id": "call-2",
-                                "type": "function",
-                                "function": {
-                                    "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Running tests.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-2",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "run_command",
+                                            "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 4:
                 # Third attempt: fix the file (after SandboxViolation)
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Fixing SandboxViolation.",
-                            "tool_calls": [{
-                                "id": "call-3",
-                                "type": "function",
-                                "function": {
-                                    "name": "write_file",
-                                    "arguments": '{"filepath": "weather_cli/app.py", "content": "MOCK_DATA = 42"}',
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Fixing SandboxViolation.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-3",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "write_file",
+                                            "arguments": (
+                                                '{"filepath": "weather_cli/app.py", "content": "MOCK_DATA = 42"}'
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             elif call_count == 5:
                 # Fourth attempt: run tests again
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": "Running tests on mock.",
-                            "tool_calls": [{
-                                "id": "call-4",
-                                "type": "function",
-                                "function": {
-                                    "name": "run_command",
-                                    "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
-                                },
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": "Running tests on mock.",
+                                "tool_calls": [
+                                    {
+                                        "id": "call-4",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "run_command",
+                                            "arguments": '{"command": "python -m pytest weather_cli/app.py"}',
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             else:
                 # Stop tool calls
                 return {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            # Deliberately does not name the violation: the history
-                            # assertions below must be satisfied by the backend's
-                            # critique, never by this scripted turn.
-                            "content": "Done testing. I replaced the network call with MOCK_DATA. PASS",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                # Deliberately does not name the violation: the history
+                                # assertions below must be satisfied by the backend's
+                                # critique, never by this scripted turn.
+                                "content": "Done testing. I replaced the network call with MOCK_DATA. PASS",
+                            }
                         }
-                    }]
+                    ]
                 }
 
         orchestrator.execution_loop.complete_chat_fn = complete_chat_mock
@@ -454,4 +498,3 @@ class TestNeurosymSandboxE2E:
         # the second run executed.
         assert "PASS" in verification_result
         assert "MOCK_DATA = 42" in (app_dir / "app.py").read_text(encoding="utf-8")
-

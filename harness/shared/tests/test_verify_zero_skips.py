@@ -534,5 +534,3 @@ def test_junit_unapproved_skip(test_files):
     )
     assert res.returncode != 0
     assert "unapproved JUnit skip" in res.stderr
-
-

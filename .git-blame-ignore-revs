@@ -1,0 +1,9 @@
+# Mass-reformat commits skipped by `git blame` when
+# `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set (GitHub
+# honours this file automatically). Keep NS-33's ruff format apply here so
+# blame stays useful after the tree-wide rewrite.
+#
+# Format: one full commit SHA per line; `#` starts a comment.
+
+# NS-33: adopt ruff format (tree-wide apply)
+fbf9003b26dee7feda6d9c35de658c2729b34e1a

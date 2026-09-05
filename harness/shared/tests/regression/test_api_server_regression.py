@@ -62,6 +62,7 @@ def _passing_outcome(message: str = "PASS: verified"):
     verdict = Verdict("VERIFIED", "make -f Makefile test-python exited 0", "", "make -f Makefile test-python", 0)
     return LoopOutcome(verdict, message, "plan", "code")
 
+
 def _subprocess_env() -> dict[str, str]:
     """Child environment that can import ``harness`` from a clean interpreter.
 
@@ -114,13 +115,14 @@ class TestConstantTimeKeyComparison:
         the expected key can creep back in."""
         tree = ast.parse(MAIN_PY.read_text(encoding="utf-8"))
         verify = next(
-            node for node in ast.walk(tree)
+            node
+            for node in ast.walk(tree)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "verify_api_key"
         )
         compares = [
-            node for node in ast.walk(verify)
-            if isinstance(node, ast.Compare)
-            and any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops)
+            node
+            for node in ast.walk(verify)
+            if isinstance(node, ast.Compare) and any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops)
         ]
         assert not compares, "verify_api_key compares the key with ==/!= instead of compare_digest"
 
@@ -131,17 +133,13 @@ class TestConstantTimeKeyComparison:
     def test_missing_key_is_rejected(self, client: TestClient, server_key: str) -> None:
         assert client.post("/api/orchestrate", json={"task": "x"}).status_code == 401
 
-    def test_unconfigured_server_fails_closed(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unconfigured_server_fails_closed(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("API_SERVER_KEY", raising=False)
         response = client.post("/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": "anything"})
         assert response.status_code == 500
 
     @pytest.mark.parametrize("header", ["kéy-with-accent", "ключ", "\udcff"])
-    def test_non_ascii_key_is_rejected_not_crashed(
-        self, server_key: str, header: str
-    ) -> None:
+    def test_non_ascii_key_is_rejected_not_crashed(self, server_key: str, header: str) -> None:
         """``secrets.compare_digest`` raises TypeError on a str with non-ASCII
         code points, where the old ``!=`` merely returned False.
 
@@ -175,9 +173,7 @@ class TestHistoryRedaction:
                 {"role": "user", "content": "do a thing"},
                 {"role": "assistant", "content": f"used {secret} to call the API"},
             ]
-            response = client.post(
-                "/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": server_key}
-            )
+            response = client.post("/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": server_key})
 
         assert response.status_code == 200
         assert secret not in response.text
@@ -197,9 +193,7 @@ class TestHistoryRedaction:
             instance = orchestrator_cls.return_value
             instance.execute_loop.return_value = _passing_outcome("PASS")
             instance.conversation_history = history
-            response = client.post(
-                "/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": server_key}
-            )
+            response = client.post("/api/orchestrate", json={"task": "x"}, headers={"X-API-Key": server_key})
         assert response.json()["history"] == history
 
 
@@ -224,14 +218,22 @@ class TestImportPurity:
         )
         result = subprocess.run(
             [sys.executable, str(probe)],
-            cwd=str(REPO), capture_output=True, text=True, timeout=60, env=_subprocess_env(),
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_subprocess_env(),
         )
         assert result.returncode == 0, f"importing the app created files: {result.stdout}{result.stderr}"
 
     def test_import_writes_nothing_to_stdout(self) -> None:
         result = subprocess.run(
             [sys.executable, "-c", "import harness.api_server.main"],
-            cwd=str(REPO), capture_output=True, text=True, timeout=60, env=_subprocess_env(),
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_subprocess_env(),
         )
         assert result.returncode == 0, result.stderr
         assert result.stdout == "", f"import printed to stdout: {result.stdout!r}"
@@ -249,9 +251,7 @@ class TestImportPurity:
             for statement in tree.body
             if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.If))
             for node in ast.walk(statement)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in mutators
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in mutators
         ]
         assert not offenders, f"module-scope filesystem mutation on import: {offenders}"
 
@@ -338,7 +338,6 @@ class TestToolUsingRunsReachTheClient:
         assert response.status_code == 500
         assert response.json() == {"detail": "Internal orchestration error"}
         assert "wizard" not in response.text
-
 
     @pytest.mark.parametrize("arguments", [[], 7, {"command": "ls"}, None, "not json"])
     def test_every_arguments_shape_the_dispatcher_tolerates_is_accepted(

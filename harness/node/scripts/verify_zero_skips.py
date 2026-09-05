@@ -1,4 +1,5 @@
 """Backward-compatible shim for verify_zero_skips."""
+
 import sys
 from pathlib import Path
 

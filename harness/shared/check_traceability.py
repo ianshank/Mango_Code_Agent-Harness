@@ -1,4 +1,5 @@
 """Backward-compatible shim for check_traceability."""
+
 import sys
 from pathlib import Path
 

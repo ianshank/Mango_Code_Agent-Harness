@@ -35,8 +35,7 @@ from harness.shared.tests._session_hooks import LANGGRAPH_DESELECT_ENV, LANGGRAP
 # Reusable skip marker for tests that require POSIX features (bash, chmod, symlinks).
 # These tests pass on CI (ubuntu-latest) but cannot pass on Windows.
 POSIX_ONLY = pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="POSIX-only: requires bash/chmod/symlinks not available on Windows (DEC-026)"
+    sys.platform == "win32", reason="POSIX-only: requires bash/chmod/symlinks not available on Windows (DEC-026)"
 )
 
 
@@ -102,6 +101,7 @@ def mock_workspace(tmp_path: Path) -> Path:
 def mock_complete_chat(mocker):
     """Patch the Nemotron bridge inside the orchestrator; return the mock."""
     from harness.shared import mango_mas_orchestrator as orch_module
+
     return mocker.patch.object(orch_module, "complete_chat")
 
 
@@ -124,14 +124,25 @@ def governance_workspace(tmp_path: Path) -> Path:
         "target_contract": ["install", "lint", "test", "cov"],
         "pre_pr_order": ["lint", "cov"],
         "ci_required_targets": [
-            "cov", "lint", "types", "secrets", "specs",
-            "audit", "remotes", "projections", "traceability", "governance",
+            "cov",
+            "lint",
+            "types",
+            "secrets",
+            "specs",
+            "audit",
+            "remotes",
+            "projections",
+            "traceability",
+            "governance",
         ],
         "decision_id_pattern": "^(DEC-[0-9]+)$",
         "agent_defaults": {"deny_unclassified_side_effects": True},
         "protected_paths": [
-            ".governance/**", ".github/workflows/**",
-            "Makefile", "scripts/remotes.py", "scripts/verify_zero_skips.py",
+            ".governance/**",
+            ".github/workflows/**",
+            "Makefile",
+            "scripts/remotes.py",
+            "scripts/verify_zero_skips.py",
         ],
         "charter_version": "2.0",
         "governance_skill_path": "agents/GOVERNANCE_SKILL.md",

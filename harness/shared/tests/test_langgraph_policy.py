@@ -84,9 +84,7 @@ class TestGraphPolicyFailClosed:
     """R-LPW-1: a malformed policy must raise, not silently degrade to
     defaults. Only a genuinely *absent* policy file is the adopter path."""
 
-    def test_absent_policy_file_uses_builtin_defaults(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_absent_policy_file_uses_builtin_defaults(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """The legitimate adopter path: no policy file at all still compiles
         a GraphPolicy from built-in defaults, unchanged by this fix."""
         monkeypatch.setattr(policy_loader, "POLICY_PATH", tmp_path / "does-not-exist.json")
@@ -104,17 +102,13 @@ class TestGraphPolicyFailClosed:
         with pytest.raises(policy_loader.PolicyError):
             GraphPolicy.from_governance_json()
 
-    def test_wrong_typed_langgraph_field_raises(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_wrong_typed_langgraph_field_raises(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """A structurally-valid JSON file with the wrong type for a langgraph
         field (a string instead of a number) must also raise -- proving the
         new langgraph_defaults() accessor is genuinely type-validated, not
         just present-vs-absent."""
         bad_policy = tmp_path / "governance-policy.json"
-        bad_policy.write_text(
-            json.dumps({"langgraph": {"recursion_limit": "not-a-number"}}), encoding="utf-8"
-        )
+        bad_policy.write_text(json.dumps({"langgraph": {"recursion_limit": "not-a-number"}}), encoding="utf-8")
         monkeypatch.setattr(policy_loader, "POLICY_PATH", bad_policy)
         with pytest.raises(policy_loader.PolicyError):
             GraphPolicy.from_governance_json()

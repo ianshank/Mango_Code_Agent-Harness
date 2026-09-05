@@ -44,6 +44,7 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
         If ``True``, the node is allowed to perform write operations.
         If ``False`` (default), the node is read-only.
     """
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -55,7 +56,9 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                 if required_action not in actions:
                     logger.warning(
                         "Node %s: role %r does not hold %s authority",
-                        fn.__name__, role, required_action,
+                        fn.__name__,
+                        role,
+                        required_action,
                     )
                     return {
                         "errors": [
@@ -67,12 +70,12 @@ def with_authority(role: str, *, may_write: bool = False) -> Callable:
                     }
             except Exception as exc:  # noqa: BLE001
                 logger.error("Authority check failed for %s: %s", fn.__name__, exc)
-                return {
-                    "errors": [error_record(fn.__name__, f"authority check failed: {exc}")]
-                }
+                return {"errors": [error_record(fn.__name__, f"authority check failed: {exc}")]}
 
             return fn(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -87,6 +90,7 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
     budget_key:
         The state channel key tracking cumulative tool budget usage.
     """
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(state: dict, *args: Any, **kwargs: Any) -> Any:
@@ -99,7 +103,9 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
                 if current >= budget_limit:
                     logger.warning(
                         "Node %s: tool budget exhausted (%d/%d)",
-                        fn.__name__, current, budget_limit,
+                        fn.__name__,
+                        current,
+                        budget_limit,
                     )
                     return {
                         "errors": [
@@ -121,7 +127,9 @@ def budgeted(budget_key: str = "tool_budget_used") -> Callable:
                 result[budget_key] = current + 1
 
             return result
+
         return wrapper
+
     return decorator
 
 

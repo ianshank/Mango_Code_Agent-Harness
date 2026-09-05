@@ -302,9 +302,7 @@ class TestControlPlaneErrorIsTerminal:
     def _denied(state: Any, config=None, **_kwargs: Any) -> dict[str, Any]:
         return {"errors": [error_record("planner", "role 'planner' lacks read authority")]}
 
-    def test_denied_planner_does_not_reach_a_verified_verdict(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_denied_planner_does_not_reach_a_verified_verdict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import harness.shared.langgraph.graph as graph_module
 
         monkeypatch.setattr(graph_module, "planner_node", self._denied)
@@ -319,9 +317,7 @@ class TestControlPlaneErrorIsTerminal:
         assert output["plan"] == ""
         assert any("lacks read authority" in e["error"] for e in output["errors"])
 
-    def test_the_write_capable_implementer_never_runs_after_a_denial(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_write_capable_implementer_never_runs_after_a_denial(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """R-LGH-3, and the half this suite got wrong first time.
 
         `errors` is an ``operator.add`` accumulator no node clears, so a retry
@@ -347,9 +343,7 @@ class TestControlPlaneErrorIsTerminal:
         assert output["revision_count"] == 0, "the write-capable implementer ran after a denial"
         assert output["patches"] == [], f"a denied run wrote patches: {output['patches']}"
 
-    def test_an_observation_plane_failure_does_not_block_the_run(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_an_observation_plane_failure_does_not_block_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """INV-16: an observation-mode producer's failure is contained and
         leaves the incumbent path unaffected, so the same shape of error from
         ``shadow_planner`` must not decide the verdict."""
@@ -390,9 +384,7 @@ class TestClarifyCycleTerminates:
     def _failing_shadow(state: Any, config=None, **_kwargs: Any) -> dict[str, Any]:
         return {"errors": [error_record("shadow_planner", "model timeout")]}
 
-    def test_unresolved_divergence_blocks_instead_of_recursing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unresolved_divergence_blocks_instead_of_recursing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import harness.shared.langgraph.graph as graph_module
 
         monkeypatch.setattr(graph_module, "shadow_planner_node", self._failing_shadow)
@@ -406,9 +398,7 @@ class TestClarifyCycleTerminates:
         assert output["verdict"] == BLOCKED
         assert output["gate_status"][CLARIFY_COUNT] == 3
 
-    def test_the_bound_is_the_policy_not_a_literal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_bound_is_the_policy_not_a_literal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import harness.shared.langgraph.graph as graph_module
 
         monkeypatch.setattr(graph_module, "shadow_planner_node", self._failing_shadow)

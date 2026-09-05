@@ -1,4 +1,5 @@
 """Tests for json_logging: JSON formatter, setup, gate logging, log level resolution."""
+
 from __future__ import annotations
 
 import json
@@ -25,13 +26,19 @@ from harness.shared.json_logging import (
 
 # -- JSONFormatter -----------------------------------------------------------
 
+
 class TestJSONFormatter:
     """JSONFormatter must produce parseable single-line JSON."""
 
     def _make_record(self, msg: str = "hello", level: int = logging.INFO) -> logging.LogRecord:
         return logging.LogRecord(
-            name="test", level=level, pathname="test.py", lineno=1,
-            msg=msg, args=(), exc_info=None,
+            name="test",
+            level=level,
+            pathname="test.py",
+            lineno=1,
+            msg=msg,
+            args=(),
+            exc_info=None,
         )
 
     def test_output_is_valid_json(self) -> None:
@@ -67,15 +74,19 @@ class TestJSONFormatter:
     def _record_with_extra(self, **extra: object) -> logging.LogRecord:
         """Build the record the way `logger.log(..., extra=...)` does, so the
         standard attributes are exactly the ones a real record carries."""
-        return logging.makeLogRecord({"name": "test", "levelno": logging.INFO, "levelname": "INFO",
-                                      "msg": "hello", "args": (), **extra})
+        return logging.makeLogRecord(
+            {"name": "test", "levelno": logging.INFO, "levelname": "INFO", "msg": "hello", "args": (), **extra}
+        )
 
     def test_extra_fields_become_top_level_keys(self) -> None:
         """`extra=` was dropped on the floor (2026 standards audit H6)."""
         record = self._record_with_extra(run_id="abc123", latency_ms=42, permitted=True, tokens=None)
         parsed = json.loads(JSONFormatter().format(record))
         assert (parsed["run_id"], parsed["latency_ms"], parsed["permitted"], parsed["tokens"]) == (
-            "abc123", 42, True, None
+            "abc123",
+            42,
+            True,
+            None,
         )
 
     def test_standard_record_attributes_are_not_echoed(self) -> None:
@@ -112,6 +123,7 @@ class TestJSONFormatter:
 
 
 # -- resolve_log_level -------------------------------------------------------
+
 
 class TestResolveLogLevel:
     """Level resolution must never raise, even with garbage input."""
@@ -150,6 +162,7 @@ class TestResolveLogLevel:
 
 # -- setup_json_logging ------------------------------------------------------
 
+
 class TestSetupJsonLogging:
     """setup_json_logging must configure the root logger."""
 
@@ -166,6 +179,7 @@ class TestSetupJsonLogging:
 
 # -- _LazyStderrHandler ------------------------------------------------------
 
+
 class TestLazyStderrHandler:
     """Handler must resolve sys.stderr at emit time, not construction."""
 
@@ -180,6 +194,7 @@ class TestLazyStderrHandler:
 
 
 # -- configure_gate_logging --------------------------------------------------
+
 
 class TestConfigureGateLogging:
     """Gate logging must be idempotent and use stderr."""
@@ -211,6 +226,7 @@ class TestConfigureGateLogging:
 
 
 # -- configure_gate_process_logging -------------------------------------------
+
 
 @contextmanager
 def _bare_root() -> Iterator[logging.Logger]:

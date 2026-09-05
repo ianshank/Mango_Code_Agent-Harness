@@ -16,8 +16,14 @@ from harness.shared.nemotron_bridge import resolve_api_key  # noqa: E402
 IS_LIVE = bool(resolve_api_key())
 
 _TRANSIENT_NIM_ERRORS = (
-    "500", "502", "503", "504", "429",
-    "ResourceExhausted", "timeout", "timed out",
+    "500",
+    "502",
+    "503",
+    "504",
+    "429",
+    "ResourceExhausted",
+    "timeout",
+    "timed out",
 )
 
 
@@ -83,9 +89,7 @@ class TestMangoMASLive:
 
         # 2. All 3 agents must have participated
         agents_used = [
-            msg["content"]
-            for msg in orchestrator.conversation_history
-            if "role" in msg and msg["role"] == "system"
+            msg["content"] for msg in orchestrator.conversation_history if "role" in msg and msg["role"] == "system"
         ]
         assert any("planner" in prompt.lower() for prompt in agents_used)
         assert any("reasoner" in prompt.lower() for prompt in agents_used)
@@ -175,8 +179,7 @@ class TestMangoMASLive:
             # On host environments without GNU make (e.g. Windows dev hosts),
             # VerificationRunner.probe() returns False and outcome terminates as verification_unavailable.
             assert any(
-                term in outcome.verifier_message.upper()
-                for term in ("PASS", "VERIFIED", "SUCCESS", "PRIME", "SOLVER")
+                term in outcome.verifier_message.upper() for term in ("PASS", "VERIFIED", "SUCCESS", "PRIME", "SOLVER")
             )
         else:
             assert outcome.verdict.is_pass

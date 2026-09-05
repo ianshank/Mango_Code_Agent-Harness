@@ -9,6 +9,7 @@ three times the declared allowance while the policy value and the enforced value
 agreed on the number. Every test in this repository builds a fresh orchestrator,
 so nothing could see it.
 """
+
 from __future__ import annotations
 
 import typing
@@ -107,9 +108,7 @@ class TestBudgetReachesTheOrchestrator:
 
         monkeypatch.setattr(orch_module, "complete_chat", _fake)
 
-    def test_a_shared_budget_is_consumed_across_turns(
-        self, workspace, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_shared_budget_is_consumed_across_turns(self, workspace, monkeypatch: pytest.MonkeyPatch) -> None:
         """AC-12: two turns spend from one allowance, so the second is refused.
 
         Before this change the counter reset every turn and both turns passed --
@@ -124,9 +123,7 @@ class TestBudgetReachesTheOrchestrator:
         with pytest.raises(RuntimeError, match="tool-call budget"):
             orch.execute_agent("nemotron-reasoner", "task two", budget=budget)
 
-    def test_a_caller_that_passes_no_budget_gets_a_fresh_one(
-        self, workspace, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_caller_that_passes_no_budget_gets_a_fresh_one(self, workspace, monkeypatch: pytest.MonkeyPatch) -> None:
         """Positive control, and the backward-compatibility guarantee.
 
         Without it, a budget that refused everything would satisfy the assertion
@@ -139,9 +136,7 @@ class TestBudgetReachesTheOrchestrator:
         for task in ("task one", "task two"):
             assert orch.execute_agent("nemotron-reasoner", task) == "done"
 
-    def test_the_refusal_names_the_budget_that_refused(
-        self, workspace, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_refusal_names_the_budget_that_refused(self, workspace, monkeypatch: pytest.MonkeyPatch) -> None:
         """The message must report the limit applied, not the policy default."""
         self._one_tool_then_answer(monkeypatch)
         orch = MangoMASOrchestrator(workspace_dir=workspace, tool_timeout=5)

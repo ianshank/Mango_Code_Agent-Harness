@@ -14,6 +14,7 @@ The per-stack shims ``runpy.run_path(..., run_name="__main__")`` this file, so
 the ``__main__`` guard below preserves their behavior exactly: same CLI, same
 CWD-relative path resolution, same exit codes, same stdout/stderr.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -42,8 +43,7 @@ def check_adoption(root: Path) -> list[str]:
 
     allowed = root / ".governance/allowed-remotes.txt"
     if not allowed.is_file() or not [
-        x for x in allowed.read_text(encoding="utf-8").splitlines()
-        if x.strip() and not x.lstrip().startswith("#")
+        x for x in allowed.read_text(encoding="utf-8").splitlines() if x.strip() and not x.lstrip().startswith("#")
     ]:
         fail.append("allowed-remotes.txt has no approved destination")
 

@@ -105,7 +105,12 @@ _REDIRECT_PREFIX = re.compile(r"^(?:[0-9]*|&|<)>{1,2}\|?")
 #: .mango/hooks/x.sh` is refused for the same reason `write_file` would refuse it.
 WRITE_TARGET_PROGRAMS: typing.Mapping[str, int] = {
     # program -> index of the first argument that is a write target
-    "cp": 1, "mv": 1, "tee": 0, "touch": 0, "mkdir": 0, "install": 1,
+    "cp": 1,
+    "mv": 1,
+    "tee": 0,
+    "touch": 0,
+    "mkdir": 0,
+    "install": 1,
 }
 
 
@@ -157,42 +162,100 @@ class Classification(typing.NamedTuple):
 #: argv[0] -> action, for commands whose whole family is one action.
 _BY_PROGRAM: typing.Mapping[str, str] = {
     # Reading the workspace.
-    "ls": "read", "cat": "read", "head": "read", "tail": "read", "wc": "read",
-    "grep": "read", "rg": "read", "pwd": "read", "echo": "read", "true": "read",
-    "false": "read", "diff": "read", "stat": "read", "basename": "read", "dirname": "read",
-    "sort": "read", "uniq": "read", "cut": "read", "tr": "read", "printf": "read",
-    "date": "read", "which": "read", "where": "read", "seq": "read", "sleep": "read", "test": "read",
+    "ls": "read",
+    "cat": "read",
+    "head": "read",
+    "tail": "read",
+    "wc": "read",
+    "grep": "read",
+    "rg": "read",
+    "pwd": "read",
+    "echo": "read",
+    "true": "read",
+    "false": "read",
+    "diff": "read",
+    "stat": "read",
+    "basename": "read",
+    "dirname": "read",
+    "sort": "read",
+    "uniq": "read",
+    "cut": "read",
+    "tr": "read",
+    "printf": "read",
+    "date": "read",
+    "which": "read",
+    "where": "read",
+    "seq": "read",
+    "sleep": "read",
+    "test": "read",
     # Running the repository's own gates.
-    "pytest": "test_execute", "make": "test_execute", "ruff": "test_execute",
-    "mypy": "test_execute", "tsc": "test_execute", "vitest": "test_execute",
-    "eslint": "test_execute", "coverage": "test_execute",
+    "pytest": "test_execute",
+    "make": "test_execute",
+    "ruff": "test_execute",
+    "mypy": "test_execute",
+    "tsc": "test_execute",
+    "vitest": "test_execute",
+    "eslint": "test_execute",
+    "coverage": "test_execute",
     # Creating files the agent is entitled to create.
-    "mkdir": "write", "touch": "write", "cp": "write", "mv": "write", "tee": "write",
+    "mkdir": "write",
+    "touch": "write",
+    "cp": "write",
+    "mv": "write",
+    "tee": "write",
     # Irreversible.
-    "rm": "destructive", "shred": "destructive", "dd": "destructive",
-    "mkfs": "destructive", "truncate": "destructive", "chmod": "permission_change",
-    "chown": "permission_change", "sudo": "permission_change", "su": "permission_change",
+    "rm": "destructive",
+    "shred": "destructive",
+    "dd": "destructive",
+    "mkfs": "destructive",
+    "truncate": "destructive",
+    "chmod": "permission_change",
+    "chown": "permission_change",
+    "sudo": "permission_change",
+    "su": "permission_change",
     # Leaving the machine.
-    "curl": "external_write", "wget": "external_write", "scp": "external_write",
-    "ssh": "external_write", "nc": "external_write", "rsync": "external_write",
-    "gh": "external_write", "docker": "external_write", "kubectl": "production_change",
+    "curl": "external_write",
+    "wget": "external_write",
+    "scp": "external_write",
+    "ssh": "external_write",
+    "nc": "external_write",
+    "rsync": "external_write",
+    "gh": "external_write",
+    "docker": "external_write",
+    "kubectl": "production_change",
     # Reading the environment, which is where the credentials are.
-    "env": "secret_access", "printenv": "secret_access", "set": "secret_access",
+    "env": "secret_access",
+    "printenv": "secret_access",
+    "set": "secret_access",
 }
 
 #: (program, first-subcommand) -> action, where the subcommand changes everything.
 _BY_SUBCOMMAND: typing.Mapping[tuple[str, str], str] = {
-    ("git", "status"): "read", ("git", "log"): "read", ("git", "diff"): "read",
-    ("git", "show"): "read", ("git", "rev-parse"): "read", ("git", "branch"): "read",
-    ("git", "ls-files"): "read", ("git", "remote"): "read",
-    ("git", "add"): "write", ("git", "commit"): "write", ("git", "checkout"): "write",
-    ("git", "push"): "external_write", ("git", "fetch"): "external_write",
-    ("git", "pull"): "external_write", ("git", "clone"): "external_write",
-    ("git", "clean"): "destructive", ("git", "reset"): "destructive",
-    ("pip", "install"): "external_write", ("pip", "download"): "external_write",
-    ("pip", "list"): "read", ("pip", "show"): "read",
-    ("npm", "install"): "external_write", ("npm", "publish"): "production_change",
-    ("pnpm", "install"): "external_write", ("pnpm", "add"): "external_write",
+    ("git", "status"): "read",
+    ("git", "log"): "read",
+    ("git", "diff"): "read",
+    ("git", "show"): "read",
+    ("git", "rev-parse"): "read",
+    ("git", "branch"): "read",
+    ("git", "ls-files"): "read",
+    ("git", "remote"): "read",
+    ("git", "add"): "write",
+    ("git", "commit"): "write",
+    ("git", "checkout"): "write",
+    ("git", "push"): "external_write",
+    ("git", "fetch"): "external_write",
+    ("git", "pull"): "external_write",
+    ("git", "clone"): "external_write",
+    ("git", "clean"): "destructive",
+    ("git", "reset"): "destructive",
+    ("pip", "install"): "external_write",
+    ("pip", "download"): "external_write",
+    ("pip", "list"): "read",
+    ("pip", "show"): "read",
+    ("npm", "install"): "external_write",
+    ("npm", "publish"): "production_change",
+    ("pnpm", "install"): "external_write",
+    ("pnpm", "add"): "external_write",
     ("pnpm", "test"): "test_execute",
     # `pnpm exec` and `npx` are deliberately absent: both run the program they
     # are handed, so they are graded as that program by `_classify_delegated`.
@@ -209,17 +272,28 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     # The alternation is owned by `read_policy`, which is the other door onto
     # the same files. Composing it here rather than restating it is what keeps
     # `cat .env` and `read_file(".env")` refusing for the same reason.
-    (re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
-     "secret_access", "the command names a credential-bearing file"),
-    (re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"), "destructive",
-     "find with an action flag deletes or executes per match"),
+    (
+        re.compile(rf"(?:^|[\s/])(?:{CREDENTIAL_FILENAME_ALTERNATION})(?:\s|$)", re.IGNORECASE),
+        "secret_access",
+        "the command names a credential-bearing file",
+    ),
+    (
+        re.compile(r"\bfind\b.*\s-(?:delete|exec|execdir|ok)\b"),
+        "destructive",
+        "find with an action flag deletes or executes per match",
+    ),
     (re.compile(r"\bfind\b"), "read", "find without an action flag only lists"),
-    (re.compile(r"\b(?:python[0-9.]*|py)\b\s+(?:--version|-V|--help|-h)\b"), "read",
-     "querying python tool version or help"),
-    (re.compile(r"\b(?:node|pnpm|npm|npx)\b\s+(?:--version|-V|-v|--help|-h)\b"), "read",
-     "querying node tool version or help"),
-    (re.compile(r"\bcommand\s+-v\s+(?:python[0-9.]*|py|node|pnpm|npm|npx)\b"), "read",
-     "resolving executable path"),
+    (
+        re.compile(r"\b(?:python[0-9.]*|py)\b\s+(?:--version|-V|--help|-h)\b"),
+        "read",
+        "querying python tool version or help",
+    ),
+    (
+        re.compile(r"\b(?:node|pnpm|npm|npx)\b\s+(?:--version|-V|-v|--help|-h)\b"),
+        "read",
+        "querying node tool version or help",
+    ),
+    (re.compile(r"\bcommand\s+-v\s+(?:python[0-9.]*|py|node|pnpm|npm|npx)\b"), "read", "resolving executable path"),
     # `[^\s]` rather than `.` between the interpreter and `-m`: `.*` here bridges
     # any distance, so the engine retries the whole tail from every `python` in
     # the string and the match becomes quadratic in the command length. A command
@@ -230,12 +304,18 @@ _BY_SHAPE: tuple[tuple[re.Pattern[str], str, str], ...] = (
         "test_execute",
         "pytest, unittest, doctest or compiler through the interpreter",
     ),
-    (re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pip\b\s+install\b"), "external_write",
-     "pip install through the interpreter"),
+    (
+        re.compile(r"\bpython[0-9.]*\b(?:\s+-[^\s]+)*\s+-m\s+pip\b\s+install\b"),
+        "external_write",
+        "pip install through the interpreter",
+    ),
     (re.compile(r"\bpython[0-9.]*\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline program can do anything"),
     (re.compile(r"\b(?:ba|z|k)?sh\b\s+-c\b"), UNCLASSIFIED_ACTION, "an inline shell program can do anything"),
-    (re.compile(r"\b(?:python[0-9.]*|py)\b(?:\s+-[^\s]+)*\s+[^\s\-][^\s]*\.py\b"), "test_execute",
-     "executing a python script in workspace"),
+    (
+        re.compile(r"\b(?:python[0-9.]*|py)\b(?:\s+-[^\s]+)*\s+[^\s\-][^\s]*\.py\b"),
+        "test_execute",
+        "executing a python script in workspace",
+    ),
 )
 
 
@@ -460,7 +540,7 @@ def write_targets(command: str) -> list[str]:
             match = inner if inner and inner.end() < len(token) else None
         if match is not None:
             # `>file` written without a space, or `2>file`.
-            tail = token[match.end():]
+            tail = token[match.end() :]
             if tail and not tail.startswith("&") and tail not in discard_targets:
                 targets.append(tail)
 

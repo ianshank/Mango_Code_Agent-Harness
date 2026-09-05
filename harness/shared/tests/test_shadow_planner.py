@@ -101,9 +101,7 @@ def _run_loop(
     if isinstance(shadow_resp, Exception):
         shadow_mock.side_effect = shadow_resp
     else:
-        shadow_mock.return_value = shadow_resp or _content_resp(
-            "shadow plan", usage={"total_tokens": 7}
-        )
+        shadow_mock.return_value = shadow_resp or _content_resp("shadow plan", usage={"total_tokens": 7})
 
     orch = MangoMASOrchestrator(workspace_dir=workspace, api_key="fake-key", model="m1")
     result = orch.execute_sequential_thinking_loop("build the widget")
@@ -220,9 +218,7 @@ class TestEnabled:
         assert enabled["history"] == baseline["history"]
         assert enabled["hook_log"] == baseline["hook_log"]
 
-    def test_shadow_call_has_no_tool_authority(
-        self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_shadow_call_has_no_tool_authority(self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch) -> None:
         ws = _mk_workspace(tmp_path)
         out = _run_loop(ws, mocker, monkeypatch, flag="1")
         assert out["shadow_mock"].call_count == 1
@@ -230,9 +226,7 @@ class TestEnabled:
         assert kwargs["tools"] == []
         assert "tool_choice" not in kwargs
 
-    def test_shadow_model_env_propagates(
-        self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_shadow_model_env_propagates(self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(SHADOW_MODEL_ENV, "alt-model")
         ws = _mk_workspace(tmp_path)
         out = _run_loop(ws, mocker, monkeypatch, flag="1")
@@ -347,9 +341,7 @@ class TestContainment:
         orchestrator decomposition (9d38670); patching the facade module's
         namespace no longer reaches the name the loop actually calls.
         """
-        monkeypatch.setattr(
-            loop_module, "run_shadow_comparison", mocker.Mock(side_effect=RuntimeError("contract bug"))
-        )
+        monkeypatch.setattr(loop_module, "run_shadow_comparison", mocker.Mock(side_effect=RuntimeError("contract bug")))
         with caplog.at_level(logging.ERROR, logger=loop_module.logger.name):
             out = _run_loop(_mk_workspace(tmp_path), mocker, monkeypatch, flag="1")
         assert out["result"] == "PASS"
@@ -385,9 +377,7 @@ class TestBoundaryStatic:
         assert "shadow_planner_enabled()" in source
         assert f'environ.get("{SHADOW_PLANNER_ENV}")' not in source  # no inline re-encoding
 
-    def test_import_is_side_effect_free_and_leaves_the_flag_off(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_import_is_side_effect_free_and_leaves_the_flag_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Flag-off rollback stance: importing the orchestrator (and thus the
         shadow module) must succeed and must not switch the shadow path on.
 
@@ -413,7 +403,11 @@ class TestBoundaryStatic:
         env["PYTHONPATH"] = str(REPO) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         result = subprocess.run(
             [sys.executable, "-c", "import harness.shared.mango_mas_orchestrator"],
-            cwd=str(REPO), capture_output=True, text=True, timeout=60, env=env,
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
         )
         assert result.returncode == 0, result.stderr
         assert result.stdout == "", f"import printed to stdout: {result.stdout!r}"
@@ -465,9 +459,7 @@ class TestHelpers:
     def test_policy_identity_unreadable_returns_unknown(self, tmp_path: Path) -> None:
         assert _policy_identity(tmp_path) == ("unknown", "unknown")
 
-    def test_run_shadow_comparison_empty_incumbent_plan(
-        self, tmp_path: Path, mocker
-    ) -> None:
+    def test_run_shadow_comparison_empty_incumbent_plan(self, tmp_path: Path, mocker) -> None:
         mocker.patch.object(shadow_module, "complete_chat", return_value=_content_resp("s"))
         ctx = ShadowContext(
             workspace_dir=tmp_path,
@@ -481,9 +473,11 @@ class TestHelpers:
             incumbent_elapsed_ms=0,
         )
         run_shadow_comparison(ctx)
-        lines = (tmp_path / ".mango" / "memory" / "signals" / "cognitive-signals.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        lines = (
+            (tmp_path / ".mango" / "memory" / "signals" / "cognitive-signals.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
         assert len(lines) == 2
         validate_signal_dict(json.loads(lines[0]))
 
@@ -542,9 +536,7 @@ class TestExtractShadowPlanText:
         than an uncaught exception, so the run completes instead of only
         producing an orphan incumbent."""
         ws = _mk_workspace(tmp_path)
-        out = _run_loop(
-            ws, mocker, monkeypatch, flag="1", shadow_resp={"choices": [None]}
-        )
+        out = _run_loop(ws, mocker, monkeypatch, flag="1", shadow_resp={"choices": [None]})
         lines = out["signals_path"].read_text(encoding="utf-8").splitlines()
         assert len(lines) == 2
         incumbent, shadow = (json.loads(line) for line in lines)
@@ -606,9 +598,7 @@ class TestRunWithoutCredentialsOrModel:
     ) -> None:
         monkeypatch.delenv(shadow_module.SHADOW_MODEL_ENV, raising=False)
         workspace = _mk_workspace(tmp_path)
-        bridge = mocker.patch.object(
-            shadow_module, "complete_chat", return_value=_content_resp("shadow plan")
-        )
+        bridge = mocker.patch.object(shadow_module, "complete_chat", return_value=_content_resp("shadow plan"))
         context = shadow_module.ShadowContext(
             workspace_dir=workspace,
             api_key=None,

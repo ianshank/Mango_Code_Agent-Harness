@@ -6,6 +6,7 @@ Checks: required roles, default_deny, high_risk_actions, delegation depth,
 allowed_actions, human_approval_required_for, and mandatory rule assertions.
 Exits non-zero with a descriptive message on any violation.
 """
+
 import json
 from pathlib import Path
 
@@ -65,6 +66,7 @@ def main(policy_path: Path = Path(".governance/agent-policy.json")) -> None:
     if rules["every_side_effect_requires_trace_id"] is not True:
         raise SystemExit("agent-policy: side effects require trace IDs")
     print("agent-policy: passed")
+
 
 if __name__ == "__main__":
     main()

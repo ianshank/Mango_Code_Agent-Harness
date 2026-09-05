@@ -242,7 +242,10 @@ class TestHookInvocationAndPaths:
     def test_hook_scripts_share_one_mode_convention(self) -> None:
         tracked = subprocess.run(
             ["git", "ls-files", "-s", ".mango/hooks", ".claude/hooks"],
-            cwd=str(REPO), capture_output=True, text=True, timeout=60,
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
         ).stdout.splitlines()
         modes = {line.split()[0] for line in tracked if line.strip()}
         assert modes == {"100644"}, (
@@ -263,8 +266,7 @@ class TestHookInvocationAndPaths:
         # paths a hook *used* to name is documentation, not a reference, and
         # scanning it would make recording the fix impossible.
         text = "\n".join(
-            line for line in script.read_text(encoding="utf-8").splitlines()
-            if not line.lstrip().startswith("#")
+            line for line in script.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
         )
         # Whole tokens, not regex substrings: a substring match on
         # "$STATE_DIR/precompact-checkpoint.md" keeps finding shorter tails
@@ -280,7 +282,8 @@ class TestHookInvocationAndPaths:
             if token.endswith(".md") and "$" not in token
         }
         missing = [
-            name for name in candidates
+            name
+            for name in candidates
             # Gitignored runtime artifacts are guarded by a conditional in the
             # script itself; they are allowed to be absent.
             if not (REPO / name).exists() and "FAILURE_MEMORY" not in name
@@ -302,9 +305,7 @@ class TestSessionStartPreparesTheGates:
 
     @POSIX_ONLY
     def test_hook_is_syntactically_valid(self) -> None:
-        result = subprocess.run(
-            ["bash", "-n", str(self.HOOK)], capture_output=True, text=True, timeout=60
-        )
+        result = subprocess.run(["bash", "-n", str(self.HOOK)], capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stderr
 
     def test_every_tool_make_ci_needs_is_installed_by_the_hook(self) -> None:
@@ -313,9 +314,7 @@ class TestSessionStartPreparesTheGates:
         test-node and verify-zero-skips have no node_modules."""
         text = self.HOOK.read_text(encoding="utf-8")
         assert "requirements-lock.txt" in text, "Python dependencies are not installed"
-        assert "node-deps" in text, (
-            "Node dependencies are not installed, so `make ci` cannot reach test-node"
-        )
+        assert "node-deps" in text, "Node dependencies are not installed, so `make ci` cannot reach test-node"
 
     def test_the_python_install_is_the_ci_recipe(self) -> None:
         """The hook installed `requirements-dev.txt` unhashed with whatever pip

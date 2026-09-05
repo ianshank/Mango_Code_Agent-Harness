@@ -32,6 +32,7 @@ Three details are load-bearing rather than defensive:
   ``enforcement_tampered`` naming the files. Containment, not isolation -- the
   script still ran; what it cannot do is have its rewrite graded.
 """
+
 from __future__ import annotations
 
 import logging
@@ -111,9 +112,7 @@ class VerificationRunner:
         # BLOCKED/harness_fault, so a runner slower than the one the model
         # latency was tuned for reported a passing change as a harness fault
         # (2026 standards audit H16).
-        self._timeout = (
-            orchestrator_defaults()["verification_timeout_sec"] if timeout is None else timeout
-        )
+        self._timeout = orchestrator_defaults()["verification_timeout_sec"] if timeout is None else timeout
         #: `(workspace, digests)` recorded by `snapshot_enforcement`. `None`
         #: until a caller records one; `run` then records its own and warns,
         #: because a check with no baseline can only compare the tree to itself.
@@ -335,9 +334,7 @@ class VerificationRunner:
             )
 
         elapsed = int((time.monotonic() - started) * 1000)
-        logger.info(
-            "verification: %s status=%s exit=%s in %dms", target, result.status, result.exit_code, elapsed
-        )
+        logger.info("verification: %s status=%s exit=%s in %dms", target, result.status, result.exit_code, elapsed)
         return HarnessCheck(
             target=target,
             command=self.command,

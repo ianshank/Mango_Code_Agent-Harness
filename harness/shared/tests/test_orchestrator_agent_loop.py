@@ -84,18 +84,29 @@ class TestExecuteAgent:
             return "hyp-logged"
 
         from harness.shared.orchestrator import dispatcher
+
         monkeypatch.setattr(dispatcher, "knowledge_gap_log", _fake_gap)
         monkeypatch.setattr(dispatcher, "hypothesis_register", _fake_hyp)
 
         mock_complete_chat.side_effect = [
-            _resp(None, tool_calls=[_tool_call(
-                "knowledge_gap_log",
-                {"question": "q", "what_needed": "w", "proposed_approach": "p"},
-            )]),
-            _resp(None, tool_calls=[_tool_call(
-                "hypothesis_register",
-                {"claim": "c", "reasoning": "r", "confidence": 0.9},
-            )]),
+            _resp(
+                None,
+                tool_calls=[
+                    _tool_call(
+                        "knowledge_gap_log",
+                        {"question": "q", "what_needed": "w", "proposed_approach": "p"},
+                    )
+                ],
+            ),
+            _resp(
+                None,
+                tool_calls=[
+                    _tool_call(
+                        "hypothesis_register",
+                        {"claim": "c", "reasoning": "r", "confidence": 0.9},
+                    )
+                ],
+            ),
             _resp("Done."),
         ]
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
@@ -141,9 +152,7 @@ class TestExecuteAgent:
 
 
 class TestSequentialThinkingLoop:
-    def test_full_loop_mocked(
-        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_full_loop_mocked(self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         responses = [
             _resp("PLAN: do the thing."),
             _resp("CODE: implemented it."),
@@ -390,6 +399,7 @@ class TestOrchestrateWorkflow:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
 
         from harness.shared.orchestrator import loop
+
         monkeypatch.setattr(loop, "shadow_planner_enabled", lambda: True)
 
         def mock_shadow_raise(ctx):
@@ -402,7 +412,6 @@ class TestOrchestrateWorkflow:
         assert res.code_output == "Code: done"
         assert res.verifier_message == "Verifier: done"
         assert res.verdict is not None
-
 
 
 class TestAFailedModelCallIsStillAnEvent:

@@ -51,7 +51,7 @@ def skip_reason(longrepr: Any) -> str:
         message = str(longrepr)
     message = message.strip()
     if message.startswith(_SKIPPED_PREFIX):
-        message = message[len(_SKIPPED_PREFIX):]
+        message = message[len(_SKIPPED_PREFIX) :]
     return message.replace("\t", " ").replace("\n", " ").strip()
 
 

@@ -38,9 +38,10 @@ GATE_LOG_FORMAT = "%(levelname)s: %(message)s"
 #: structured payload -- the fields ``JSONFormatter`` used to drop on the floor
 #: (2026 standards audit H6). Computed from a real record rather than listed, so
 #: an attribute a future Python adds (``taskName`` in 3.12) is excluded too.
-_STANDARD_RECORD_ATTRIBUTES = frozenset(
-    vars(logging.LogRecord("", logging.NOTSET, "", 0, "", (), None))
-) | {"message", "asctime"}
+_STANDARD_RECORD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", logging.NOTSET, "", 0, "", (), None))) | {
+    "message",
+    "asctime",
+}
 
 
 def _is_credential_key(key: str) -> bool:

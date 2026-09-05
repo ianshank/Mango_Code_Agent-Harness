@@ -98,9 +98,7 @@ class TestReadmeLayoutIsReal:
         actual = len([p for p in (REPO / ".mango" / "skills").iterdir() if p.is_dir()])
         match = re.search(r"(\d+) reusable skills", text)
         assert match, "README no longer states a skill count"
-        assert int(match.group(1)) == actual, (
-            f"README says {match.group(1)} skills; there are {actual}"
-        )
+        assert int(match.group(1)) == actual, f"README says {match.group(1)} skills; there are {actual}"
 
 
 class TestGitignoreHasNoDeadRules:
@@ -190,9 +188,7 @@ class TestDockerignoreHasNoDeadRules:
         )
 
     def test_every_concrete_rule_excludes_something_that_exists(self) -> None:
-        offenders = [
-            rule for rule in self._concrete_rules() if not (REPO / rule.rstrip("/")).exists()
-        ]
+        offenders = [rule for rule in self._concrete_rules() if not (REPO / rule.rstrip("/")).exists()]
         assert not offenders, (
             f".dockerignore excludes paths that do not exist: {offenders}. Remove them. "
             "A rule for a path nobody has created yet is not harmless: it exempts whatever "
@@ -414,11 +410,13 @@ class TestChangelogSectionCap:
         at_cap = "## [1.0.0] - 2026-01-01\n" + filler * (cap - 1)  # heading + (cap - 1) lines == cap
         one_over = "## [1.1.0] - 2026-01-02\n" + filler * cap  # heading + cap lines == cap + 1
         text = (
-            "# Changelog\n\n## [Unreleased]\n" + filler * (cap + 5)  # exempt however long
+            "# Changelog\n\n## [Unreleased]\n"
+            + filler * (cap + 5)  # exempt however long
             + one_over
             + at_cap
             + "## Harness gate-contract history (formerly `harness/CHANGELOG.md`)\n"
-            + "### v2.1.5 - old\n" + filler * (cap + 5)  # exempt trailing block
+            + "### v2.1.5 - old\n"
+            + filler * (cap + 5)  # exempt trailing block
         )
         assert oversized_changelog_sections(text, cap) == {"## [1.1.0] - 2026-01-02": cap + 1}
         assert changelog_sections(text)["## [1.0.0] - 2026-01-01"] == cap
@@ -523,13 +521,12 @@ class TestEveryMermaidDiagramCanRender:
                             offenders.append(f"{path.relative_to(REPO)} block {index} line {lineno}: {line.strip()}")
         assert not offenders, (
             "these mermaid node labels contain a bracket without being quoted, so the label ends "
-            "early and the diagram fails to parse. Wrap the label in double quotes: "
-            + "; ".join(offenders)
+            "early and the diagram fails to parse. Wrap the label in double quotes: " + "; ".join(offenders)
         )
 
     def test_the_detector_reports_a_known_bad_label(self) -> None:
         """The exact shape found in `c4_architecture.md`, so the regex cannot silently stop matching."""
-        bad = 'Node[label with (parens) [Planned]]'
+        bad = "Node[label with (parens) [Planned]]"
         match = UNQUOTED_MERMAID_NODE.search(bad)
         assert match is not None and "[" in match.group(1)
 
@@ -560,7 +557,7 @@ def documented_api_routes(text: str) -> list[str]:
     match = API_SECTION_HEADING.search(text)
     if not match:
         return []
-    body = text[match.end():]
+    body = text[match.end() :]
     end = re.search(rf"^#{{1,{len(match.group(1))}}} ", body, re.M)
     if end:
         body = body[: end.start()]

@@ -114,9 +114,7 @@ class TestTheShellCannotSpellItsWayPastTheClassifier:
 
     @pytest.mark.parametrize("command", CREDENTIAL_READ_SPELLINGS)
     def test_every_spelling_is_graded_above_read(self, command: str) -> None:
-        assert classify(command).action != "read", (
-            f"{command!r} graded as read, which every role holds"
-        )
+        assert classify(command).action != "read", f"{command!r} graded as read, which every role holds"
 
     @pytest.mark.parametrize("command", CREDENTIAL_READ_SPELLINGS)
     def test_the_shell_really_does_resolve_each_spelling_to_the_secret(
@@ -160,9 +158,7 @@ class TestNoRoleReachesTheCredentialThroughTheBroker:
     def test_the_broker_blocks_the_read_for_every_role(
         self, role: str, command: str, workspace_with_a_credential: Path
     ) -> None:
-        dispatcher = ToolDispatcher(
-            workspace_dir=workspace_with_a_credential, broker=ExecutionBroker()
-        )
+        dispatcher = ToolDispatcher(workspace_dir=workspace_with_a_credential, broker=ExecutionBroker())
         dispatcher.set_active_role(role)
 
         output = dispatcher._execute_run_command(command)
@@ -170,14 +166,10 @@ class TestNoRoleReachesTheCredentialThroughTheBroker:
         assert SECRET not in output, f"{role} read the credential via {command!r}"
         assert BROKER_BLOCKED in output or "Denied" in output or "denied" in output.lower()
 
-    def test_an_ordinary_command_still_runs_through_the_broker(
-        self, workspace_with_a_credential: Path
-    ) -> None:
+    def test_an_ordinary_command_still_runs_through_the_broker(self, workspace_with_a_credential: Path) -> None:
         """Control: the reasoner holds `read`, and ordinary reads must still work
         or the containment above is indistinguishable from a broken broker."""
-        dispatcher = ToolDispatcher(
-            workspace_dir=workspace_with_a_credential, broker=ExecutionBroker()
-        )
+        dispatcher = ToolDispatcher(workspace_dir=workspace_with_a_credential, broker=ExecutionBroker())
         dispatcher.set_active_role("nemotron-reasoner")
 
         assert "ordinary content" in dispatcher._execute_run_command("cat README.md")
@@ -198,16 +190,12 @@ class TestNoToolReachesTheCredentialsBytes:
             "the credential file was modified despite the denial"
         )
 
-    def test_apply_patch_refuses_and_leaks_no_count(
-        self, workspace_with_a_credential: Path
-    ) -> None:
+    def test_apply_patch_refuses_and_leaks_no_count(self, workspace_with_a_credential: Path) -> None:
         result = execute_apply_patch(workspace_with_a_credential, ".env", "nvapi-R", "x")
         assert "credential-bearing" in result
         assert "matched" not in result, "the match count is the oracle this closed"
 
-    def test_the_patch_oracle_is_silent_about_the_contents(
-        self, workspace_with_a_credential: Path
-    ) -> None:
+    def test_the_patch_oracle_is_silent_about_the_contents(self, workspace_with_a_credential: Path) -> None:
         """The defect precisely: the refusal must not depend on the file's bytes,
         or the denial *is* the oracle. Present and absent substrings must be
         indistinguishable to the caller."""
@@ -235,9 +223,7 @@ class TestBothTransportsAgreeOnWhoMayWrite:
         from harness.shared.mcp_server import _build_tool_handlers
 
         handlers = _build_tool_handlers(tmp_path, ExecutionBroker(), role)
-        mcp_denied = handlers["write_file"]({"filepath": "notes.md", "content": "x"}).startswith(
-            "Denied:"
-        )
+        mcp_denied = handlers["write_file"]({"filepath": "notes.md", "content": "x"}).startswith("Denied:")
 
         dispatcher = ToolDispatcher(workspace_dir=tmp_path, broker=ExecutionBroker())
         dispatcher.set_active_role(role)

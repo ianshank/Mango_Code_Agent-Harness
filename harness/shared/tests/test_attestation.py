@@ -228,9 +228,7 @@ class TestSectionScoping:
         body.write_text(PR_BODY, encoding="utf-8")
         assert attestation._check(["Makefile"], body) == 0
 
-    def test_check_fails_when_the_section_is_absent(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_check_fails_when_the_section_is_absent(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """A description that never attests must fail, not pass for lack of a table."""
         body = tmp_path / "body.md"
         body.write_text("## Summary\n\n| A | B |\n|---|---|\n| `Makefile` | x |\n", encoding="utf-8")
@@ -238,9 +236,7 @@ class TestSectionScoping:
             assert attestation._check(["Makefile"], body) == 1
         assert "no heading matching" in caplog.text
 
-    def test_a_row_in_a_later_section_does_not_attest(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_row_in_a_later_section_does_not_attest(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         body = tmp_path / "body.md"
         body.write_text(PR_BODY, encoding="utf-8")
         with caplog.at_level(logging.ERROR, logger="harness.shared"):
@@ -263,7 +259,7 @@ class TestCompare:
 
 class TestCheck:
     def test_a_body_with_no_table_fails_closed(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        """"No table" must never read as "no rows to attest"."""
+        """ "No table" must never read as "no rows to attest"."""
         body = tmp_path / "body.md"
         body.write_text("## Protected-path attestation\n\nNothing tabular here.\n", encoding="utf-8")
         with caplog.at_level(logging.ERROR, logger="harness.shared"):
@@ -353,10 +349,14 @@ class TestCli:
     ) -> None:
         code = attestation.main(
             [
-                "--workspace", str(repo),
-                "--policy", str(self._policy(tmp_path)),
-                "--base-ref", "base",
-                "--format", "plain",
+                "--workspace",
+                str(repo),
+                "--policy",
+                str(self._policy(tmp_path)),
+                "--base-ref",
+                "base",
+                "--format",
+                "plain",
             ]
         )
         assert code == 0
@@ -377,10 +377,14 @@ class TestCli:
         body = tmp_path / "body.md"
         body.write_text(attested(["secrets/key.txt"]), encoding="utf-8")
         argv = [
-            "--workspace", str(repo),
-            "--policy", str(self._policy(tmp_path)),
-            "--base-ref", "base",
-            "--check", str(body),
+            "--workspace",
+            str(repo),
+            "--policy",
+            str(self._policy(tmp_path)),
+            "--base-ref",
+            "base",
+            "--check",
+            str(body),
         ]
         assert attestation.main(argv) == 0
         body.write_text(attested(["Makefile"]), encoding="utf-8")
@@ -402,11 +406,16 @@ class TestStandaloneInvocation:
         policy.write_text('{"protected_paths": ["secrets/**"]}', encoding="utf-8")
         result = subprocess.run(
             [
-                sys.executable, str(script),
-                "--workspace", str(repo),
-                "--policy", str(policy),
-                "--base-ref", "base",
-                "--format", "plain",
+                sys.executable,
+                str(script),
+                "--workspace",
+                str(repo),
+                "--policy",
+                str(policy),
+                "--base-ref",
+                "base",
+                "--format",
+                "plain",
             ],
             cwd=script.parent,
             capture_output=True,

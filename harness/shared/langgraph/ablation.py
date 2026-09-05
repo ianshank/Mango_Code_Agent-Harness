@@ -15,20 +15,22 @@ from harness.shared.langgraph.state import MangoState
 @dataclass
 class AblationNode:
     """A node in the MCTS ablation tree."""
+
     state_diff: dict[str, Any]
     score: float = 0.0
     visits: int = 0
-    children: list['AblationNode'] = field(default_factory=list)
-    parent: Optional['AblationNode'] = None
+    children: list["AblationNode"] = field(default_factory=list)
+    parent: Optional["AblationNode"] = None
     action_description: str = ""
 
-    def add_child(self, child: 'AblationNode') -> None:
+    def add_child(self, child: "AblationNode") -> None:
         child.parent = self
         self.children.append(child)
 
 
 class AblationChannel:
     """Isolated channel for MCTS hypotheticals (INV-LG-5)."""
+
     def __init__(self, base_state: MangoState):
         self.base_state = base_state
         self.root = AblationNode(state_diff={})

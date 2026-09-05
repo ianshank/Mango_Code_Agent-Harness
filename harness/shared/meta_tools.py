@@ -6,6 +6,7 @@ logging (``hypotheses.json``), and audit trail writing (``audit.jsonl``), all
 rooted at ``<repo-root>/.mango/memory/``. Path is resolved from ``__file__`` so
 it is workspace-agnostic and never hardcoded.
 """
+
 import contextlib
 import json
 import logging
@@ -49,7 +50,10 @@ def _read_json_safe(file_path: Path) -> list:
             logger.error(
                 "Malformed JSON in %s could not be backed up to %s (backup error: %s; parse error: %s)."
                 " Store NOT reset to prevent data loss.",
-                file_path, backup_path, backup_err, exc,
+                file_path,
+                backup_path,
+                backup_err,
+                exc,
             )
             raise RuntimeError(
                 f"Memory store {file_path} is malformed and the backup attempt failed: {backup_err}"
@@ -57,7 +61,9 @@ def _read_json_safe(file_path: Path) -> list:
         file_path.write_text("[]", encoding="utf-8")
         logger.error(
             "Malformed JSON in %s backed up to %s (Error: %s). Resetting store.",
-            file_path, backup_path, exc,
+            file_path,
+            backup_path,
+            exc,
         )
         return []
 
@@ -166,7 +172,6 @@ def hypothesis_register(claim: str, reasoning: str, confidence: float) -> str:
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
 
-
 META_TOOLS_SCHEMA = [
     {
         "type": "function",
@@ -215,5 +220,4 @@ META_TOOLS_SCHEMA = [
             },
         },
     },
-
 ]

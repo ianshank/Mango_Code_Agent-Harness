@@ -68,12 +68,20 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
     # ruff_json raises with ruff's stderr if the invocation itself fails. Without
     # that, an exit-2 error leaves stdout empty, parses to [], and every pattern
     # below reports as dead -- a tool failure dressed up as a config finding.
-    rows = ruff_json([
-        "check", ".", "--isolated", "--no-cache",
-        "--line-length", str(ruff_cfg["line-length"]),
-        "--target-version", ruff_cfg["target-version"],
-        "--select", ",".join(codes),
-    ])
+    rows = ruff_json(
+        [
+            "check",
+            ".",
+            "--isolated",
+            "--no-cache",
+            "--line-length",
+            str(ruff_cfg["line-length"]),
+            "--target-version",
+            ruff_cfg["target-version"],
+            "--select",
+            ",".join(codes),
+        ]
+    )
     return [(Path(row["filename"]).resolve().relative_to(REPO.resolve()).as_posix(), row["code"]) for row in rows]
 
 
@@ -96,9 +104,9 @@ class TestPerFileIgnoresAreLive:
     @pytest.mark.parametrize("pattern", sorted(_per_file_ignores()))
     def test_pattern_matches_at_least_one_file(self, pattern: str) -> None:
         matched = [
-            path for path in REPO.rglob("*.py")
-            if "__pycache__" not in path.parts
-            and fnmatch.fnmatch(path.relative_to(REPO).as_posix(), pattern)
+            path
+            for path in REPO.rglob("*.py")
+            if "__pycache__" not in path.parts and fnmatch.fnmatch(path.relative_to(REPO).as_posix(), pattern)
         ]
         assert matched, (
             f"per-file-ignores pattern {pattern!r} matches no file. Delete it: a pattern "
@@ -106,14 +114,9 @@ class TestPerFileIgnoresAreLive:
         )
 
     @pytest.mark.parametrize("pattern", sorted(_per_file_ignores()))
-    def test_every_code_still_suppresses_something(
-        self, pattern: str, findings: list[tuple[str, str]]
-    ) -> None:
+    def test_every_code_still_suppresses_something(self, pattern: str, findings: list[tuple[str, str]]) -> None:
         declared = set(_per_file_ignores()[pattern])
-        firing = {
-            code for path, code in findings
-            if code in declared and fnmatch.fnmatch(path, pattern)
-        }
+        firing = {code for path, code in findings if code in declared and fnmatch.fnmatch(path, pattern)}
         assert declared == firing, (
             f"per-file-ignores[{pattern!r}] declares {sorted(declared - firing)} which suppress "
             "nothing. Remove them, or the config claims a rule is needed where it is not -- "
@@ -186,7 +189,8 @@ class TestGitleaksAllowlistIsLive:
 
     def test_every_literal_path_entry_still_exists(self) -> None:
         missing = [
-            entry for entry in self._paths()
+            entry
+            for entry in self._paths()
             # Skip genuine regexes (wildcards); only literal file paths are checkable.
             if ".*" not in entry and not (REPO / entry).exists()
         ]

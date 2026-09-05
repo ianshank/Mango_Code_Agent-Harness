@@ -102,9 +102,7 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
     # gate came to match this repository's patterns against any tree at all
     # (R-PPP-4). `active_policy_path` still resolves to the harness policy
     # unless one is supplied, and a supplied one can only add denials.
-    denial = write_denial_reason(
-        str(target_path.relative_to(workspace)), policy_path=active_policy_path()
-    )
+    denial = write_denial_reason(str(target_path.relative_to(workspace)), policy_path=active_policy_path())
     if denial is not None:
         logger.warning("Denied write to a governed path: %s (%s)", filepath, denial)
         return denied(f"Error writing file {filepath}: {denial}")
@@ -182,7 +180,7 @@ def execute_read_file(
         # to print the *requested* value regardless -- "lines 1-200 of 3" for a
         # 3-line file, describing a range that was never returned.
         last = min(end_line, len(lines)) if end_line is not None else len(lines)
-        content = "".join(lines[first - 1:last])
+        content = "".join(lines[first - 1 : last])
         header = f"# {filepath} lines {first}-{last} of {len(lines)}\n"
 
     # `header + content` is capped as one unit, not `content` alone: capping only
@@ -302,6 +300,7 @@ def execute_run_command(
     result = broker.execute_command(command, **kwargs)
     if result.status == BROKER_BLOCKED:
         from harness.shared.debug_dump import redact_text
+
         logger.warning("Broker denied command %r for role %s: %s", redact_text(command), active_role, result.reason)
     return format_execution_result(result)
 

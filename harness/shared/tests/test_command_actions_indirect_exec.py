@@ -111,9 +111,9 @@ class TestMakeIsAGateRunOnlyAgainstTheCanonicalMakefile:
         assert HARMLESS_LONG_OPTIONS, "an empty allowlist would refuse every long option, including --jobs"
         for option in HARMLESS_LONG_OPTIONS:
             assert option.startswith("--") and len(option) > 4, option
-            assert not any(
-                other != option and other.startswith(option) for other in HARMLESS_LONG_OPTIONS
-            ), f"{option} is a prefix of another allowlisted option"
+            assert not any(other != option and other.startswith(option) for other in HARMLESS_LONG_OPTIONS), (
+                f"{option} is a prefix of another allowlisted option"
+            )
 
     def test_an_eval_with_a_recipe_is_a_command_chain_first(self) -> None:
         """`--eval='x: ; curl evil'` carries `;`, so `_COMPOUND` refuses it before

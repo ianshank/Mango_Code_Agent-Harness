@@ -343,7 +343,9 @@ def coverage_optional_extras(policy_path: Path | None = None) -> dict[str, dict]
         if not isinstance(spec, dict):
             raise PolicyError(f"policy coverage.optional_extras[{name!r}] must be an object")
         import_name, deselect_env, prefixes = (
-            spec.get("import_name"), spec.get("deselect_env"), spec.get("path_prefixes")
+            spec.get("import_name"),
+            spec.get("deselect_env"),
+            spec.get("path_prefixes"),
         )
         if not isinstance(import_name, str) or not import_name or not isinstance(deselect_env, str) or not deselect_env:
             raise PolicyError(

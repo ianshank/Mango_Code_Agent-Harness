@@ -1,4 +1,5 @@
 """Tests for validate_agent_policy: agent policy schema validation."""
+
 from __future__ import annotations
 
 import json
@@ -26,8 +27,13 @@ def _scaffold_valid_policy(root: Path) -> Path:
                 "human_approval_required_for": ["destructive", "external_write"],
             }
             for role in [
-                "orchestrator", "spec-analyst", "implementer",
-                "test-eval", "security-reviewer", "peer-reviewer", "release-auditor",
+                "orchestrator",
+                "spec-analyst",
+                "implementer",
+                "test-eval",
+                "security-reviewer",
+                "peer-reviewer",
+                "release-auditor",
             ]
         ],
         "rules": {

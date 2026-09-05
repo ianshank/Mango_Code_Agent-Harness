@@ -7,6 +7,7 @@ Defects covered:
 4. governance/process_backend: _cap must work on bytes, not characters
 5. validate_adoption: digest mismatch must be detected
 """
+
 from __future__ import annotations
 
 import json

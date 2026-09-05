@@ -99,9 +99,9 @@ DEFAULT_STATE: MangoState = {
 ACCUMULATOR_CHANNELS = frozenset({"patches", "findings", "test_results", "errors"})
 
 #: Channels that are last-write-wins (no reducer).
-LWW_CHANNELS = frozenset({"task", "plan", "shadow_plan", "plan_divergence",
-                           "revision_count", "gate_status", "verdict",
-                           "tool_budget_used"})
+LWW_CHANNELS = frozenset(
+    {"task", "plan", "shadow_plan", "plan_divergence", "revision_count", "gate_status", "verdict", "tool_budget_used"}
+)
 
 #: Total number of channels — pinned by ``test_langgraph_state.py``.
 CHANNEL_COUNT = 12
@@ -114,4 +114,3 @@ __all__ = [
     "LWW_CHANNELS",
     "MangoState",
 ]
-

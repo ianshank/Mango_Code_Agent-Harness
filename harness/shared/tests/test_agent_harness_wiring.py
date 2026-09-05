@@ -13,6 +13,7 @@ rather than on pattern strings.
 Everything is discovered dynamically from the filesystem/policy - no
 hard-coded thresholds, digests, or role lists beyond the documented contract.
 """
+
 from __future__ import annotations
 
 import json

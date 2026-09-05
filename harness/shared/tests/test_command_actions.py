@@ -146,15 +146,11 @@ class TestEveryRedirectSpellingIsAWrite:
             pytest.param("echo x 2>>f", "f", id="fd-2-append"),
             pytest.param("printf x 1<>f", "f", id="read-write"),
             pytest.param("echo x >| f", "f", id="clobber"),
-            pytest.param(
-                "echo PWNED 1>.git/hooks/pre-commit", ".git/hooks/pre-commit", id="the-reported-bypass"
-            ),
+            pytest.param("echo PWNED 1>.git/hooks/pre-commit", ".git/hooks/pre-commit", id="the-reported-bypass"),
         ],
     )
     def test_the_target_is_seen(self, command: str, target: str) -> None:
-        assert target in write_targets(command), (
-            f"{command!r} writes to {target!r} and the gate cannot see it"
-        )
+        assert target in write_targets(command), f"{command!r} writes to {target!r} and the gate cannot see it"
 
     @pytest.mark.parametrize(
         "command",
@@ -207,8 +203,7 @@ class TestWriteTargetPrograms:
     )
     def test_the_target_is_seen_with_no_redirect_at_all(self, command: str, target: str) -> None:
         assert target in write_targets(command), (
-            f"{command!r} writes to {target!r} via argument position, not a redirect, "
-            "and the gate cannot see it"
+            f"{command!r} writes to {target!r} via argument position, not a redirect, and the gate cannot see it"
         )
 
     def test_source_operand_is_not_itself_a_target(self) -> None:
@@ -256,13 +251,9 @@ class TestARedirectNeverDowngradesACommand:
         ],
     )
     @pytest.mark.parametrize("suffix", [" > log.txt", " 1>log.txt", " >> log.txt"])
-    def test_the_stricter_action_survives_a_redirect(
-        self, bare: str, expected: str, suffix: str
-    ) -> None:
+    def test_the_stricter_action_survives_a_redirect(self, bare: str, expected: str, suffix: str) -> None:
         assert classify(bare).action == expected, "the bare command's grade moved; update this test"
-        assert classify(bare + suffix).action == expected, (
-            f"appending {suffix!r} downgraded {bare!r} from {expected!r}"
-        )
+        assert classify(bare + suffix).action == expected, f"appending {suffix!r} downgraded {bare!r} from {expected!r}"
 
     def test_a_redirect_still_grades_an_otherwise_read_command_as_a_write(self) -> None:
         """The control: the fix must not stop redirects mattering. `echo` is a
@@ -487,9 +478,9 @@ class TestABracketClassEndsAtItsClosingBracket:
         assert len(branches) > 1, "the alternation stopped being an alternation"
         for branch in branches:
             compiled = re.compile(rf"^(?:{branch})$", re.IGNORECASE)
-            assert any(
-                compiled.match(name) for name in shell_words._CREDENTIAL_REPRESENTATIVES
-            ), f"no representative stands for the credential class {branch!r}"
+            assert any(compiled.match(name) for name in shell_words._CREDENTIAL_REPRESENTATIVES), (
+                f"no representative stands for the credential class {branch!r}"
+            )
 
 
 class TestProcessSubstitutionIsACommandChain:
@@ -532,7 +523,7 @@ class TestQuotingAndEscapingDoNotHideACredential:
             pytest.param('cat ".env"', id="double-quoted"),
             pytest.param("cat \\.env", id="backslash-escaped"),
             pytest.param("cat '.env' README.md", id="quoted-among-others"),
-            pytest.param("head -n 5 \"secrets/id_rsa\"", id="quoted-nested"),
+            pytest.param('head -n 5 "secrets/id_rsa"', id="quoted-nested"),
         ],
     )
     def test_a_quoted_or_escaped_credential_is_still_secret_access(self, command: str) -> None:
@@ -635,4 +626,3 @@ class TestTheWordCheckAndTheTextCheckAgree:
             ("cat secrets/id_rsa", "cat 'secrets/id_rsa'"),
         ]:
             assert classify(bare).action == classify(transformed).action
-

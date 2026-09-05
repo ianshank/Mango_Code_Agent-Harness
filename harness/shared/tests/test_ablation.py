@@ -139,5 +139,3 @@ def test_ablation_empty_diff_is_noop() -> None:
     result = channel.apply_diff(empty_node)
     assert result["plan"] == "untouched"
     assert result is not base_state  # Deep copy, not identity
-
-

@@ -48,15 +48,11 @@ class TestRequiredStatusChecksListIsAccurate:
         # Scoped to the sentence between "Required status checks" and its
         # terminating period: the paragraph after it repeats one of these
         # names in different prose, which would corrupt an unscoped search.
-        sentence = re.search(
-            r"Required status checks[^:]*:\s*(.+?)\.\s*\n", next_steps_text, re.S
-        )
+        sentence = re.search(r"Required status checks[^:]*:\s*(.+?)\.\s*\n", next_steps_text, re.S)
         assert sentence, "NEXT_STEPS.md has no 'Required status checks' sentence to parse"
         return set(re.findall(r"`([^`]+)`", sentence.group(1)))
 
-    def test_documented_checks_match_what_ci_reports(
-        self, workflow_text: str, next_steps_text: str
-    ) -> None:
+    def test_documented_checks_match_what_ci_reports(self, workflow_text: str, next_steps_text: str) -> None:
         reported = _reported_check_names(workflow_text)
         documented = self._documented_required_checks(next_steps_text)
         missing = sorted(reported - documented)
@@ -82,19 +78,17 @@ class TestRequiredStatusChecksListIsAccurate:
         quotes a job `name:`, but a future edit that adds quotes for style
         reasons alone must not read as a check-name change. Covers exactly
         the two cases a Copilot review of this file flagged as unverified."""
-        unquoted = '  audit:\n    name: dependency-audit\n    steps:\n'
+        unquoted = "  audit:\n    name: dependency-audit\n    steps:\n"
         double_quoted = '  audit:\n    name: "dependency-audit"\n    steps:\n'
         single_quoted = "  audit:\n    name: 'dependency-audit'\n    steps:\n"
         for body in (unquoted, double_quoted, single_quoted):
             assert _job_check_names("audit", body) == ["dependency-audit"]
 
         double_quoted_matrix = (
-            '  build:\n    strategy:\n      matrix:\n'
-            '        python-version: ["3.9", "3.10"]\n    steps:\n'
+            '  build:\n    strategy:\n      matrix:\n        python-version: ["3.9", "3.10"]\n    steps:\n'
         )
         single_quoted_matrix = (
-            "  build:\n    strategy:\n      matrix:\n"
-            "        python-version: ['3.9', '3.10']\n    steps:\n"
+            "  build:\n    strategy:\n      matrix:\n        python-version: ['3.9', '3.10']\n    steps:\n"
         )
         for body in (double_quoted_matrix, single_quoted_matrix):
             assert _job_check_names("build", body) == ["build (3.9)", "build (3.10)"]
@@ -104,10 +98,7 @@ class TestRequiredStatusChecksListIsAccurate:
         identical matrix axis; a Copilot review of this file correctly
         flagged that only the inline form was recognized, which would have
         read a purely stylistic reformat as the matrix disappearing."""
-        inline = (
-            '  build:\n    strategy:\n      matrix:\n'
-            '        python-version: ["3.9", "3.10"]\n    steps:\n'
-        )
+        inline = '  build:\n    strategy:\n      matrix:\n        python-version: ["3.9", "3.10"]\n    steps:\n'
         block = (
             "  build:\n    strategy:\n      matrix:\n"
             "        python-version:\n"
@@ -131,8 +122,8 @@ class TestRequiredStatusChecksListIsAccurate:
         would be inspecting the wrong thing, not just a false drift signal."""
         body = (
             "  build:\n    runs-on: ubuntu-latest\n    steps:\n"
-            '      - name: Some future step\n'
-            '        with:\n'
+            "      - name: Some future step\n"
+            "        with:\n"
             '          python-version: ["3.9", "3.10"]\n'
         )
         assert _job_check_names("build", body) == ["build"]

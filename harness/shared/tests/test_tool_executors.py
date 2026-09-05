@@ -48,9 +48,7 @@ class TestReadFile:
         result = execute_read_file(mock_workspace, "small.txt", 100, 200)
         assert result.splitlines()[0] == "# small.txt lines 100-3 of 3"
 
-    def test_a_ranged_read_that_overflows_the_cap_is_still_bounded(
-        self, mock_workspace: Path
-    ) -> None:
+    def test_a_ranged_read_that_overflows_the_cap_is_still_bounded(self, mock_workspace: Path) -> None:
         """Flagged in review: the cap applied to `content` alone, then prepended
         the header, so `header + capped_content` could exceed
         DEFAULT_MAX_OUTPUT_BYTES by the header's own length. The header must be
@@ -76,9 +74,7 @@ class TestReadFile:
             (5, 2, "end_line (2) is before start_line (5)"),
         ],
     )
-    def test_bad_bounds_are_refused(
-        self, mock_workspace: Path, start: object, end: object, expected: str
-    ) -> None:
+    def test_bad_bounds_are_refused(self, mock_workspace: Path, start: object, end: object, expected: str) -> None:
         """A negative index would silently return a different slice than asked
         for, with no error for the model to react to."""
         (mock_workspace / "sample.py").write_text("a\nb\n", encoding="utf-8")
@@ -175,9 +171,7 @@ class TestApplyPatch:
         assert "expected exactly 1" in execute_apply_patch(mock_workspace, "sample.py", "", "x")
 
     def test_path_escaping_the_workspace_is_refused(self, mock_workspace: Path) -> None:
-        assert "path escapes workspace" in execute_apply_patch(
-            mock_workspace, "../../etc/passwd", "root", "pwned"
-        )
+        assert "path escapes workspace" in execute_apply_patch(mock_workspace, "../../etc/passwd", "root", "pwned")
 
     def test_a_protected_path_is_refused(self, mock_workspace: Path) -> None:
         """Same write policy as write_file, because it reaches the same paths."""
@@ -273,9 +267,7 @@ class TestApplyPatchConsultsTheReadPolicy:
         assert self.READ_GATE_PHRASE in result
         assert "writing it is" not in result
 
-    def test_the_oracle_answers_identically_for_present_and_absent_text(
-        self, mock_workspace: Path
-    ) -> None:
+    def test_the_oracle_answers_identically_for_present_and_absent_text(self, mock_workspace: Path) -> None:
         """The refusal must not depend on the file's contents, or the denial
         itself becomes the oracle it replaced."""
         (mock_workspace / ".env").write_text("NVIDIA_API_KEY=nvapi-secret\n", encoding="utf-8")
@@ -294,9 +286,7 @@ class TestApplyPatchConsultsTheReadPolicy:
     def test_a_git_directory_file_is_refused_by_the_read_gate(self, mock_workspace: Path) -> None:
         (mock_workspace / ".git").mkdir(exist_ok=True)
         (mock_workspace / ".git" / "config").write_text("[remote]\n", encoding="utf-8")
-        assert "no agent read may target" in execute_apply_patch(
-            mock_workspace, ".git/config", "[remote]", "[x]"
-        )
+        assert "no agent read may target" in execute_apply_patch(mock_workspace, ".git/config", "[remote]", "[x]")
 
     def test_an_ordinary_file_still_patches(self, mock_workspace: Path) -> None:
         """Control: the added gate must not close the tool it guards."""
@@ -371,17 +361,13 @@ class TestOneWriteAuthorizationPath:
         for role, expected_denied in self.EXPECTED_WRITE_DENIAL.items():
             broker = ExecutionBroker()
             handlers = _build_tool_handlers(mock_workspace, broker, role)
-            mcp_denied = handlers["write_file"]({"filepath": "probe.md", "content": "x"}).startswith(
-                "Denied:"
-            )
+            mcp_denied = handlers["write_file"]({"filepath": "probe.md", "content": "x"}).startswith("Denied:")
 
             d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
             d.set_active_role(role)
             loop_denied = d._execute_write_file("probe.md", "x").startswith("Denied:")
 
-            assert mcp_denied == loop_denied, (
-                f"the two transports disagree about whether {role} may write"
-            )
+            assert mcp_denied == loop_denied, f"the two transports disagree about whether {role} may write"
             assert mcp_denied is expected_denied, (
                 f"both transports agree about {role}, but on the wrong answer: "
                 f"denied={mcp_denied}, expected denied={expected_denied}"

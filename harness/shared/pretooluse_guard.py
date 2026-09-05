@@ -1,4 +1,5 @@
 """Backward-compatible shim for pretooluse_guard."""
+
 import sys
 from pathlib import Path
 

@@ -394,9 +394,7 @@ class TestARedirectAlsoRequiresTheWriteAction:
         """Control: the write requirement must attach to the redirect, not to
         `test_execute`. A gate that denied the verifier every test run would
         pass the assertion above and be useless."""
-        result = ExecutionBroker().execute_command(
-            "true", {"agent_id": "test-eval"}, cwd=tmp_path, timeout=10
-        )
+        result = ExecutionBroker().execute_command("true", {"agent_id": "test-eval"}, cwd=tmp_path, timeout=10)
         assert result.status != "BLOCKED", result.reason
 
     def test_the_implementer_may_still_redirect(self, tmp_path: Path) -> None:
@@ -422,9 +420,7 @@ class TestFdRedirectsCannotReachTheControlSurface:
         ],
     )
     @pytest.mark.parametrize("op", ["1>", "2>", ">", ">>"])
-    def test_the_write_is_refused_and_the_file_is_untouched(
-        self, tmp_path: Path, relpath: str, op: str
-    ) -> None:
+    def test_the_write_is_refused_and_the_file_is_untouched(self, tmp_path: Path, relpath: str, op: str) -> None:
         target = tmp_path / relpath
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("ORIGINAL\n", encoding="utf-8")
@@ -480,7 +476,9 @@ class TestBrokeredCommandsDoNotInheritCredentials:
         monkeypatch.setenv("MANGO_ORDINARY_VARIABLE", "kept")
         result = ExecutionBroker().execute_command(
             "printf '%s' \"$MANGO_ORDINARY_VARIABLE\"",
-            {"agent_id": "implementer"}, cwd=tmp_path, timeout=10,
+            {"agent_id": "implementer"},
+            cwd=tmp_path,
+            timeout=10,
         )
         assert result.status == "SUCCESS", result.reason
         assert "kept" in (result.stdout or "")
@@ -505,6 +503,7 @@ class TestTheAvailabilityProbeIsAProbe:
 
     def test_a_backend_whose_shell_fails_is_unavailable(self) -> None:
         """Present and runnable is not enough: `exit 0` must actually succeed."""
+
         class BrokenShell(ProcessBackend):
             shell = "false"
 
@@ -517,6 +516,7 @@ class TestTheAvailabilityProbeIsAProbe:
 
     def test_an_unavailable_backend_blocks_rather_than_falling_back(self, tmp_path: Path) -> None:
         """INV-9 end to end, through the branch that was unreachable."""
+
         class NoShell(ProcessBackend):
             shell = "definitely-not-a-real-shell-b7f3a1"
 

@@ -198,7 +198,8 @@ def matches(selector: Selector) -> int:
             rel = it.path.relative_to(REPO).as_posix()
             return (
                 (rel, "", None) in wanted
-                or (rel, "", it.func_name) in wanted and it.class_name == ""
+                or (rel, "", it.func_name) in wanted
+                and it.class_name == ""
                 or (rel, "", it.class_name) in wanted
                 or (rel, it.class_name, it.func_name) in wanted
             )
@@ -231,9 +232,7 @@ ACTIONS = "harness/shared/tests/test_command_actions.py"
 FUNC = "test_patching_a_credential_file_is_refused"
 
 
-def _selector(
-    paths: tuple[str, ...] = (), node_ids: tuple[str, ...] = (), keyword: str | None = None
-) -> Selector:
+def _selector(paths: tuple[str, ...] = (), node_ids: tuple[str, ...] = (), keyword: str | None = None) -> Selector:
     return Selector("x.md", "AC-1", "", paths, node_ids, keyword)
 
 

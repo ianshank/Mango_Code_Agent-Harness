@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class TestHealer:
     """Detects test failures and triggers automated remediation."""
+
     __test__ = False
 
     def __init__(
@@ -42,9 +43,7 @@ class TestHealer:
         elif isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
             raise ValueError(f"max_retries must be a non-negative integer, got {max_retries!r}")
         elif max_retries > policy_limit:
-            raise ValueError(
-                f"max_retries={max_retries} exceeds governance policy limit of {policy_limit}"
-            )
+            raise ValueError(f"max_retries={max_retries} exceeds governance policy limit of {policy_limit}")
         else:
             self.max_retries = max_retries
 
@@ -55,6 +54,7 @@ class TestHealer:
         that command classification, pretool guard, and output caps apply.
         """
         from harness.shared.governance.broker import ExecutionBroker
+
         broker = self.broker if self.broker is not None else ExecutionBroker()
         try:
             broker_result = broker.execute_command(
@@ -107,9 +107,8 @@ class TestHealer:
                 if LANGGRAPH_AVAILABLE:
                     from harness.shared.langgraph.graph import build_graph, runtime_config
                     from harness.shared.langgraph.policy import GraphPolicy
-                    orchestrator = MangoMASOrchestrator(
-                        workspace_dir=Path(self.workspace), broker=self.broker
-                    )
+
+                    orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace), broker=self.broker)
                     # One policy for both halves. Compiling with a policy and
                     # then invoking with a `configurable` that omits it left
                     # every threshold on its dataclass fallback (R-LGH-4).
@@ -120,9 +119,7 @@ class TestHealer:
                         config=runtime_config(policy, orchestrator=orchestrator),
                     )
                 else:
-                    orchestrator = MangoMASOrchestrator(
-                        workspace_dir=Path(self.workspace), broker=self.broker
-                    )
+                    orchestrator = MangoMASOrchestrator(workspace_dir=Path(self.workspace), broker=self.broker)
                     orchestrator.execute_loop(prompt)
             except Exception as e:  # noqa: BLE001
                 logger.error("Healing loop encountered an error: %s", e)

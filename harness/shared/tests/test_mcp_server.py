@@ -59,12 +59,14 @@ class MockServer:
         def decorator(fn: Callable) -> Callable:
             self._list_tools_handler = fn
             return fn
+
         return decorator
 
     def call_tool(self) -> Callable:
         def decorator(fn: Callable) -> Callable:
             self._call_tool_handler = fn
             return fn
+
         return decorator
 
     def create_initialization_options(self) -> dict[str, Any]:
@@ -189,8 +191,7 @@ def test_every_declared_tool_has_a_handler(tmp_path: Path, broker: ExecutionBrok
     declared = {t["function"]["name"] for t in tools}
     registered = set(handlers)
     assert declared == registered, (
-        f"declared-but-unhandled: {declared - registered}; "
-        f"handled-but-undeclared: {registered - declared}"
+        f"declared-but-unhandled: {declared - registered}; handled-but-undeclared: {registered - declared}"
     )
 
 
@@ -573,8 +574,9 @@ def test_policy_lookup_failure_logs_the_call_as_denied(
     tmp_path: Path, broker: ExecutionBroker, caplog: pytest.LogCaptureFixture
 ) -> None:
     server = create_mcp_server(tmp_path, role="nemotron-reasoner", broker=broker)
-    with caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__), patch(
-        "harness.shared.mcp_server.tool_is_permitted", side_effect=RuntimeError("policy read failure")
+    with (
+        caplog.at_level(logging.DEBUG, logger=mcp_mod.__name__),
+        patch("harness.shared.mcp_server.tool_is_permitted", side_effect=RuntimeError("policy read failure")),
     ):
         asyncio.run(server._call_tool_handler("write_file", None))
 

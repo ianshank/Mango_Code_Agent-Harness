@@ -136,11 +136,7 @@ def tampered_files(baseline: dict[str, str], current: dict[str, str]) -> list[st
     new input to the recipe that no review saw. A file that vanished is
     reported for the same reason.
     """
-    return sorted(
-        path
-        for path in baseline.keys() | current.keys()
-        if baseline.get(path) != current.get(path)
-    )
+    return sorted(path for path in baseline.keys() | current.keys() if baseline.get(path) != current.get(path))
 
 
 __all__ = ["EnforcementDigestError", "enforcement_digests", "tampered_files"]

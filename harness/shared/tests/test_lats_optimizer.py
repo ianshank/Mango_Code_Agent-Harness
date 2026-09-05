@@ -160,4 +160,3 @@ def test_lats_best_leaf_ignores_root() -> None:
     opt = LATSOptimizer()
     root = AblationNode(state_diff={}, visits=1, score=1.0)
     assert opt._best_leaf(root) is None
-

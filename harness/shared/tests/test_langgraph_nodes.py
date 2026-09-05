@@ -271,9 +271,7 @@ class TestQualityGateNode:
     """
 
     def test_passes_on_a_conclusive_green_result(self) -> None:
-        result = quality_gate_node(
-            {**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 3, "failed": 0}]}
-        )
+        result = quality_gate_node({**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 3, "failed": 0}]})
         assert result["gate_status"]["quality_gate"] == "pass"
         assert result["verdict"] == VERIFIED
         assert QUALITY_GATE_REASON not in result["gate_status"]
@@ -315,9 +313,7 @@ class TestQualityGateNode:
             {"suite": "pytest", "passed": 0, "failed": 0, "skipped": 5},
         ],
     )
-    def test_fails_on_inconclusive_malformed_or_incomplete_counts(
-        self, row: dict
-    ) -> None:
+    def test_fails_on_inconclusive_malformed_or_incomplete_counts(self, row: dict) -> None:
         """Malformed counts must not raise or reach VERIFIED (PR #87 follow-up).
 
         Selector for AC-17: ``-k inconclusive_malformed``.
@@ -328,9 +324,7 @@ class TestQualityGateNode:
         assert result["verdict"] != VERIFIED
 
     def test_fails_on_failing_suite(self) -> None:
-        result = quality_gate_node(
-            {**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 1, "failed": 2}]}
-        )
+        result = quality_gate_node({**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 1, "failed": 2}]})
         assert result["gate_status"][QUALITY_GATE_REASON] == REASON_TESTS_FAILED
 
     def test_blocking_error_fails_the_gate_over_a_green_suite(self) -> None:
@@ -501,6 +495,4 @@ class TestNodeContract:
         original_state = {**DEFAULT_STATE, "task": "test task"}
         state_before = dict(original_state)
         node_fn(original_state)  # type: ignore[operator]
-        assert original_state == state_before, (
-            f"{getattr(node_fn, '__name__', str(node_fn))} mutated input state"
-        )
+        assert original_state == state_before, f"{getattr(node_fn, '__name__', str(node_fn))} mutated input state"

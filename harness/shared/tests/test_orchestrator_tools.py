@@ -205,13 +205,13 @@ class TestToolRegistry:
         declared = {t["function"]["name"] for t in tools}
         registered = set(orch.execution_loop.dispatcher.tool_handlers)
         assert declared == registered, (
-            f"declared-but-unhandled: {declared - registered}; "
-            f"handled-but-undeclared: {registered - declared}"
+            f"declared-but-unhandled: {declared - registered}; handled-but-undeclared: {registered - declared}"
         )
 
     def test_handlers_return_strings(self, mock_workspace: Path, mocker) -> None:
         """Every handler returns a str for the tool message content (empty args)."""
         from harness.shared.orchestrator import dispatcher
+
         mocker.patch.object(dispatcher, "knowledge_gap_log", return_value="gap-logged")
         mocker.patch.object(dispatcher, "hypothesis_register", return_value="hypothesis-logged")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)

@@ -66,7 +66,14 @@ _GLOB_TAIL_MIN = 2
 #: so a name class added to the alternation without a representative here is a
 #: failing test rather than a silent gap.
 _CREDENTIAL_REPRESENTATIVES = (
-    ".env", ".env.local", ".netrc", ".npmrc", ".pypirc", "id_rsa", "id_dsa", "key.pem",
+    ".env",
+    ".env.local",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    "id_rsa",
+    "id_dsa",
+    "key.pem",
 )
 
 

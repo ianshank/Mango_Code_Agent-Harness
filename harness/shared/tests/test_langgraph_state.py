@@ -48,9 +48,7 @@ class TestMangoStateChannels:
             metadata = typing.get_args(hint)
             assert len(metadata) >= 2, f"{name} is not Annotated"
             reducer = metadata[1]
-            assert reducer is operator.add, (
-                f"{name} reducer is {reducer!r}, expected operator.add"
-            )
+            assert reducer is operator.add, f"{name} reducer is {reducer!r}, expected operator.add"
 
     def test_lww_channels_have_no_reducer(self) -> None:
         """LWW channels must NOT be Annotated — a reducer on a LWW channel
@@ -63,9 +61,7 @@ class TestMangoStateChannels:
             # If it IS Annotated, the second arg would be the reducer
             if args and len(args) >= 2:
                 # Check it's not operator.add or any callable reducer
-                assert not callable(args[1]) or args[1] is type, (
-                    f"{name} has a reducer {args[1]!r} but should be LWW"
-                )
+                assert not callable(args[1]) or args[1] is type, f"{name} has a reducer {args[1]!r} but should be LWW"
 
     def test_all_channels_are_categorised(self) -> None:
         """Every channel must be in exactly one of ACCUMULATOR or LWW."""
@@ -73,8 +69,7 @@ class TestMangoStateChannels:
         all_channels = set(hints.keys())
         categorised = ACCUMULATOR_CHANNELS | LWW_CHANNELS
         assert all_channels == categorised, (
-            f"Uncategorised channels: {all_channels - categorised}; "
-            f"Over-categorised: {categorised - all_channels}"
+            f"Uncategorised channels: {all_channels - categorised}; Over-categorised: {categorised - all_channels}"
         )
 
     def test_no_overlap_between_accumulator_and_lww(self) -> None:

@@ -64,12 +64,11 @@ PYTHON_EQUIVALENT_NOTES = {
 UNENFORCED_IN_ROOT_CI: dict[str, str] = {}
 
 
-
 def _recipe_for(makefile: str, target: str) -> str:
     """The recipe lines of a Make target, i.e. the tab-indented body."""
     match = re.search(rf"^{re.escape(target)}:.*$", makefile, re.M)
     assert match, f"Makefile declares no {target} target"
-    body = makefile[match.end():]
+    body = makefile[match.end() :]
     lines = []
     for line in body.splitlines()[1:]:
         if line and not line.startswith(("\t", " ")):
@@ -99,9 +98,7 @@ def makefile() -> str:
 class TestEveryDeclaredThresholdIsAccountedFor:
     def test_no_threshold_is_silently_unaccounted_for(self, policy):
         declared = set(policy["coverage"])
-        unaccounted = sorted(
-            declared - PYTHON_ENFORCED - NODE_ENFORCED - set(UNENFORCED_IN_ROOT_CI)
-        )
+        unaccounted = sorted(declared - PYTHON_ENFORCED - NODE_ENFORCED - set(UNENFORCED_IN_ROOT_CI))
         assert not unaccounted, (
             f"coverage keys neither enforced nor declared unenforced: {unaccounted}. "
             "Enforce it, or add it to UNENFORCED_IN_ROOT_CI with a measured reason."
@@ -157,9 +154,7 @@ class TestThresholdSourcing:
         assert match is not None, "vitest.config.ts has no thresholds block"
         thresholds = match.group(1)
         for key in ("lines", "statements", "branches", "functions"):
-            assert f"policy.{key}" in thresholds, (
-                f"vitest threshold '{key}' is not sourced from the policy"
-            )
+            assert f"policy.{key}" in thresholds, f"vitest threshold '{key}' is not sourced from the policy"
         assert "per_file" in thresholds, "vitest perFile is not sourced from the policy"
 
     def test_pyproject_does_not_declare_a_competing_threshold(self):
@@ -212,8 +207,10 @@ class TestCoverageGateFailsClosed:
         from harness.shared import coverage_gate as cg
 
         report = tmp_path / "coverage.json"
-        report.write_text('{"totals": {"covered_lines": 9, "num_statements": 10, '
-                          '"covered_branches": 9, "num_branches": 10}}', encoding="utf-8")
+        report.write_text(
+            '{"totals": {"covered_lines": 9, "num_statements": 10, "covered_branches": 9, "num_branches": 10}}',
+            encoding="utf-8",
+        )
         policy = tmp_path / "policy.json"
         policy.write_text("{not json", encoding="utf-8")
         with pytest.raises(SystemExit) as exc:
@@ -229,15 +226,33 @@ class TestCoverageGateFailsClosed:
         policy = tmp_path / "policy.json"
         policy.write_text(json.dumps({"coverage": {"lines": 90, "branches": 80}}), encoding="utf-8")
         report = tmp_path / "coverage.json"
-        report.write_text(json.dumps({"totals": {
-            "covered_lines": 91, "num_statements": 100,
-            "covered_branches": 40, "num_branches": 100,
-        }}), encoding="utf-8")
+        report.write_text(
+            json.dumps(
+                {
+                    "totals": {
+                        "covered_lines": 91,
+                        "num_statements": 100,
+                        "covered_branches": 40,
+                        "num_branches": 100,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
         assert cg.main(["--coverage-json", str(report), "--policy", str(policy)]) == 1
-        report.write_text(json.dumps({"totals": {
-            "covered_lines": 91, "num_statements": 100,
-            "covered_branches": 81, "num_branches": 100,
-        }}), encoding="utf-8")
+        report.write_text(
+            json.dumps(
+                {
+                    "totals": {
+                        "covered_lines": 91,
+                        "num_statements": 100,
+                        "covered_branches": 81,
+                        "num_branches": 100,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
         assert cg.main(["--coverage-json", str(report), "--policy", str(policy)]) == 0
 
 
@@ -255,8 +270,7 @@ class TestPerFileEnforcement:
         payload = {
             "totals": totals,
             "files": {
-                path: {"summary": {"covered_lines": cov, "num_statements": num}}
-                for path, (cov, num) in files.items()
+                path: {"summary": {"covered_lines": cov, "num_statements": num}} for path, (cov, num) in files.items()
             },
         }
         report = tmp_path / "coverage.json"
@@ -309,10 +323,16 @@ class TestPerFileEnforcement:
 
         report = tmp_path / "coverage.json"
         report.write_text(
-            json.dumps({"totals": {
-                "covered_lines": 95, "num_statements": 100,
-                "covered_branches": 90, "num_branches": 100,
-            }}),
+            json.dumps(
+                {
+                    "totals": {
+                        "covered_lines": 95,
+                        "num_statements": 100,
+                        "covered_branches": 90,
+                        "num_branches": 100,
+                    }
+                }
+            ),
             encoding="utf-8",
         )
         with pytest.raises(SystemExit) as exc:
@@ -323,9 +343,7 @@ class TestPerFileEnforcement:
         from harness.shared import coverage_gate as cg
 
         report = self._report(tmp_path, {"big.py": (960, 1000), "thin.py": (10, 20)})
-        assert cg.main(
-            ["--coverage-json", str(report), "--policy", str(self._policy(tmp_path, per_file=False))]
-        ) == 0
+        assert cg.main(["--coverage-json", str(report), "--policy", str(self._policy(tmp_path, per_file=False))]) == 0
 
     @pytest.mark.parametrize("bad", [0, 1, [], {}, None, "true", "no"])
     def test_a_non_boolean_per_file_fails_closed(self, tmp_path, bad):

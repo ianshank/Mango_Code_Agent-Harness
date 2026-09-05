@@ -448,4 +448,3 @@ def test_validate_specs_unreadable_file_fails(tmp_path: Path, monkeypatch: pytes
 def test_validate_specs_run_script(run_script: RunScript, project_root: Path, mock_repo: Path) -> None:
     res = run_script(project_root, mock_repo, "validate_specs.py")
     assert res.returncode == 0
-

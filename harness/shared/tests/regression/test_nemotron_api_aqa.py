@@ -7,6 +7,7 @@ They exercise the full path through mock transport to verify:
 3. Secret masking never leaks full key
 4. Egress floor blocks undeclared network access (enforced by pytest-socket)
 """
+
 from __future__ import annotations
 
 import json
@@ -28,10 +29,12 @@ class TestBridgeSmoke:
     @patch("urllib.request.urlopen")
     def test_complete_chat_returns_choices(self, mock_urlopen: MagicMock) -> None:
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "choices": [{"message": {"content": "AQA response"}}],
-            "usage": {"total_tokens": 5, "prompt_tokens": 3, "completion_tokens": 2},
-        }).encode()
+        mock_resp.read.return_value = json.dumps(
+            {
+                "choices": [{"message": {"content": "AQA response"}}],
+                "usage": {"total_tokens": 5, "prompt_tokens": 3, "completion_tokens": 2},
+            }
+        ).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
@@ -47,10 +50,12 @@ class TestBridgeSmoke:
     @patch("urllib.request.urlopen")
     def test_complete_chat_includes_latency(self, mock_urlopen: MagicMock) -> None:
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "choices": [{"message": {"content": "ok"}}],
-            "usage": {"total_tokens": 1},
-        }).encode()
+        mock_resp.read.return_value = json.dumps(
+            {
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"total_tokens": 1},
+            }
+        ).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
@@ -58,7 +63,8 @@ class TestBridgeSmoke:
         with patch.dict(os.environ, {"NEMOTRON_DEFAULT_MODEL": "test-model"}):
             result = complete_chat(
                 [{"role": "user", "content": "test"}],
-                api_key="nvapi-test", timeout_sec=1,
+                api_key="nvapi-test",
+                timeout_sec=1,
             )
         assert "latency_ms" in result
         assert result["latency_ms"] >= 0
@@ -121,6 +127,7 @@ class TestEgressFloor:
         import socket
 
         from pytest_socket import SocketBlockedError
+
         with pytest.raises(SocketBlockedError):
             socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -182,10 +189,12 @@ class TestRetryAndEgressPolicyAQA:
         )
 
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "choices": [{"message": {"content": "recovered"}}],
-            "usage": {"total_tokens": 10},
-        }).encode()
+        mock_resp.read.return_value = json.dumps(
+            {
+                "choices": [{"message": {"content": "recovered"}}],
+                "usage": {"total_tokens": 10},
+            }
+        ).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
 
@@ -219,4 +228,3 @@ class TestToolExecutorsAQA:
         result = execute_read_file(tmp_path, "missing_file.py")
         assert "File does not exist" in result
         assert "write_file" in result
-

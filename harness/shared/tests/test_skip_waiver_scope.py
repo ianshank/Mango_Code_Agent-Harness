@@ -38,6 +38,7 @@ WAIVERS = REPO / "harness" / "shared" / "tests" / "skip-waivers.json"
 DECISION_LOG = REPO / "harness" / "node" / ".governance" / "decision-log.md"
 VERIFIER = REPO / "harness" / "shared" / "governance" / "verify_zero_skips.py"
 
+
 #: The decision every row in the shipped registry cites. Read from the registry
 #: rather than restated, so a future registry citing a different decision does
 #: not silently make these probes test nothing.
@@ -120,9 +121,7 @@ class TestWaiversAreNodeScoped:
             ),
         ],
     )
-    def test_a_skip_where_no_condition_exists_is_refused(
-        self, node_id: str, why: str, tmp_path: Path
-    ) -> None:
+    def test_a_skip_where_no_condition_exists_is_refused(self, node_id: str, why: str, tmp_path: Path) -> None:
         """The mutation the narrowing exists to catch.
 
         Both node ids sit inside a module the registry waives, and both carry a
@@ -147,12 +146,10 @@ class TestWaiversAreNodeScoped:
         decision = _sole_decision_id()
         events = tmp_path / "skips.tsv"
         events.write_text(
-            "harness/shared/tests/test_shadow_planner.py::TestContainment::test_x\t"
-            f"test_x\tPOSIX-only ({decision})\n",
+            f"harness/shared/tests/test_shadow_planner.py::TestContainment::test_x\ttest_x\tPOSIX-only ({decision})\n",
             encoding="utf-8",
         )
         result = _verify(events)
         assert result.returncode == 0, (
-            "the narrowing dropped a class that really does carry a POSIX_ONLY skip: "
-            f"{result.stdout}{result.stderr}"
+            f"the narrowing dropped a class that really does carry a POSIX_ONLY skip: {result.stdout}{result.stderr}"
         )

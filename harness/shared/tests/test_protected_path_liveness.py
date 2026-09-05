@@ -239,9 +239,7 @@ class Finding(NamedTuple):
     detail: str
 
 
-def liveness_findings(
-    patterns: list[str], tracked: list[str], dormant: dict[str, str]
-) -> list[Finding]:
+def liveness_findings(patterns: list[str], tracked: list[str], dormant: dict[str, str]) -> list[Finding]:
     """Findings from applying ``patterns`` to ``tracked`` -- whatever tree that is.
 
     This is the assertion the in-repo tests below make. They differ from a
@@ -260,35 +258,23 @@ def liveness_findings(
     for pattern in patterns:
         if pattern in dormant or _matches(pattern, tracked):
             continue
-        findings.append(
-            Finding(DEAD, pattern, "matches no file in the tree it governs, so it protects nothing")
-        )
+        findings.append(Finding(DEAD, pattern, "matches no file in the tree it governs, so it protects nothing"))
     for pattern, reason in dormant.items():
         if pattern not in patterns:
-            findings.append(
-                Finding(STALE, pattern, "is declared dormant but is no longer in the pattern set")
-            )
+            findings.append(Finding(STALE, pattern, "is declared dormant but is no longer in the pattern set"))
             continue
         if not str(reason).strip():
-            findings.append(
-                Finding(UNDECLARED, pattern, "is declared dormant with no reason given")
-            )
+            findings.append(Finding(UNDECLARED, pattern, "is declared dormant with no reason given"))
         matched = _matches(pattern, tracked)
         if matched:
-            findings.append(
-                Finding(AWAKE, pattern, f"is declared dormant but matches {sorted(matched)[:3]}")
-            )
+            findings.append(Finding(AWAKE, pattern, f"is declared dormant but matches {sorted(matched)[:3]}"))
     return findings
 
 
 class TestPatternLiveness:
     def test_every_live_pattern_matches_at_least_one_tracked_file(self, patterns, tracked):
         """A pattern matching nothing protects nothing, however plausible it reads."""
-        dead = sorted(
-            f.pattern
-            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
-            if f.kind == DEAD
-        )
+        dead = sorted(f.pattern for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == DEAD)
         assert not dead, (
             "protected_paths patterns match no tracked file, so they protect nothing: "
             f"{dead}. Either fix the pattern or declare it in DORMANT_PATTERNS "
@@ -297,20 +283,16 @@ class TestPatternLiveness:
 
     def test_dormant_patterns_are_still_dormant(self, patterns, tracked):
         """A dormant pattern that starts matching must be reclassified, not left declared dead."""
-        awake = [
-            f for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == AWAKE
-        ]
+        awake = [f for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == AWAKE]
         assert not awake, (
             "patterns declared dormant now match real files; remove them from "
             f"DORMANT_PATTERNS so the liveness gate covers them: {[(f.pattern, f.detail) for f in awake]}"
         )
 
     def test_every_dormant_pattern_carries_a_declared_reason(self, patterns, tracked):
-        """"Dormant" without a reason says no more than deletion does (R-PPP-5)."""
+        """ "Dormant" without a reason says no more than deletion does (R-PPP-5)."""
         undeclared = sorted(
-            f.pattern
-            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
-            if f.kind == UNDECLARED
+            f.pattern for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == UNDECLARED
         )
         assert not undeclared, f"dormant patterns declared with no reason: {undeclared}"
 
@@ -330,23 +312,15 @@ class TestPatternLiveness:
 
     def test_dormant_declarations_all_reference_real_patterns(self, patterns, tracked):
         """Stale dormancy waivers must not outlive the patterns they excuse."""
-        stale = sorted(
-            f.pattern
-            for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS)
-            if f.kind == STALE
-        )
-        assert not stale, (
-            f"DORMANT_PATTERNS names patterns that are no longer in the policy: {stale}"
-        )
+        stale = sorted(f.pattern for f in liveness_findings(patterns, tracked, DORMANT_PATTERNS) if f.kind == STALE)
+        assert not stale, f"DORMANT_PATTERNS names patterns that are no longer in the policy: {stale}"
 
 
 class TestControlSurfaceIsGated:
     @pytest.mark.parametrize("relpath", sorted(CONTROL_SURFACE))
     def test_control_surface_file_is_protected(self, relpath, patterns, tracked):
         reason = CONTROL_SURFACE[relpath]
-        assert relpath in tracked, (
-            f"{relpath} is not tracked; the census entry is vacuous and must be updated"
-        )
+        assert relpath in tracked, f"{relpath} is not tracked; the census entry is vacuous and must be updated"
         assert is_protected(relpath, patterns), (
             f"{relpath} is not covered by protected_paths, so it can be changed with no "
             f"review gate. It matters because: {reason}"
@@ -377,17 +351,13 @@ class TestDiscoveredSurfacesAreGated:
         governed = [f for f in tracked if "/.governance/" in f or f.startswith(".governance/")]
         assert governed, "no .governance files discovered; this test would be vacuous"
         unprotected = sorted(f for f in governed if not is_protected(f, patterns))
-        assert not unprotected, (
-            f"governance file(s) not covered by protected_paths: {unprotected}"
-        )
+        assert not unprotected, f"governance file(s) not covered by protected_paths: {unprotected}"
 
     def test_every_agent_role_contract_is_protected(self, patterns, tracked):
         contracts = [f for f in tracked if "/agents/" in f or f.startswith(".mango/agents/")]
         assert contracts, "no agent role contracts discovered; this test would be vacuous"
         unprotected = sorted(f for f in contracts if not is_protected(f, patterns))
-        assert not unprotected, (
-            f"agent role contract(s) not covered by protected_paths: {unprotected}"
-        )
+        assert not unprotected, f"agent role contract(s) not covered by protected_paths: {unprotected}"
 
     def test_every_skill_is_protected(self, patterns, tracked):
         """Skills encode the review procedures that gate PRs."""
@@ -400,9 +370,7 @@ class TestDiscoveredSurfacesAreGated:
         charters = [f for f in tracked if f.endswith("docs/PROJECT-CHARTER.md")]
         assert charters, "no project charters discovered; this test would be vacuous"
         unprotected = sorted(f for f in charters if not is_protected(f, patterns))
-        assert not unprotected, (
-            f"project charter(s) not covered by protected_paths: {unprotected}"
-        )
+        assert not unprotected, f"project charter(s) not covered by protected_paths: {unprotected}"
 
     def test_every_governance_validator_is_protected(self, patterns, tracked):
         """The scripts that enforce the gates must not be editable without review."""
@@ -482,6 +450,6 @@ class TestPortableLiveness:
         assert not liveness_findings(["agents/**"], self.FOREIGN_TREE, declared)
 
     def test_a_dormant_declaration_without_a_reason_is_itself_a_finding(self):
-        """"Intended to match nothing" must be a statement someone made (R-PPP-5)."""
+        """ "Intended to match nothing" must be a statement someone made (R-PPP-5)."""
         findings = liveness_findings(["agents/**"], self.FOREIGN_TREE, {"agents/**": "  "})
         assert [f.kind for f in findings] == [UNDECLARED]

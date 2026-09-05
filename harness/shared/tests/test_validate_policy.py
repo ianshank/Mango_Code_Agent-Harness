@@ -1,4 +1,5 @@
 """Tests for validate_policy: governance policy schema and invariant validation."""
+
 from __future__ import annotations
 
 import json
@@ -18,14 +19,25 @@ def _scaffold_valid_policy(root: Path) -> Path:
         "target_contract": ["install", "lint", "test", "cov"],
         "pre_pr_order": ["lint", "cov"],
         "ci_required_targets": [
-            "cov", "lint", "types", "secrets", "specs",
-            "audit", "remotes", "projections", "traceability", "governance",
+            "cov",
+            "lint",
+            "types",
+            "secrets",
+            "specs",
+            "audit",
+            "remotes",
+            "projections",
+            "traceability",
+            "governance",
         ],
         "decision_id_pattern": "^(DEC-[0-9]+)$",
         "agent_defaults": {"deny_unclassified_side_effects": True},
         "protected_paths": [
-            ".governance/**", ".github/workflows/**",
-            "Makefile", "scripts/remotes.py", "scripts/verify_zero_skips.py",
+            ".governance/**",
+            ".github/workflows/**",
+            "Makefile",
+            "scripts/remotes.py",
+            "scripts/verify_zero_skips.py",
         ],
         "charter_version": "2.0",
         "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
@@ -44,11 +56,20 @@ class TestValidatePolicy:
         main(path)  # no SystemExit
         assert "passed" in capsys.readouterr().out
 
-    @pytest.mark.parametrize("missing_key", [
-        "target_contract", "pre_pr_order", "ci_required_targets",
-        "decision_id_pattern", "agent_defaults", "protected_paths",
-        "charter_version", "governance_skill_path", "skill_max_age_days",
-    ])
+    @pytest.mark.parametrize(
+        "missing_key",
+        [
+            "target_contract",
+            "pre_pr_order",
+            "ci_required_targets",
+            "decision_id_pattern",
+            "agent_defaults",
+            "protected_paths",
+            "charter_version",
+            "governance_skill_path",
+            "skill_max_age_days",
+        ],
+    )
     def test_missing_required_key_fails(self, tmp_path: Path, missing_key: str) -> None:
         path = _scaffold_valid_policy(tmp_path)
         data = json.loads(path.read_text())

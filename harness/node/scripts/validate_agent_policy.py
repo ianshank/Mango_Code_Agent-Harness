@@ -8,6 +8,7 @@ module relative to its own location and runs it as ``__main__`` so that
 ``python harness/shared/validate_agent_policy.py`` (same CLI, same CWD-relative path
 resolution, same exit codes, same stdout/stderr).
 """
+
 import runpy
 import sys
 from pathlib import Path

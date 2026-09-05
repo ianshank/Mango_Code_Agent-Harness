@@ -176,8 +176,15 @@ class TestFloatValues:
         # keys before reaching the type check this test is about.
         p.write_text(
             json.dumps(
-                {"nemotron": {"temperature": 1, "top_p": 0.7, "max_tokens": 4096,
-                              "timeout_ms": 30000, "max_retries": 0}}
+                {
+                    "nemotron": {
+                        "temperature": 1,
+                        "top_p": 0.7,
+                        "max_tokens": 4096,
+                        "timeout_ms": 30000,
+                        "max_retries": 0,
+                    }
+                }
             ),
             encoding="utf-8",
         )
@@ -240,8 +247,7 @@ class TestPolicyResolutionLogging:
         assert "orchestrator" in message
         assert str(policy_loader.POLICY_PATH) in message, "the record does not name the file it read"
         assert f"max_iterations={resolved['max_iterations']!r}" in message, (
-            "the record does not name the resolved value, so it cannot answer "
-            "'which thresholds is this run enforcing'"
+            "the record does not name the resolved value, so it cannot answer 'which thresholds is this run enforcing'"
         )
 
     def test_nothing_is_logged_at_the_default_level(self, caplog) -> None:
@@ -250,9 +256,7 @@ class TestPolicyResolutionLogging:
             policy_loader.orchestrator_defaults()
         assert not caplog.records, "policy resolution is noisy at INFO"
 
-    def test_an_absent_policy_says_so_rather_than_naming_a_file_it_did_not_read(
-        self, tmp_path, caplog
-    ) -> None:
+    def test_an_absent_policy_says_so_rather_than_naming_a_file_it_did_not_read(self, tmp_path, caplog) -> None:
         """The adopter path resolves built-in defaults; the log must not imply a read."""
         missing = tmp_path / "no-such-policy.json"
         with caplog.at_level(logging.DEBUG, logger="harness.shared.policy_loader"):
@@ -334,9 +338,7 @@ class TestAPresentPolicyMissingAKeyFailsClosed:
         return path
 
     @pytest.mark.parametrize(("accessor", "block", "key"), ACCESSORS)
-    def test_present_policy_missing_key_raises(
-        self, tmp_path: Path, accessor: str, block: str, key: str
-    ) -> None:
+    def test_present_policy_missing_key_raises(self, tmp_path: Path, accessor: str, block: str, key: str) -> None:
         """The AC's named case: a policy that exists and omits one key."""
         path = self._policy(tmp_path, block, {})
         with pytest.raises(PolicyError) as excinfo:

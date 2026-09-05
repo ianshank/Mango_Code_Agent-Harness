@@ -103,9 +103,7 @@ class ProcessBackend:
             return False
         return completed.returncode == 0
 
-    def _spawn(
-        self, command: str, cwd: Path | None, timeout: int
-    ) -> subprocess.CompletedProcess[str]:
+    def _spawn(self, command: str, cwd: Path | None, timeout: int) -> subprocess.CompletedProcess[str]:
         # Filter credentials from environment for security invariants
         denied = set(credential_env_names())
         env = {k: v for k, v in os.environ.items() if k not in denied}

@@ -142,9 +142,7 @@ class TestRealGateStdoutContract:
         quiet = self._run({LOG_LEVEL_ENV_VAR: "CRITICAL"})
         loud = self._run({LOG_LEVEL_ENV_VAR: "DEBUG"})
         assert quiet.returncode == loud.returncode == 0
-        assert quiet.stdout == loud.stdout, (
-            "verbosity changed a gate's stdout; the verdict channel is not isolated"
-        )
+        assert quiet.stdout == loud.stdout, "verbosity changed a gate's stdout; the verdict channel is not isolated"
         assert "traceability: passed" in quiet.stdout
 
     def test_debug_adds_diagnostics_on_stderr_only(self):
@@ -177,9 +175,7 @@ class TestFallbackLoggerDoesNotLeakToStdout:
                 raise ImportError("simulated missing shared package")
             return real_import(name, *args, **kwargs)
 
-        spec = importlib.util.spec_from_file_location(
-            f"probe_{Path(module_path).stem}", REPO / module_path
-        )
+        spec = importlib.util.spec_from_file_location(f"probe_{Path(module_path).stem}", REPO / module_path)
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
         monkeypatch.setattr(builtins, "__import__", explode)

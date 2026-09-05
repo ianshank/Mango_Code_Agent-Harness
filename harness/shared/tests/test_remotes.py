@@ -246,7 +246,9 @@ def test_main_check_url_blocked(mock_stderr, tmp_path):
 def test_main_check_current_remotes_blocked(mock_stderr, tmp_path):
     f = tmp_path / "allow.txt"
     f.write_text("github.com/other\n")
-    with patch("harness.shared.governance.remotes.current_push_urls", return_value=[("origin", "https://github.com/repo")]):
+    with patch(
+        "harness.shared.governance.remotes.current_push_urls", return_value=[("origin", "https://github.com/repo")]
+    ):
         assert main(["--check-current-remotes", "--allowlist", str(f)]) == 1
         assert "BLOCKED: origin: destination github.com/repo is not on the allowlist" in mock_stderr.getvalue()
 
@@ -254,5 +256,7 @@ def test_main_check_current_remotes_blocked(mock_stderr, tmp_path):
 def test_main_check_current_remotes_allowed(tmp_path):
     f = tmp_path / "allow.txt"
     f.write_text("github.com/repo\n")
-    with patch("harness.shared.governance.remotes.current_push_urls", return_value=[("origin", "https://github.com/repo")]):
+    with patch(
+        "harness.shared.governance.remotes.current_push_urls", return_value=[("origin", "https://github.com/repo")]
+    ):
         assert main(["--check-current-remotes", "--allowlist", str(f)]) == 0

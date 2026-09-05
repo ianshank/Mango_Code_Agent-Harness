@@ -36,13 +36,9 @@ def _expand_make_vars(makefile_text: str, line: str) -> str:
     string match would report a false gap. Only simple assignments are resolved,
     which is all this Makefile uses for the paths under test.
     """
-    definitions = dict(
-        re.findall(r"^([A-Z_][A-Z0-9_]*)\s*[:?]?=\s*(.+?)\s*$", makefile_text, re.M)
-    )
+    definitions = dict(re.findall(r"^([A-Z_][A-Z0-9_]*)\s*[:?]?=\s*(.+?)\s*$", makefile_text, re.M))
     for _ in range(5):  # bounded: variables may reference other variables
-        expanded = re.sub(
-            r"\$\(([A-Z_][A-Z0-9_]*)\)", lambda m: definitions.get(m.group(1), m.group(0)), line
-        )
+        expanded = re.sub(r"\$\(([A-Z_][A-Z0-9_]*)\)", lambda m: definitions.get(m.group(1), m.group(0)), line)
         if expanded == line:
             break
         line = expanded
@@ -111,9 +107,7 @@ def _root_workflow_texts() -> list[str]:
     texts = []
     for path in files:
         text = path.read_text(encoding="utf-8")
-        trigger = re.search(r"^on:\s*$(.*?)^\S", text, re.M | re.S) or re.search(
-            r"^on:.*$", text, re.M
-        )
+        trigger = re.search(r"^on:\s*$(.*?)^\S", text, re.M | re.S) or re.search(r"^on:.*$", text, re.M)
         block = trigger.group(0) if trigger else ""
         if re.search(r"^\s*(pull_request|push):", block, re.M):
             texts.append(text)
@@ -198,9 +192,7 @@ def _matrix_python_versions(pre_steps: str) -> list[str] | None:
     inline = re.search(r"python-version:\s*\[(.*?)\]", pre_steps)
     if inline:
         return [_unquote(v) for v in re.findall(_QUOTED, inline.group(1))]
-    block = re.search(
-        rf"python-version:[ \t]*\n((?:[ \t]*-[ \t]*(?:{_QUOTED})[ \t]*\n)+)", pre_steps
-    )
+    block = re.search(rf"python-version:[ \t]*\n((?:[ \t]*-[ \t]*(?:{_QUOTED})[ \t]*\n)+)", pre_steps)
     if block:
         return [_unquote(v) for v in re.findall(_QUOTED, block.group(1))]
     return None
@@ -282,14 +274,10 @@ def _recipe_body(makefile_text: str, target: str) -> str:
     had been disabled.
     """
     spliced = _splice_continuations(makefile_text)
-    match = re.search(
-        rf"^{re.escape(target)}\s*::?(?!=)[^\n]*\n((?:\t[^\n]*\n)*)", spliced, re.M
-    )
+    match = re.search(rf"^{re.escape(target)}\s*::?(?!=)[^\n]*\n((?:\t[^\n]*\n)*)", spliced, re.M)
     if not match:
         return ""
-    return "\n".join(
-        line for line in match.group(1).splitlines() if not re.match(r"^\t\s*[@-]*\s*#", line)
-    )
+    return "\n".join(line for line in match.group(1).splitlines() if not re.match(r"^\t\s*[@-]*\s*#", line))
 
 
 def _numeric_fallback_shape(source: str) -> re.Match[str] | None:
@@ -370,8 +358,6 @@ def ci_reachable(makefile: str, root_workflows: str) -> set[str]:
     """
     reachable = _reachable_from(makefile, "ci")
     assert "ci" in reachable, "root Makefile has no `ci` target"
-    for target in re.findall(
-        r"\bmake\s+([a-zA-Z0-9_.-]+)", _workflow_run_commands(root_workflows)
-    ):
+    for target in re.findall(r"\bmake\s+([a-zA-Z0-9_.-]+)", _workflow_run_commands(root_workflows)):
         reachable |= _reachable_from(makefile, target)
     return reachable

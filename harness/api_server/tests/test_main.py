@@ -45,6 +45,7 @@ def _passing_outcome(message: str = "PASS: verified"):
     verdict = Verdict("VERIFIED", "make -f Makefile test-python exited 0", "", "make -f Makefile test-python", 0)
     return LoopOutcome(verdict, message, "plan", "code")
 
+
 @pytest.fixture(autouse=True)
 def _api_server_key(monkeypatch):
     """Provide a throwaway API_SERVER_KEY per test without committing a literal secret."""
@@ -126,9 +127,7 @@ def _run_dev_runner(monkeypatch):
     # constant name is B010. This form satisfies both and is undone for us at
     # teardown. raising=False because the attribute is being created, not
     # replaced -- without it pytest rejects the patch on a missing attribute.
-    monkeypatch.setattr(
-        fake_uvicorn, "run", lambda app, **kwargs: calls.update(kwargs), raising=False
-    )
+    monkeypatch.setattr(fake_uvicorn, "run", lambda app, **kwargs: calls.update(kwargs), raising=False)
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
     runpy.run_module("harness.api_server.main", run_name="__main__")
     return calls

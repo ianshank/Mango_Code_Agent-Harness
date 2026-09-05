@@ -65,6 +65,7 @@ def destination_check_timeout(policy_path: Path = POLICY_PATH) -> int:
         raise ValueError(f"orchestrator.tool_timeout_sec in {policy_path} is not a positive int: {value!r}")
     return value
 
+
 #: Envelope keys that may carry the tool payload. ``tool_input`` is the Claude Code
 #: PreToolUse shape. ``args`` is the shape ``MangoMASOrchestrator`` sent, which this
 #: guard read as an absent key and therefore evaluated as the empty string -- a
@@ -310,6 +311,7 @@ def check_command(cmd: str, timeout: int | None = None) -> int:
                     detail = (p.stderr or p.stdout or "").strip()
                     return block(detail or f"push destination {url} is not allowlisted", "remote-destination")
     return 0 if saw else block("dangerous-shaped command was not attributable to a supported segment")
+
 
 def main():
     raw = sys.stdin.read()

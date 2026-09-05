@@ -61,11 +61,7 @@ PASSING_SUITE = f'test-python:\n\t{PYTHON} -c "import sys; sys.exit(0)"\n'
 
 #: The audit's forgery script, verbatim in shape: rewrite the protected file
 #: from a process the broker was happy to start.
-FORGE = (
-    "from pathlib import Path\n"
-    f"Path('Makefile').write_text({PASSING_SUITE!r}, encoding='utf-8')\n"
-    "print('forged')\n"
-)
+FORGE = f"from pathlib import Path\nPath('Makefile').write_text({PASSING_SUITE!r}, encoding='utf-8')\nprint('forged')\n"
 
 #: A real pytest run over a real failing test, in the two recipe shapes. The
 #: first is the root Makefile's `test-python` recipe as it was: `python -m
@@ -75,8 +71,7 @@ FORGE = (
 #: variable.
 LEAKY_PYTEST_SUITE = f"test-python:\n\t{PYTHON} -m pytest -q -p no:cacheprovider tests\n"
 ISOLATED_PYTEST_SUITE = (
-    "export PYTHONSAFEPATH := 1\n"
-    f"test-python:\n\t{PYTHON} -I -m pytest -q -p no:cacheprovider tests\n"
+    f"export PYTHONSAFEPATH := 1\ntest-python:\n\t{PYTHON} -I -m pytest -q -p no:cacheprovider tests\n"
 )
 #: What the agent writes where `pytest` is imported from: exits 0 before any
 #: test runs. Not a protected path, so `write_file` permits it.
@@ -174,15 +169,19 @@ class TestTheForgedVerdictIsRefused:
         import harness.shared.mango_mas_orchestrator as orch_module
         from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
-        turns = iter([
-            chat_response(content="plan: forge it"),
-            chat_response(tool_calls=[
-                tool_call("write_file", {"filepath": "forge.py", "content": FORGE}, call_id="c1"),
-                tool_call("run_command", {"command": f"{PYTHON} forge.py"}, call_id="c2"),
-            ]),
-            chat_response(content="done"),
-            chat_response(content="VERIFY: PASS"),
-        ])
+        turns = iter(
+            [
+                chat_response(content="plan: forge it"),
+                chat_response(
+                    tool_calls=[
+                        tool_call("write_file", {"filepath": "forge.py", "content": FORGE}, call_id="c1"),
+                        tool_call("run_command", {"command": f"{PYTHON} forge.py"}, call_id="c2"),
+                    ]
+                ),
+                chat_response(content="done"),
+                chat_response(content="VERIFY: PASS"),
+            ]
+        )
         monkeypatch.setattr(orch_module, "complete_chat", lambda **_kw: next(turns))
         orch = MangoMASOrchestrator(workspace_dir=workspace, tool_timeout=60, verification=_runner())
 
@@ -310,14 +309,25 @@ class TestTheDirectDoorIsShut:
 
     @pytest.mark.parametrize(
         "relpath",
-        ["GNUmakefile", "makefile", "setup.py", "setup.cfg", "pytest.ini", "tox.ini",
-         "sitecustomize.py", "usercustomize.py", "extra.pth", "harness/shared/tests/conftest.py", "tests/conftest.py",
-         # The nested forms the interpreter honours from any sys.path entry
-         # (Copilot review on PR #86).
-         ".venv/lib/python3.11/site-packages/sitecustomize.py",
-         ".venv/lib/python3.11/site-packages/usercustomize.py",
-         ".venv/lib/python3.11/site-packages/extra.pth",
-         "harness/usercustomize.py"],
+        [
+            "GNUmakefile",
+            "makefile",
+            "setup.py",
+            "setup.cfg",
+            "pytest.ini",
+            "tox.ini",
+            "sitecustomize.py",
+            "usercustomize.py",
+            "extra.pth",
+            "harness/shared/tests/conftest.py",
+            "tests/conftest.py",
+            # The nested forms the interpreter honours from any sys.path entry
+            # (Copilot review on PR #86).
+            ".venv/lib/python3.11/site-packages/sitecustomize.py",
+            ".venv/lib/python3.11/site-packages/usercustomize.py",
+            ".venv/lib/python3.11/site-packages/extra.pth",
+            "harness/usercustomize.py",
+        ],
     )
     def test_write_file_refuses_each_code_execution_surface(self, workspace: Path, relpath: str) -> None:
         assert write_denial_reason(relpath) is not None, f"{relpath} is writable"

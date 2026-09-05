@@ -22,6 +22,7 @@ scalars off a check, so it declares the shape it needs rather than importing the
 broker to get it; that keeps the vocabulary at the bottom of the import graph and
 stops ``api_server.main`` pulling the whole governance package in to name a field.
 """
+
 from __future__ import annotations
 
 import logging
@@ -153,7 +154,10 @@ def _emit(verdict: Verdict) -> Verdict:
     exit_code: object = verdict.exit_code if verdict.exit_code >= 0 else "-"
     logger.info(
         "verdict status=%s termination_reason=%s command=%r exit_code=%s",
-        verdict.status, verdict.termination_reason or "-", verdict.command, exit_code,
+        verdict.status,
+        verdict.termination_reason or "-",
+        verdict.command,
+        exit_code,
     )
     return verdict
 

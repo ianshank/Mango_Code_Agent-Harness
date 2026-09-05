@@ -77,9 +77,7 @@ class TestCredentialMatchingIsCaseInsensitive:
     -- valid names on the case-preserving filesystems this harness already targets
     (macOS default, Windows), and a name an agent could simply create on Linux."""
 
-    @pytest.mark.parametrize(
-        "path", [".ENV", ".Env", "ID_RSA", "Id_Rsa", "SECRETS.PEM", ".NeTrC", ".NPMRC"]
-    )
+    @pytest.mark.parametrize("path", [".ENV", ".Env", "ID_RSA", "Id_Rsa", "SECRETS.PEM", ".NeTrC", ".NPMRC"])
     def test_case_variants_are_denied(self, path: str) -> None:
         assert read_denial_reason(path) is not None, f"{path} was readable"
 

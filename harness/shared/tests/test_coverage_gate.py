@@ -267,9 +267,7 @@ def test_malformed_extra_fails_closed(tmp_path: Path, overrides: dict, caplog):
 
 @pytest.mark.parametrize("extras", [[1], {"opt": 3}, {"opt": {"deselect_env": _ENV}}])
 def test_malformed_extras_container_fails_closed(tmp_path: Path, extras: object):
-    policy = _write_json(
-        tmp_path / "bad.json", {"coverage": {"lines": 90, "branches": 80, "optional_extras": extras}}
-    )
+    policy = _write_json(tmp_path / "bad.json", {"coverage": {"lines": 90, "branches": 80, "optional_extras": extras}})
     with pytest.raises(SystemExit) as exc:
         cg.optional_extra_waivers(policy, environ={})
     assert exc.value.code == 1
@@ -320,9 +318,9 @@ def test_main_waives_through_the_env_and_keeps_aggregate_floors(tmp_path: Path, 
     strict_policy = json.loads(policy.read_text(encoding="utf-8"))
     strict_policy["coverage"]["lines"] = 99
     strict = _write_json(tmp_path / "strict.json", strict_policy)
-    assert cg.main(
-        ["--coverage-json", str(report), "--policy", str(strict), "--repo-root", str(root)]
-    ) == 1, "aggregate floor still applies"
+    assert cg.main(["--coverage-json", str(report), "--policy", str(strict), "--repo-root", str(root)]) == 1, (
+        "aggregate floor still applies"
+    )
 
 
 def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
@@ -496,20 +494,14 @@ class TestMeasuredSetIsBounded:
             assert cg.check_measured_set(report, tmp_path, pyproject) is False
         assert "pkg/beta.py" in caplog.text
 
-    def test_a_test_file_counted_as_source_fails(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_test_file_counted_as_source_fails(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """The inverse drift: test code measured as source inflates every number."""
-        report, pyproject = self._tree(
-            tmp_path, ["pkg/alpha.py", "pkg/beta.py", "pkg/tests/test_alpha.py"]
-        )
+        report, pyproject = self._tree(tmp_path, ["pkg/alpha.py", "pkg/beta.py", "pkg/tests/test_alpha.py"])
         with caplog.at_level(logging.ERROR):
             assert cg.check_measured_set(report, tmp_path, pyproject) is False
         assert "pkg/tests/test_alpha.py" in caplog.text
 
-    def test_no_first_party_sources_fails_closed(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_no_first_party_sources_fails_closed(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Absence of evidence is never a pass -- this module's own contract."""
         (tmp_path / "pyproject.toml").write_text(
             '[tool.coverage.run]\nsource = ["absent"]\n\n[tool.other]\nk = 1\n', encoding="utf-8"
@@ -519,9 +511,7 @@ class TestMeasuredSetIsBounded:
             assert cg.check_measured_set(report, tmp_path, tmp_path / "pyproject.toml") is False
         assert "vacuously" in caplog.text
 
-    def test_a_report_without_a_files_block_fails(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_report_without_a_files_block_fails(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         report, pyproject = self._tree(tmp_path, [])
         _write_json(report, {"totals": {}})
         with caplog.at_level(logging.ERROR):
@@ -539,13 +529,11 @@ class TestMeasuredSetIsBounded:
     @pytest.mark.parametrize(
         ("content", "why"),
         [
-            ('[tool.other]\nk = 1\n\n[tool.z]\nj = 2\n', "no [tool.coverage.run] table"),
-            ('[tool.coverage.run]\nbranch = true\n\n[tool.z]\nk = 1\n', "no source roots"),
+            ("[tool.other]\nk = 1\n\n[tool.z]\nj = 2\n", "no [tool.coverage.run] table"),
+            ("[tool.coverage.run]\nbranch = true\n\n[tool.z]\nk = 1\n", "no source roots"),
         ],
     )
-    def test_an_unusable_pyproject_exits_rather_than_defaulting(
-        self, tmp_path: Path, content: str, why: str
-    ) -> None:
+    def test_an_unusable_pyproject_exits_rather_than_defaulting(self, tmp_path: Path, content: str, why: str) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(content, encoding="utf-8")
         with pytest.raises(SystemExit):

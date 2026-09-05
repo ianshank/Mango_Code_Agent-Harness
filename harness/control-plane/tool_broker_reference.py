@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reference PDP logic. Deploy the production equivalent outside the governed repo."""
+
 import argparse
 import json
 from pathlib import Path

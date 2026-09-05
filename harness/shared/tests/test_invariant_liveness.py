@@ -177,10 +177,7 @@ ACCEPTED_STATUS_PHRASES = ("not yet enforced", "not currently satisfiable")
 
 #: Every invariant this module has an opinion about, in any category.
 _ALL_CLASSIFIED = (
-    set(INVARIANT_MECHANISMS)
-    | set(ENFORCED_ELSEWHERE)
-    | set(PARTIALLY_ENFORCED)
-    | set(DORMANT_INVARIANTS)
+    set(INVARIANT_MECHANISMS) | set(ENFORCED_ELSEWHERE) | set(PARTIALLY_ENFORCED) | set(DORMANT_INVARIANTS)
 )
 
 
@@ -328,12 +325,8 @@ class TestEveryInvariantIsClassified:
         # Anchored, not a substring test: "NOT COVERED:" *contains* "COVERED:", so
         # `"COVERED:" in reason` is satisfied by the negative marker alone and a
         # reason stating only the uncovered half would pass. Found by mutation.
-        assert reason.startswith("COVERED:"), (
-            f"PARTIALLY_ENFORCED[{invariant!r}] must open with the covered half"
-        )
-        assert "NOT COVERED:" in reason, (
-            f"PARTIALLY_ENFORCED[{invariant!r}] must name the uncovered half"
-        )
+        assert reason.startswith("COVERED:"), f"PARTIALLY_ENFORCED[{invariant!r}] must open with the covered half"
+        assert "NOT COVERED:" in reason, f"PARTIALLY_ENFORCED[{invariant!r}] must name the uncovered half"
 
 
 class TestWaiversStayHonest:
