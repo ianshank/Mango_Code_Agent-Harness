@@ -62,9 +62,18 @@ def _ensure_memory_files(workspace_dir: Path | None = None) -> tuple[Path, Path]
 
 
 def _fifo_trim(entries: list, max_entries: int, *, label: str) -> list:
-    """Keep the newest ``max_entries`` items (FIFO drop from the front)."""
+    """Keep the newest ``max_entries`` items (FIFO drop from the front).
+
+    ``max_entries == 0`` means retention is disabled: return an empty list.
+    Python's ``entries[-0:]`` is ``entries[0:]`` (the full list), so the zero
+    case must be handled explicitly rather than falling through to a slice.
+    """
     if max_entries < 0:
         raise ValueError(f"max_entries must be non-negative, got {max_entries}")
+    if max_entries == 0:
+        if entries:
+            logger.info("trimmed %d oldest %s (retained=0; policy disabled)", len(entries), label)
+        return []
     if len(entries) <= max_entries:
         return entries
     trimmed = len(entries) - max_entries

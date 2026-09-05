@@ -345,3 +345,11 @@ def test_format_gaps_for_planner_surfaces_seeded_gap(tmp_path, monkeypatch):
     assert "middle" in rendered
     assert "oldest" not in rendered  # truncated by planner_gap_limit=2
     assert rendered.index("newest") < rendered.index("middle")
+
+
+def test_fifo_trim_zero_disables_retention() -> None:
+    """Policy 0 means empty store, not "disable trimming" (Python -0 slice trap)."""
+    from harness.shared.meta_tools import _fifo_trim
+
+    assert _fifo_trim([{"id": 1}, {"id": 2}], 0, label="knowledge gaps") == []
+    assert _fifo_trim([], 0, label="knowledge gaps") == []
