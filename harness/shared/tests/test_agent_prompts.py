@@ -29,21 +29,8 @@ class TestPromptTemplatesFormatCleanly:
     would break this at call time, not at import time)."""
 
     def test_planner_template_formats(self) -> None:
-        rendered = PLANNER_PROMPT_TEMPLATE.format(task="add a login form", open_gaps="")
+        rendered = PLANNER_PROMPT_TEMPLATE.format(task="add a login form")
         assert "add a login form" in rendered
-
-    def test_planner_template_surfaces_open_gaps(self) -> None:
-        rendered = PLANNER_PROMPT_TEMPLATE.format(
-            task="add a login form",
-            open_gaps="Open knowledge gaps (most recent first):\n- Q: how?; need: docs\n",
-        )
-        assert "Open knowledge gaps" in rendered
-        assert "how?" in rendered
-
-    def test_planner_template_open_gaps_default_empty_is_ok(self) -> None:
-        """Callers may pass an empty string when the store has nothing to surface."""
-        rendered = PLANNER_PROMPT_TEMPLATE.format(task="t", open_gaps="")
-        assert "Open knowledge gaps" not in rendered
 
     def test_reasoner_template_formats(self) -> None:
         rendered = REASONER_PROMPT_TEMPLATE.format(plan="1. write the handler")

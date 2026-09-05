@@ -34,6 +34,7 @@ defect 1 is about -- and it is empty on a detached HEAD too, which is what
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -44,7 +45,13 @@ import pytest
 
 from harness.shared.tests._helpers import REPO
 
-pytestmark = pytest.mark.governance
+pytestmark: pytest.MarkDecorator | list[pytest.MarkDecorator] = pytest.mark.governance
+
+# Every test in this file invokes GNU Make as a subprocess. Skip the whole
+# module on platforms where Make is absent (Windows dev machines). All tests
+# run on Linux CI where Make is always present. (DEC-058)
+if not shutil.which("make"):
+    pytestmark = [pytest.mark.governance, pytest.mark.skip(reason="GNU Make not found on this system (DEC-058)")]
 
 WORKFLOW = REPO / ".github" / "workflows" / "python-package.yml"
 ATTESTATION_STEP = "Verify the protected-path attestation table"

@@ -70,3 +70,6 @@ harness/node/test-*/
 
 # Agent session state (never a build input); .mango/ above already covers the memory store
 .claude/
+
+# IDE tooling — not needed in the container image
+pyrightconfig.json

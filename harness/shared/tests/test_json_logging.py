@@ -118,8 +118,11 @@ class TestJSONFormatter:
     def test_a_non_json_value_is_stringified_not_fatal(self) -> None:
         from pathlib import Path
 
-        record = self._record_with_extra(path=Path("/tmp/x"))
-        assert json.loads(JSONFormatter().format(record))["path"] == "/tmp/x"
+        # Path("/tmp/x") stringifies as "/tmp/x" on POSIX and "\\tmp\\x" on Windows.
+        # The test asserts the formatter serialises the value -- not the value itself.
+        path = Path("/tmp/x")
+        record = self._record_with_extra(path=path)
+        assert json.loads(JSONFormatter().format(record))["path"] == str(path)
 
 
 # -- resolve_log_level -------------------------------------------------------

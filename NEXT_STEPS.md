@@ -217,6 +217,40 @@ PR #97 review threads on `policy_path`; grep for readers outside tests.
 
 **Depends on.** Nothing.
 
+### NS-21 · The hook surface has one live hook and no post-turn recorder
+
+**Why now.** The `post-*-run` shell scripts shipped on a previous branch were
+rolled back (CHANGELOG 2026-09-05: NS-21 rollback clarification). The invocation
+infrastructure (`loop.py` calls `hook_runner.run_hook(f"post-{role}-run", ...)`,
+`PERMITTED_HOOK_NAMES` includes all post-hook names) is **intact** — only the
+scripts are absent. `test_ns21_rollback_regression.py` pins this state.
+
+**Evidence.** `harness/shared/orchestrator/loop.py` L222, L227, L234;
+`.mango/hooks/` (scripts absent); `harness/shared/agent_prompts.PERMITTED_HOOK_NAMES`;
+DEC-003; DEC-050.
+
+**Done when.** The three `post-*-run` scripts and `lib/record_post_run.sh` are
+restored to `.mango/hooks/`, `test_ns21_rollback_regression.py`
+`TestNS21HookScriptsAreRolledBack` assertions are updated to `assert script.exists()`,
+and JSONL-record contract tests (liveness + outcome schema) are added.
+
+**Depends on.** Nothing (invocation infra already in `loop.py`).
+
+### NS-35 · Windows CI parity on Linux runner
+
+**Why now.** The 133 expected skips on the Windows dev machine (DEC-058 make-guards,
+DEC-059 asyncio guards) should be **zero on a Linux CI runner** where `make` is
+available and `AF_UNIX` exists. Until the suite runs on Linux CI these guards are
+unverified.
+
+**Evidence.** `harness/shared/tests/skip-waivers.json` DEC-058 / DEC-059 rows;
+`test_windows_portability_regression.py`; `.github/workflows/`.
+
+**Done when.** A Linux CI matrix entry runs `make test-python` and the skip count
+is ≤ 5 (langgraph deselect only, no make-guard or asyncio-guard skips).
+
+**Depends on.** Nothing.
+
 ### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
 
 **Why now.** `.mango/agents/nemotron-reasoner.md` names Claude Code tools
@@ -314,6 +348,12 @@ gated on R-SR-2).
 
 ## 6. Delivered, and removed from the open list
 
+**Closed 2026-09-05c (Windows portability hardening):**
+
+| Was | Now |
+|---|---|
+| **Windows parity** RCA-1 → RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-057 (AF_UNIX), DEC-058 (make guards), DEC-059 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `test_ns21_rollback_regression.py` and `test_ns17_rollback_regression.py` added. `pyrightconfig.json` added for IDE parity. NS-21 re-opened (scripts absent); NS-35 opened for Linux CI parity. |
+
 **Closed 2026-09-05b (this rewrite's evidence pass):**
 
 | Was | Now |
@@ -321,12 +361,6 @@ gated on R-SR-2).
 | **NS-31** Four in-or-out decisions | **Logged on PR #93.** DEC-053 LangGraph PARK (sunset TBD); DEC-054 JVM relocate; DEC-055 `openspec/` fold; DEC-056 mirroring collapse Option A (supersedes DEC-005 mechanism). Restated in `GOVERNANCE_SKILL.md`. Remediation plan rev 3 ticks AC-5 / R-SR-5. Phase E code still waits on NS-2. |
 | **NS-11** Reconcile regression tier | **Landed on PR #90.** Reproductions in `harness/shared/tests/regression/`; `test_regression_tier_pin.py` fails if moved back; duplicate `make test-regression` dropped from `build-full`. |
 | **NS-33** Adopt `ruff format` | **Landed on PR #91** (+ #95 size-budget hotfix). `[tool.ruff.format]`; `make lint-python` runs `ruff format --check`; reformat commit in `.git-blame-ignore-revs`. Removed from Phase F slack. |
-
-**Closed 2026-09-05c (NS-21):**
-
-| Was | Now |
-|---|---|
-| **NS-21** Hook surface / post-turn observation | **Landed on PR #99.** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
 
 **Closed 2026-09-05 (prior rewrite's evidence pass):**
 

@@ -10,17 +10,49 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### NS-21: post-turn hooks record status and tool-call spend
+### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
 
-Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
-surface. `ExecutionLoop.execute_agent` passes `status`, `run_id`, `agent`,
-`tool_calls_used`, and `tool_calls_limit` into each post-run hook. Three thin
-scripts plus shared `.mango/hooks/lib/record_post_run.sh` append JSONL under
-`.mango/.state/post-run.jsonl` (presence = enablement; not registered in
-`.mango/settings.json`). HookRunner DEBUG-logs when a permitted script is
-missing. Tests cover disk liveness for every permitted post name, success /
-budget_exceeded / timeout record contracts, allowlist parsing of `loop.py`,
-and settings-namespace partition. DEC-003 Claude hooks stay dormant.
+Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
+Eleven root causes triaged against `origin/main`; three governance decisions
+registered (DEC-057, DEC-058, DEC-059).
+
+| RCA | Root cause | Fix |
+|-----|-----------|-----|
+| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-057 waiver |
+| RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
+| RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
+| RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |
+| RCA-5 | `make` absent on Windows in timeout test | `_ensure_make_on_path` autouse fixture |
+| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-058 waiver |
+| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-058 |
+| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-059 |
+| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-058 |
+| RCA-10 | `_sole_decision_id()` breaks with >1 DEC in registry | `_dec_for_posix_only_probes()` asserts DEC-026 |
+| RCA-11 | NTFS same-inode overwrite in tamper test | Case-insensitive assertion on `win32` |
+
+New regression tests: `test_windows_portability_regression.py` (expanded to
+enterprise AQA — anti-pattern guard, parametrized case-sensitivity, make-guard
+audit, asyncio-mark audit, security bypass regression).
+
+Added `pyrightconfig.json` so Pylance resolves `harness.*` imports without a
+`pip install -e .`; mirrors pytest's `pythonpath = ["."]` setting.
+
+### NS-21 rollback clarification (2026-09-05)
+
+The three `post-*-run` shell scripts and `lib/record_post_run.sh` introduced by
+NS-21 are absent from this branch. The *invocation infrastructure* in `loop.py`
+(`hook_runner.run_hook(f"post-{agent_name}-run", ...)`) and `PERMITTED_HOOK_NAMES`
+derivation are **retained intact** — re-enabling NS-21 only requires adding the
+scripts back. `test_ns21_rollback_regression.py` pins this state. NS-21 is
+re-opened in `NEXT_STEPS.md` as undelivered.
+
+### NS-17 rollback clarification (2026-09-05)
+
+`resolve_memory_dir`, `_fifo_trim`, `format_gaps_for_planner`, the `{open_gaps}`
+slot in `PLANNER_PROMPT_TEMPLATE`, `policy_path` in `ToolDispatcher.__init__`, and
+the `agent_memory` block in `governance-policy.json` are absent from this branch
+(simplified back to fixed `MEMORY_DIR` from `__file__`). `test_ns17_rollback_regression.py`
+pins this state and documents what must be added when NS-17 is re-implemented.
 
 ### Docs: roadmap peer rewrite after #89-#95 / #93 (2026-09-05b)
 
@@ -45,20 +77,6 @@ logging on the new module names path *counts*, never command text. Same commit
 regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
 that NS-33 reformatted without refreshing the bundle (the related digest gate
 failure on `main`).
-
-### NS-17: agent memory retention and workspace scoping
-
-Bound `knowledge_gap_log` / `hypothesis_register` stores via policy
-`agent_memory` (FIFO trim), scope memory under `<workspace>/.mango/memory`
-when a workspace is supplied (legacy install-root path when not), and surface
-open gaps into the planner prompt (`{open_gaps}`).
-
-Plumb optional `policy_path` into agent-memory call sites
-(`knowledge_gap_log`, `hypothesis_register`, `format_gaps_for_planner`,
-`ExecutionLoop`, `ToolDispatcher`) so retention and planner-gap limits follow
-the same governance file as other budgets. Zero-bound policies now report that
-retention is disabled instead of claiming a successful log. Mutation tests pin
-`policy_path` honouring and zero-bound messaging.
 
 ### NS-11: reconcile the regression tier with CONTRACT.md
 

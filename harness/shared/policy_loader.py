@@ -74,14 +74,6 @@ class CoverageThresholds(TypedDict):
     branches: int
 
 
-class AgentMemoryLimits(TypedDict):
-    """The `agent_memory` block. See :class:`OrchestratorLimits` for the rationale."""
-
-    max_gaps: int
-    max_hypotheses: int
-    planner_gap_limit: int
-
-
 def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
     """Record what a policy block resolved to, and which file it came from.
 
@@ -390,15 +382,3 @@ def lats_defaults(policy_path: Path | None = None) -> dict:
         "max_budget": section.int("max_budget", 10),
         "exploration_weight": section.float("exploration_weight", 1.414),
     }
-
-
-def agent_memory_defaults(policy_path: Path | None = None) -> AgentMemoryLimits:
-    """Retention / planner-surface limits for agent memory; policy `agent_memory` block."""
-    section = _section("agent_memory", policy_path)
-    resolved: AgentMemoryLimits = {
-        "max_gaps": section.int("max_gaps", 100),
-        "max_hypotheses": section.int("max_hypotheses", 100),
-        "planner_gap_limit": section.int("planner_gap_limit", 10),
-    }
-    _log_resolution("agent_memory", resolved, policy_path)
-    return resolved

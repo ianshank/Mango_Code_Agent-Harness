@@ -1,6 +1,7 @@
 import json
 import os
 import secrets
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from harness.api_server.main import app
+
+# Windows portability (DEC-059): TestClient uses anyio's BlockingPortal, whose
+# self-pipe falls back to a loopback TCP socketpair on Windows Python builds
+# without AF_UNIX. enable_socket is applied only on win32 so pytest-socket does
+# not block the event loop's self-pipe. On Linux CI the TCP floor is unaffected.
+if sys.platform == "win32":
+    pytestmark = pytest.mark.enable_socket
 
 
 @pytest.fixture
@@ -293,6 +301,7 @@ def test_readyz_is_503_without_the_model_credential(client: TestClient, _api_ser
     """`/api/orchestrate` cannot start a run without the Nemotron key, so the
     probe must say so rather than report ready-then-500 (Copilot review)."""
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.setattr("harness.api_server.main.resolve_environment", dict)
     monkeypatch.setattr("harness.shared.nemotron_bridge.resolve_environment", dict)
     response = client.get("/readyz")
     assert response.status_code == 503

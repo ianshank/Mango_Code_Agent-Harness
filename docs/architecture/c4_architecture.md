@@ -13,11 +13,23 @@
 > `1564 tests` label is dropped (the README carries the current count), and the
 > version below is this file's, not the snapshot's 2.1.9.
 
-**Version:** 2.4.0 (2026 Standards - God File Decomposition)  
-**Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)  
+**Version:** 2.4.0 (C4 model updated 2026-09-05 — Windows Portability Hardening + NS-21/NS-17 Rollback)
+**Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`) (INV-1..INV-16)
 
----
+> **2.5.0 delta from 2.4.0:**
+>
+> - RCA-1→RCA-11 Windows portability fixes (fnmatchcase, AF_UNIX hasattr, asyncio self-pipe, make-guards).
+>   DEC-057, DEC-058, DEC-059 registered. Test suite: 3 417 passed, 133 expected skips (Windows dev),
+>   0 on Linux CI.
+> - NS-21 post-run hook scripts rolled back; invocation infrastructure in `loop.py` retained.
+>   `test_ns21_rollback_regression.py` pins this state.
+> - NS-17 workspace-scoped memory rolled back; fixed-path `MEMORY_DIR` from `__file__`.
+>   `test_ns17_rollback_regression.py` pins this state.
+> - `pyrightconfig.json` added (root); sets `extraPaths=["."]` for Pylance parity with pytest.
+> - `test_windows_portability_regression.py` expanded to enterprise AQA (anti-pattern guard,
+>   parametrized case-sensitivity, make-guard audit, security bypass regression).
+>
 
 ## 1. Level 1: System Context Diagram
 

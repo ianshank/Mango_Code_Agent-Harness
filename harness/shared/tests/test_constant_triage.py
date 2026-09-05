@@ -285,7 +285,7 @@ def module_constants(root: Path) -> list[tuple[str, str]]:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except (SyntaxError, OSError):  # pragma: no cover - a broken source fails lint first
             continue
-        module = str(path.relative_to(REPO).with_suffix("")).replace("/", ".").replace("-", "_")
+        module = str(path.relative_to(REPO).with_suffix("")).replace("\\", ".").replace("/", ".").replace("-", "_")
         for node in tree.body:
             names: list[str]
             # `AnnAssign.value` is optional (`X: int` declares without assigning),

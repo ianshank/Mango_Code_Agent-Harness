@@ -51,26 +51,23 @@ def _decision_ids() -> set[str]:
     return {row["decision_id"] for row in _registry()["waivers"]}
 
 
-def _sole_decision_id() -> str:
-    """The one decision id the shipped registry cites, asserted rather than assumed.
+def _dec_for_posix_only_probes() -> str:
+    """The decision id the POSIX_ONLY waivers cite, for the probes that test them.
 
-    The probes below build a skip reason carrying a valid decision id, because
-    the gate requires one before it will even consider a waiver. Picking
-    `sorted(...)[0]` read whichever id happened to sort first, so a second
-    decision entering the registry would silently re-point every probe at an id
-    it was not written for -- and they would keep passing. Raised by review.
-
-    If the registry legitimately grows a second decision, this fails loudly and
-    the probes should be parametrized over the ids rather than this guard
-    relaxed: each probe is about a specific waiver row, not about ids in general.
+    These probes are about the DEC-026 POSIX waivers specifically:
+    ``test_shadow_planner.py::TestContainment`` carries ``POSIX_ONLY`` (DEC-026),
+    while ``TestHelpers`` and ``test_langgraph_nodes.py::TestAnything`` do not.
+    Using the literal id makes the probe's scope explicit rather than coupling it
+    to a ``_sole_decision_id()`` guard that breaks when new DECs are added.
+    The registry is free to grow new decisions; these probes are about DEC-026 rows.
     """
     decisions = _decision_ids()
-    assert len(decisions) == 1, (
-        f"the shipped registry now cites {sorted(decisions)}; these probes were written for a "
-        "single decision id and would silently test the wrong one. Parametrize them over the "
-        "ids, naming the row each case belongs to."
+    assert "DEC-026" in decisions, (
+        f"DEC-026 is no longer in the registry; these probes pin DEC-026 rows. "
+        f"Update them if the POSIX-only waivers moved to a different DEC. "
+        f"Current ids: {sorted(decisions)}"
     )
-    return decisions.pop()
+    return "DEC-026"
 
 
 def _verify(events: Path) -> subprocess.CompletedProcess:
@@ -128,7 +125,7 @@ class TestWaiversAreNodeScoped:
         reason bearing the registry's own decision id -- which is all the
         pre-narrowing rows required.
         """
-        decision = _sole_decision_id()
+        decision = _dec_for_posix_only_probes()
         events = tmp_path / "skips.tsv"
         events.write_text(
             f"{node_id}\ttest_a_new_skip\tconvenient reason ({decision})\n",
@@ -143,7 +140,7 @@ class TestWaiversAreNodeScoped:
 
     def test_a_skip_where_the_condition_lives_is_still_approved(self, tmp_path: Path) -> None:
         """The converse, so the narrowing cannot have simply broken the gate."""
-        decision = _sole_decision_id()
+        decision = _dec_for_posix_only_probes()
         events = tmp_path / "skips.tsv"
         events.write_text(
             f"harness/shared/tests/test_shadow_planner.py::TestContainment::test_x\ttest_x\tPOSIX-only ({decision})\n",

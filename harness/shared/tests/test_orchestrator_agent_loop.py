@@ -75,23 +75,11 @@ class TestExecuteAgent:
     ) -> None:
         calls: list[str] = []
 
-        def _fake_gap(
-            question: str,
-            what_needed: str,
-            proposed_approach: str,
-            workspace_dir=None,
-            policy_path=None,
-        ) -> str:
+        def _fake_gap(question: str, what_needed: str, proposed_approach: str) -> str:
             calls.append("gap")
             return "gap-logged"
 
-        def _fake_hyp(
-            claim: str,
-            reasoning: str,
-            confidence: float,
-            workspace_dir=None,
-            policy_path=None,
-        ) -> str:
+        def _fake_hyp(claim: str, reasoning: str, confidence: float) -> str:
             calls.append("hyp")
             return "hyp-logged"
 
@@ -445,71 +433,3 @@ class TestAFailedModelCallIsStillAnEvent:
         assert getattr(event, "error_type", None) == "RuntimeError"
         assert getattr(event, "run_id", None) == orch.run_id
         assert event.levelno == logging.WARNING
-
-
-class TestExecutionLoopPlannerGapPolicyPath:
-    """Constructor policy_path must drive planner open_gaps injection (NS-17 Copilot)."""
-
-    def test_execute_loop_uses_constructor_policy_path_for_planner_injection(
-        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import json
-        from unittest.mock import MagicMock
-
-        from harness.shared.meta_tools import knowledge_gap_log
-        from harness.shared.orchestrator.loop import ExecutionLoop
-        from harness.shared.tests._helpers import REPO
-
-        shipped = json.loads((REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8"))
-        shipped["agent_memory"] = {
-            "max_gaps": 100,
-            "max_hypotheses": 100,
-            "planner_gap_limit": 1,
-        }
-        policy_path = mock_workspace / "custom-governance-policy.json"
-        policy_path.write_text(json.dumps(shipped), encoding="utf-8")
-
-        seed_policy = mock_workspace / "seed-policy.json"
-        seed = json.loads(policy_path.read_text(encoding="utf-8"))
-        seed["agent_memory"]["planner_gap_limit"] = 10
-        seed_policy.write_text(json.dumps(seed), encoding="utf-8")
-        for q in ("oldest-gap", "middle-gap", "newest-gap"):
-            knowledge_gap_log(q, f"need-{q}", f"approach-{q}", workspace_dir=mock_workspace, policy_path=seed_policy)
-
-        captured: list[Any] = []
-
-        def _fake_complete_chat(**kwargs):
-            captured.append(kwargs)
-            # Planner / reasoner / verifier each get a plain text turn.
-            return _resp("ok")
-
-        loop = ExecutionLoop(
-            workspace_dir=mock_workspace,
-            agents_dir=mock_workspace / ".mango" / "agents",
-            dispatcher=MagicMock(),
-            hook_runner=MagicMock(),
-            verification=MagicMock(target=None),
-            verification_cwd=mock_workspace,
-            max_iterations=3,
-            api_timeout=5,
-            max_tool_calls_per_task=10,
-            complete_chat_fn=_fake_complete_chat,
-            policy_path=policy_path,
-        )
-        # Avoid shadow planner side effects.
-        monkeypatch.setattr(
-            "harness.shared.orchestrator.loop.shadow_planner_enabled",
-            lambda: False,
-        )
-
-        loop.execute_loop("implement feature")
-
-        assert captured, "expected at least the planner complete_chat call"
-        planner_messages = captured[0]["messages"]
-        user_msgs = [m for m in planner_messages if m.get("role") == "user"]
-        assert user_msgs, "planner user prompt missing"
-        prompt = user_msgs[0]["content"]
-        assert "newest-gap" in prompt
-        assert "middle-gap" not in prompt
-        assert "oldest-gap" not in prompt
-        assert prompt.count("- Q:") == 1

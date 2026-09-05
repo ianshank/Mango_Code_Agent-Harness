@@ -203,9 +203,13 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **3,963 automated tests** (123 Vitest + 3,840 Pytest across 7 tiers), measured 2026-09-05 by `pnpm exec vitest run` and `pytest --collect-only` on the fail-open-hardening head; `--collect-only` reports `3833/3840 tests collected (7 deselected)`, and the collected figure is the one paired with Vitest's, which likewise counts its 11 skipped among 123. Re-measured because updating a child count without its parents is how the previous disagreement started. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
+- **Total Automated Tests:** **~3,970 automated tests** (123 Vitest + ~3,847 Pytest across 7 tiers, measured 2026-09-05).
+  New since last count: `test_ns21_rollback_regression.py` (10 tests), `test_ns17_rollback_regression.py` (9 tests),
+  and `test_windows_portability_regression.py` expanded from 7 to ~35 tests (enterprise AQA).
+  `pytest --collect-only` is the authoritative source — a carried-forward figure is a claim, not a measurement (DEC-024).
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **99.20% Lines | 97.91% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 82 files with all 79 gated files meeting the per-file floor and **none waived**. Measured 2026-09-04 on Python 3.11 with the `langgraph` extra installed — the configuration `build-full` runs, re-measured after the fail-closed-verdict change rather than carried forward. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
+- **Windows Platform Parity:** **3 417 passed, 133 expected skips, 0 failures** (DEC-058 make-guards, DEC-059 asyncio guards on Windows dev). Expected skip count is **0 on Linux CI** where `make` and `AF_UNIX` are available.
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
@@ -267,9 +271,11 @@ cd ../..
 make ci              # Full pipeline: lint → lint-node → lock-check → coverage → zero-skips-python → test-node → zero-skips → specs → remotes → validate → dedup → digest-regen
 make lint            # ruff + mypy + check_py_compat (Python 3.9 compat gate)
 make test            # Full test suite (Pytest + Vitest + Zero-Skips)
+make test-regression # Run regression/AQA tier only (reproductions + rollback pins + portability)
 make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)
 make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
 make validate        # Governance invariants (adoption, policy, remotes, traceability)
+make verify-skip-waivers  # Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-058/059)
 make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
 make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
@@ -281,6 +287,28 @@ make digest-regen    # Regenerate protected-file digests after policy changes
 # 4. Run root adversarial harness self-tests
 python harness/shared/tests/test_harness.py
 ```
+
+### 4.4 Windows IDE Setup (Pylance / Antigravity IDE)
+
+A `pyrightconfig.json` is committed at the repo root. It sets `extraPaths = ["."]` so
+that Pylance resolves `harness.*` imports without a `pip install -e .`. This mirrors the
+`pythonpath = ["."]` entry in `pyproject.toml`'s `[tool.pytest.ini_options]`.
+
+```json
+// pyrightconfig.json (root)
+{
+  "extraPaths": ["."],
+  "venvPath": ".",
+  "venv": ".venv"
+}
+```
+
+Expected Windows skip counts (DEC-058/059 waivers, all approved):
+
+| Runner | Expected skips | Reason |
+| ------ | -------------- | ------ |
+| Linux CI | 0 (or ≤5 langgraph-deselect) | `make` available; `AF_UNIX` available |
+| Windows dev | 133 | `make` absent; asyncio TCP fallback |
 
 ---
 
