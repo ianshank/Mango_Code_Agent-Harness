@@ -12,6 +12,22 @@ from harness.shared.meta_tools import (
     load_open_gaps,
     resolve_memory_dir,
 )
+from harness.shared.tests._helpers import REPO
+
+
+
+SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
+
+
+def _agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
+    """Copy the shipped governance policy and mutate only ``agent_memory`` keys."""
+    policy = json.loads(SHARED_POLICY.read_text(encoding="utf-8"))
+    block = dict(policy.get("agent_memory") or {})
+    block.update(agent_memory_overrides)
+    policy["agent_memory"] = block
+    path = tmp_path / "governance-policy.json"
+    path.write_text(json.dumps(policy), encoding="utf-8")
+    return path
 
 
 def test_knowledge_gap_log(tmp_path, monkeypatch):
@@ -353,3 +369,69 @@ def test_fifo_trim_zero_disables_retention() -> None:
 
     assert _fifo_trim([{"id": 1}, {"id": 2}], 0, label="knowledge gaps") == []
     assert _fifo_trim([], 0, label="knowledge gaps") == []
+
+
+def test_planner_gap_limit_respects_policy_path(tmp_path):
+    """format_gaps_for_planner must honour planner_gap_limit from policy_path."""
+    (tmp_path / "p1").mkdir()
+    (tmp_path / "p2").mkdir()
+    (tmp_path / "seed").mkdir()
+    policy_one = _agent_memory_policy(tmp_path / "p1", planner_gap_limit=1, max_gaps=100)
+    policy_two = _agent_memory_policy(tmp_path / "p2", planner_gap_limit=2, max_gaps=100)
+    seed_policy = _agent_memory_policy(tmp_path / "seed", max_gaps=100, planner_gap_limit=10)
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    for q in ("gap-a", "gap-b", "gap-c"):
+        knowledge_gap_log(q, f"need-{q}", f"approach-{q}", workspace_dir=ws, policy_path=seed_policy)
+
+    rendered_one = format_gaps_for_planner(workspace_dir=ws, policy_path=policy_one)
+    assert rendered_one.count("- Q:") == 1
+    assert "gap-c" in rendered_one  # most recent first
+    assert "gap-a" not in rendered_one
+
+    rendered_two = format_gaps_for_planner(workspace_dir=ws, policy_path=policy_two)
+    assert rendered_two.count("- Q:") == 2
+    assert "gap-c" in rendered_two
+    assert "gap-b" in rendered_two
+    assert "gap-a" not in rendered_two
+
+
+def test_knowledge_gap_log_respects_policy_path_max_gaps(tmp_path):
+    """Retention bound must come from the caller's policy_path, not the default."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=2, max_hypotheses=100, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    for i in range(3):
+        knowledge_gap_log(f"q{i}", f"need{i}", f"approach{i}", workspace_dir=ws, policy_path=policy)
+
+    gaps = load_open_gaps(ws)
+    assert len(gaps) == 2
+    assert [g["question"] for g in gaps] == ["q2", "q1"]
+
+
+def test_knowledge_gap_log_max_gaps_zero_messaging(tmp_path):
+    """max_gaps=0 must not claim successful retention or a kept total."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=0, max_hypotheses=100, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = knowledge_gap_log("q", "need", "approach", workspace_dir=ws, policy_path=policy)
+    lowered = result.lower()
+    assert "logged successfully" not in lowered
+    assert "total gaps logged" not in lowered
+    assert "not retained" in lowered or "retention disabled" in lowered
+    assert load_open_gaps(ws) == []
+
+
+def test_hypothesis_register_max_hypotheses_zero_messaging(tmp_path):
+    """max_hypotheses=0 must not claim successful retention."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=100, max_hypotheses=0, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = hypothesis_register("claim", "reason", 0.5, workspace_dir=ws, policy_path=policy)
+    lowered = result.lower()
+    assert "registered successfully" not in lowered
+    assert "total hypotheses" not in lowered
+    assert "not retained" in lowered or "retention disabled" in lowered
+    hyp_file = ws / ".mango" / "memory" / "hypotheses.json"
+    assert json.loads(hyp_file.read_text(encoding="utf-8")) == []

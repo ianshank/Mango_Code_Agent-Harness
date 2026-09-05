@@ -46,10 +46,12 @@ class ToolDispatcher:
         broker: ExecutionBroker,
         tool_timeout: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        policy_path: Path | None = None,
     ) -> None:
         self.workspace_dir = workspace_dir
         self.broker = broker
         self.tool_timeout = tool_timeout
+        self.policy_path = policy_path
         self.active_role: str = "nemotron-reasoner"
         # The schemas the model is shown are the schemas its arguments are
         # checked against (2026 standards audit H7): one declaration, in
@@ -72,12 +74,14 @@ class ToolDispatcher:
                 args.get("what_needed") or "",
                 args.get("proposed_approach") or "",
                 workspace_dir=self.workspace_dir,
+                policy_path=self.policy_path,
             ),
             "hypothesis_register": lambda args: hypothesis_register(
                 args.get("claim") or "",
                 args.get("reasoning") or "",
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
                 workspace_dir=self.workspace_dir,
+                policy_path=self.policy_path,
             ),
         }
 

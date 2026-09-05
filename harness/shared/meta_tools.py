@@ -181,6 +181,7 @@ def knowledge_gap_log(
     what_needed: str,
     proposed_approach: str,
     workspace_dir: Path | None = None,
+    policy_path: Path | None = None,
 ) -> str:
     """
     Record a knowledge gap: something the agent could not answer or do, and what would be needed to fill the gap.
@@ -189,6 +190,8 @@ def knowledge_gap_log(
     When ``workspace_dir`` is set the entry is scoped under that workspace's
     ``.mango/memory/``; otherwise the legacy install-root store is used.
     After append the store is FIFO-trimmed to ``agent_memory.max_gaps``.
+    ``policy_path`` selects which governance policy supplies that bound
+    (``None`` keeps the loader default).
     """
     from harness.shared.policy_loader import agent_memory_defaults
 
@@ -201,7 +204,7 @@ def knowledge_gap_log(
         "proposed_approach": proposed_approach,
     }
 
-    max_gaps = agent_memory_defaults()["max_gaps"]
+    max_gaps = agent_memory_defaults(policy_path)["max_gaps"]
     with _file_lock(gaps_file):
         gaps = _read_json_safe(gaps_file)
         gaps.append(entry)
@@ -212,6 +215,11 @@ def knowledge_gap_log(
         temp_file.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
         temp_file.replace(gaps_file)
 
+    if max_gaps == 0:
+        return (
+            f"Knowledge gap entry not retained: retention disabled "
+            f"(agent_memory.max_gaps=0). ID: {entry['id']}."
+        )
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
 
@@ -220,6 +228,7 @@ def hypothesis_register(
     reasoning: str,
     confidence: float,
     workspace_dir: Path | None = None,
+    policy_path: Path | None = None,
 ) -> str:
     """
     Record a provisional belief: 'I think X is true because Y.'
@@ -228,6 +237,8 @@ def hypothesis_register(
     When ``workspace_dir`` is set the entry is scoped under that workspace's
     ``.mango/memory/``; otherwise the legacy install-root store is used.
     After append the store is FIFO-trimmed to ``agent_memory.max_hypotheses``.
+    ``policy_path`` selects which governance policy supplies that bound
+    (``None`` keeps the loader default).
     """
     from harness.shared.policy_loader import agent_memory_defaults
 
@@ -241,7 +252,7 @@ def hypothesis_register(
         "status": "provisional",
     }
 
-    max_hypotheses = agent_memory_defaults()["max_hypotheses"]
+    max_hypotheses = agent_memory_defaults(policy_path)["max_hypotheses"]
     with _file_lock(hypotheses_file):
         hypotheses = _read_json_safe(hypotheses_file)
         hypotheses.append(entry)
@@ -251,6 +262,11 @@ def hypothesis_register(
         temp_file.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
         temp_file.replace(hypotheses_file)
 
+    if max_hypotheses == 0:
+        return (
+            f"Hypothesis entry not retained: retention disabled "
+            f"(agent_memory.max_hypotheses=0). ID: {entry['id']}."
+        )
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
 
@@ -269,18 +285,21 @@ def format_gaps_for_planner(
     *,
     workspace_dir: Path | None = None,
     limit: int | None = None,
+    policy_path: Path | None = None,
 ) -> str:
     """Format open gaps for injection into the planner prompt.
 
     Truncates to ``planner_gap_limit`` from policy (or ``limit`` when given).
-    Returns ``""`` when there is nothing to surface so the prompt stays clean.
+    ``policy_path`` selects which governance policy supplies that limit
+    (``None`` keeps the loader default). Returns ``""`` when there is nothing
+    to surface so the prompt stays clean.
     """
     from harness.shared.policy_loader import agent_memory_defaults
 
     if gaps is None:
         gaps = load_open_gaps(workspace_dir)
     if limit is None:
-        limit = agent_memory_defaults()["planner_gap_limit"]
+        limit = agent_memory_defaults(policy_path)["planner_gap_limit"]
     selected = list(gaps)[:limit]
     if not selected:
         return ""
