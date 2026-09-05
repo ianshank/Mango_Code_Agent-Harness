@@ -10,6 +10,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### NS-21: post-turn hooks record status and tool-call spend
+
+Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
+surface. `ExecutionLoop.execute_agent` passes `status`, `run_id`, `agent`,
+`tool_calls_used`, and `tool_calls_limit` into each post-run hook. Three thin
+scripts plus shared `.mango/hooks/lib/record_post_run.sh` append JSONL under
+`.mango/.state/post-run.jsonl` (presence = enablement; not registered in
+`.mango/settings.json`). HookRunner DEBUG-logs when a permitted script is
+missing. Tests cover disk liveness for every permitted post name, success /
+budget_exceeded / timeout record contracts, allowlist parsing of `loop.py`,
+and settings-namespace partition. DEC-003 Claude hooks stay dormant.
+
 ### Docs: roadmap peer rewrite after #89-#95 / #93 (2026-09-05b)
 
 Second evidence pass against `main` @ `58490c1`. `NEXT_STEPS.md` moves NS-11,

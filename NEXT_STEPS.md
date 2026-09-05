@@ -217,21 +217,6 @@ PR #97 review threads on `policy_path`; grep for readers outside tests.
 
 **Depends on.** Nothing.
 
-### NS-21 · The hook surface has one live hook and no loop
-
-**Why now.** Five of six `.mango/hooks/` scripts are dormant by DEC-003; three
-of four `PERMITTED_HOOK_NAMES` have no script on disk. Phase B already added
-`run_id` + structured events (R-SR-13) - the observation point this item wanted.
-
-**Evidence.** `harness/shared/orchestrator/hook_runner.py`; `.mango/hooks/`;
-DEC-003; DEC-050.
-
-**Done when.** Either a post-turn hook records verdict and tool-call count with
-a failing test when it stops firing, or a decision-log entry records that the
-`post-*-run` namespace stays empty and why.
-
-**Depends on.** Nothing (Phase B events already shipped).
-
 ### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
 
 **Why now.** `.mango/agents/nemotron-reasoner.md` names Claude Code tools
@@ -336,6 +321,12 @@ gated on R-SR-2).
 | **NS-31** Four in-or-out decisions | **Logged on PR #93.** DEC-053 LangGraph PARK (sunset TBD); DEC-054 JVM relocate; DEC-055 `openspec/` fold; DEC-056 mirroring collapse Option A (supersedes DEC-005 mechanism). Restated in `GOVERNANCE_SKILL.md`. Remediation plan rev 3 ticks AC-5 / R-SR-5. Phase E code still waits on NS-2. |
 | **NS-11** Reconcile regression tier | **Landed on PR #90.** Reproductions in `harness/shared/tests/regression/`; `test_regression_tier_pin.py` fails if moved back; duplicate `make test-regression` dropped from `build-full`. |
 | **NS-33** Adopt `ruff format` | **Landed on PR #91** (+ #95 size-budget hotfix). `[tool.ruff.format]`; `make lint-python` runs `ruff format --check`; reformat commit in `.git-blame-ignore-revs`. Removed from Phase F slack. |
+
+**Closed 2026-09-05c (NS-21):**
+
+| Was | Now |
+|---|---|
+| **NS-21** Hook surface / post-turn observation | **Landed on PR #99.** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
 
 **Closed 2026-09-05 (prior rewrite's evidence pass):**
 

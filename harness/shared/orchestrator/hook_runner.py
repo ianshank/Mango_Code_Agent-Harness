@@ -47,20 +47,26 @@ class HookRunner:
                 f"refusing to run unrecognised hook {hook_name!r}; permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
             )
         hook_path = self.hooks_dir / f"{hook_name}.sh"
-        if hook_path.exists():
-            logger.info("Executing hook: %s", hook_name)
+        # Presence of a regular file remains the enablement switch. Distinguish
+        # missing paths from same-named directories (or other non-files) so
+        # operators and tests see a clear signal; never bash a non-file.
+        if not hook_path.exists():
+            logger.debug("permitted hook %s missing on disk at %s; skipping", hook_name, hook_path)
+            return
+        if not hook_path.is_file():
+            logger.debug("permitted hook %s not a file at %s; skipping", hook_name, hook_path)
+            return
+        logger.info("Executing hook: %s", hook_name)
+        try:
+            denied = set(credential_env_names())
+            env = {k: v for k, v in os.environ.items() if k not in denied}
+            for k, v in kwargs.items():
+                env[f"MANGO_HOOK_{k.upper()}"] = str(v)
             try:
-                denied = set(credential_env_names())
-                env = {k: v for k, v in os.environ.items() if k not in denied}
-                for k, v in kwargs.items():
-                    env[f"MANGO_HOOK_{k.upper()}"] = str(v)
-                try:
-                    hook_arg = hook_path.relative_to(self.workspace_dir).as_posix()
-                except ValueError:
-                    hook_arg = hook_path.as_posix()
-                subprocess.run(
-                    ["bash", hook_arg], cwd=self.workspace_dir, env=env, check=True, timeout=self.tool_timeout
-                )
-            except Exception:
-                logger.exception("Hook %s failed", hook_name)
-                raise
+                hook_arg = hook_path.relative_to(self.workspace_dir).as_posix()
+            except ValueError:
+                hook_arg = hook_path.as_posix()
+            subprocess.run(["bash", hook_arg], cwd=self.workspace_dir, env=env, check=True, timeout=self.tool_timeout)
+        except Exception:
+            logger.exception("Hook %s failed", hook_name)
+            raise
