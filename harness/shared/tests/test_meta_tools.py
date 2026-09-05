@@ -5,7 +5,27 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
+from harness.shared.meta_tools import (
+    format_gaps_for_planner,
+    hypothesis_register,
+    knowledge_gap_log,
+    load_open_gaps,
+    resolve_memory_dir,
+)
+from harness.shared.tests._helpers import REPO
+
+SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
+
+
+def _agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
+    """Copy the shipped governance policy and mutate only ``agent_memory`` keys."""
+    policy = json.loads(SHARED_POLICY.read_text(encoding="utf-8"))
+    block = dict(policy.get("agent_memory") or {})
+    block.update(agent_memory_overrides)
+    policy["agent_memory"] = block
+    path = tmp_path / "governance-policy.json"
+    path.write_text(json.dumps(policy), encoding="utf-8")
+    return path
 
 
 def test_knowledge_gap_log(tmp_path, monkeypatch):
@@ -232,3 +252,184 @@ def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.Monke
     # this is the data-loss-prevention behavior the RuntimeError exists for.
     assert target.read_text(encoding="utf-8") == "invalid"
     assert not list(tmp_path.glob("locked.json.malformed.*"))
+
+
+# ---------------------------------------------------------------------------
+# NS-17: retention, workspace scoping, planner surfacing
+# ---------------------------------------------------------------------------
+
+
+def test_knowledge_gap_retention_fifo_trim(tmp_path, monkeypatch):
+    """Writing past max_gaps keeps only the newest entries (FIFO)."""
+    from harness.shared import meta_tools, policy_loader
+
+    mock_memory_dir = tmp_path / ".mango" / "memory"
+    monkeypatch.setattr(meta_tools, "MEMORY_DIR", mock_memory_dir)
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 3,
+            "max_hypotheses": 100,
+            "planner_gap_limit": 10,
+        },
+    )
+
+    for i in range(5):
+        knowledge_gap_log(f"q{i}", f"need{i}", f"approach{i}")
+
+    data = load_open_gaps()  # most recent first
+    assert len(data) <= 3
+    # FIFO: oldest q0,q1 dropped; retained q2,q3,q4 (most recent first → q4..q2)
+    questions = [g["question"] for g in data]
+    assert questions == ["q4", "q3", "q2"]
+
+
+def test_hypothesis_retention_fifo_trim(tmp_path, monkeypatch):
+    from harness.shared import meta_tools, policy_loader
+
+    mock_memory_dir = tmp_path / ".mango" / "memory"
+    monkeypatch.setattr(meta_tools, "MEMORY_DIR", mock_memory_dir)
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 100,
+            "max_hypotheses": 3,
+            "planner_gap_limit": 10,
+        },
+    )
+
+    for i in range(5):
+        hypothesis_register(f"claim{i}", f"reason{i}", 0.5)
+
+    hyp_file = mock_memory_dir / "hypotheses.json"
+    data = json.loads(hyp_file.read_text(encoding="utf-8"))
+    assert len(data) <= 3
+    assert [h["claim"] for h in data] == ["claim2", "claim3", "claim4"]
+
+
+def test_memory_dir_workspace_isolation(tmp_path):
+    """Two workspaces must not share stores; None keeps the legacy root."""
+    ws_a = tmp_path / "a"
+    ws_b = tmp_path / "b"
+    ws_a.mkdir()
+    ws_b.mkdir()
+
+    knowledge_gap_log("only-a", "need-a", "approach-a", workspace_dir=ws_a)
+    knowledge_gap_log("only-b", "need-b", "approach-b", workspace_dir=ws_b)
+
+    gaps_a = load_open_gaps(ws_a)
+    gaps_b = load_open_gaps(ws_b)
+    assert [g["question"] for g in gaps_a] == ["only-a"]
+    assert [g["question"] for g in gaps_b] == ["only-b"]
+
+    assert resolve_memory_dir(ws_a) == ws_a / ".mango" / "memory"
+    assert resolve_memory_dir(ws_b) == ws_b / ".mango" / "memory"
+
+    # Legacy path (None) still resolves to the install-root MEMORY_DIR constant.
+    from harness.shared import meta_tools
+
+    assert resolve_memory_dir(None) == meta_tools.MEMORY_DIR
+
+
+def test_format_gaps_for_planner_empty_store_ok(tmp_path):
+    assert format_gaps_for_planner(workspace_dir=tmp_path / "empty-ws") == ""
+    assert format_gaps_for_planner([]) == ""
+
+
+def test_format_gaps_for_planner_surfaces_seeded_gap(tmp_path, monkeypatch):
+    from harness.shared import policy_loader
+
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 100,
+            "max_hypotheses": 100,
+            "planner_gap_limit": 2,
+        },
+    )
+    knowledge_gap_log("oldest", "n0", "a0", workspace_dir=tmp_path)
+    knowledge_gap_log("middle", "n1", "a1", workspace_dir=tmp_path)
+    knowledge_gap_log("newest", "n2", "a2", workspace_dir=tmp_path)
+
+    rendered = format_gaps_for_planner(workspace_dir=tmp_path)
+    assert "newest" in rendered
+    assert "middle" in rendered
+    assert "oldest" not in rendered  # truncated by planner_gap_limit=2
+    assert rendered.index("newest") < rendered.index("middle")
+
+
+def test_fifo_trim_zero_disables_retention() -> None:
+    """Policy 0 means empty store, not "disable trimming" (Python -0 slice trap)."""
+    from harness.shared.meta_tools import _fifo_trim
+
+    assert _fifo_trim([{"id": 1}, {"id": 2}], 0, label="knowledge gaps") == []
+    assert _fifo_trim([], 0, label="knowledge gaps") == []
+
+
+def test_planner_gap_limit_respects_policy_path(tmp_path):
+    """format_gaps_for_planner must honour planner_gap_limit from policy_path."""
+    (tmp_path / "p1").mkdir()
+    (tmp_path / "p2").mkdir()
+    (tmp_path / "seed").mkdir()
+    policy_one = _agent_memory_policy(tmp_path / "p1", planner_gap_limit=1, max_gaps=100)
+    policy_two = _agent_memory_policy(tmp_path / "p2", planner_gap_limit=2, max_gaps=100)
+    seed_policy = _agent_memory_policy(tmp_path / "seed", max_gaps=100, planner_gap_limit=10)
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    for q in ("gap-a", "gap-b", "gap-c"):
+        knowledge_gap_log(q, f"need-{q}", f"approach-{q}", workspace_dir=ws, policy_path=seed_policy)
+
+    rendered_one = format_gaps_for_planner(workspace_dir=ws, policy_path=policy_one)
+    assert rendered_one.count("- Q:") == 1
+    assert "gap-c" in rendered_one  # most recent first
+    assert "gap-a" not in rendered_one
+
+    rendered_two = format_gaps_for_planner(workspace_dir=ws, policy_path=policy_two)
+    assert rendered_two.count("- Q:") == 2
+    assert "gap-c" in rendered_two
+    assert "gap-b" in rendered_two
+    assert "gap-a" not in rendered_two
+
+
+def test_knowledge_gap_log_respects_policy_path_max_gaps(tmp_path):
+    """Retention bound must come from the caller's policy_path, not the default."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=2, max_hypotheses=100, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    for i in range(3):
+        knowledge_gap_log(f"q{i}", f"need{i}", f"approach{i}", workspace_dir=ws, policy_path=policy)
+
+    gaps = load_open_gaps(ws)
+    assert len(gaps) == 2
+    assert [g["question"] for g in gaps] == ["q2", "q1"]
+
+
+def test_knowledge_gap_log_max_gaps_zero_messaging(tmp_path):
+    """max_gaps=0 must not claim successful retention or a kept total."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=0, max_hypotheses=100, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = knowledge_gap_log("q", "need", "approach", workspace_dir=ws, policy_path=policy)
+    lowered = result.lower()
+    assert "logged successfully" not in lowered
+    assert "total gaps logged" not in lowered
+    assert "not retained" in lowered or "retention disabled" in lowered
+    assert load_open_gaps(ws) == []
+
+
+def test_hypothesis_register_max_hypotheses_zero_messaging(tmp_path):
+    """max_hypotheses=0 must not claim successful retention."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=100, max_hypotheses=0, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = hypothesis_register("claim", "reason", 0.5, workspace_dir=ws, policy_path=policy)
+    lowered = result.lower()
+    assert "registered successfully" not in lowered
+    assert "total hypotheses" not in lowered
+    assert "not retained" in lowered or "retention disabled" in lowered
+    hyp_file = ws / ".mango" / "memory" / "hypotheses.json"
+    assert json.loads(hyp_file.read_text(encoding="utf-8")) == []

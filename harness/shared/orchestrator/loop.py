@@ -20,6 +20,7 @@ from harness.shared.agent_prompts import (
 from harness.shared.debug_dump import write_dump
 from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
 from harness.shared.governance.verification import VerificationRunner
+from harness.shared.meta_tools import format_gaps_for_planner
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.orchestrator.hook_runner import HookRunner
@@ -64,6 +65,7 @@ class ExecutionLoop:
         """
         self.workspace_dir = workspace_dir
         self.agents_dir = agents_dir
+        self.policy_path = policy_path
         self.dispatcher = dispatcher
         self.hook_runner = hook_runner
         self.verification = verification
@@ -292,7 +294,11 @@ class ExecutionLoop:
         budget = ToolBudget(self.max_tool_calls_per_task)
         logger.debug("loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit})
         self._record_enforcement_baseline()
-        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
+        open_gaps = format_gaps_for_planner(
+            workspace_dir=self.workspace_dir,
+            policy_path=self.policy_path,
+        )
+        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task, open_gaps=open_gaps)
         plan_started = time.monotonic()
         plan = self.execute_agent("planner", planner_prompt, tools=[], budget=budget)
         logger.info("Plan generated: %d bytes", len(plan))
