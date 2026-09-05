@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from harness.shared import decision_records as dr
 from harness.shared import generate_decision_index as gdi
 from harness.shared.tests._helpers import seed_minimal_decision_records, utc_today
@@ -132,9 +133,7 @@ class TestGenerateDecisionIndex:
         with pytest.raises(SystemExit, match="missing"):
             gdi.main(["--root", str(tmp_path)])
 
-    def test_module_as_main(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_module_as_main(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         seed_minimal_decision_records(tmp_path, write_skill=False)
         (tmp_path / "Makefile").write_text("# stub\n", encoding="utf-8")
         monkeypatch.setattr(
@@ -149,9 +148,7 @@ class TestGenerateDecisionIndex:
 
 
 class TestValidateGovernanceDocsExtraBranches:
-    def test_unreadable_decision_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unreadable_decision_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         seed_minimal_decision_records(tmp_path)
         (tmp_path / ".governance").mkdir(exist_ok=True)
         (tmp_path / ".governance/policy.json").write_text(
@@ -164,20 +161,14 @@ class TestValidateGovernanceDocsExtraBranches:
             ),
             encoding="utf-8",
         )
-        (tmp_path / "docs/PROJECT-CHARTER.md").write_text(
-            "# Charter v1.0\n", encoding="utf-8"
-        )
+        (tmp_path / "docs/PROJECT-CHARTER.md").write_text("# Charter v1.0\n", encoding="utf-8")
         # Corrupt frontmatter so load_all raises ValueError.
-        (tmp_path / "docs/decisions/DEC-001.md").write_text(
-            "not a record\n", encoding="utf-8"
-        )
+        (tmp_path / "docs/decisions/DEC-001.md").write_text("not a record\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit, match="unreadable"):
             validate_governance_docs(tmp_path)
 
-    def test_missing_generated_index_and_sot_pointer(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_generated_index_and_sot_pointer(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         seed_minimal_decision_records(tmp_path)
         (tmp_path / ".governance").mkdir(exist_ok=True)
         (tmp_path / ".governance/policy.json").write_text(
@@ -190,9 +181,7 @@ class TestValidateGovernanceDocsExtraBranches:
             ),
             encoding="utf-8",
         )
-        (tmp_path / "docs/PROJECT-CHARTER.md").write_text(
-            "# Charter v1.0\n", encoding="utf-8"
-        )
+        (tmp_path / "docs/PROJECT-CHARTER.md").write_text("# Charter v1.0\n", encoding="utf-8")
         (tmp_path / "docs/decisions/index.md").unlink()
         today = utc_today().isoformat()
         (tmp_path / "agents/GOVERNANCE_SKILL.md").write_text(
@@ -206,9 +195,7 @@ class TestValidateGovernanceDocsExtraBranches:
         assert "generated decision index missing" in msg
         assert "must point at docs/decisions" in msg
 
-    def test_invalid_and_missing_record_dates(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_invalid_and_missing_record_dates(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         seed_minimal_decision_records(tmp_path, dec_id="DEC-010", date="2026-01-01")
         (tmp_path / ".governance").mkdir(exist_ok=True)
         (tmp_path / ".governance/policy.json").write_text(
@@ -221,9 +208,7 @@ class TestValidateGovernanceDocsExtraBranches:
             ),
             encoding="utf-8",
         )
-        (tmp_path / "docs/PROJECT-CHARTER.md").write_text(
-            "# Charter v1.0\n", encoding="utf-8"
-        )
+        (tmp_path / "docs/PROJECT-CHARTER.md").write_text("# Charter v1.0\n", encoding="utf-8")
         decisions = tmp_path / "docs/decisions"
         # Valid shape but non-ISO date (schema does not check ISO).
         (decisions / "DEC-011.md").write_text(
@@ -261,12 +246,8 @@ class TestValidateGovernanceDocsExtraBranches:
         # Refresh indexes so drift is not the first failure (schema fails first).
         records = dr.load_all(decisions)
         payload = dr.index_payload(records)
-        (decisions / "index.json").write_text(
-            dr.render_index_json(payload), encoding="utf-8"
-        )
-        (decisions / "index.md").write_text(
-            dr.render_index_md(payload), encoding="utf-8"
-        )
+        (decisions / "index.json").write_text(dr.render_index_json(payload), encoding="utf-8")
+        (decisions / "index.md").write_text(dr.render_index_md(payload), encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit) as exc_info:
             validate_governance_docs(tmp_path)
