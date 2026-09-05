@@ -8,6 +8,8 @@ under ``<workspace>/.mango/memory/``; otherwise the legacy install-root
 ``policy_loader.agent_memory_defaults`` (NS-17).
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 import logging
