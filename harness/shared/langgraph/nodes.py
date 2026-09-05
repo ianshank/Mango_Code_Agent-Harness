@@ -32,7 +32,6 @@ from harness.shared.langgraph.decorators import budgeted, with_authority
 from harness.shared.langgraph.errors import blocking_error, error_record
 from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import MangoState
-from harness.shared.meta_tools import format_gaps_for_planner
 
 #: ``gate_status`` keys this module writes beside the per-gate outcomes.
 #: ``quality_gate_reason`` tells ``_route_quality_gate`` *why* the gate failed,
@@ -101,14 +100,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         orchestrator: MangoMASOrchestrator | None = configurable.get("orchestrator")
 
         if orchestrator:
-            # GraphPolicy / node configurable has no policy_path accessor today;
-            # resolve planner gaps from the loader default and say so explicitly.
-            logger.debug("planner gaps resolve from default policy (no policy_path in GraphPolicy/node context)")
-            open_gaps = format_gaps_for_planner(
-                workspace_dir=orchestrator.workspace_dir,
-                policy_path=None,
-            )
-            planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=task, open_gaps=open_gaps)
+            planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=task)
             plan = orchestrator.execute_agent("planner", planner_prompt, tools=[])
         else:
             plan = f"[PLAN] Analyse and implement: {task[:200]}"

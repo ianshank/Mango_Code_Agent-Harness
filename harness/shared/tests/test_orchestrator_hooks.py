@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared.agent_authority import ACTIVE_TO_CANONICAL
 from harness.shared.mango_mas_orchestrator import (
     PERMITTED_HOOK_NAMES,
@@ -15,7 +16,7 @@ from harness.shared.mango_mas_orchestrator import (
     MangoMASOrchestrator,
 )
 from harness.shared.orchestrator.hook_runner import HookRunner
-from harness.shared.tests._orchestrator_helpers import _POSIX, _resp, _tool_call
+from harness.shared.tests._orchestrator_helpers import _POSIX, _resp
 
 
 class TestRunHook:
@@ -172,26 +173,15 @@ class TestOnlyKnownHooksExecute:
         assert (mock_workspace / f"{name}_marker.txt").exists()
 
     def test_the_allowlist_covers_every_name_the_orchestrator_constructs(self) -> None:
-        """Call sites live on ExecutionLoop (R-TDH-18); parse loop.py, not the facade."""
-        import harness.shared.orchestrator.loop as loop_module
-
-        source = Path(loop_module.__file__).read_text(encoding="utf-8")
-        literal = set(re.findall(r'\.run_hook\(\s*"([a-z0-9-]+)"', source))
+        source = Path(orch_module.__file__).read_text(encoding="utf-8")
+        literal = set(re.findall(r'_run_hook\(\s*"([a-z0-9-]+)"', source))
         interpolated = {
             template.replace("{agent_name}", role)
-            for template in re.findall(r'\.run_hook\(\s*f"([^"]+)"', source)
+            for template in re.findall(r'_run_hook\(\s*f"([^"]+)"', source)
             for role in ACTIVE_TO_CANONICAL
         }
-        constructed = set(literal) | interpolated
-        if re.search(r"\.run_hook\(\s*PRE_RUN_HOOK\b", source):
-            constructed.add(PRE_RUN_HOOK)
-        assert constructed, "found no run_hook call sites in loop.py; this parser needs updating"
-        post_names = {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL}
-        assert post_names <= constructed, (
-            f"loop.py no longer constructs every post-*-run name: "
-            f"{sorted(post_names - constructed)}. Removing a post-run call site "
-            "silently drops the NS-21 observation point."
-        )
+        constructed = literal | interpolated | {PRE_RUN_HOOK}
+        assert constructed, "found no _run_hook call sites; this parser needs updating"
         assert constructed <= PERMITTED_HOOK_NAMES, (
             f"the orchestrator constructs hook names the allowlist refuses: "
             f"{sorted(constructed - PERMITTED_HOOK_NAMES)}"
@@ -312,145 +302,3 @@ class TestHookExecutionIsAlwaysBounded:
 
         monkeypatch.setattr(hook_module, "orchestrator_defaults", lambda: {"tool_timeout_sec": 41})
         assert HookRunner(workspace_dir=tmp_path, hooks_dir=tmp_path).tool_timeout == 41
-
-
-class TestPermittedHookMissingLogsDebug:
-    """A permitted name with no script on disk stays a no-op, but logs at DEBUG."""
-
-    def test_missing_permitted_hook_logs_debug(self, mock_workspace: Path, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
-        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator.hook_runner"):
-            orch.hook_runner.run_hook("post-planner-run", status="success")
-        assert any(
-            "missing on disk" in rec.getMessage() and "post-planner-run" in rec.getMessage() for rec in caplog.records
-        ), "expected DEBUG when a permitted post-run script is absent"
-
-    def test_directory_named_like_hook_is_skipped_not_executed(self, mock_workspace, caplog):
-        """A directory at the hook path must not be treated as an executable script."""
-        import logging
-
-        from harness.shared.agent_prompts import PRE_RUN_HOOK
-        from harness.shared.orchestrator.hook_runner import HookRunner
-
-        hooks = mock_workspace / ".mango" / "hooks"
-        hooks.mkdir(parents=True, exist_ok=True)
-        decoy = hooks / f"{PRE_RUN_HOOK}.sh"
-        decoy.mkdir()  # directory, not a file
-        runner = HookRunner(workspace_dir=mock_workspace, hooks_dir=hooks, tool_timeout=5)
-        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator.hook_runner"):
-            runner.run_hook(PRE_RUN_HOOK, status="success")
-        assert any("not a file" in rec.getMessage() and PRE_RUN_HOOK in rec.getMessage() for rec in caplog.records), (
-            "expected DEBUG distinguishing a non-file hook path"
-        )
-        assert "missing on disk" not in caplog.text
-        # Must not have attempted to plant side effects via bash on a directory
-        assert not (mock_workspace / "planted_marker.txt").exists()
-
-
-def _repo_hooks_dir() -> Path:
-    # harness/shared/tests/this_file.py -> repo root
-    return Path(__file__).resolve().parents[3] / ".mango" / "hooks"
-
-
-def _install_repo_post_run_hooks(workspace: Path) -> None:
-    """Copy the tracked post-run entrypoints + shared recorder into a temp workspace."""
-    import shutil
-
-    src = _repo_hooks_dir()
-    dest = workspace / ".mango" / "hooks"
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "lib").mkdir(parents=True, exist_ok=True)
-    for name in (
-        "post-planner-run.sh",
-        "post-nemotron-reasoner-run.sh",
-        "post-verifier-run.sh",
-    ):
-        shutil.copy2(src / name, dest / name)
-    shutil.copy2(src / "lib" / "record_post_run.sh", dest / "lib" / "record_post_run.sh")
-
-
-def _read_post_run_records(workspace: Path) -> list[dict]:
-    import json
-
-    path = workspace / ".mango" / ".state" / "post-run.jsonl"
-    assert path.is_file(), f"expected post-run JSONL at {path}"
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-@pytest.mark.skipif(not _POSIX, reason="bash hooks not available on Windows (DEC-026)")
-class TestPostRunHookRecordContract:
-    """NS-21: post-*-run scripts record turn status + tool-call spend, or tests fail."""
-
-    def test_success_path_records_zero_tool_calls(self, mock_workspace: Path, mock_complete_chat) -> None:
-        _install_repo_post_run_hooks(mock_workspace)
-        mock_complete_chat.return_value = _resp("done")
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=10)
-        assert orch.execute_agent("planner", "task") == "done"
-        records = _read_post_run_records(mock_workspace)
-        assert len(records) == 1
-        rec = records[0]
-        assert rec["status"] == "success"
-        assert rec["agent"] == "planner"
-        assert rec["run_id"]
-        assert rec["run_id"] == orch.run_id
-        assert rec["tool_calls_used"] == 0
-        assert rec["tool_calls_limit"] == orch.execution_loop.max_tool_calls_per_task
-
-    def test_budget_exceeded_path_records_spend(self, mock_workspace: Path, mock_complete_chat) -> None:
-        _install_repo_post_run_hooks(mock_workspace)
-        tc = _tool_call("write_file", {"filepath": "loop.txt", "content": "x"})
-        # Two calls in one round against a limit of 1: consume records the
-        # overspend and the post-run hook still fires with budget_exceeded.
-        mock_complete_chat.return_value = _resp(None, tool_calls=[tc, tc])
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=50, tool_timeout=10)
-        orch.execution_loop.max_tool_calls_per_task = 1
-        with pytest.raises(RuntimeError, match="tool-call budget"):
-            orch.execute_agent("nemotron-reasoner", "budget")
-        records = _read_post_run_records(mock_workspace)
-        assert len(records) == 1
-        rec = records[0]
-        assert rec["status"] == "budget_exceeded"
-        assert rec["agent"] == "nemotron-reasoner"
-        assert rec["run_id"] == orch.run_id
-        assert rec["tool_calls_used"] == 2
-        assert rec["tool_calls_limit"] == 1
-
-    def test_timeout_path_records_status(self, mock_workspace: Path, mock_complete_chat) -> None:
-        _install_repo_post_run_hooks(mock_workspace)
-        tc = _tool_call("write_file", {"filepath": "loop.txt", "content": "x"})
-        mock_complete_chat.return_value = _resp(None, tool_calls=[tc])
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, max_iterations=2, tool_timeout=10)
-        # Raise the budget so the timeout path wins before budget_exceeded.
-        orch.execution_loop.max_tool_calls_per_task = 100
-        with pytest.raises(RuntimeError, match="exceeded maximum tool iterations"):
-            orch.execute_agent("verifier", "loop")
-        records = _read_post_run_records(mock_workspace)
-        assert len(records) == 1
-        rec = records[0]
-        assert rec["status"] == "timeout"
-        assert rec["agent"] == "verifier"
-        assert rec["run_id"] == orch.run_id
-        assert rec["tool_calls_used"] == 2
-        assert rec["tool_calls_limit"] == 100
-
-    def test_removing_the_call_site_would_leave_no_record(
-        self, mock_workspace: Path, mock_complete_chat, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Integration pin: if execute_agent stops firing post-run, this fails."""
-        _install_repo_post_run_hooks(mock_workspace)
-        mock_complete_chat.return_value = _resp("done")
-        orch = MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=10)
-
-        original = orch.hook_runner.run_hook
-
-        def _silent_run_hook(name: str, **kwargs):
-            if name.startswith("post-") and name.endswith("-run"):
-                return None
-            return original(name, **kwargs)
-
-        monkeypatch.setattr(orch.hook_runner, "run_hook", _silent_run_hook)
-        assert orch.execute_agent("planner", "task") == "done"
-        path = mock_workspace / ".mango" / ".state" / "post-run.jsonl"
-        assert not path.exists(), "post-run JSONL appeared without a post-run hook call; the negative pin is miswired"

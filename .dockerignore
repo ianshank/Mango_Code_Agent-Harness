@@ -73,5 +73,3 @@ harness/node/test-*/
 
 # IDE tooling — not needed in the container image
 pyrightconfig.json
-.mcp_storage/
-.agents/

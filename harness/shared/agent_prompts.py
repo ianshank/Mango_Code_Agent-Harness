@@ -30,8 +30,7 @@ PLANNER_PROMPT_TEMPLATE = (
     "(e.g. 'pytest <file>', 'python <file.py>', 'python -m unittest <file>').\n"
     "- NEVER suggest chained commands with '&&', ';', '|', or redirection '>'.\n"
     "- NEVER suggest 'python -c'. All code must be written into files using write_file.\n"
-    f"{AUTONOMOUS_AGENT_GUARDRAIL}\n"
-    "{open_gaps}"
+    f"{AUTONOMOUS_AGENT_GUARDRAIL}"
 )
 
 REASONER_PROMPT_TEMPLATE = (
