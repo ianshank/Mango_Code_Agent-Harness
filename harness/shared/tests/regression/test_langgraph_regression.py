@@ -317,12 +317,21 @@ class TestControlPlaneErrorIsTerminal:
         assert output["plan"] == ""
         assert any("lacks read authority" in e["error"] for e in output["errors"])
 
-    def test_it_escalates_without_spending_the_revision_budget(
+    def test_the_write_capable_implementer_never_runs_after_a_denial(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`errors` is an ``operator.add`` accumulator no node clears, so a
-        retry can never remove the record that failed the gate; routing to the
-        implementer would burn every revision to reach the same terminal."""
+        """R-LGH-3, and the half this suite got wrong first time.
+
+        `errors` is an ``operator.add`` accumulator no node clears, so a retry
+        can never remove the record that failed the gate. But checking that only
+        at ``quality_gate`` makes a denial terminal in *verdict* while the
+        write-capable ``implementer`` has already run: a denied planner leaves
+        ``plan_divergence`` at 0.0, the plan gate passes, and the run wrote a
+        patch and spent a revision on the way to ``BLOCKED``. The original
+        version of this test asserted ``revision_count == 1`` and called that
+        acceptable, which is how the defect survived its own regression test
+        until review on PR #87 caught it. A denial must cost zero writes.
+        """
         import harness.shared.langgraph.graph as graph_module
 
         monkeypatch.setattr(graph_module, "planner_node", self._denied)
@@ -333,7 +342,8 @@ class TestControlPlaneErrorIsTerminal:
             config=graph_module.runtime_config(GraphPolicy(max_iterations=4)),
         )
 
-        assert output["revision_count"] == 1, "the implementer ran more than once on a terminal error"
+        assert output["revision_count"] == 0, "the write-capable implementer ran after a denial"
+        assert output["patches"] == [], f"a denied run wrote patches: {output['patches']}"
 
     def test_an_observation_plane_failure_does_not_block_the_run(
         self, monkeypatch: pytest.MonkeyPatch

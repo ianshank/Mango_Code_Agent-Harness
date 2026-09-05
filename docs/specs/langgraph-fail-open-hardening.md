@@ -144,7 +144,11 @@ change below survives R-SR-27's relocation of this package under
   revision budget: the `errors` channel is an `operator.add` accumulator that
   no node clears, so a retry can never remove the entry that failed the gate,
   and routing to `implementer` would burn `max_iterations` revisions before
-  reaching the same `BLOCKED` terminal.
+  reaching the same `BLOCKED` terminal. The check MUST happen at **every**
+  route that can reach the write-capable `implementer`, not at `quality_gate`
+  alone: `quality_gate` is downstream of `implementer`, so checking only
+  there makes a denial terminal in verdict while a patch has already been
+  written and a revision already spent. A denial MUST cost zero writes.
 - R-LGH-4: The graph MUST expose one constructor for its runtime
   configuration, so a caller threads `GraphPolicy` into
   `config["configurable"]["policy"]` — the key the policy-wiring spec's
@@ -177,66 +181,71 @@ change below survives R-SR-27's relocation of this package under
 
 ## Acceptance criteria
 
-- [ ] AC-1: a control-plane node returning the denial record
+- [x] AC-1: a control-plane node returning the denial record
       `decorators.py` writes leaves the compiled graph with a verdict that is
       not `VERIFIED` — verified by
       `pytest harness/shared/tests/regression/test_langgraph_regression.py -k TestControlPlaneErrorIsTerminal`
       · stage: `make coverage-python` (R-LGH-1, R-LGH-3)
-- [ ] AC-2: an `errors` entry from `shadow_planner` does not fail the quality
+- [x] AC-2: an `errors` entry from `shadow_planner` does not fail the quality
       gate, so an observation-plane failure cannot block the incumbent path —
       verified by
       `pytest harness/shared/tests/test_langgraph_nodes.py -k observation_plane_error_does_not_block`
       · stage: `make coverage-python` (R-LGH-1, R-LGH-6)
-- [ ] AC-3: `quality_gate_node` over an empty `test_results` channel, and over
+- [x] AC-3: `quality_gate_node` over an empty `test_results` channel, and over
       a latest result of `passed=0, failed=0`, both report `fail` and a verdict
       other than `VERIFIED`, where today both report `pass` — verified by
       `pytest harness/shared/tests/test_langgraph_nodes.py -k inconclusive`
       · stage: `make coverage-python` (R-LGH-2)
-- [ ] AC-4: `quality_gate_node` still reports `pass` and `VERIFIED` on a
+- [x] AC-4: `quality_gate_node` still reports `pass` and `VERIFIED` on a
       conclusive passing result (`passed=1, failed=0`, no errors), so the
       orchestrator-backed path is unchanged — verified by
       `pytest harness/shared/tests/regression/test_langgraph_regression.py -k test_full_e2e_graph_with_orchestrator`
       · stage: `make coverage-python` (R-LGH-2, backward compatibility)
-- [ ] AC-5: `runtime_config(GraphPolicy(max_iterations=2, recursion_limit=7))`
+- [x] AC-5: `runtime_config(GraphPolicy(max_iterations=2, recursion_limit=7))`
       produces a config whose `configurable.policy` is that policy and whose
       `recursion_limit` is 7, and a graph invoked through it escalates at a
       revision count the dataclass default would retry — verified by
       `pytest harness/shared/tests/test_langgraph_graph.py -k TestRuntimeConfig`
       · stage: `make coverage-python` (R-LGH-4)
-- [ ] AC-6: `autonomous_healing`'s LangGraph branch invokes with a config
+- [x] AC-6: `autonomous_healing`'s LangGraph branch invokes with a config
       carrying `configurable.policy` and `recursion_limit`, and the test fails
       when the policy key is dropped from the call — verified by
       `pytest harness/shared/tests/test_autonomous_healing.py -k langgraph_branch`
       · stage: `make coverage-python` (R-LGH-4)
-- [ ] AC-7: a graph whose `plan_divergence` stays above the threshold
+- [x] AC-7: a graph whose `plan_divergence` stays above the threshold
       terminates with `BLOCKED` after a bounded number of clarify visits
       instead of raising `GraphRecursionError` — verified by
       `pytest harness/shared/tests/regression/test_langgraph_regression.py -k TestClarifyCycleTerminates`
       · stage: `make coverage-python` (R-LGH-5)
-- [ ] AC-8: `build_graph` compiles with the same ten nodes, two conditional
+- [x] AC-8: `build_graph` compiles with the same ten nodes, two conditional
       edges and `compile(checkpointer=None)` signature after the change —
       verified by
       `pytest harness/shared/tests/test_langgraph_graph.py -k assembles`
       · stage: `make coverage-python` (C-LGH-1)
-- [ ] AC-9: `CHANNEL_COUNT`, the accumulator/LWW partition and
+- [x] AC-9: `CHANNEL_COUNT`, the accumulator/LWW partition and
       `EXPECTED_NODE_COUNT` are unchanged, and the channel-reducer regression
       still passes — verified by
       `pytest harness/shared/tests/regression/test_langgraph_regression.py -k TestLangGraphChannelReducersRegression`
       · stage: `make coverage-python` (C-LGH-2)
-- [ ] AC-10: a node whose orchestrator raises still returns a contained
+- [x] AC-10: a node whose orchestrator raises still returns a contained
       `errors` record rather than propagating the exception — verified by
       `pytest harness/shared/tests/regression/test_langgraph_regression.py -k TestLangGraphErrorIsolationRegression`
       · stage: `make coverage-python` (C-LGH-3)
-- [ ] AC-12: every routing function and node that reads `config` annotates it
+- [x] AC-12: every routing function and node that reads `config` annotates it
       in one of the three forms LangGraph injects, and the check rejects a
       signature that drifts back to `Any` — verified by
       `pytest harness/shared/tests/test_langgraph_graph.py -k TestConfigInjectionContract`
       · stage: `make coverage-python` (R-LGH-7)
-- [ ] AC-13: `build_graph()` raises no `UserWarning`, so nothing in the
+- [x] AC-13: `build_graph()` raises no `UserWarning`, so nothing in the
       compiled graph is silently denied its `config` — verified by
       `pytest harness/shared/tests/test_langgraph_graph.py -k emits_no_injection_warning`
       · stage: `make coverage-python` (R-LGH-7)
-- [ ] AC-11: `blocking_error` grades a record from every registered node, and
+- [x] AC-14: a run whose planner is denied reaches `BLOCKED` with
+      `revision_count == 0` and an empty `patches` channel, so the
+      write-capable implementer never executes after a denial — verified by
+      `pytest harness/shared/tests/regression/test_langgraph_regression.py -k write_capable_implementer_never_runs`
+      · stage: `make coverage-python` (R-LGH-3)
+- [x] AC-11: `blocking_error` grades a record from every registered node, and
       an unrecognised node name grades as blocking, so an unclassified error
       fails closed — verified by
       `pytest harness/shared/tests/test_langgraph_nodes.py -k TestErrorClassification`

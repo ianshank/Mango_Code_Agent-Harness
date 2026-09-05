@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover
 #: suppressions below are for, and ``test_config_injection_contract`` fails if
 #: any of these signatures drifts back out of the accepted set.
 
+from harness.shared.langgraph.errors import blocking_error
 from harness.shared.langgraph.nodes import (
     CLARIFY_COUNT,
     QUALITY_GATE_REASON,
@@ -67,7 +68,14 @@ def _route_plan_gate(
     config: Optional[RunnableConfig] = None,  # noqa: UP045
     **kwargs: Any,
 ) -> str:
-    """Route after plan_gate: pass → implementer, fail → clarify | escalate.
+    """Route after plan_gate: blocking error → escalate; pass → implementer;
+    fail → clarify | escalate.
+
+    The blocking-error exit comes first and is the one that keeps a denial
+    terminal in fact rather than only in verdict: it is the ``pass`` branch
+    that reaches the write-capable ``implementer``, so checking after it let
+    a denied planner's run write a patch and spend a revision before
+    ``quality_gate`` escalated (R-LGH-3).
 
     The third exit is what makes the cycle terminate. ``clarify_node`` writes
     ``plan_gate: "pass"`` and ``plan_gate_node`` recomputes that key from
@@ -82,6 +90,16 @@ def _route_plan_gate(
     ``GraphPolicy()`` fallback ``_route_quality_gate`` uses, so a bare-``state``
     caller keeps the documented default.
     """
+    if blocking_error(state.get("errors", [])) is not None:
+        # Checked *before* the pass branch, because the pass branch is the one
+        # that reaches the write-capable implementer. A denied planner records
+        # its authority failure and leaves `plan_divergence` at 0.0, so the plan
+        # gate passes and the run reached `implementer` — which wrote a patch
+        # and spent a revision before `quality_gate` escalated it. Terminal
+        # meant terminal only after a write had already happened, which is not
+        # what R-LGH-3 asks for. Found by review on PR #87.
+        logger.warning("plan_gate: blocking error recorded upstream; escalating before implementer")
+        return "escalate"
     gate_status = state.get("gate_status", {})
     if gate_status.get("plan_gate") == "pass":
         return "implementer"
