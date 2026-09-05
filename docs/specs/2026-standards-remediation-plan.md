@@ -1,6 +1,6 @@
 # Spec: 2026 standards remediation plan (audit round 4)
 
-> Status: IN PROGRESS, revision 1 (peer-reviewed before first publication) · Date: 2026-09-04 · Base: `main` @ `71223f1` (PR #85)
+> Status: IN PROGRESS, revision 2 (Phase B Done on PR #86; roadmap peer-rewrite 2026-09-05) · Date: 2026-09-05 · Base: `main` @ `2441547` (PRs #86–#88)
 >
 > Supersedes the open remainder of `docs/specs/code-quality-tech-debt-plan.md`
 > (closed 2026-09-04 at revision 2) and owns every Blocker, High and Medium
@@ -30,8 +30,9 @@ year past end-of-life, and none of the nine required checks is required.
 | E | Decide, then delete: JVM relocated, LangGraph parked, `openspec/` folded, per-stack mirroring collapsed behind `[project.scripts]` | 5–7 | ~55 | **yes**: DEC-005 posture |
 | F | Slack items, each one PR: `ruff format`, PEP 621 metadata, ESLint type-checked, ADR directory and changelog cap, OS sandbox, eval harness and live smoke, mutation score, context budget, HITL, provider boundary | per item | varies | no |
 
-Phase B is in flight on this branch. Phases A and C block nothing in B and
-everything in E.
+Phase B is **Done** on PR #86 (AC-6…AC-22, AC-33 `[x]`; DEC-048…DEC-051).
+Phases A and C block nothing that remains of B; Phase A still blocks everything
+in E.
 
 ## Review record
 
@@ -118,7 +119,7 @@ names the audit finding or closed-plan requirement it carries.
   `openspec/` fold (Memo 3 option Y), and the mirroring collapse including the
   superseding of DEC-005's push posture (Memo 4).
 
-### Phase B — runtime correctness and containment (this PR)
+### Phase B — runtime correctness and containment (Done — PR #86)
 
 - R-SR-6: Executing a workspace file MUST NOT be a route around the write policy:
   `GNUmakefile`, `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`
@@ -446,7 +447,7 @@ names the audit finding or closed-plan requirement it carries.
 
 ## Steps
 
-Ordered by dependency. Phase B is one PR (#86) because its slices were developed
+Ordered by dependency. Phase B landed as one PR (#86) — slices were developed
 in parallel worktrees against the same base and merged once; later phases are one
 PR per numbered step.
 
@@ -456,7 +457,7 @@ PR per numbered step.
    `v2.4.0`, and records the four DECs (R-SR-1 … R-SR-5) — produces the API
    response for AC-1, `LICENSE`, the tag, four decision-log entries.
 
-### Phase B (this PR)
+### Phase B (Done — PR #86)
 
 2. Containment: protected paths, classifier grades, verification tamper check,
    prose (R-SR-6, R-SR-7, R-SR-8) — consumes `governance-policy.json`; produces
@@ -515,7 +516,7 @@ PR per numbered step.
 ## Files touched
 
 Protected paths are marked (P); every (P) slice carries the attestation table and
-the `infra-reviewed` label. Phase B's list is what PR #86 carries; later phases
+the `infra-reviewed` label. Phase B's list is what PR #86 carried; later phases
 list their principal files and defer the full set to their own PR bodies.
 
 - Phase A: `.github/rulesets/main.json`, `LICENSE` (new), `pyproject.toml` (P),

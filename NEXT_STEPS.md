@@ -39,8 +39,8 @@ skill, then `make pre-pr`.
 
 | ID | Severity | Finding | Effect on this file |
 |---|---|---|---|
-| PR-1 | **Blocker (doc)** | NS-32 said "Land Phase B (PR #86)". PR #86 is `docs(reports): 2026 coding-standards audit`. Phase B ACs AC-6…AC-22 and AC-33 are `[x]` in the remediation plan; containment/runtime work is recorded in DEC-048…DEC-051. | NS-32 closed → §6 Delivered. |
-| PR-2 | **Blocker (product)** | NS-31's memo recommended parking LangGraph, but PR #87/#88 + DEC-052 invested in fail-closed LangGraph on `main`. "Park" is no longer the default reading of reality. | NS-31 requires an explicit KEEP vs PARK decision. |
+| PR-1 | **Blocker (doc)** | NS-32 said "Land Phase B (PR #86)" while the open roadmap still treated Phase B as unfinished. PR #86's title is `docs(reports): 2026 coding-standards audit`, but its body and 97-file diff landed Phase B (R-SR-6…R-SR-22 / AC-6…AC-22, AC-33 `[x]`); DEC-048…DEC-051 carry the containment/runtime narrative. | NS-32 closed → §6 Delivered; remediation plan bumped to rev 2 (Phase B Done). |
+| PR-2 | **Blocker (product)** | Memo 1 / R-SR-27 still recommend PARK, and peer review drafts DEC-053 as park-after-fail-closed — but PR #87/#88 + DEC-052 invested in fail-closed LangGraph on `main`, so KEEP became a live contested alternative. | NS-31 records **DEC-053 park recommended**; KEEP only if a DEC supersedes Memo 1 / R-SR-27. |
 | PR-3 | Major | Several P1 items still listed `Depends on: NS-32` after Phase B acceptance criteria were already ticked. | Depends-on retargeted. |
 | PR-4 | Unchanged blockers | Re-queried 2026-09-05: `GET …/rules/branches/main` → `[]`; `feature/governed-run-console` still at `5970249…`; zero tags; `license: null`. | NS-1, NS-2, NS-3, NS-30 stay P0. |
 
@@ -125,32 +125,35 @@ any of the three is removed (R-SR-3, AC-3). Plan recommends Apache-2.0.
 
 **Depends on.** Nothing.
 
-### NS-31 · Record the four in-or-out decisions (LangGraph is now contested)
+### NS-31 · Record the four in-or-out decisions (LangGraph: DEC-053 park recommended)
 
 **Why now.** Four half-done stacks still cost gates, shims and personas on
 every PR: `harness/jvm/`, `harness/shared/langgraph/`, `openspec/`, and
 per-stack governance mirroring. Phase E cannot start until the decisions are
 entries in the log (C-CQ-2 / R-SR-5).
 
-**LangGraph is no longer a soft "park" default.** Between the remediation
-plan's review memos and 2026-09-05, PR #87/#88 and DEC-052 landed fail-closed
-graph routing, conclusive-count hardening, and INV-LG-6/7 on `main`. A decision
-that says "park" without addressing that investment is false. The entry must
-choose one of:
+**Recommendation: PARK (DEC-053 draft), after #87/#88 fail-closed.** Memo 1 /
+R-SR-27 and the peer-reviewed plan still recommend parking LangGraph with a
+named sunset. PR #87/#88 + DEC-052 made that investment fail-closed on `main`
+(INV-LG-6/7); they do **not** convert Memo 1 into KEEP by default. Fail-closed
+is the correct posture whether the path is kept or parked. Log DEC-053 as PARK
+unless a later DEC explicitly supersedes Memo 1 / R-SR-27. The KEEP row below
+is the contested alternative, not the default.
 
 | Choice | Meaning | Consequences |
 |---|---|---|
-| **KEEP** | LangGraph stays a supported runtime path | Supersede the park recommendation; rewrite R-SR-27 / Phase E order; continue NS-9 and graph expansion under specs; HITL/LATS stay gated on ablation (DEC-027) not on "move to experimental". |
-| **PARK** | Stop feature work; move under `experimental/` with a named sunset | Honour R-SR-27 as written; freeze further LangGraph PRs except security; NS-9 moves with the package; do not open new graph-expansion specs. |
+| **PARK (recommended · DEC-053)** | Stop feature work; move under `experimental/` with a named sunset | Honour R-SR-27 as written; freeze further LangGraph PRs except security; NS-9 moves with the package; do not open new graph-expansion specs. Phase E order stays JVM → LangGraph → openspec → mirroring. |
+| **KEEP (contested)** | LangGraph stays a supported runtime path | Requires a DEC that supersedes Memo 1 / R-SR-27; rewrite Phase E order; continue NS-9 and graph expansion under specs; HITL/LATS stay gated on ablation (DEC-027). |
 
 JVM relocate, `openspec/` fold, and mirroring collapse remain as the memos
-recommend unless a new memo says otherwise.
+recommend unless a new memo says otherwise. **Do not log DEC-053 in this PR** —
+bundle it with drafts of DEC-054…056 in a separate decision-log PR.
 
-**Evidence.** Program plan §Review record; audit H14/M3/M22/M23; DEC-052;
-`gh pr view 87` / `88` merged on 2026-09-05.
+**Evidence.** Program plan §Review record (Memo 1 option B); audit H14/M3/M22/M23;
+DEC-052; `gh pr view 87` / `88` merged on 2026-09-05; peer plan Memo 1 / R-SR-27.
 
-**Done when.** Four decision-log entries exist (JVM, LangGraph KEEP-or-PARK with
-sunset if PARK, `openspec/` fold, mirroring collapse including DEC-005 push
+**Done when.** Four decision-log entries exist (JVM, LangGraph PARK with sunset
+unless superseded, `openspec/` fold, mirroring collapse including DEC-005 push
 posture), each restated so `validate_governance_docs.py` passes, and
 `make validate` rejects an entry missing from either (R-SR-5, AC-5).
 
@@ -160,10 +163,10 @@ posture), each restated so `validate_governance_docs.py` passes, and
 
 ## 2. P0 — agent-executable front
 
-**Phase B is landed.** Do not open a "finish PR #86" item. Remaining agent
-work is P1 below. If a Phase B AC box is unticked or its named command fails on
-current `main`, file a regression under the remediation plan — do not revive
-NS-32.
+**Phase B is landed on PR #86** (despite the docs-only title; body + AC ticks
+are the evidence). Do not open a "finish Phase B" item. Remaining agent work is
+P1 below. If a Phase B AC box is unticked or its named command fails on current
+`main`, file a regression under the remediation plan — do not revive NS-32.
 
 ---
 
@@ -329,7 +332,7 @@ Pointer only: status is the remediation plan's boxes, read there, not here.
 
 | Item | Blocked on |
 |---|---|
-| **Phase E** (R-SR-26 … R-SR-29) | NS-31's four entries (LangGraph KEEP vs PARK changes whether R-SR-27 is delete/move or "continue under specs"); **NS-2 before any destructive slice**. If PARK: order JVM → openspec → LangGraph → mirroring. If KEEP: drop LangGraph from the delete sequence; still fold openspec / relocate JVM / collapse mirroring. |
+| **Phase E** (R-SR-26 … R-SR-29) | NS-31's four entries (DEC-053 park recommended; KEEP only via superseding DEC); **NS-2 before any destructive slice**. PARK order (plan / memos): **JVM → LangGraph → openspec → mirroring**. If KEEP: drop LangGraph from the delete sequence; still relocate JVM / fold openspec / collapse mirroring. |
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
 | **Context-window budget / HITL interrupts** | Budget needs policy key + spec (Phase B events exist). HITL needs NS-31 KEEP (interrupts in-graph) or an explicit non-graph design if PARK. |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with NS-31. |
@@ -358,10 +361,16 @@ Pointer only: status is the remediation plan's boxes, read there, not here.
 
 | Was | Now |
 |---|---|
-| **NS-32** Land Phase B (PR #86) | **Mis-attributed.** PR #86 landed the audit report only. Phase B requirements R-SR-6…R-SR-22 are accepted in the remediation plan (AC-6…AC-22, AC-33 ticked). Runtime/containment narrative: DEC-048…DEC-051. Do not re-open under the PR #86 label. |
+| **NS-32** Land Phase B (PR #86) | **Landed on PR #86.** Title was docs-only (`docs(reports): 2026 coding-standards audit`), but the PR body and 97-file diff delivered Phase B (R-SR-6…R-SR-22; AC-6…AC-22, AC-33 `[x]`). Runtime/containment narrative: DEC-048…DEC-051. Remediation plan rev 2 marks Phase B Done. Do not re-open under a different PR label. |
+
+**Closed earlier — Dependabot disposition (keep visible):**
+
+| Was | Now |
+|---|---|
+| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. The reopened bot PRs (#62–#73) are left for the maintainer to close. |
 
 **Closed earlier (pointers only — details in prior revisions / CHANGELOG):**
-NS-4, NS-5, NS-7, NS-8, NS-10, NS-12, NS-13, NS-14, NS-15, NS-16, NS-20,
+NS-5, NS-7, NS-8, NS-10, NS-12, NS-13, NS-14, NS-15, NS-16, NS-20,
 NS-22…NS-28, gate half of NS-3, bound half of NS-9 — see git history of this
 file at `6f0f18b`…`2441547` and `docs/reports/ROADMAP-PEER-REVIEW.md`.
 
