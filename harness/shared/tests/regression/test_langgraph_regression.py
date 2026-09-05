@@ -4,9 +4,13 @@ Pins critical runtime invariants and prevents regressions across:
 1. Node calling conventions (positional vs keyword RunnableConfig).
 2. Input state immutability across node boundaries.
 3. 12-channel accumulator list-concatenation vs LWW semantics.
-4. Fail-open error isolation and recording to errors channel.
-5. Plan gate divergence boundary condition precision (0.35 threshold).
-6. Safe fallback and feature detection behavior.
+4. Contained error isolation and recording to the errors channel (INV-LG-3).
+5. Fail-closed verdict: a blocking error or an inconclusive result cannot
+   reach VERIFIED, while an observation-plane failure stays non-blocking
+   per INV-16 (INV-LG-6).
+6. Termination of the plan_gate/clarify cycle at its policy bound (INV-LG-6).
+7. Plan gate divergence boundary condition precision (0.35 threshold).
+8. Safe fallback and feature detection behavior.
 """
 
 from __future__ import annotations
@@ -17,10 +21,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from harness.shared.governance.verdict import VERIFIED, Verdict
+from harness.shared.governance.verdict import BLOCKED, VERIFIED, Verdict
 from harness.shared.langgraph import LANGGRAPH_AVAILABLE
 from harness.shared.langgraph.decorators import budgeted, with_authority
+from harness.shared.langgraph.errors import error_record
+from harness.shared.langgraph.graph import runtime_config
 from harness.shared.langgraph.nodes import (
+    CLARIFY_COUNT,
+    QUALITY_GATE_REASON,
+    REASON_INCONCLUSIVE,
     clarify_node,
     escalate_node,
     evaluation_node,
@@ -32,6 +41,7 @@ from harness.shared.langgraph.nodes import (
     security_reviewer_node,
     shadow_planner_node,
 )
+from harness.shared.langgraph.policy import GraphPolicy
 from harness.shared.langgraph.state import (
     ACCUMULATOR_CHANNELS,
     CHANNEL_COUNT,
@@ -148,18 +158,25 @@ class TestLangGraphChannelReducersRegression:
             "patches": [{"file": "init.py", "old_text": "", "new_text": "# init", "agent": "setup"}],
         }
 
-        output = graph.invoke(initial_state)
+        output = graph.invoke(initial_state, config=runtime_config(GraphPolicy(max_iterations=2)))
 
         # Output must contain original patch plus newly generated patches
         patches = output.get("patches", [])
         assert len(patches) >= 2
         assert patches[0]["file"] == "init.py"
-        assert output.get("gate_status", {}).get("quality_gate") == "pass"
-        assert output.get("verdict") == "VERIFIED"
+        # This path has no orchestrator, so `evaluation_node` reports
+        # `passed=0, failed=0`. The two assertions here used to read `pass` and
+        # `VERIFIED` from exactly that row — a third instance of the vacuous
+        # pass R-LGH-2 closes, incidental to what this test is for. Accumulation
+        # is unaffected either way, which is the regression being pinned.
+        assert output.get("gate_status", {}).get("quality_gate") == "fail"
+        assert output.get("verdict") == BLOCKED
 
 
 class TestLangGraphErrorIsolationRegression:
-    """Pins that exceptions inside active nodes fail-open to the errors channel."""
+    """Pins INV-LG-3: an exception inside an active node is contained in the
+    `errors` channel rather than propagating. What the gate then does with
+    that record is INV-LG-6, pinned by TestControlPlaneErrorIsTerminal."""
 
     def test_planner_exception_isolated(self) -> None:
         mock_orch = MagicMock()
@@ -267,3 +284,188 @@ class TestLangGraphMockOrchestratorLiveE2E:
         assert output.get("test_results")[-1]["passed"] == 1
         assert output.get("test_results")[-1]["failed"] == 0
         assert output.get("verdict") == "VERIFIED"
+
+
+class TestControlPlaneErrorIsTerminal:
+    """docs/specs/langgraph-fail-open-hardening.md R-LGH-1, R-LGH-3.
+
+    Reproduces the defect end to end: a node returning the exact denial record
+    ``@with_authority`` writes on a refused role used to leave the run
+    ``VERIFIED`` over an empty plan, because nothing read the ``errors``
+    channel — ``_route_plan_gate`` and ``_route_quality_gate`` decided on
+    ``gate_status`` and ``revision_count``, and ``quality_gate_node`` consulted
+    ``errors`` only when ``test_results`` was empty, which no path through the
+    compiled graph produces.
+    """
+
+    @staticmethod
+    def _denied(state: Any, config=None, **_kwargs: Any) -> dict[str, Any]:
+        return {"errors": [error_record("planner", "role 'planner' lacks read authority")]}
+
+    def test_denied_planner_does_not_reach_a_verified_verdict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import harness.shared.langgraph.graph as graph_module
+
+        monkeypatch.setattr(graph_module, "planner_node", self._denied)
+        graph = graph_module.build_graph()
+
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo"},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=4)),
+        )
+
+        assert output["verdict"] == BLOCKED
+        assert output["plan"] == ""
+        assert any("lacks read authority" in e["error"] for e in output["errors"])
+
+    def test_the_write_capable_implementer_never_runs_after_a_denial(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """R-LGH-3, and the half this suite got wrong first time.
+
+        `errors` is an ``operator.add`` accumulator no node clears, so a retry
+        can never remove the record that failed the gate. But checking that only
+        at ``quality_gate`` makes a denial terminal in *verdict* while the
+        write-capable ``implementer`` has already run: a denied planner leaves
+        ``plan_divergence`` at 0.0, the plan gate passes, and the run wrote a
+        patch and spent a revision on the way to ``BLOCKED``. The original
+        version of this test asserted ``revision_count == 1`` and called that
+        acceptable, which is how the defect survived its own regression test
+        until review on PR #87 caught it. A denial must cost zero writes.
+        """
+        import harness.shared.langgraph.graph as graph_module
+
+        monkeypatch.setattr(graph_module, "planner_node", self._denied)
+        graph = graph_module.build_graph()
+
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo"},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=4)),
+        )
+
+        assert output["revision_count"] == 0, "the write-capable implementer ran after a denial"
+        assert output["patches"] == [], f"a denied run wrote patches: {output['patches']}"
+
+    def test_an_observation_plane_failure_does_not_block_the_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """INV-16: an observation-mode producer's failure is contained and
+        leaves the incumbent path unaffected, so the same shape of error from
+        ``shadow_planner`` must not decide the verdict."""
+        import harness.shared.langgraph.graph as graph_module
+
+        def failing_shadow(state: Any, config=None, **_kwargs: Any) -> dict[str, Any]:
+            return {"errors": [error_record("shadow_planner", "model timeout")]}
+
+        mock_orch = MagicMock()
+        mock_orch.execute_agent.side_effect = ["plan", "code", "verified"]
+        mock_orch._harness_verdict.return_value = Verdict(
+            status=VERIFIED, reason="green", termination_reason="", command="pytest", exit_code=0
+        )
+
+        monkeypatch.setattr(graph_module, "shadow_planner_node", failing_shadow)
+        graph = graph_module.build_graph()
+
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo"},
+            config=graph_module.runtime_config(GraphPolicy(), orchestrator=mock_orch),
+        )
+
+        assert output["verdict"] == VERIFIED
+        assert any(e["node"] == "shadow_planner" for e in output["errors"])
+
+
+class TestClarifyCycleTerminates:
+    """R-LGH-5. ``clarify_node`` writes ``plan_gate: "pass"`` and
+    ``plan_gate_node`` recomputes that key from an unchanged
+    ``plan_divergence`` on the way back, so the two nodes alternated until
+    LangGraph raised ``GraphRecursionError``. Reachable today only through a
+    failing shadow planner, whose ``errors``-only return leaves a
+    caller-supplied divergence intact; it becomes reachable on the first real
+    divergence computation.
+    """
+
+    @staticmethod
+    def _failing_shadow(state: Any, config=None, **_kwargs: Any) -> dict[str, Any]:
+        return {"errors": [error_record("shadow_planner", "model timeout")]}
+
+    def test_unresolved_divergence_blocks_instead_of_recursing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import harness.shared.langgraph.graph as graph_module
+
+        monkeypatch.setattr(graph_module, "shadow_planner_node", self._failing_shadow)
+        graph = graph_module.build_graph()
+
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo", "plan_divergence": 0.9},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=3)),
+        )
+
+        assert output["verdict"] == BLOCKED
+        assert output["gate_status"][CLARIFY_COUNT] == 3
+
+    def test_the_bound_is_the_policy_not_a_literal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import harness.shared.langgraph.graph as graph_module
+
+        monkeypatch.setattr(graph_module, "shadow_planner_node", self._failing_shadow)
+        graph = graph_module.build_graph()
+
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo", "plan_divergence": 0.9},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=5)),
+        )
+
+        assert output["gate_status"][CLARIFY_COUNT] == 5
+
+
+class TestInconclusiveDoesNotBuyRetries:
+    """docs/specs/langgraph-fail-open-hardening.md R-LGH-8.
+
+    An inconclusive result is an absence of evidence, and nothing inside the
+    revision loop can supply it: with no orchestrator in ``configurable``,
+    ``evaluation_node`` returns `passed=0, failed=0` on every pass, and the
+    configuration cannot change mid-run. Treating only `error` as terminal
+    therefore bought a *guaranteed* sequence of unverified writes — under
+    ``max_iterations=5`` the run spent five revisions and wrote five patches to
+    produce five identical rows before escalating. Found by review on PR #87.
+    """
+
+    def test_an_inconclusive_run_does_not_write_once_per_revision(self) -> None:
+        import harness.shared.langgraph.graph as graph_module
+
+        graph = graph_module.build_graph()
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo"},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=5)),
+        )
+
+        assert output["verdict"] == BLOCKED
+        assert output["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
+        # One pass through the implementer is unavoidable: the plan gate passes
+        # and no evidence exists until `test_eval` has run once. What must not
+        # happen is a write per revision thereafter.
+        assert output["revision_count"] == 1, (
+            f"an inconclusive run spent {output['revision_count']} revisions; "
+            "retrying cannot supply the evidence it lacks"
+        )
+        assert len(output["patches"]) == 1
+        assert len(output["test_results"]) == 1
+
+    def test_the_cap_does_not_change_the_count(self) -> None:
+        """A higher cap must not buy more unverified writes — the old behaviour
+        scaled the damage with `max_iterations`."""
+        import harness.shared.langgraph.graph as graph_module
+
+        graph = graph_module.build_graph()
+        counts = []
+        for cap in (2, 5, 9):
+            out = graph.invoke(
+                {**DEFAULT_STATE, "task": "demo"},
+                config=graph_module.runtime_config(GraphPolicy(max_iterations=cap)),
+            )
+            counts.append(out["revision_count"])
+        assert counts == [1, 1, 1], f"revision count tracked the cap: {counts}"

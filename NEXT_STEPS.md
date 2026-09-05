@@ -475,6 +475,19 @@ skip, `xfail` or waiver was added.
   against the spec at `docs/specs/langgraph-authority-budget-wiring.md`, whose
   three acceptance criteria are checked and cite passing tests. INV-LG-4 is
   active.
+
+  **Corrected again 2026-09-04 (DEC-052).** "Active" was true of *application*
+  and false of *enforcement*: the decorators ran and recorded a denial, and
+  nothing read the channel they recorded it into, so a denied planner reached a
+  `VERIFIED` verdict over an empty plan. Applied is not enforcing, and the
+  three acceptance criteria could not tell the difference because none of them
+  ran the compiled graph. `INV-LG-6` supplies the consumer and
+  `docs/specs/langgraph-fail-open-hardening.md` carries the reproduction. The
+  same shape one level up is why `R-LPW-4`'s policy wiring also did nothing:
+  its criteria called the routing functions directly, where an ordinary Python
+  default applies, while LangGraph never injected `config` into them at all.
+  Two entries in this section have now been corrected for the same reason — a
+  criterion satisfied on a path production never takes.
 - **The specs-gate template and MUST-bullet refinements.** Both are live in
   `harness/shared/plan_rules.py`: `UNFILLED_TEMPLATE` rejects an unmodified
   scaffold, and `ANY_ID_PATTERN` accepts `AC-*` bullets containing MUST, which

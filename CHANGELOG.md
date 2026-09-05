@@ -10,6 +10,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### LangGraph: the graph fails closed on errors and on absent evidence
+
+Spec `docs/specs/langgraph-fail-open-hardening.md`; DEC-052. Five defects, each
+reproduced against the real `langgraph` package (1.2.11) rather than read off
+the source.
+
+- **An authority denial now changes the outcome.** `@with_authority` recorded a
+  denial into the `errors` channel and the graph carried on — neither router
+  read `errors`, and `quality_gate_node` consulted it only when `test_results`
+  was empty, which no path through the compiled graph produces. A denied
+  planner returned `VERIFIED` over an empty plan. The channel has a consumer
+  (`INV-LG-6`). `INV-LG-3`'s containment is unchanged; what is added is
+  consequence, and that invariant is retitled from "Fail-Open" to "Contained"
+  Error Channel Routing because the old name read as licensing the outcome.
+- **The quality gate no longer passes vacuously.** With no orchestrator,
+  `evaluation_node` reports `passed=0, failed=0`; grading by `failed > 0` alone
+  made zero executed tests indistinguishable from a green suite — the shape
+  DEC-024 rejects, inside the graph's own gate. An inconclusive result is a
+  non-pass.
+- **Terminality is decided in one place.** `langgraph/errors.py` stamps each
+  record with `blocking`: control-plane nodes block; `OBSERVATION_NODES`
+  (`shadow_planner`, `peer_reviewer`, `security_reviewer`) do not, because
+  INV-16 requires an observation-mode producer's failure to leave the incumbent
+  path unaffected; an unrecognised node blocks, so an unclassified error fails
+  closed. A blocking error escalates without spending revision budget —
+  `errors` is an `operator.add` accumulator no node clears.
+- **Policy reaches the runtime.** `runtime_config()` is the producer for the
+  `configurable.policy` key the policy-wiring spec's consumers already read and
+  no caller had ever written; it also carries `recursion_limit` and
+  `max_concurrency`, which were read only to be logged and not at all.
+- **`config` reaches the routers.** LangGraph injects it only for an accepted
+  annotation spelling; `config: Any` was skipped with a `UserWarning` no gate
+  observed, so the earlier policy wiring passed unit tests that call the
+  routers directly and did nothing through a compiled graph (`INV-LG-7`, pinned
+  by `TestConfigInjectionContract`).
+- **The clarify cycle terminates.** `clarify_node` wrote `plan_gate: "pass"`
+  and `plan_gate_node` recomputed that key from an unchanged divergence, so the
+  two alternated to `GraphRecursionError`. `_route_plan_gate` gains an
+  `escalate` exit at a policy-bounded attempt count.
+
+Three assertions that pinned the vacuous pass are rewritten to assert the
+graded outcome, including one reading `verdict in ("VERIFIED", "FAILED",
+"BLOCKED", "")` — the channel's whole domain. No skip, `xfail` or waiver added.
+`CHANGELOG`-adjacent docs re-synced: `c4_architecture.md` §4.7 now documents
+`INV-LG-5` (live in code and cited by the LATS spec, but never listed) plus the
+two new invariants, and README's regression-suite count and coverage figures
+are re-measured rather than carried forward.
+
 ### Phase B of the 2026 remediation plan: the loop, the policy and the MCP transport
 
 Landed together with the slices recorded below, from

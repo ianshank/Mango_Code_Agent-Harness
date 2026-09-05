@@ -105,15 +105,19 @@ class TestHealer:
 
             try:
                 if LANGGRAPH_AVAILABLE:
-                    from harness.shared.langgraph.graph import build_graph
+                    from harness.shared.langgraph.graph import build_graph, runtime_config
                     from harness.shared.langgraph.policy import GraphPolicy
                     orchestrator = MangoMASOrchestrator(
                         workspace_dir=Path(self.workspace), broker=self.broker
                     )
-                    graph = build_graph(policy=GraphPolicy.from_governance_json())
+                    # One policy for both halves. Compiling with a policy and
+                    # then invoking with a `configurable` that omits it left
+                    # every threshold on its dataclass fallback (R-LGH-4).
+                    policy = GraphPolicy.from_governance_json()
+                    graph = build_graph(policy=policy)
                     graph.invoke(
                         healing_state,
-                        config={"configurable": {"orchestrator": orchestrator}},
+                        config=runtime_config(policy, orchestrator=orchestrator),
                     )
                 else:
                     orchestrator = MangoMASOrchestrator(

@@ -79,6 +79,19 @@ def test_heal_until_green_langgraph_branch(tmp_path) -> None:
         config = call_kwargs[1].get("config") or (call_kwargs[0][1] if len(call_kwargs[0]) > 1 else {})
         assert config.get("configurable", {}).get("orchestrator") is not None
 
+        # R-LGH-4: this call site loaded a GraphPolicy for `build_graph` and then
+        # invoked with a `configurable` that carried only the orchestrator, so
+        # `plan_gate_node` and `_route_quality_gate` took their documented
+        # dataclass fallback and `governance-policy.json` decided nothing at
+        # runtime. `recursion_limit` was read once, to be logged.
+        policy = config.get("configurable", {}).get("policy")
+        assert policy is not None, "the graph was invoked with no policy in configurable"
+        assert config.get("recursion_limit") == policy.recursion_limit
+        assert config.get("max_concurrency") == policy.max_concurrency
+        assert mock_build.call_args[1]["policy"] is policy, (
+            "the compiled graph and the invocation must run under one policy"
+        )
+
 
 def test_heal_until_green_exhausted(tmp_path) -> None:
     """Test heal_until_green returns False when retries are exhausted."""

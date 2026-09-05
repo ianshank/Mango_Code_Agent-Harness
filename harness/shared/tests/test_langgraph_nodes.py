@@ -14,7 +14,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from harness.shared.governance.verdict import VERIFIED, Verdict
+from harness.shared.langgraph.errors import blocking_error, error_record
 from harness.shared.langgraph.nodes import (
+    CLARIFY_COUNT,
+    QUALITY_GATE_REASON,
+    REASON_ERROR,
+    REASON_INCONCLUSIVE,
+    REASON_TESTS_FAILED,
     _get_configurable,
     clarify_node,
     escalate_node,
@@ -256,16 +262,149 @@ class TestPlanGateNodeUsesPolicy:
 
 
 class TestQualityGateNode:
-    def test_passes_in_stub(self) -> None:
-        result = quality_gate_node({**DEFAULT_STATE})
+    """docs/specs/langgraph-fail-open-hardening.md R-LGH-1, R-LGH-2.
+
+    The assertion these replace was ``quality_gate_node({**DEFAULT_STATE})``
+    asserting ``pass``/``VERIFIED`` over an *empty* ``test_results`` channel.
+    It pinned the vacuous pass rather than a contract: zero executed tests
+    graded the same as a green suite, which is the shape DEC-024 rejects.
+    """
+
+    def test_passes_on_a_conclusive_green_result(self) -> None:
+        result = quality_gate_node(
+            {**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 3, "failed": 0}]}
+        )
         assert result["gate_status"]["quality_gate"] == "pass"
-        assert result["verdict"] == "VERIFIED"
+        assert result["verdict"] == VERIFIED
+        assert QUALITY_GATE_REASON not in result["gate_status"]
+
+    def test_fails_on_inconclusive_empty_channel(self) -> None:
+        result = quality_gate_node({**DEFAULT_STATE})
+        assert result["gate_status"]["quality_gate"] == "fail"
+        assert result["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
+        assert result["verdict"] != VERIFIED
+
+    def test_fails_on_inconclusive_zero_test_result(self) -> None:
+        """The exact row ``evaluation_node`` returns with no orchestrator."""
+        result = quality_gate_node(
+            {
+                **DEFAULT_STATE,
+                "test_results": [{"suite": "pytest", "passed": 0, "failed": 0, "skipped": 0}],
+            }
+        )
+        assert result["gate_status"]["quality_gate"] == "fail"
+        assert result["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
+
+    def test_fails_on_failing_suite(self) -> None:
+        result = quality_gate_node(
+            {**DEFAULT_STATE, "test_results": [{"suite": "pytest", "passed": 1, "failed": 2}]}
+        )
+        assert result["gate_status"][QUALITY_GATE_REASON] == REASON_TESTS_FAILED
+
+    def test_blocking_error_fails_the_gate_over_a_green_suite(self) -> None:
+        """R-LGH-1: the denial record ``@with_authority`` writes must decide
+        the gate. Before this, a green ``test_results`` row after a denied
+        planner produced ``VERIFIED`` with the denial sitting unread."""
+        result = quality_gate_node(
+            {
+                **DEFAULT_STATE,
+                "test_results": [{"suite": "pytest", "passed": 3, "failed": 0}],
+                "errors": [error_record("planner", "role 'planner' lacks read authority")],
+            }
+        )
+        assert result["gate_status"]["quality_gate"] == "fail"
+        assert result["gate_status"][QUALITY_GATE_REASON] == REASON_ERROR
+        assert result["verdict"] != VERIFIED
+
+    def test_observation_plane_error_does_not_block(self) -> None:
+        """R-LGH-1 / INV-16: an observation-mode producer's failure is
+        contained and must leave the incumbent path unaffected, so a
+        ``shadow_planner`` error cannot fail a gate a green suite passed."""
+        result = quality_gate_node(
+            {
+                **DEFAULT_STATE,
+                "test_results": [{"suite": "pytest", "passed": 3, "failed": 0}],
+                "errors": [error_record("shadow_planner", "model timeout")],
+            }
+        )
+        assert result["gate_status"]["quality_gate"] == "pass"
+        assert result["verdict"] == VERIFIED
+
+
+class TestErrorClassification:
+    """R-LGH-6: one definition decides which errors are terminal."""
+
+    @pytest.mark.parametrize("node", ["shadow_planner", "peer_reviewer", "security_reviewer"])
+    def test_observation_nodes_are_non_blocking(self, node: str) -> None:
+        assert error_record(node, "boom")["blocking"] is False
+        assert blocking_error([error_record(node, "boom")]) is None
+
+    @pytest.mark.parametrize("node", ["planner", "implementer", "test_eval"])
+    def test_control_plane_nodes_are_blocking(self, node: str) -> None:
+        assert error_record(node, "boom")["blocking"] is True
+        assert blocking_error([error_record(node, "boom")]) is not None
+
+    def test_decorator_and_node_spellings_grade_alike(self) -> None:
+        """``decorators.py`` records ``fn.__name__`` and ``nodes.py`` records the
+        graph node name; both must reach the same verdict."""
+        assert error_record("shadow_planner_node", "x")["blocking"] is False
+        assert error_record("planner_node", "x")["blocking"] is True
+
+    def test_unknown_node_fails_closed(self) -> None:
+        assert error_record("some_future_node", "x")["blocking"] is True
+        assert blocking_error([{"node": "some_future_node", "error": "x"}]) is not None
+
+    def test_an_explicit_false_cannot_lower_a_control_plane_record(self) -> None:
+        """The node classification is a floor, not a default.
+
+        Reading the flag as a default let ``{"node": "planner", "blocking":
+        False}`` — hand-written, or supplied by an adopter's state — walk a
+        control-plane denial straight through the gate, contradicting the
+        module's own guarantee. Found by review on PR #87.
+        """
+        assert blocking_error([{"node": "planner", "blocking": False}]) is not None
+        assert blocking_error([{"node": "implementer", "blocking": False}]) is not None
+
+    def test_an_explicit_false_cannot_lower_an_unknown_node(self) -> None:
+        assert blocking_error([{"node": "who_is_this", "blocking": False}]) is not None
+
+    def test_an_explicit_true_may_raise_an_observation_record(self) -> None:
+        """The floor may be raised, only never lowered."""
+        assert blocking_error([{"node": "shadow_planner", "blocking": True}]) is not None
+
+    @pytest.mark.parametrize("flag", ["yes", 1, 0, None, [], {}])
+    def test_a_non_boolean_flag_is_not_a_declaration(self, flag: object) -> None:
+        """Only ``True`` raises the floor; anything else leaves the node to decide,
+        so a truthy string cannot block an observation node and a falsy one
+        cannot clear a control-plane node."""
+        assert blocking_error([{"node": "shadow_planner", "blocking": flag}]) is None
+        assert blocking_error([{"node": "planner", "blocking": flag}]) is not None
+
+    def test_record_without_a_blocking_key_is_graded_by_its_node(self) -> None:
+        """Records written before this classification existed, or by an adopter."""
+        assert blocking_error([{"node": "shadow_planner", "error": "x"}]) is None
+        assert blocking_error([{"node": "planner", "error": "x"}]) is not None
+
+    def test_malformed_entry_fails_closed(self) -> None:
+        assert blocking_error(["not a dict"]) is not None
+        assert blocking_error([{"node": 42, "error": "x"}]) is not None
+
+    def test_empty_and_none_channels_block_nothing(self) -> None:
+        assert blocking_error([]) is None
+        assert blocking_error(None) is None
 
 
 class TestClarifyNode:
     def test_returns_gate_pass(self) -> None:
         result = clarify_node({**DEFAULT_STATE})
         assert result["gate_status"]["plan_gate"] == "pass"
+
+    def test_counts_its_visits(self) -> None:
+        """R-LGH-5: the counter is the plan_gate/clarify cycle's only bound."""
+        first = clarify_node({**DEFAULT_STATE})
+        assert first["gate_status"][CLARIFY_COUNT] == 1
+        second = clarify_node({**DEFAULT_STATE, "gate_status": first["gate_status"]})
+        assert second["gate_status"][CLARIFY_COUNT] == 2
 
 
 class TestEscalateNode:
