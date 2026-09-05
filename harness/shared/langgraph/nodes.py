@@ -103,7 +103,7 @@ def planner_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str, An
         if orchestrator:
             # GraphPolicy / node configurable has no policy_path accessor today;
             # resolve planner gaps from the loader default and say so explicitly.
-            logger.debug("planner gaps resolve from default policy " "(no policy_path in GraphPolicy/node context)")
+            logger.debug("planner gaps resolve from default policy (no policy_path in GraphPolicy/node context)")
             open_gaps = format_gaps_for_planner(
                 workspace_dir=orchestrator.workspace_dir,
                 policy_path=None,
