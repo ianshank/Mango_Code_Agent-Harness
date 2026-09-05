@@ -6,7 +6,7 @@ harness/api_server/tests produced no row in the evidence file and the Python
 zero-skip gate (INV-2, DEC-026) could not see it. The hooks now sit in the
 repository-root conftest.py; the tests here pin that placement. The end-to-end
 sibling-suite reproduction lives in
-``regression/test_session_hooks_skip_evidence_regression.py`` (NS-11).
+``harness/shared/tests/regression/test_session_hooks_skip_evidence_regression.py`` (NS-11).
 """
 
 from __future__ import annotations

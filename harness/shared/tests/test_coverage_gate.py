@@ -338,7 +338,7 @@ def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
 
 
 # Shadowing reproduction (own-directory on sys.path) lives in
-# regression/test_coverage_gate_shadowing_regression.py (NS-11).
+# harness/shared/tests/regression/test_coverage_gate_shadowing_regression.py (NS-11).
 
 
 def test_a_namespace_stub_does_not_count_as_importable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
