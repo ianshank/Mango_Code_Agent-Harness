@@ -147,6 +147,8 @@ class TestEveryRedirectSpellingIsAWrite:
             pytest.param("printf x 1<>f", "f", id="read-write"),
             pytest.param("echo x >| f", "f", id="clobber"),
             pytest.param("echo PWNED 1>.git/hooks/pre-commit", ".git/hooks/pre-commit", id="the-reported-bypass"),
+            pytest.param("echo x>>out.txt", "out.txt", id="append-no-whitespace"),
+            pytest.param("echo x>|out.txt", "out.txt", id="clobber-no-whitespace"),
         ],
     )
     def test_the_target_is_seen(self, command: str, target: str) -> None:

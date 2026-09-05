@@ -10,6 +10,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Hotfix: split `command_actions` write-target extraction (size budget)
+
+NS-33's `ruff format` apply expanded `harness/shared/governance/command_actions.py`
+from 472 to 552 lines and breached `limits.size_budget_lines` (500), turning
+`validate_invariants` / `build-full` red on `main` and blocking open PRs. The
+write-target walk (`write_targets`, redirect operators, `WRITE_TARGET_PROGRAMS`)
+moves to `command_write_targets.py` — the seam the broker already draws between
+action classification and path enumeration — with DEC-035 re-exports so callers
+and tests keep importing from `command_actions`. Budget is not raised. DEBUG
+logging on the new module names path *counts*, never command text. Same commit
+regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
+that NS-33 reformatted without refreshing the bundle (the related digest gate
+failure on `main`).
+
+
 ### Adopt `ruff format` (NS-33 / audit H11)
 
 `[tool.ruff.format]` is declared (inherits `line-length` / `target-version` from

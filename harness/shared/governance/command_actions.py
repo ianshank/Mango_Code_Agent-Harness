@@ -25,6 +25,10 @@ import shlex
 import typing
 
 from harness.shared.debug_dump import redact_text
+from harness.shared.governance.command_write_targets import (
+    _REDIRECT,
+    write_targets,
+)
 from harness.shared.governance.indirect_exec import delegated_argv, make_denial_reason
 from harness.shared.governance.shell_words import (
     WordListNotEnumerable,
@@ -75,44 +79,9 @@ UNCLASSIFIED_ACTION = "destructive"
 #: shell: both printed the secret while grading `read`.
 _COMPOUND = re.compile(r"[;|]|(?<!>)&|\$[({']|[<>]\(|`|\n")
 
-#: A redirection that can write to a file. Every `>` counts -- `>`, `>>`, `1>`,
-#: `2>`, `&>`, `>|` and `<>` alike -- except descriptor duplication and closing
-#: (`2>&1`, `>&2`, `2>&-`), which renames or closes a descriptor rather than
-#: naming a file.
-#:
-#: The previous form was `(?<![0-9<>&])(?:>>|>)(?!&)`. The `0-9` was added to
-#: keep `2>&1` from reading as a redirect, but `(?!&)` already did that -- so the
-#: digit exclusion bought nothing and cost everything: it made **every**
-#: fd-numbered redirect invisible. `echo PWNED 1>.git/hooks/pre-commit` classified
-#: as `read`, produced no write targets, and installed a host-executed hook. The
-#: same spelling let the verifier -- which holds no `write` action at all -- write
-#: files, because the action never became `write` in the first place.
-#:
-#: `(?<!>)` only prevents the second `>` of `>>` from matching again; the leading
-#: `<` of `<>` and `&` of `&>` must NOT be excluded, since both are real writes.
-_REDIRECT = re.compile(r"(?<!>)>(?!&[0-9-])")
-
-#: A token that is *entirely* a redirection operator, so the filename is the next
-#: token: `>`, `>>`, `1>`, `2>>`, `&>`, `<>`, `>|`.
-_REDIRECT_OP = re.compile(r"^(?:[0-9]*|&|<)>{1,2}\|?$")
-
-#: The same operator when the filename is glued to it (`2>f`, `>>f`): matches the
-#: operator so the remainder can be taken as the target.
-_REDIRECT_PREFIX = re.compile(r"^(?:[0-9]*|&|<)>{1,2}\|?")
-
-#: Programs whose non-flag arguments name files they create or overwrite. Their
-#: targets go through the same write policy as the write tool, so `cp evil
-#: .mango/hooks/x.sh` is refused for the same reason `write_file` would refuse it.
-WRITE_TARGET_PROGRAMS: typing.Mapping[str, int] = {
-    # program -> index of the first argument that is a write target
-    "cp": 1,
-    "mv": 1,
-    "tee": 0,
-    "touch": 0,
-    "mkdir": 0,
-    "install": 1,
-}
-
+#: Re-exported from ``command_write_targets`` so callers and tests that address
+#: write targets through this module keep working (DEC-035 re-export pattern).
+#: ``_REDIRECT`` is imported for ``_classify``; the write-target walk lives next door.
 
 #: Actions from least to most privileged. A command can exercise more than one --
 #: `rm -rf victim > log.txt` is both a delete and a write -- and the strictest is
@@ -500,53 +469,3 @@ def _classify_delegated(delegator: str, inner: list[str]) -> Classification:
     if inner_verdict.action != "test_execute":
         return Classification(UNCLASSIFIED_ACTION, f"{delegator}: {inner_verdict.reason}")
     return Classification(inner_verdict.action, f"{delegator} {program}")
-
-
-def write_targets(command: str) -> list[str]:
-    """Paths ``command`` would create or overwrite, best effort.
-
-    The broker checks each against the same write policy as the file-write tool.
-    Without this, ``run_command`` re-opens every path ``write_file`` closes:
-    ``echo x > .git/hooks/pre-commit`` is ``echo`` by ``argv[0]``, classifies as
-    a read, and installs a host-executed hook.
-
-    Best effort is stated deliberately. A shape this cannot parse is graded
-    ``UNCLASSIFIED_ACTION`` by :func:`classify` and denied there, so the failure
-    mode of missing a target is a denial, not an allow.
-    """
-    try:
-        argv = shlex.split(command.strip())
-    except ValueError:
-        return []
-
-    targets: list[str] = []
-    discard_targets = {"/dev/null", "nul", "NUL", "/dev/zero", "/dev/stdout", "/dev/stderr"}
-    pending_redirect = False
-    for token in argv:
-        if pending_redirect:
-            # `2>&1` and `>&2` duplicate a descriptor rather than naming a file.
-            if not token.startswith("&") and token not in discard_targets:
-                targets.append(token)
-            pending_redirect = False
-            continue
-        if _REDIRECT_OP.fullmatch(token):
-            pending_redirect = True
-            continue
-        match = _REDIRECT_PREFIX.match(token)
-        if match is None:
-            # A redirect can still sit mid-token when the shell would split it
-            # but shlex does not, e.g. `foo>bar`.
-            inner = _REDIRECT.search(token)
-            match = inner if inner and inner.end() < len(token) else None
-        if match is not None:
-            # `>file` written without a space, or `2>file`.
-            tail = token[match.end() :]
-            if tail and not tail.startswith("&") and tail not in discard_targets:
-                targets.append(tail)
-
-    program = argv[0].rsplit("/", 1)[-1] if argv else ""
-    start = WRITE_TARGET_PROGRAMS.get(program)
-    if start is not None:
-        operands = [a for a in argv[1:] if not a.startswith("-") and not _REDIRECT.search(a)]
-        targets.extend(operands[start:] if start else operands)
-    return targets
