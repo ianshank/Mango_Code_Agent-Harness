@@ -54,7 +54,7 @@ The control-plane workflow example, `harness/control-plane/required-workflow.exa
 
 The `protected_paths` policy (see `governance-policy.json`) forbids unreviewed modifications to governance-critical files. Three groups are covered: the **enforcement layer** (`Makefile`, `pyproject.toml`, `.github/workflows/**`, the shared validators, the policy publisher and its committed artifact, and the per-stack roots of trust under `.governance/`), and the **agent control surface** — everything an agent reads to decide what it may do: `CLAUDE.md`, `harness/CONTRACT.md`, `agent-policy.json`, agent role contracts, `.mango/skills/**`, and the `.mango/` and `.claude/` hook and settings files that execute shell; and, since DEC-042, the **runtime enforcement layer** — the modules that execute and gate a tool call, which an agent could otherwise rewrite mid-task to widen its own next write: `tool_executors.py`, `orchestrator/**`, `nemotron_bridge.py`, `tool_schemas.py`, `agent_prompts.py`, `tool_dispatch.py`, and the repository-root `conftest.py` (the verifier's verdict is a `make test-python` run that imports it). `validate_invariants.py` enforces this at `make validate` / `make ci` time and **fails closed** when a protected path is modified.
 
-`.governance/` currently exists only under `harness/node/.governance/` — there is no root-level `.governance/` directory, even though root-level scripts (`verify_zero_skips.py`, `remotes.py`) consult it by explicit path. This is intentional, not an oversight to fix: DEC-005 rejected creating a root `.governance/allowed-remotes.txt` specifically because `.governance/**` is declared dormant in `protected_paths` (see `test_protected_path_liveness.py`'s `DORMANT_PATTERNS`), part of a deliberate posture that keeps agent-initiated `git push` fail-closed until a human explicitly stands up a root-level root of trust. A future stack wiring its own root of trust should follow the same per-stack pattern unless that posture is revisited with its own decision-log entry.
+`.governance/` currently exists only under `harness/node/.governance/` — there is no root-level `.governance/` directory, even though root-level scripts (`verify_zero_skips.py`, `remotes.py`) consult it by explicit path. This is intentional, not an oversight to fix: DEC-005 rejected creating a root `.governance/allowed-remotes.txt` specifically because `.governance/**` is declared dormant in `protected_paths` (see `test_protected_path_liveness.py`'s `DORMANT_PATTERNS`), part of a deliberate posture that keeps agent-initiated `git push` fail-closed until a human explicitly stands up a root-level root of trust. A future stack wiring its own root of trust should follow the same per-stack pattern unless that posture is revisited with its own `docs/decisions/` record.
 
 Since DEC-007 the same matcher also runs at **tool-call granularity**: `harness/shared/write_policy.write_denial_reason` reuses `validate_invariants.is_protected` — one matcher, not two — and is consulted by the orchestrator's `write_file` handler and by `ExecutionBroker` for every target a `run_command` would create or redirect into. It additionally denies any path containing a `.git` segment, and since DEC-042 any credential-bearing filename — `.env` is deliberately untracked, so `protected_paths` matched nothing and `write_denial_reason(".env")` returned `None` while `read_policy` had refused the same file since it shipped. The write handler now also asks the policy decision point whether the acting role holds `write` at all, before this path check runs, which `protected_paths` structurally cannot express: `validate_invariants` enumerates staged, tracked-modified and untracked files, and git never reports anything under `.git`. A policy that cannot be read denies the write. The CI gate remains the *review* gate; the runtime gate closes the tool-call budget between agent boundaries, which the review gate cannot see.
 
@@ -62,7 +62,7 @@ Since DEC-012 there is a read-side counterpart at the same granularity: `harness
 
 Patterns are matched with `fnmatch` against repo-root-relative paths, so a pattern written for a different repository layout matches nothing and protects nothing — silently. `test_protected_path_liveness.py` guards against that by asserting on the set of files each pattern actually matches, and requires any intentionally-dormant pattern to be declared with a reason.
 
-Legitimate infrastructure modernization (CI, Makefile, governance scripts) necessarily touches these paths. Such changes MUST be made on a dedicated branch with an explicit, reviewed decision-log entry, and the protected-path gate is satisfied by setting `ALLOW_GITHUB_CHANGES=1` in the CI environment **for that reviewed change only**. The env var is a per-change attestation of review, not a blanket bypass: it is not set in the default CI environment and must never be committed to a `.env` file.
+Legitimate infrastructure modernization (CI, Makefile, governance scripts) necessarily touches these paths. Such changes MUST be made on a dedicated branch with an explicit, reviewed `docs/decisions/` record, and the protected-path gate is satisfied by setting `ALLOW_GITHUB_CHANGES=1` in the CI environment **for that reviewed change only**. The env var is a per-change attestation of review, not a blanket bypass: it is not set in the default CI environment and must never be committed to a `.env` file.
 
 Untracked files in protected paths are also caught (fail-closed) — `validate_invariants` enumerates staged, tracked-modified, and untracked non-ignored files.
 
@@ -83,13 +83,13 @@ Node thresholds are read from this same policy rather than restated as literals,
 The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation. They are currently schema-shape guards for an unimplemented feature: no production code path consults them.
 
 `decision_id_pattern` in `governance-policy.json` governs the identifiers in
-`.governance/decision-log.md` and nothing else. `check_projections.py` and
+`docs/decisions/` (and the thin ID index at `harness/node/.governance/decision-log.md`) and nothing else. `check_projections.py` and
 `governance/verify_zero_skips.py` rewrite it from `^(...)$` into `\b(...)\b` and use it
-as a *scanner* over the log, harvesting the IDs a waiver or projection may cite — never
+as a *scanner* over those files, harvesting the IDs a waiver or projection may cite -- never
 as a validator that rejects a malformed ID. Area-scoped identifiers appearing in
-`openspec/changes/**` (`DEC-NS-002`, `DEC-AE-001`, `DEC-GCP-002`, `DEC-CE-002`) are
+historical proposal drafts (`DEC-NS-002`, `DEC-AE-001`, `DEC-GCP-002`, `DEC-CE-002`) are
 proposal-local: they name open questions inside a draft change, are read by no gate, and
-carry no authority until the decision is minted as a real `DEC-<n>` entry in a log.
+carry no authority until the decision is minted as a real `DEC-<n>` record under `docs/decisions/`.
 
 ## Evidence signing
 

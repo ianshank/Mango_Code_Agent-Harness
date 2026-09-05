@@ -7,7 +7,7 @@ states are allowed and a third is not (tech-debt-hardening-plan R-TDH-16):
 * **policy** -- the constant equals a policy value, read through
   `policy_loader` or equality-pinned to it (the adopter-fallback pattern
   `test_policy_consistency.py` already applies).
-* **decision** -- the constant is named in one decision-log entry that says
+* **decision** -- the constant is named in one decision-record entry that says
   why it is a true constant (a protocol ceiling, an operator env knob with a
   documented default, a client-local resilience default).
 * unlinked -- not allowed. A new constant needs a row here, and a row needs a
@@ -44,7 +44,7 @@ from harness.shared.tests._helpers import REPO
 pytestmark = pytest.mark.governance
 
 POLICY = REPO / "harness" / "shared" / "governance-policy.json"
-DECISION_LOG = REPO / "harness" / "node" / ".governance" / "decision-log.md"
+DECISIONS_DIR = REPO / "docs" / "decisions"
 
 
 @dataclass(frozen=True)
@@ -112,7 +112,7 @@ TRIAGE: tuple[Row, ...] = (
 
 
 def _module_names(module: str) -> tuple[str, ...]:
-    """Identifiers a decision-log line may legitimately use to name ``module``.
+    """Identifiers a decision-record body may legitimately use to name ``module``.
 
     Rows carry two shapes: a dotted Python module
     (``harness.shared.retry_policy``) and a repo-relative Node path
@@ -140,13 +140,15 @@ def _lookup(policy: dict[str, Any], dotted: str) -> Any:
     return node
 
 
-def decision_entries(log_text: str) -> dict[str, str]:
-    """`DEC-nnn` -> the full log line, for the pipe-delimited log format."""
+def decision_entries(decisions_dir: Path | None = None) -> dict[str, str]:
+    """`DEC-nnn` -> record text (frontmatter + body) from docs/decisions."""
+    root = decisions_dir if decisions_dir is not None else DECISIONS_DIR
     entries: dict[str, str] = {}
-    for line in log_text.splitlines():
-        match = re.match(r"^\d{4}-\d{2}-\d{2}\s*\|\s*(DEC-\d+)\s*\|", line)
+    for path in sorted(root.glob("DEC-*.md")):
+        text = path.read_text(encoding="utf-8")
+        match = re.search(r"^id:\s*(DEC-\d+)\s*$", text, re.M)
         if match:
-            entries[match.group(1)] = line
+            entries[match.group(1)] = text
     return entries
 
 
@@ -165,7 +167,7 @@ def check_row(row: Row, policy: dict[str, Any], decisions: dict[str, str]) -> st
     assert row.decision is not None
     line = decisions.get(row.decision)
     if line is None:
-        return f"{row.decision} is not in the decision log"
+        return f"{row.decision} is not in the decision records"
     if row.symbol not in line or not any(name in line for name in _module_names(row.module)):
         return f"{row.decision} does not name {row.module} / {row.symbol}"
     return None
@@ -180,8 +182,8 @@ def policy() -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def decisions() -> dict[str, str]:
-    entries = decision_entries(DECISION_LOG.read_text(encoding="utf-8"))
-    assert entries, "the decision-log parser found no entries; the format changed or the file moved"
+    entries = decision_entries()
+    assert entries, "docs/decisions parser found no entries; the format changed or the dir moved"
     return entries
 
 
@@ -379,7 +381,7 @@ class TestCheckerSemantics:
 
     def test_missing_decision_is_rejected(self, policy: dict[str, Any]) -> None:
         reason = check_row(Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-999"), policy, {})
-        assert reason and "not in the decision log" in reason
+        assert reason and "not in the decision records" in reason
 
     def test_decision_that_does_not_name_the_constant_is_rejected(self, policy: dict[str, Any]) -> None:
         fake = {"DEC-1": "2026-01-01 | DEC-1 | something unrelated | owner"}
@@ -392,9 +394,15 @@ class TestCheckerSemantics:
         reason = check_row(row, drifted, decisions)
         assert reason and "but policy" in reason
 
-    def test_parser_reads_the_log_format(self) -> None:
-        text = "# Log\n\n2026-01-01 | DEC-007 | first | a\n2026-01-02 | DEC-008 | second | b\n"
-        assert set(decision_entries(text)) == {"DEC-007", "DEC-008"}
+    def test_parser_reads_decision_records(self, tmp_path: Path) -> None:
+        for dec_id, body in (("DEC-007", "first"), ("DEC-008", "second")):
+            (tmp_path / f"{dec_id}.md").write_text(
+                f"---\nid: {dec_id}\nstatus: accepted\ndate: 2026-01-01\n"
+                f"supersedes: []\nowners: [a]\n---\n\n## Context\n\nx\n\n"
+                f"## Decision\n\n{body}\n\n## Consequences\n\ny\n",
+                encoding="utf-8",
+            )
+        assert set(decision_entries(tmp_path)) == {"DEC-007", "DEC-008"}
 
 
 class TestDecisionLinkageIsNotVacuous:
@@ -402,7 +410,7 @@ class TestDecisionLinkageIsNotVacuous:
 
     ``Path("harness.shared.retry_policy").name.split(".")[0]`` is ``"harness"``
     — a dotted module has no path separator to split on — and that appears in
-    essentially every decision-log line. With `or`/`and` precedence only the
+    essentially every decision-record body. With `or`/`and` precedence only the
     symbol was ever really checked, so a constant could cite a decision about a
     different module, or a module that does not exist, and stay green. AC-16's
     entire enforcement rested on that expression.

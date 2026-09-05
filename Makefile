@@ -203,6 +203,14 @@ verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last c
 		--waivers $(SHARED_TESTS)/skip-waivers.json
 
 # --- Governance Validators ---
+.PHONY: decision-index
+decision-index: ## Regenerate docs/decisions/index.{md,json} and the thin node decision-log
+	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root .
+
+.PHONY: decision-index-check
+decision-index-check: ## Fail if decision index artefacts drift from DEC-*.md
+	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root . --check
+
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"

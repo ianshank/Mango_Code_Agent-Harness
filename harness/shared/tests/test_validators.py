@@ -12,14 +12,18 @@ from typing import Protocol
 
 import pytest
 
-from harness.shared.tests._helpers import utc_today
+from harness.shared.tests._helpers import seed_minimal_decision_records
 
 
 class RunScript(Protocol):
     """The runner the ``run_script`` fixture hands each test."""
 
     def __call__(
-        self, project_root: Path, cwd: Path, script_name: str, args: list[str] | None = None
+        self,
+        project_root: Path,
+        cwd: Path,
+        script_name: str,
+        args: list[str] | None = None,
     ) -> subprocess.CompletedProcess: ...
 
 
@@ -51,7 +55,10 @@ def run_script(monkeypatch: pytest.MonkeyPatch) -> RunScript:
             returncode = 0
 
             try:
-                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                with (
+                    contextlib.redirect_stdout(stdout),
+                    contextlib.redirect_stderr(stderr),
+                ):
                     runpy.run_path(str(script), run_name="__main__")
             except SystemExit as e:
                 if isinstance(e.code, int):
@@ -154,7 +161,12 @@ def mock_repo(tmp_path: Path):
         "test-eval",
     ]
     agent_list = [
-        {"id": r, "delegation_depth": 1, "allowed_actions": ["foo"], "human_approval_required_for": ["foo"]}
+        {
+            "id": r,
+            "delegation_depth": 1,
+            "allowed_actions": ["foo"],
+            "human_approval_required_for": ["foo"],
+        }
         for r in [*roles, "verifier"]
     ]
 
@@ -197,8 +209,8 @@ def mock_repo(tmp_path: Path):
         )
     )
 
-    # decision-log.md
-    (gov / "decision-log.md").write_text("2020-01-01 | DEC-123 | foo\n")
+    # decision-log.md (thin ID index for --decision-log consumers such as projections)
+    (gov / "decision-log.md").write_text("DEC-123\n")
 
     # allowed-remotes.txt
     (gov / "allowed-remotes.txt").write_text("github.com/org/repo\n")
@@ -217,9 +229,14 @@ def mock_repo(tmp_path: Path):
     # PROJECT-CHARTER.md
     (docs / "PROJECT-CHARTER.md").write_text("# Charter v1.0\n")
 
-    # GOVERNANCE_SKILL.md
-    today = utc_today().isoformat()
-    (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2020-01-01\nDEC-123")
+    # docs/decisions SoT + skill pointer (NS-34)
+    seed_minimal_decision_records(
+        tmp_path,
+        dec_id="DEC-123",
+        date="2020-01-01",
+        since="2020-01-01",
+        title="foo",
+    )
 
     return tmp_path
 
@@ -323,7 +340,12 @@ def test_adoption_rot_without_external_ref_or_valid_digest(run_script: RunScript
 def test_adoption_rot_valid_but_policy_json_missing(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "policy.json").unlink()
     (mock_repo / ".governance" / "root-of-trust.json").write_text(
-        json.dumps({"external_policy_ref": "https://example.com/policy", "policy_sha256": "a" * 64})
+        json.dumps(
+            {
+                "external_policy_ref": "https://example.com/policy",
+                "policy_sha256": "a" * 64,
+            }
+        )
     )
     res = run_script(project_root, mock_repo, "validate_adoption.py")
     assert res.returncode != 0
@@ -332,7 +354,12 @@ def test_adoption_rot_valid_but_policy_json_missing(run_script: RunScript, proje
 
 def test_adoption_rot_digest_mismatch(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "root-of-trust.json").write_text(
-        json.dumps({"external_policy_ref": "https://example.com/policy", "policy_sha256": "a" * 64})
+        json.dumps(
+            {
+                "external_policy_ref": "https://example.com/policy",
+                "policy_sha256": "a" * 64,
+            }
+        )
     )
     res = run_script(project_root, mock_repo, "validate_adoption.py")
     assert res.returncode != 0
@@ -408,7 +435,10 @@ def test_missing_requirement_fails(run_script: RunScript, project_root: Path, mo
     (src / "test.py").write_text("# covers REQ-NOTHING")
 
     res = run_script(
-        project_root, mock_repo, "check_traceability.py", ["--req-files", "docs/reqs.md", "--src-dir", "src"]
+        project_root,
+        mock_repo,
+        "check_traceability.py",
+        ["--req-files", "docs/reqs.md", "--src-dir", "src"],
     )
     assert res.returncode != 0
     assert "missing implementation and/or test citation" in res.stderr
@@ -422,7 +452,8 @@ def test_validate_specs_default_and_template(tmp_path: Path, monkeypatch: pytest
     specs_dir.mkdir(parents=True)
     (specs_dir / "SPEC_TEMPLATE.md").write_text("# Template", encoding="utf-8")
     (specs_dir / "valid_spec.md").write_text(
-        "## Requirements\n- MUST R-01 foo\n## Acceptance criteria\nDone.\n", encoding="utf-8"
+        "## Requirements\n- MUST R-01 foo\n## Acceptance criteria\nDone.\n",
+        encoding="utf-8",
     )
 
     res = validate_specs.main(specs_dir)
