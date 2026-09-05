@@ -204,15 +204,11 @@ jobs:
             "$RUNNER_TEMP/pr.json" > "$RUNNER_TEMP/pr-body.md"
           make attestation-check FILE="$RUNNER_TEMP/pr-body.md"
 
-      # Run the regression tier on its own, before the full gate. These tests
-      # each reproduce a defect that already shipped once, so a failure here has
-      # a specific meaning -- something came back -- that is worth reading
-      # without scrolling through the whole suite. They also run again inside
-      # `make ci`; the tier is fast enough that the duplicate is worth the
-      # distinct signal.
-      - name: Run regression/AQA tier (make test-regression)
-        run: make test-regression
-
+      # Regression/AQA lives under harness/shared/tests/regression/ and is
+      # already collected by `make ci` via coverage-python's SHARED_TESTS path
+      # (CONTRACT.md; pinned by test_makefile_contracts). A prior standalone
+      # `make test-regression` step double-collected the tier (NS-11); keep
+      # `make test-regression` for local/dedicated runs only.
       - name: Run unified CI gate (make ci)
         # Same label-derived attestation as the matrix job; see the note there.
         env:

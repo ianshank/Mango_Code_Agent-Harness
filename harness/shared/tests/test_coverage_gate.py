@@ -338,6 +338,9 @@ def test_shipped_policy_declares_langgraph_the_way_conftest_and_ci_use_it():
         assert (cg.DEFAULT_REPO_ROOT / prefix).is_dir(), prefix
 
 
+# Shadowing reproduction (own-directory on sys.path) lives in
+# regression/test_coverage_gate_shadowing_regression.py (NS-11).
+
 def test_a_namespace_stub_does_not_count_as_importable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A directory with no `__init__.py` is a namespace hit with nothing importable under it."""
     (tmp_path / "nsonly").mkdir()
@@ -348,32 +351,6 @@ def test_a_namespace_stub_does_not_count_as_importable(tmp_path: Path, monkeypat
     assert cg._importable("no_such_parent_for_tests.child") is False
     assert cg._importable("json") is True
     assert cg._importable("json.decoder") is True
-
-
-def test_the_gates_own_directory_cannot_shadow_the_extra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """The 3.9 CI failure: `python harness/shared/coverage_gate.py` puts harness/shared/
-    first on sys.path, where harness/shared/langgraph/ shadows the real package, so the
-    probe said "importable" on a leg with nothing installed. Reproduced by pointing the
-    gate's __file__ at a directory holding a same-named package: the probe must ignore
-    that directory, and only that directory."""
-    shadow = tmp_path / "gate_dir" / "shadowextra"
-    shadow.mkdir(parents=True)
-    (shadow / "__init__.py").write_text("", encoding="utf-8")
-    (shadow / "graph.py").write_text("", encoding="utf-8")
-    monkeypatch.syspath_prepend(str(tmp_path / "gate_dir"))
-    importlib.invalidate_caches()
-    assert cg._importable("shadowextra.graph") is True, "sanity: visible when it is just another path entry"
-
-    # Patched on the module that *defines* `_importable`, which is where the
-    # `__file__` it reads lives. That is `coverage_scope` since the scope concern
-    # was split out; patching `cg.__file__` after the split left this regression
-    # asserting nothing, because the function never reads it. Production
-    # behaviour is unchanged either way -- both modules sit in harness/shared/,
-    # so "the script's own directory" resolves to the same path (DEC-032).
-    monkeypatch.setattr(cs, "__file__", str(tmp_path / "gate_dir" / "coverage_scope.py"))
-    assert cg._importable("shadowextra.graph") is False
-    assert "shadowextra" not in sys.modules, "the probe must not leave its imports behind"
-    assert cg._importable("json.decoder") is True, "removing the own directory must not hide real modules"
 
 
 def test_the_probe_restores_a_module_it_set_aside(monkeypatch: pytest.MonkeyPatch):
