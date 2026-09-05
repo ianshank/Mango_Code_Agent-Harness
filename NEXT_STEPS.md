@@ -1,8 +1,8 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
 **Version:** 2.4.0
-**Status:** Active roadmap — forward-looking only
-**Last reviewed:** 2026-09-05 · peer rewrite against `main` @ `2441547` (PRs #86–#88) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · prior peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
+**Status:** Active roadmap - forward-looking only
+**Last reviewed:** 2026-09-05 · second peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
 
 ---
 
@@ -18,17 +18,17 @@ plan (`docs/specs/2026-standards-remediation-plan.md`, R-SR-1 … R-SR-31) carri
 every audit finding and every open requirement of the closed
 `code-quality-tech-debt-plan.md`; this file lists what is **blocked on a person**,
 what an **agent can do without a decision**, and what is **parked** with its
-blocker named. Status boxes live in the plan — do not restate them here.
+blocker named. Status boxes live in the plan - do not restate them here.
 
 Every item carries four fields, and an item without them is not ready to be
 worked:
 
-- **Why now** — the consequence of not doing it, not a restatement of the title.
-- **Evidence** — a command, a file reference, or an API result a reviewer can
+- **Why now** - the consequence of not doing it, not a restatement of the title.
+- **Evidence** - a command, a file reference, or an API result a reviewer can
   re-run today. A claim in prose is not evidence (DEC-024).
-- **Done when** — a falsifiable criterion bound to the stage that proves it, with
+- **Done when** - a falsifiable criterion bound to the stage that proves it, with
   the failure it must be able to report.
-- **Depends on** — the item that must land first, or `nothing`.
+- **Depends on** - the item that must land first, or `nothing`.
 
 Priorities are an ordering, not a schedule. **Spec discipline.** Items marked
 *(spec required)* change behaviour, policy, or a protected path and must not be
@@ -40,16 +40,30 @@ skill, then `make pre-pr`.
 | ID | Severity | Finding | Effect on this file |
 |---|---|---|---|
 | PR-1 | **Blocker (doc)** | NS-32 said "Land Phase B (PR #86)" while the open roadmap still treated Phase B as unfinished. PR #86's title is `docs(reports): 2026 coding-standards audit`, but its body and 97-file diff landed Phase B (R-SR-6…R-SR-22 / AC-6…AC-22, AC-33 `[x]`); DEC-048…DEC-051 carry the containment/runtime narrative. | NS-32 closed → §6 Delivered; remediation plan bumped to rev 2 (Phase B Done). |
-| PR-2 | **Blocker (product)** | Memo 1 / R-SR-27 still recommend PARK, and peer review drafts DEC-053 as park-after-fail-closed — but PR #87/#88 + DEC-052 invested in fail-closed LangGraph on `main`, so KEEP became a live contested alternative. | NS-31 records **DEC-053 park recommended**; KEEP only if a DEC supersedes Memo 1 / R-SR-27. |
+| PR-2 | **Blocker (product)** | Memo 1 / R-SR-27 still recommend PARK, and peer review drafts DEC-053 as park-after-fail-closed - but PR #87/#88 + DEC-052 invested in fail-closed LangGraph on `main`, so KEEP became a live contested alternative. | NS-31 records **DEC-053 park recommended**; KEEP only if a DEC supersedes Memo 1 / R-SR-27. |
 | PR-3 | Major | Several P1 items still listed `Depends on: NS-32` after Phase B acceptance criteria were already ticked. | Depends-on retargeted. |
 | PR-4 | Unchanged blockers | Re-queried 2026-09-05: `GET …/rules/branches/main` → `[]`; `feature/governed-run-console` still at `5970249…`; zero tags; `license: null`. | NS-1, NS-2, NS-3, NS-30 stay P0. |
 
+### 2026-09-05b second peer-rewrite findings (verified)
+
+| ID | Severity | Finding | Effect on this file |
+|---|---|---|---|
+| PR-5 | **Blocker (doc)** | NEXT_STEPS still listed NS-11 / NS-31 / NS-33 as open; header cited `2441547` not tip `58490c1`. | Move NS-11 / NS-31 / NS-33 to §6; header retargeted to tip. |
+| PR-6 | **Blocker (doc)** | Remediation plan still revision 2 @ `2441547`; AC-5 unchecked; Phase E prose conflated R-SR-5 Done with R-SR-2 still gating. | Plan → revision 3; AC-5 `[x]`; Phase E gated on NS-2 / R-SR-2 only. |
+| PR-7 | Major | Phase F still listed `ruff format`; NS-33 delivered on #91 (blame-ignore + format gate). | Drop ruff from Phase F slack; note delivered. |
+| PR-8 | Major | NS-4 still said bot PRs left for maintainer; Dependabot open = none (closed #62-#78). | §6 NS-4 disposition updated. |
+| PR-9 | Major | §4 Phase E still blocked on NS-31; DEC-053…056 exist on #93. | Phase E retargeted to **NS-2** before destructive slices. |
+| PR-10 | Major | NS-9 / NS-34 still treated NS-31 undecided; PARK decided (DEC-053). | NS-9 moves with park; NS-34 Depends on nothing mechanical (DECs logged). |
+| PR-11 | Product | NS-17 open on #97; Copilot: `policy_path` not plumbed into `agent_memory_defaults` / gap injection. | Keep open; strengthen Done-when (policy_path + mutation + `max_gaps==0`). |
+| PR-12 | Unchanged P0 | Re-queried: ruleset `[]`; tip `58490c1`; branch `5970249…`; 0 tags; `license: null`. | NS-1 / NS-2 / NS-3 / NS-30 stay P0. |
+
 ---
 
-## 1. P0 — one owner sitting, zero code
+## 1. P0 - one owner sitting, zero code
 
-These five are settings, credentials, a file and decision-log entries.
-Nothing an agent does advances them.
+These four are settings, credentials, a file and a release identity.
+Nothing an agent does advances them. (NS-31's four DECs landed on #93;
+R-SR-5 / AC-5 are closed - see §6.)
 
 ### NS-1 · Apply the branch ruleset to `main`
 
@@ -89,12 +103,12 @@ DEC-014; Makefile secrets targets.
 
 **Done when.** Credential rotated at the provider first, branch deleted or
 purged, decision-log entry records the date, and
-`gitleaks git . --config .gitleaks.toml --log-opts="--all"` reports clean —
+`gitleaks git . --config .gitleaks.toml --log-opts="--all"` reports clean -
 it must have failed on the pre-rotation ref set, or the scan proves nothing
 (R-SR-2, AC-2).
 
 **Depends on.** Nothing. Do not wait for NS-1. **Required before any Phase E
-destructive slice.**
+destructive slice.** DEC-053…056 are logged; they do not lift this gate.
 
 ### NS-3 · Settle the release identity, tag it, and cap `[Unreleased]`
 
@@ -125,52 +139,20 @@ any of the three is removed (R-SR-3, AC-3). Plan recommends Apache-2.0.
 
 **Depends on.** Nothing.
 
-### NS-31 · Record the four in-or-out decisions (LangGraph: DEC-053 park recommended)
-
-**Why now.** Four half-done stacks still cost gates, shims and personas on
-every PR: `harness/jvm/`, `harness/shared/langgraph/`, `openspec/`, and
-per-stack governance mirroring. Phase E cannot start until the decisions are
-entries in the log (C-CQ-2 / R-SR-5).
-
-**Recommendation: PARK (DEC-053 draft), after #87/#88 fail-closed.** Memo 1 /
-R-SR-27 and the peer-reviewed plan still recommend parking LangGraph with a
-named sunset. PR #87/#88 + DEC-052 made that investment fail-closed on `main`
-(INV-LG-6/7); they do **not** convert Memo 1 into KEEP by default. Fail-closed
-is the correct posture whether the path is kept or parked. Log DEC-053 as PARK
-unless a later DEC explicitly supersedes Memo 1 / R-SR-27. The KEEP row below
-is the contested alternative, not the default.
-
-| Choice | Meaning | Consequences |
-|---|---|---|
-| **PARK (recommended · DEC-053)** | Stop feature work; move under `experimental/` with a named sunset | Honour R-SR-27 as written; freeze further LangGraph PRs except security; NS-9 moves with the package; do not open new graph-expansion specs. Phase E order stays JVM → LangGraph → openspec → mirroring. |
-| **KEEP (contested)** | LangGraph stays a supported runtime path | Requires a DEC that supersedes Memo 1 / R-SR-27; rewrite Phase E order; continue NS-9 and graph expansion under specs; HITL/LATS stay gated on ablation (DEC-027). |
-
-JVM relocate, `openspec/` fold, and mirroring collapse remain as the memos
-recommend unless a new memo says otherwise. **Do not log DEC-053 in this PR** —
-bundle it with drafts of DEC-054…056 in a separate decision-log PR.
-
-**Evidence.** Program plan §Review record (Memo 1 option B); audit H14/M3/M22/M23;
-DEC-052; `gh pr view 87` / `88` merged on 2026-09-05; peer plan Memo 1 / R-SR-27.
-
-**Done when.** Four decision-log entries exist (JVM, LangGraph PARK with sunset
-unless superseded, `openspec/` fold, mirroring collapse including DEC-005 push
-posture), each restated so `validate_governance_docs.py` passes, and
-`make validate` rejects an entry missing from either (R-SR-5, AC-5).
-
-**Depends on.** Nothing.
-
 ---
 
-## 2. P0 — agent-executable front
+## 2. P0 - agent-executable front
 
 **Phase B is landed on PR #86** (despite the docs-only title; body + AC ticks
-are the evidence). Do not open a "finish Phase B" item. Remaining agent work is
-P1 below. If a Phase B AC box is unticked or its named command fails on current
-`main`, file a regression under the remediation plan — do not revive NS-32.
+are the evidence). Do not open a "finish Phase B" item. **NS-31 DECs are logged
+on PR #93** (DEC-053 PARK … DEC-056); do not revive an "undecided" NS-31 item.
+Remaining agent work is P1 below. If a Phase B AC box is unticked or its named
+command fails on current `main`, file a regression under the remediation plan -
+do not revive NS-32.
 
 ---
 
-## 3. P1 — unblocked, take in any order
+## 3. P1 - unblocked, take in any order
 
 ### NS-6 · Move the Python floor to 3.10, then 3.11 *(spec required)*
 
@@ -195,43 +177,43 @@ if a 3.9 context remains (R-SR-23, AC-23).
 `# pragma: no cover` over an `except ImportError: pass` that turns a broken
 `graph.py` into "`build_graph` just isn't exported".
 
-**Evidence.** `harness/shared/langgraph/__init__.py`; `coverage.optional_extras`.
+**Evidence.** `harness/shared/langgraph/__init__.py`; `coverage.optional_extras`;
+DEC-053 (PARK).
 
 **Done when.** The swallow is gone and
 `pytest harness/shared/tests/test_langgraph_regression.py -k import_failure`
 fails when a broken `graph.py` is silently absorbed. Protected path;
-attestation required. If NS-31 chooses PARK, this item moves with the package
-into experimental and is not a mainline P1.
+attestation required. **DEC-053 chose PARK** - this item moves with the package
+into `experimental/` on the Phase E LangGraph park PRs (R-SR-27); it is not
+mainline KEEP polish.
 
-**Depends on.** Nothing mechanical; **coordinate with NS-31** — do not invest
-in KEEP-only polish the same week a PARK decision lands.
-
-### NS-11 · Reconcile the regression tier with the contract it claims
-
-**Why now.** `harness/CONTRACT.md` defines `harness/shared/tests/regression/` as
-one reproduction per defect that reached `main`, run by `make test-regression`.
-Recent reproductions still sit in the unit tier; `build-full` runs the
-regression tier twice because `testpaths` already recurses into it.
-
-**Evidence.** `harness/CONTRACT.md`; `pyproject.toml` `testpaths`; workflow.
-
-**Done when.** Named reproductions live in the regression tier with a pin that
-fails when one is moved back out. Rewriting the contract instead is not an
-option.
-
-**Depends on.** Nothing.
+**Depends on.** Nothing mechanical; land with the R-SR-27 park slices, not as a
+standalone KEEP investment ahead of the move.
 
 ### NS-17 · Retention and scoping for the agent memory directory
 
 **Why now.** `knowledge_gap_log` / `hypothesis_register` append to
 `.mango/memory/*.json` with no bound; `MEMORY_DIR` resolves from the install
 path, so workspaces share one store and nothing reads it back (audit M4).
+Open PR #97 implements the bound + workspace scope + planner injection, but
+Copilot review is unresolved: `policy_path` is not plumbed into
+`agent_memory_defaults()` / gap injection, so non-default governance policies
+do not affect retention or planner gap limits.
 
-**Evidence.** `harness/shared/meta_tools.py`; grep for readers outside tests.
+**Evidence.** `harness/shared/meta_tools.py`; `harness/shared/orchestrator/loop.py`;
+PR #97 review threads on `policy_path`; grep for readers outside tests.
 
-**Done when.** A bound from `governance-policy.json` is enforced; store lives
-under the workspace; one reader surfaces gaps into the planner prompt; tests
-fail when retention or surfacing breaks.
+**Done when.**
+- A bound from `governance-policy.json` is enforced via the **active**
+  `policy_path` (same path `ExecutionLoop` already uses for budgets), not only
+  the built-in harness defaults.
+- Store lives under the workspace; one reader surfaces gaps into the planner
+  prompt.
+- Tests fail when retention or surfacing breaks.
+- A mutation / negative case fails closed when `max_gaps == 0` (no false
+  "logged" / non-empty trim result from the `[-0:]` pitfall).
+- PR #97 either absorbs these criteria or a follow-up closes them before NS-17
+  moves to §6.
 
 **Depends on.** Nothing.
 
@@ -239,7 +221,7 @@ fail when retention or surfacing breaks.
 
 **Why now.** Five of six `.mango/hooks/` scripts are dormant by DEC-003; three
 of four `PERMITTED_HOOK_NAMES` have no script on disk. Phase B already added
-`run_id` + structured events (R-SR-13) — the observation point this item wanted.
+`run_id` + structured events (R-SR-13) - the observation point this item wanted.
 
 **Evidence.** `harness/shared/orchestrator/hook_runner.py`; `.mango/hooks/`;
 DEC-003; DEC-050.
@@ -266,35 +248,22 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 
 **Depends on.** Nothing (Phase B MCP parity shipped).
 
-### NS-33 · Adopt `ruff format`
-
-**Why now.** No `[tool.ruff.format]`, no CI step; `ruff format --check` would
-change ~176 files (audit H11). Must be its own commit so blame can skip it.
-
-**Evidence.** No `ruff format` in Makefile / pyproject / workflows.
-
-**Done when.** One reformat commit listed in `.git-blame-ignore-revs`;
-`make lint-python` runs `ruff format --check`; makefile-contract test fails
-when the step is removed.
-
-**Depends on.** Nothing (Phase B file churn has landed; do not batch with
-behaviour PRs).
-
 ### NS-34 · Decision records as records
 
-**Why now.** ~48 decisions are pipe-delimited lines in
+**Why now.** ~52 decisions are pipe-delimited lines in
 `harness/node/.governance/decision-log.md`, restated into `GOVERNANCE_SKILL.md`.
-Every PR writes each decision twice (audit H15).
+Every PR writes each decision twice (audit H15). DEC-053…056 were the last
+four NS-31 entries written in the old format (#93).
 
-**Evidence.** decision-log; `validate_governance_docs.py`.
+**Evidence.** decision-log; `validate_governance_docs.py`; PR #93.
 
 **Done when.** One file per decision under `docs/decisions/` with status,
 context, decision, consequences, machine-readable `supersedes:`; validators
 read a generated index; skill lockstep copy deleted; `make validate` fails on a
-decision without status. NS-31's four entries should be the last written in the
-old format.
+decision without status.
 
-**Depends on.** NS-31.
+**Depends on.** Nothing (NS-31 / R-SR-5 closed on #93). Prefer migrating before
+further Phase E decision churn, but the DECs are no longer a blocker.
 
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
@@ -325,17 +294,19 @@ stale SHA in its attestation table fails `build-full`.
 
 Pointer only: status is the remediation plan's boxes, read there, not here.
 `docs/specs/code-quality-tech-debt-plan.md` is closed at revision 2.
+Remediation plan is revision 3 (Phase B Done; R-SR-5 / AC-5 closed; Phase E
+gated on R-SR-2).
 
 ---
 
-## 4. Parked — blocked on a decision or a gate that does not exist yet
+## 4. Parked - blocked on a decision or a gate that does not exist yet
 
 | Item | Blocked on |
 |---|---|
-| **Phase E** (R-SR-26 … R-SR-29) | NS-31's four entries (DEC-053 park recommended; KEEP only via superseding DEC); **NS-2 before any destructive slice**. PARK order (plan / memos): **JVM → LangGraph → openspec → mirroring**. If KEEP: drop LangGraph from the delete sequence; still relocate JVM / fold openspec / collapse mirroring. |
+| **Phase E** (R-SR-26 … R-SR-29) | **NS-2 / R-SR-2 before any destructive slice.** DEC-053…056 (NS-31 / R-SR-5 / AC-5) are logged on #93 - PARK order stands: **JVM → LangGraph → openspec → mirroring**. Do not start Phase E code while the DEC-014 credential branch remains. Premature Phase E inverts DEC-024 (claimed readiness without the hard gate). |
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
-| **Context-window budget / HITL interrupts** | Budget needs policy key + spec (Phase B events exist). HITL needs NS-31 KEEP (interrupts in-graph) or an explicit non-graph design if PARK. |
-| **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with NS-31. |
+| **Context-window budget / HITL interrupts** | Budget needs policy key + spec (Phase B events exist). HITL needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). |
+| **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with DEC-053 park / revival. |
 | **`AC-CE-1` ProcessBackend capability profiles** | OS isolation is the permanent B4 fix; Phase B digest is containment only. |
 | **Eval harness / nightly live smoke** | Scoped `NVIDIA_API_KEY` in scheduled workflow (owner) + fixtures after openspec fold. |
 
@@ -345,38 +316,47 @@ Pointer only: status is the remediation plan's boxes, read there, not here.
 
 - **Annotating the test suite** (~530 `no-untyped-def` on tests). Strict typing
   on source via NS-6; tests are a separate project.
-- **Regrouping `harness/shared/`** — DEC-020 / DEC-029 stand.
+- **Regrouping `harness/shared/`** - DEC-020 / DEC-029 stand.
 - **Closed-plan ceremony items** listed in the remediation plan's
   §Explicitly not doing.
 - **Pre-emptive decomposition** of files near size budget without a behaviour
   change that needs the seam.
 - **Raising the `fastapi` floor to ≥0.141.1** until NS-6.
-- **A `HEALTHCHECK` in the Dockerfile** — nothing listens; the CMD exits.
+- **A `HEALTHCHECK` in the Dockerfile** - nothing listens; the CMD exits.
+- **Starting Phase E before NS-2** - DECs logged ≠ credential rotated.
 
 ---
 
 ## 6. Delivered, and removed from the open list
 
-**Closed 2026-09-05 (this rewrite's evidence pass):**
+**Closed 2026-09-05b (this rewrite's evidence pass):**
 
 | Was | Now |
 |---|---|
-| **NS-32** Land Phase B (PR #86) | **Landed on PR #86.** Title was docs-only (`docs(reports): 2026 coding-standards audit`), but the PR body and 97-file diff delivered Phase B (R-SR-6…R-SR-22; AC-6…AC-22, AC-33 `[x]`). Runtime/containment narrative: DEC-048…DEC-051. Remediation plan rev 2 marks Phase B Done. Do not re-open under a different PR label. |
+| **NS-31** Four in-or-out decisions | **Logged on PR #93.** DEC-053 LangGraph PARK (sunset TBD); DEC-054 JVM relocate; DEC-055 `openspec/` fold; DEC-056 mirroring collapse Option A (supersedes DEC-005 mechanism). Restated in `GOVERNANCE_SKILL.md`. Remediation plan rev 3 ticks AC-5 / R-SR-5. Phase E code still waits on NS-2. |
+| **NS-11** Reconcile regression tier | **Landed on PR #90.** Reproductions in `harness/shared/tests/regression/`; `test_regression_tier_pin.py` fails if moved back; duplicate `make test-regression` dropped from `build-full`. |
+| **NS-33** Adopt `ruff format` | **Landed on PR #91** (+ #95 size-budget hotfix). `[tool.ruff.format]`; `make lint-python` runs `ruff format --check`; reformat commit in `.git-blame-ignore-revs`. Removed from Phase F slack. |
 
-**Closed earlier — Dependabot disposition (keep visible):**
+**Closed 2026-09-05 (prior rewrite's evidence pass):**
 
 | Was | Now |
 |---|---|
-| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. The reopened bot PRs (#62–#73) are left for the maintainer to close. |
+| **NS-32** Land Phase B (PR #86) | **Landed on PR #86.** Title was docs-only (`docs(reports): 2026 coding-standards audit`), but the PR body and 97-file diff delivered Phase B (R-SR-6…R-SR-22; AC-6…AC-22, AC-33 `[x]`). Runtime/containment narrative: DEC-048…DEC-051. Remediation plan rev 2 marked Phase B Done. Do not re-open under a different PR label. |
 
-**Closed earlier (pointers only — details in prior revisions / CHANGELOG):**
+**Closed earlier - Dependabot disposition (keep visible):**
+
+| Was | Now |
+|---|---|
+| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. **Bot PRs #62-#78 are all closed**; Dependabot open queue is empty (re-queried 2026-09-05). |
+
+**Closed earlier (pointers only - details in prior revisions / CHANGELOG):**
 NS-5, NS-7, NS-8, NS-10, NS-12, NS-13, NS-14, NS-15, NS-16, NS-20,
-NS-22…NS-28, gate half of NS-3, bound half of NS-9 — see git history of this
-file at `6f0f18b`…`2441547` and `docs/reports/ROADMAP-PEER-REVIEW.md`.
+NS-22…NS-28, gate half of NS-3, bound half of NS-9 - see git history of this
+file at `6f0f18b`…`58490c1` and `docs/reports/ROADMAP-PEER-REVIEW.md`.
 
 **Corrected record (do not re-open as "unwired"):**
 
-- `@with_authority` / `@budgeted` are applied **and**, after DEC-052 / PR #87–#88,
+- `@with_authority` / `@budgeted` are applied **and**, after DEC-052 / PR #87-#88,
   denials fail closed through the compiled graph (INV-LG-6). Applied ≠ enforcing
   was the 2026-09-04 defect; do not claim either half without a graph-level test.
 - Specs-gate template / MUST-bullet refinements remain live in `plan_rules.py`.
@@ -385,11 +365,11 @@ file at `6f0f18b`…`2441547` and `docs/reports/ROADMAP-PEER-REVIEW.md`.
 
 ## 7. Where the history went
 
-- **Completed milestones v2.1.3 – v2.4.0** —
+- **Completed milestones v2.1.3 - v2.4.0** -
   [`docs/releases/milestone-history.md`](docs/releases/milestone-history.md).
-- **Per-release narrative** — `CHANGELOG.md`; long bodies in `docs/releases/`.
-- **Decisions** — `harness/node/.governance/decision-log.md` (migrate via NS-34).
-- **Specifications** — `docs/specs/`; Phase B status boxes in
-  `2026-standards-remediation-plan.md`.
+- **Per-release narrative** - `CHANGELOG.md`; long bodies in `docs/releases/`.
+- **Decisions** - `harness/node/.governance/decision-log.md` (migrate via NS-34).
+- **Specifications** - `docs/specs/`; Phase B / R-SR-5 status boxes in
+  `2026-standards-remediation-plan.md` (revision 3).
 
 Cite section IDs (`NS-1`, `R-SR-1`), never line numbers into this living file.

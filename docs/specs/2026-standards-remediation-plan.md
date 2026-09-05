@@ -1,6 +1,6 @@
 # Spec: 2026 standards remediation plan (audit round 4)
 
-> Status: IN PROGRESS, revision 2 (Phase B Done on PR #86; roadmap peer-rewrite 2026-09-05) · Date: 2026-09-05 · Base: `main` @ `2441547` (PRs #86–#88)
+> Status: IN PROGRESS, revision 3 (Phase B Done on PR #86; R-SR-5 / AC-5 closed on PR #93; roadmap peer-rewrite 2026-09-05b) · Date: 2026-09-05 · Base: `main` @ `58490c1` (PRs #89-#95 / #93 DECs)
 >
 > Supersedes the open remainder of `docs/specs/code-quality-tech-debt-plan.md`
 > (closed 2026-09-04 at revision 2) and owns every Blocker, High and Medium
@@ -11,8 +11,8 @@
 
 ## Executive summary
 
-The uncomfortable finding is not that `main` is unprotected — the roadmap has said
-so for four releases — it is that the runtime verdict the whole harness exists to
+The uncomfortable finding is not that `main` is unprotected - the roadmap has said
+so for four releases - it is that the runtime verdict the whole harness exists to
 produce is **forgeable by the agent it judges**, in two tool calls, through the
 real dispatcher, broker and backend (audit B4). The previous program plan spent
 six product-path PRs closing string-level spellings of credential reads and never
@@ -27,12 +27,15 @@ year past end-of-life, and none of the nine required checks is required.
 | B | Runtime correctness and containment: typed API history, verification timeout key, per-task budget, run id and structured events, schema-validated tool args, indirect-execution door closed, verification tamper check, unix-socket egress floor, order randomization, gate-runner fixes, documentation truth, vacuous-selector gate | 1 (this PR, #86) | ~30 | no |
 | C | Floor to 3.10 with every compensating waiver deleted; 3.14 in the matrix; mypy 2.x; `target-version` removed | 1 + spec | ~8 | **yes**: adopters' floor |
 | D | CI truthfulness: attestation bound to head SHA, scheduled branch-protection self-report, signed commits, Dockerfile, Dependabot ecosystems and cooldown | 2 | ~6 | no |
-| E | Decide, then delete: JVM relocated, LangGraph parked, `openspec/` folded, per-stack mirroring collapsed behind `[project.scripts]` | 5–7 | ~55 | **yes**: DEC-005 posture |
-| F | Slack items, each one PR: `ruff format`, PEP 621 metadata, ESLint type-checked, ADR directory and changelog cap, OS sandbox, eval harness and live smoke, mutation score, context budget, HITL, provider boundary | per item | varies | no |
+| E | Decide, then delete: JVM relocated, LangGraph parked, `openspec/` folded, per-stack mirroring collapsed behind `[project.scripts]` | 5-7 | ~55 | **yes**: DEC-005 posture |
+| F | Slack items, each one PR: PEP 621 metadata, ESLint type-checked, ADR directory and changelog cap, OS sandbox, eval harness and live smoke, mutation score, context budget, HITL, provider boundary (`ruff format` / NS-33 delivered on #91) | per item | varies | no |
 
 Phase B is **Done** on PR #86 (AC-6…AC-22, AC-33 `[x]`; DEC-048…DEC-051).
-Phases A and C block nothing that remains of B; Phase A still blocks everything
-in E.
+R-SR-5 / AC-5 are **Done** on PR #93 (DEC-053…056 in the decision-log and
+`GOVERNANCE_SKILL.md`). Remaining Phase A owner actions are R-SR-1…R-SR-4
+(ruleset, credential rotation, licence, tag). Phase E destructive slices still
+require R-SR-2 / NS-2 before any delete/relocate PR; logged DECs are not that
+gate. Phases A (remaining) and C block nothing that remains of B.
 
 ## Review record
 
@@ -98,7 +101,7 @@ finding id given; only the deciding facts are restated.
 Requirement ids are `R-SR-<n>` (functional) and `C-SR-<n>` (constraint). Each
 names the audit finding or closed-plan requirement it carries.
 
-### Phase A — owner actions (zero code)
+### Phase A - owner actions (zero code)
 
 - R-SR-1: The ruleset at `.github/rulesets/main.json` MUST be imported so that
   `GET /repos/{owner}/{repo}/rules/branches/main` returns at least the
@@ -119,7 +122,7 @@ names the audit finding or closed-plan requirement it carries.
   `openspec/` fold (Memo 3 option Y), and the mirroring collapse including the
   superseding of DEC-005's push posture (Memo 4).
 
-### Phase B — runtime correctness and containment (Done — PR #86)
+### Phase B - runtime correctness and containment (Done - PR #86)
 
 - R-SR-6: Executing a workspace file MUST NOT be a route around the write policy:
   `GNUmakefile`, `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`
@@ -199,7 +202,7 @@ names the audit finding or closed-plan requirement it carries.
   classified by `test_agent_surface_liveness.py`, composing `tech-debt-audit`,
   `validation-runner` and `gate-mutation-proof` rather than restating them.
 
-### Phase C — the floor
+### Phase C - the floor
 
 - R-SR-23: `requires-python` MUST move to `>= 3.10`; the 3.9 matrix legs, the
   forked pytest pins, `coverage.optional_extras`, `check_py_compat.py`'s PEP 604
@@ -210,7 +213,7 @@ names the audit finding or closed-plan requirement it carries.
   be removed so it derives from `requires-python` (H1, M10; supersedes DEC-028;
   carries R-CQ-16, R-CQ-23 by deletion).
 
-### Phase D — CI truthfulness
+### Phase D - CI truthfulness
 
 - R-SR-24: The protected-path attestation MUST bind to the PR head SHA so a later
   push invalidates it; a scheduled job MUST query `/rules/branches/main` and open
@@ -220,7 +223,7 @@ names the audit finding or closed-plan requirement it carries.
   ship no dev dependency at runtime; Dependabot MUST cover `docker` and declare an
   explicit `cooldown` (M17, M18; carries R-CQ-11).
 
-### Phase E — decide, then delete
+### Phase E - decide, then delete
 
 - R-SR-26: `harness/jvm/` MUST be relocated to `docs/adopters/jvm-template/` with
   its shims, personas and `.governance/` deleted, the bundle tooling tolerating an
@@ -249,7 +252,7 @@ names the audit finding or closed-plan requirement it carries.
   toolchain and never from the workspace: the Python runner MUST start the
   interpreter in isolated mode (`-I`) and MUST export `PYTHONSAFEPATH=1` to its
   worker processes, so a `pytest.py` or `pytest/` package an agent writes into
-  the workspace — not a protected path — is not the pytest that runs; a
+  the workspace - not a protected path - is not the pytest that runs; a
   regression MUST prove the forgery under the old recipe shape and its absence
   under the new one, and `SECURITY.md` MUST name the residuals (workers on
   Python < 3.11, the toolchain's own packages in the workspace virtualenv)
@@ -283,85 +286,89 @@ names the audit finding or closed-plan requirement it carries.
 - [ ] AC-4: `git tag -l v2.4.0` prints the tag and
       `pytest harness/shared/tests/test_documentation_truth.py -k real_release`
       fails when the tag is absent · stage: `make test-python` (R-SR-4)
-- [ ] AC-5: `git grep -nE "DEC-0(4[8-9]|5[0-9]).*(jvm|langgraph|openspec|mirroring)" harness/node/.governance/decision-log.md`
+- [x] AC-5: `git grep -nE "DEC-0(4[8-9]|5[0-9]).*(jvm|langgraph|openspec|mirroring)" harness/node/.governance/decision-log.md`
       returns four entries and `make validate` passes on them
       (`validate_governance_docs.py` rejects an entry missing from
       `GOVERNANCE_SKILL.md`) · stage: `make validate` (R-SR-5)
+      - verified 2026-09-05 on `58490c1` / PR #93: DEC-053 (LangGraph PARK),
+      DEC-054 (JVM relocate), DEC-055 (`openspec/` fold), DEC-056 (mirroring
+      collapse Option A) present in decision-log and restated in
+      `GOVERNANCE_SKILL.md`. R-SR-5 closed; Phase E code still waits on R-SR-2.
 - [x] AC-6: `pytest harness/shared/tests/test_command_actions_indirect_exec.py`
       asserts `make -f GNUmakefile x`, `make -C sub`, `MAKEFILES=x make` and
       `pnpm exec node -e 1` grade `destructive`, while `make test-python`, `pytest`
       and `pnpm exec vitest` keep `test_execute`;
       `pytest harness/shared/tests/test_protected_path_liveness.py` passes with
       every new pattern live · stage: `make test-python` (R-SR-6)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_command_actions_indirect_exec.py`: 83 passed; `test_protected_path_liveness.py` green with the ten new patterns declared
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_command_actions_indirect_exec.py`: 83 passed; `test_protected_path_liveness.py` green with the ten new patterns declared
 - [x] AC-7: `pytest harness/shared/tests/regression -k enforcement_tampered`
       runs the forgery recipe (write a script that rewrites `Makefile`, run it,
       verify) end to end through the real dispatcher, broker and backend and
       asserts `BLOCKED/enforcement_tampered`; reverting the digest check yields
       `VERIFIED` · stage: `make test-regression` (R-SR-7)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `regression/test_verdict_forgery_regression.py`: the recipe yields `BLOCKED/enforcement_tampered` through the real dispatcher, broker and backend; untampered passing → `VERIFIED`, untampered failing → `FAILED`
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `regression/test_verdict_forgery_regression.py`: the recipe yields `BLOCKED/enforcement_tampered` through the real dispatcher, broker and backend; untampered passing → `VERIFIED`, untampered failing → `FAILED`
 - [x] AC-8: `git grep -n -i "OS isolation" SECURITY.md harness/shared/agent-policy.json`
       finds both (each names OS isolation of the process backend as the missing
       control), and `git grep -n "\.env" SECURITY.md` names the remaining gap
       · stage: `make validate` (R-SR-8)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); both greps find the OS-isolation wording; SECURITY.md names the on-disk `.env` gap
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); both greps find the OS-isolation wording; SECURITY.md names the on-disk `.env` gap
 - [x] AC-9: `pytest harness/api_server/tests -k tool_using_history_round_trips` asserts
       HTTP 200 with a round-tripped `tool_calls` assistant message and a `tool`
       message, and `pytest harness/api_server/tests -k malformed_message` asserts
       500 whose body does not contain the pydantic error text;
       `pytest harness/shared/tests/regression -k "tool_call_and_tool_result or unknown_role_is_still_refused"`
       reproduces the pre-fix 500 · stage: `make test-python` (R-SR-9)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_using_history_round_trips`, `test_a_malformed_message_is_an_internal_error_that_leaks_nothing`, `TestToolUsingRunsReachTheClient` (4 shapes + 5 argument shapes) green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_using_history_round_trips`, `test_a_malformed_message_is_an_internal_error_that_leaks_nothing`, `TestToolUsingRunsReachTheClient` (4 shapes + 5 argument shapes) green
 - [x] AC-10: `pytest harness/api_server/tests -k "healthz or readyz"` asserts
       200/200 with a key and 200/503 without; `git grep -n "setup_json_logging" harness/api_server/main.py`
       shows it inside `lifespan` only · stage: `make test-python` (R-SR-10)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); healthz/readyz: 200/200 with a key, 503 without, 503 on a broken policy, 503 on a missing `agent_defaults` block; `setup_json_logging` inside `lifespan`
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); healthz/readyz: 200/200 with a key, 503 without, 503 on a broken policy, 503 on a missing `agent_defaults` block; `setup_json_logging` inside `lifespan`
 - [x] AC-11: `python -c "from harness.shared.policy_loader import orchestrator_limits as o;print(o().verification_timeout_sec)"`
       prints the policy value; `pytest harness/shared/tests -k verification_timeout`
       fails when the key is removed from a `tmp_path` policy and when
       `api_timeout_sec` is patched but the verification timeout is unchanged
       · stage: `make test-python` (R-SR-11, C-SR-1)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); accessor prints 900; `test_the_verification_timeout_does_not_follow_api_timeout` and `test_moving_the_model_latency_key_does_not_move_the_verification_timeout` green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); accessor prints 900; `test_the_verification_timeout_does_not_follow_api_timeout` and `test_moving_the_model_latency_key_does_not_move_the_verification_timeout` green
 - [x] AC-12: `pytest harness/shared/tests -k "sum_across_roles or task_within_the_budget"`
       asserts that with a budget of N the sum of tool calls across the three
       roles cannot exceed N, and fails when each role gets a fresh budget
       · stage: `make test-python` (R-SR-12)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_the_sum_across_roles_cannot_exceed_the_task_budget` and `test_a_task_within_the_budget_completes` green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_the_sum_across_roles_cannot_exceed_the_task_budget` and `test_a_task_within_the_budget_completes` green
 - [x] AC-13: `pytest harness/shared/tests/test_json_logging.py -k extra` asserts
       `extra={"run_id": …}` appears as a top-level key and a key named
       `NVIDIA_API_KEY` never does; `pytest harness/shared/tests -k run_id`
       asserts model and tool events in one loop run share a `run_id`
       · stage: `make test-python` (R-SR-13)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_extra_fields_become_top_level_keys`, `test_a_credential_named_extra_is_never_emitted`, `test_model_and_tool_events_carry_the_same_run_id` green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_extra_fields_become_top_level_keys`, `test_a_credential_named_extra_is_never_emitted`, `test_model_and_tool_events_carry_the_same_run_id` green
 - [x] AC-14: `pytest harness/shared/tests/test_tool_arg_validation.py` passes
       including its seeded random-dict cases, and
       `pytest harness/shared/tests -k "never_reaches_the_executor or extra_key_is_rejected"`
       asserts `write_file` without `filepath` never reaches the executor
       (reverting → the executor raises `IsADirectoryError`) and an undeclared
       key is rejected by name · stage: `make test-python` (R-SR-14)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_arg_validation.py` (seeded random cases) green; `test_a_missing_required_key_never_reaches_the_executor`, `test_an_extra_key_is_rejected_by_name` green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_tool_arg_validation.py` (seeded random cases) green; `test_a_missing_required_key_never_reaches_the_executor`, `test_an_extra_key_is_rejected_by_name` green
 - [x] AC-15: `pytest harness/shared/tests/test_mcp_server.py -k "registry or off_the_event_loop or concurrent_tool_calls_overlap or parity"`
       asserts the MCP handler names equal the dispatcher's and that two
       concurrent calls overlap in time; dropping a name from the shared registry
       fails the parity test · stage: `make test-python` (R-SR-15)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); registry parity, `test_call_tool_runs_the_handler_off_the_event_loop_thread`, `test_two_concurrent_tool_calls_overlap` green; dropping a name fails the parity check
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); registry parity, `test_call_tool_runs_the_handler_off_the_event_loop_thread`, `test_two_concurrent_tool_calls_overlap` green; dropping a name fails the parity check
 - [x] AC-16: `git grep -n "logging\.basicConfig(" -- harness/shared harness/control-plane ':!*/tests/*' ':!harness/shared/mcp_server.py' ':!harness/shared/json_logging.py'`
       returns nothing (the MCP server is a stdio transport, not a gate, and
       keeps its WARNING floor; `json_logging.py` names the call only in a
       docstring), and `LOG_LEVEL=DEBUG python harness/shared/validate_specs.py`
       emits DEBUG records · stage: `make lint` (R-SR-16)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); grep returns nothing; `LOG_LEVEL=DEBUG` honoured by `validate_specs.py` and `validate_plan.py`
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); grep returns nothing; `LOG_LEVEL=DEBUG` honoured by `validate_specs.py` and `validate_plan.py`
 - [x] AC-17: `git grep -n "mark.enable_socket" -- harness ':!*/test_egress_floor.py' ':!*/test_nemotron_bridge_live.py' ':!*/test_mango_mas_live.py'`
       returns no mark (the three survivors open real TCP and say so at the
       mark); `pytest harness/shared/tests/test_egress_floor.py -k socketpair`
       asserts a unix socketpair succeeds and a TCP connect raises
       `SocketBlockedError` · stage: `make test-python` (R-SR-17)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); no mark outside the three declared TCP users; `test_a_unix_socketpair_is_permitted_while_tcp_still_raises` green
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); no mark outside the three declared TCP users; `test_a_unix_socketpair_is_permitted_while_tcp_still_raises` green
 - [x] AC-18: `make lock-check` passes with `pytest-randomly` and `pytest-xdist` in
       the lock; `make coverage-python` prints a `randomly` seed; three runs with
       distinct `--randomly-seed` values pass; `git grep -n "os\.chdir(" -- harness`
       returns nothing · stage: `make ci` (R-SR-18)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make lock-check: passed`; `make coverage-python` prints `--randomly-seed` and runs `-n auto` (4 workers); three seeds green in the slice run; `os.chdir(` absent
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make lock-check: passed`; `make coverage-python` prints `--randomly-seed` and runs `-n auto` (4 workers); three seeds green in the slice run; `os.chdir(` absent
 - [x] AC-19: `make secrets-install && make secrets` exits 0 in a shell whose PATH
       lacks GOPATH/bin, pinned by `pytest harness/shared/tests/test_makefile_contracts.py -k gopath_bin`;
       `pytest harness/shared/tests/test_agent_surface_liveness.py -k SessionStartPreparesTheGates`
@@ -371,22 +378,22 @@ names the audit finding or closed-plan requirement it carries.
       `grep -n "^.SHELLFLAGS" Makefile` finds the line;
       `pytest harness/shared/tests/test_makefile_contracts.py -k installs_the_lock_with_hashes`
       asserts the audit tooling installs from the hashed lock · stage: `make ci` (R-SR-19)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make secrets-install && make secrets` passed with no PATH edit; `test_a_gitleaks_in_gopath_bin_is_what_the_secrets_gate_runs`, `TestSessionStartPreparesTheGates`, `test_workflow_runtime_limits.py`, `test_the_install_target_installs_the_lock_with_hashes` green; `.SHELLFLAGS` present
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `make secrets-install && make secrets` passed with no PATH edit; `test_a_gitleaks_in_gopath_bin_is_what_the_secrets_gate_runs`, `TestSessionStartPreparesTheGates`, `test_workflow_runtime_limits.py`, `test_the_install_target_installs_the_lock_with_hashes` green; `.SHELLFLAGS` present
 - [x] AC-20: `pytest harness/shared/tests/test_documentation_truth.py harness/shared/tests/test_documentation_claims.py -k "Placeholder or DocumentedRoutes or PersonaScope or ContributingGate"`
       fails when any corrected claim is reverted; `ls docs/reports/SDLC_HYGIENE_AND_GAP_ANALYSIS.md`
       succeeds and `ls docs/SDLC_HYGIENE_AND_GAP_ANALYSIS.md` fails
       · stage: `make test-python` (R-SR-20)
-      — verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_documentation_claims.py` (placeholder, persona scope, contributing gate) and `TestDocumentedRoutesExist` green; the report lives under `docs/reports/`
+      - verified 2026-09-04 on `bf5fe22`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (lines 99.25 %, branches 97.91 %, 78 files at the per-file floor, 0 waived); `test_documentation_claims.py` (placeholder, persona scope, contributing gate) and `TestDocumentedRoutesExist` green; the report lives under `docs/reports/`
 - [x] AC-21: `pytest harness/shared/tests/test_spec_selectors_collect.py` passes on
       the tree and fails on a spec whose ticked criterion names `-k patch_denied_read`
       (its `test_a_dead_keyword_reports_zero` case) · stage: `make test-python`
-      (R-SR-21) — verified 2026-09-04: `61 passed`; before the four
+      (R-SR-21) - verified 2026-09-04: `61 passed`; before the four
       in-place corrections it reported `4 failed, 57 passed` naming
       `tech-debt-hardening-plan.md` AC-1/AC-9 and `gate-truthfulness.md` AC-2/AC-6
 - [x] AC-22: `pytest harness/shared/tests/test_agent_surface_liveness.py -k "SkillsAreDated or EverySkillIsWiredOrDeclared or SkillsNameRealTargets"`
       passes with `standards-audit` classified; removing its `STANDALONE_SKILLS`
       entry fails `EverySkillIsWiredOrDeclared` · stage: `make test-python`
-      (R-SR-22) — verified 2026-09-04 on this branch
+      (R-SR-22) - verified 2026-09-04 on this branch
 - [ ] AC-23: `python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['requires-python'])"`
       prints `>=3.10`; `git grep -n "3\.9" .github/workflows pyproject.toml requirements-dev.txt harness/shared/governance-policy.json`
       returns nothing; `git grep -n "target-version" pyproject.toml` returns
@@ -443,39 +450,41 @@ names the audit finding or closed-plan requirement it carries.
       `pytest harness/shared/tests/test_makefile_contracts.py -k shadow` pins
       the real `PYTEST` definition to `-I` and the exported `PYTHONSAFEPATH`
       · stage: `make test-regression` (R-SR-31)
-      — verified 2026-09-04 on `e1232d4`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (3,757 passed, 1 skipped under DEC-026, lines 99.19 %, branches 97.88 %, 78 files at the per-file floor, 0 waived); the premise test runs the old recipe shape against a real failing suite and reports exit 0 with the shadow module's output, and the same forgery under the isolated shape yields `FAILED`, not `VERIFIED` and not `enforcement_tampered`; the passing-suite control yields `VERIFIED`; the first `make ci` on `84bb85a` caught the premise test inheriting the Makefile's own `PYTHONSAFEPATH` export, fixed in the fixture
+      - verified 2026-09-04 on `e1232d4`: `ALLOW_GITHUB_CHANGES=1 make ci` exit 0 (3,757 passed, 1 skipped under DEC-026, lines 99.19 %, branches 97.88 %, 78 files at the per-file floor, 0 waived); the premise test runs the old recipe shape against a real failing suite and reports exit 0 with the shadow module's output, and the same forgery under the isolated shape yields `FAILED`, not `VERIFIED` and not `enforcement_tampered`; the passing-suite control yields `VERIFIED`; the first `make ci` on `84bb85a` caught the premise test inheriting the Makefile's own `PYTHONSAFEPATH` export, fixed in the fixture
 
 ## Steps
 
-Ordered by dependency. Phase B landed as one PR (#86) — slices were developed
+Ordered by dependency. Phase B landed as one PR (#86) - slices were developed
 in parallel worktrees against the same base and merged once; later phases are one
 PR per numbered step.
 
 ### Phase A (0 code)
 
-1. Owner imports the ruleset, rotates the credential, chooses the licence, tags
-   `v2.4.0`, and records the four DECs (R-SR-1 … R-SR-5) — produces the API
-   response for AC-1, `LICENSE`, the tag, four decision-log entries.
+1. Owner imports the ruleset, rotates the credential, chooses the licence, and
+   tags `v2.4.0` (R-SR-1 … R-SR-4) - produces the API response for AC-1,
+   `LICENSE`, the tag. **R-SR-5 / AC-5 Done on PR #93** (DEC-053…056); do not
+   re-log those four entries. Remaining Phase A items still block nothing of B,
+   and R-SR-2 alone still hard-gates Phase E destructive work.
 
-### Phase B (Done — PR #86)
+### Phase B (Done - PR #86)
 
 2. Containment: protected paths, classifier grades, verification tamper check,
-   prose (R-SR-6, R-SR-7, R-SR-8) — consumes `governance-policy.json`; produces
+   prose (R-SR-6, R-SR-7, R-SR-8) - consumes `governance-policy.json`; produces
    `test_command_actions_indirect_exec.py`, a regression test, a regenerated
    bundle.
 3. API server: typed history, health/readiness, lifespan logging (R-SR-9,
-   R-SR-10) — produces `harness/api_server/main.py` models, tests, a regression
+   R-SR-10) - produces `harness/api_server/main.py` models, tests, a regression
    test.
 4. Loop and policy: verification timeout key, shared budget, run id and
    structured events, dispatch validation, gate logging (R-SR-11 … R-SR-14,
-   R-SR-16) — consumes the policy; produces `tool_arg_validation.py`,
+   R-SR-16) - consumes the policy; produces `tool_arg_validation.py`,
    `OrchestratorLimits.verification_timeout_sec`, tests, a regenerated bundle.
 5. MCP: registry reuse, `to_thread`, per-call logging (R-SR-15).
-6. Test infrastructure and gate runners (R-SR-17, R-SR-18, R-SR-19) — consumes
+6. Test infrastructure and gate runners (R-SR-17, R-SR-18, R-SR-19) - consumes
    `requirements-dev.txt`; produces the regenerated hashed lock, workflow
    timeouts and concurrency, Makefile PATH and `.SHELLFLAGS`, hook install line.
 7. Documentation truth (R-SR-20); vacuous-selector gate (R-SR-21); audit skill
-   (R-SR-22) — produces `test_spec_selectors_collect.py`,
+   (R-SR-22) - produces `test_spec_selectors_collect.py`,
    `.mango/skills/standards-audit/SKILL.md`, corrected spec lines.
 8. Merge, `make ci`, `make lint-cold`, `make audit`, `make secrets`,
    `make attestation`; tick AC-6 … AC-22 with the command each names.
@@ -490,28 +499,37 @@ PR per numbered step.
 10. Attestation bound to SHA; scheduled protection report; signatures
     (R-SR-24). 11. Dockerfile and Dependabot (R-SR-25).
 
-### Phase E (after Phase A's DECs)
+### Phase E (after R-SR-2 / NS-2; DECs already logged)
+
+R-SR-5 is closed (DEC-053…056 on #93). Do **not** treat that as license to start
+destructive deletes: R-SR-2 / NS-2 (credential rotation + purge) remains the
+hard gate before any Phase E slice. Starting Phase E while
+`feature/governed-run-console` still carries the DEC-014 leak is DEC-024
+inverted (claimed readiness without the named control).
 
 12. JVM relocation, two PRs per Memo 2 (R-SR-26). 13. LangGraph park, three PRs
-    per Memo 1 (R-SR-27). 14. `openspec/` fold, two PRs per Memo 3 (R-SR-28).
-15. Mirroring collapse, five PRs per Memo 4, `[project.scripts]` first (R-SR-29).
+    per Memo 1 / DEC-053 (R-SR-27). 14. `openspec/` fold, two PRs per Memo 3 /
+    DEC-055 (R-SR-28).
+15. Mirroring collapse, five PRs per Memo 4 / DEC-056, `[project.scripts]` first
+    (R-SR-29). Order stays JVM → LangGraph → openspec → mirroring.
 
 ### Phase F
 
-16. One PR each, any order, when there is slack: `ruff format` with
-    `.git-blame-ignore-revs` (H11); PEP 621 metadata and `py.typed` (H12);
-    ESLint `recommendedTypeChecked` (H13); `docs/decisions/` ADRs and the
-    `[Unreleased]` cap (H15); OS sandbox for `ProcessBackend` (B4 permanent —
+16. One PR each, any order, when there is slack: PEP 621 metadata and `py.typed`
+    (H12); ESLint `recommendedTypeChecked` (H13); `docs/decisions/` ADRs and the
+    `[Unreleased]` cap (H15); OS sandbox for `ProcessBackend` (B4 permanent -
     the digest check runs before and after the verification command, so the
     remaining window is a swap-and-restore inside the run, which only an
     immutable snapshot or OS isolation closes; Copilot review on PR #86);
     eval harness and nightly live smoke (H10); `mutmut` score floor (H9);
     context budget (H4); HITL interrupts (H5); `ChatProvider` boundary (M5);
-    meta-tool readers (M4); runtime-specific personas (M2); a subprocess-level
-    egress floor for the suite (a refusing `curl` shim on `PATH` or
-    `unshare -n` around `ProcessBackend` in tests), since `pytest-socket` cannot
-    see a child process and one regression test currently makes a real
-    outbound connection attempt (audit Low list).
+    meta-tool readers (M4 / NS-17 open on #97); runtime-specific personas (M2);
+    a subprocess-level egress floor for the suite (a refusing `curl` shim on
+    `PATH` or `unshare -n` around `ProcessBackend` in tests), since
+    `pytest-socket` cannot see a child process and one regression test currently
+    makes a real outbound connection attempt (audit Low list).
+    **Delivered and removed from slack:** `ruff format` with
+    `.git-blame-ignore-revs` (H11 / NS-33 on PR #91; size-budget hotfix #95).
 
 ## Files touched
 
@@ -594,7 +612,7 @@ list their principal files and defer the full set to their own PR bodies.
 - `make test-regression` for the end-to-end reproductions (R-SR-7, R-SR-9).
 - `make specs` on this document and every spec it corrects (R-SR-21, R-SR-30).
 - Coverage floors from policy; the baseline on `71223f1` is lines 99.24 %,
-  branches 97.87 %, 77 files measured — a report line, not a threshold (C-SR-1).
+  branches 97.87 %, 77 files measured - a report line, not a threshold (C-SR-1).
 - Negative test per new gate: R-SR-6, R-SR-7, R-SR-9, R-SR-11, R-SR-12, R-SR-13,
   R-SR-14, R-SR-15, R-SR-17, R-SR-19, R-SR-20, R-SR-21, R-SR-24, R-SR-25 (C-SR-4
   for the compatibility half).
@@ -632,8 +650,9 @@ Recorded so the next audit does not rediscover them, each with the reason:
   splits, R-CQ-27 archive index, R-CQ-28 `Status:` tier rule, R-CQ-31 and
   AC-31/34/35 process assertions: inventory or ceremony with no defect behind
   them for a single maintainer.
-- `ruff format` inside Phase B: 176 files change; it needs its own commit and
-  `.git-blame-ignore-revs` entry (Phase F).
+- `ruff format` inside Phase B (historical): 176 files change; it needed its own
+  commit and `.git-blame-ignore-revs` entry. **Delivered on PR #91 / NS-33** (and
+  #95 size-budget hotfix); no longer a Phase F slack item.
 - A `HEALTHCHECK` in the Dockerfile: nothing listens (the closed plan was right).
 - Pre-emptive decomposition of `write_policy.py` (448/500), `plan_rules.py` (428),
   `nemotron-client.ts` (432): headroom exists; a split lands with the change that
