@@ -25,6 +25,12 @@ bodies. `GOVERNANCE_SKILL.md` (node + jvm) points at `docs/decisions/`.
 Constant-triage reads record files instead of the pipe log. Roadmap: NS-34
 and NS-17 move to Delivered (NS-17 landed on #97).
 
+### Docs: NS-18 reasoner-bridge-tool-parity spec scaffold
+
+Add `docs/specs/reasoner-bridge-tool-parity.md` as the NS-18 contract
+(persona/bridge tool-inventory parity, `prompt_sha` logging, falsifying tests).
+Point `NEXT_STEPS.md` NS-18 Evidence at the spec. Docs only; no runtime change.
+
 ### NS-21: post-turn hooks record status and tool-call spend
 
 Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
