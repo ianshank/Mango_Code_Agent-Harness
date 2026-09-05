@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from pathlib import Path
 
 import pytest
 
 from harness.shared.governance import check_secret_allowlist as gate
-from harness.shared.tests.conftest import POSIX_ONLY
 
 pytestmark = pytest.mark.governance
 
@@ -199,58 +199,54 @@ class TestMainFailsClosed:
 
 
 class TestScanFindings:
-    """The subprocess boundary, driven with a stub binary rather than gitleaks.
+    """The subprocess boundary, driven with a cross-platform stub rather than gitleaks."""
 
-    The stub is a `#!/bin/sh` script: POSIX-only. The same contract is covered
-    on Linux CI where gitleaks is installed (``make secrets-allowlist-check``).
-    These unit tests are skipped on Windows; the gate still rejects a missing
-    gitleaks (TestMainFailsClosed) on every platform. [DEC-058]
-    """
-
-    pytestmark = POSIX_ONLY
-
-    def _stub(self, tmp_path: Path, body: str) -> str:
-        script = tmp_path / "fake-gitleaks"
-        script.write_text(body, encoding="utf-8")
-        script.chmod(0o755)
-        return str(script)
+    def _stub(self, tmp_path: Path, report_content: str | None = None, exit_code: int = 0) -> str:
+        py_worker = tmp_path / "fake_gitleaks_worker.py"
+        worker_code = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            "args = sys.argv[1:]\n"
+            f"has_content = {report_content is not None!r}\n"
+            f"content = {report_content!r}\n"
+            "if has_content and '--report-path' in args:\n"
+            "    idx = args.index('--report-path')\n"
+            "    if idx + 1 < len(args):\n"
+            "        Path(args[idx + 1]).write_text(content, encoding='utf-8')\n"
+            f"sys.exit({exit_code})\n"
+        )
+        py_worker.write_text(worker_code, encoding="utf-8")
+        if sys.platform == "win32":
+            cmd = tmp_path / "fake-gitleaks.cmd"
+            cmd.write_text(f'@"{sys.executable}" "{py_worker}" %*\n', encoding="utf-8")
+            return str(cmd)
+        else:
+            sh = tmp_path / "fake-gitleaks"
+            sh.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{py_worker}" "$@"\n', encoding="utf-8")
+            sh.chmod(0o755)
+            return str(sh)
 
     def test_a_report_that_is_never_written_fails(self, tmp_path: Path, caplog) -> None:
-        stub = self._stub(tmp_path, "#!/bin/sh\nexit 3\n")
+        stub = self._stub(tmp_path, report_content=None, exit_code=3)
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit):
             gate.scan_findings(tmp_path, CONFIG, stub)
         assert "produced no report" in caplog.text
 
     def test_a_non_json_report_fails(self, tmp_path: Path, caplog) -> None:
-        stub = self._stub(
-            tmp_path,
-            "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n"
-            '  if [ "$1" = "--report-path" ]; then printf "not json" > "$2"; fi\n'
-            "  shift\ndone\nexit 0\n",
-        )
+        stub = self._stub(tmp_path, report_content="not json", exit_code=0)
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit):
             gate.scan_findings(tmp_path, CONFIG, stub)
         assert "not valid JSON" in caplog.text
 
     def test_a_report_that_is_not_a_list_fails(self, tmp_path: Path, caplog) -> None:
-        stub = self._stub(
-            tmp_path,
-            "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n"
-            '  if [ "$1" = "--report-path" ]; then printf "{}" > "$2"; fi\n'
-            "  shift\ndone\nexit 0\n",
-        )
+        stub = self._stub(tmp_path, report_content="{}", exit_code=0)
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit):
             gate.scan_findings(tmp_path, CONFIG, stub)
         assert "not a list" in caplog.text
 
     def test_findings_are_returned_verbatim(self, tmp_path: Path) -> None:
         payload = json.dumps(_findings("a.py"))
-        stub = self._stub(
-            tmp_path,
-            "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n"
-            f'  if [ "$1" = "--report-path" ]; then printf \'{payload}\' > "$2"; fi\n'
-            "  shift\ndone\nexit 0\n",
-        )
+        stub = self._stub(tmp_path, report_content=payload, exit_code=0)
         assert gate.scan_findings(tmp_path, CONFIG, stub) == _findings("a.py")
 
 

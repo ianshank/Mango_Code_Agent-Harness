@@ -208,6 +208,15 @@
       "reason": "test_the_makefile_reads_the_pin_rather_than_restating_it invokes make --eval to evaluate PIP_AUDIT_VERSION. Skipped on systems without GNU Make. Runs on Linux CI.",
       "owner": "governance-maintainers",
       "expires": "2027-09-02"
+    },
+    {
+      "framework": "junit",
+      "unique_id_glob": "harness/shared/tests/regression/test_orchestrator_dispatch_regression.py::TestDebugDumpRedaction::test_dump_directory_is_owner_only",
+      "test": "*",
+      "decision_id": "DEC-026",
+      "reason": "POSIX-only: directory permission bits 0o700 not enforced identically on Windows NTFS ACLs. Runs on Linux CI.",
+      "owner": "governance-maintainers",
+      "expires": "2027-09-02"
     }
   ]
 }

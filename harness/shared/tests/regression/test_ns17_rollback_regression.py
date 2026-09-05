@@ -76,6 +76,7 @@ class TestNS17MetaToolsAPIRolledBack:
         import inspect as _inspect
 
         from harness.shared.meta_tools import knowledge_gap_log
+
         sig = _inspect.signature(knowledge_gap_log)
         assert "workspace_dir" not in sig.parameters, (
             "knowledge_gap_log still accepts workspace_dir -- NS-17 was rolled back."
@@ -85,6 +86,7 @@ class TestNS17MetaToolsAPIRolledBack:
         import inspect as _inspect
 
         from harness.shared.meta_tools import knowledge_gap_log
+
         sig = _inspect.signature(knowledge_gap_log)
         assert "policy_path" not in sig.parameters, (
             "knowledge_gap_log still accepts policy_path -- NS-17 was rolled back."
@@ -129,9 +131,7 @@ class TestNS17PlannerTemplateRolledBack:
             "PLANNER_PROMPT_TEMPLATE contains an {open_gaps} slot -- NS-17 planner "
             "gap injection was rolled back. Remove this slot or update this test."
         )
-        assert "task" in field_names, (
-            "PLANNER_PROMPT_TEMPLATE has no {task} slot -- the template is broken."
-        )
+        assert "task" in field_names, "PLANNER_PROMPT_TEMPLATE has no {task} slot -- the template is broken."
 
 
 class TestNS17GovernancePolicyRolledBack:

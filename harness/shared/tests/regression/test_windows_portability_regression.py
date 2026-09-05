@@ -43,9 +43,7 @@ class TestAntiPatternFnmatchBanned:
 
     def test_fnmatch_call_not_in_enforcement_digest(self) -> None:
         calls = re.findall(r"\bfnmatch\.fnmatch\s*\(", _DIGEST_SRC)
-        assert not calls, (
-            f"enforcement_digest.py calls fnmatch.fnmatch (case-insensitive): {calls}."
-        )
+        assert not calls, f"enforcement_digest.py calls fnmatch.fnmatch (case-insensitive): {calls}."
 
     def test_no_hardcoded_win32_literal_in_validate_invariants(self) -> None:
         """Production governance code must not hard-code platform strings."""
@@ -82,9 +80,7 @@ class TestIsProtectedCaseSensitivity:
             ("MakeFile", ["Makefile", "makefile"], False),
         ],
     )
-    def test_is_protected_case_sensitivity(
-        self, filename: str, patterns: list[str], expected: bool
-    ) -> None:
+    def test_is_protected_case_sensitivity(self, filename: str, patterns: list[str], expected: bool) -> None:
         result = is_protected(filename, patterns)
         assert result == expected, (
             f"is_protected({filename!r}, {patterns!r}) -> {result}, expected {expected}. "
@@ -194,13 +190,10 @@ class TestDecisionIdGuardInSkipWaiverScope:
         tree = _ast.parse(src)
         # Detect only code-level definitions and call expressions -- not docstring mentions
         found_def = any(
-            isinstance(node, _ast.FunctionDef) and node.name == "_sole_decision_id"
-            for node in _ast.walk(tree)
+            isinstance(node, _ast.FunctionDef) and node.name == "_sole_decision_id" for node in _ast.walk(tree)
         )
         found_call = any(
-            isinstance(node, _ast.Call)
-            and isinstance(node.func, _ast.Name)
-            and node.func.id == "_sole_decision_id"
+            isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == "_sole_decision_id"
             for node in _ast.walk(tree)
         )
         assert not found_def and not found_call, (
@@ -210,9 +203,7 @@ class TestDecisionIdGuardInSkipWaiverScope:
 
     def test_dec_for_posix_only_probes_present(self) -> None:
         src = (REPO / "harness" / "shared" / "tests" / "test_skip_waiver_scope.py").read_text(encoding="utf-8")
-        assert "_dec_for_posix_only_probes" in src, (
-            "test_skip_waiver_scope.py is missing _dec_for_posix_only_probes()."
-        )
+        assert "_dec_for_posix_only_probes" in src, "test_skip_waiver_scope.py is missing _dec_for_posix_only_probes()."
 
     def test_dec_026_checked_not_counted(self) -> None:
         src = (REPO / "harness" / "shared" / "tests" / "test_skip_waiver_scope.py").read_text(encoding="utf-8")

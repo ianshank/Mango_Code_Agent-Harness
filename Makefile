@@ -209,31 +209,30 @@ verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last c
 # Fails fast if the registry is malformed, missing required fields, or has duplicate test_ids.
 .PHONY: verify-skip-waivers
 verify-skip-waivers: ## Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-058/059)
-	$(PYTHON) -c "
-import json, sys
-from pathlib import Path
-REQUIRED = {'test_id', 'skip_reason_pattern', 'decision_id', 'scope', 'rationale'}
-path = Path('$(SHARED_TESTS)/skip-waivers.json')
-data = json.loads(path.read_text(encoding='utf-8'))
-waivers = data.get('waivers', [])
-errors = []
-test_ids_seen = {}
-for i, w in enumerate(waivers):
-    missing = REQUIRED - set(w)
-    if missing:
-        errors.append(f'  waiver[{i}] missing fields: {sorted(missing)}')
-    tid = w.get('test_id')
-    if tid in test_ids_seen:
-        errors.append(f'  duplicate test_id: {tid!r} at index {i} and {test_ids_seen[tid]}')
-    if tid:
-        test_ids_seen[tid] = i
-if errors:
-    print('verify-skip-waivers FAILED:', file=sys.stderr)
-    for e in errors:
-        print(e, file=sys.stderr)
-    sys.exit(1)
-print(f'verify-skip-waivers OK: {len(waivers)} waivers validated')
-"
+	$(PYTHON) -c "\
+import json, sys; \
+from pathlib import Path; \
+path = Path('$(SHARED_TESTS)/skip-waivers.json'); \
+data = json.loads(path.read_text(encoding='utf-8')); \
+waivers = data.get('waivers', []); \
+errors = []; \
+common = {'framework', 'decision_id', 'reason', 'owner', 'expires'}; \
+for i, w in enumerate(waivers): \
+    missing = common - set(w); \
+    if missing: errors.append(f'waiver[{i}] missing common: {sorted(missing)}'); \
+    fw = w.get('framework'); \
+    if fw == 'junit': \
+        if not w.get('test'): errors.append(f'waiver[{i}] junit missing test'); \
+        if not (bool(w.get('unique_id')) ^ bool(w.get('unique_id_glob'))): \
+            errors.append(f'waiver[{i}] junit needs exactly one of unique_id or unique_id_glob'); \
+    elif fw == 'vitest': \
+        if not w.get('file') or not w.get('test'): errors.append(f'waiver[{i}] vitest missing file or test'); \
+    else: errors.append(f'waiver[{i}] unknown framework {fw!r}'); \
+if errors: \
+    print('verify-skip-waivers FAILED:', file=sys.stderr); \
+    for e in errors: print('  ' + e, file=sys.stderr); \
+    sys.exit(1); \
+print(f'verify-skip-waivers OK: {len(waivers)} waivers validated')"
 
 .PHONY: validate
 validate: ## Run all governance validation scripts
