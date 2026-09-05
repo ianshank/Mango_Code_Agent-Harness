@@ -59,7 +59,9 @@
       "langgraph": {
         "import_name": "langgraph.graph",
         "deselect_env": "MANGO_CI_DESELECT_LANGGRAPH",
-        "path_prefixes": ["harness/shared/langgraph/"]
+        "path_prefixes": [
+          "harness/shared/langgraph/"
+        ]
       }
     }
   },
@@ -225,5 +227,10 @@
   "lats": {
     "max_budget": 10,
     "exploration_weight": 1.414
+  },
+  "agent_memory": {
+    "max_gaps": 100,
+    "max_hypotheses": 100,
+    "planner_gap_limit": 10
   }
 }
