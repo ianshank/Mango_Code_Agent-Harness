@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Docs: NS-18 reasoner-bridge-tool-parity spec scaffold
+
+Add `docs/specs/reasoner-bridge-tool-parity.md` as the NS-18 contract
+(persona/bridge tool-inventory parity, `prompt_sha` logging, falsifying tests).
+Point `NEXT_STEPS.md` NS-18 Evidence at the spec. Docs only; no runtime change.
+
 ### NS-21: post-turn hooks record status and tool-call spend
 
 Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
