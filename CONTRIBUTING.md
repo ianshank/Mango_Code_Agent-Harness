@@ -88,7 +88,7 @@ it exists to enforce — don't do that to unblock a red check.
 
 - No hard-coded values — thresholds come from `governance-policy.json`.
 - No test waivers or `xfail` to make a gate green without a decision-log
-  entry (`harness/node/.governance/decision-log.md`).
+  record under `docs/decisions/` (see `docs/decisions/index.md`).
 - No credentials in code; external model calls route through env vars.
 - A gate, threshold-loader, or policy-derived default must fail **closed**
   (raise) on malformed input, never silently substitute a default — this

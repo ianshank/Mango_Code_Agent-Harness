@@ -54,7 +54,7 @@ skill, then `make pre-pr`.
 | PR-8 | Major | NS-4 still said bot PRs left for maintainer; Dependabot open = none (closed #62-#78). | §6 NS-4 disposition updated. |
 | PR-9 | Major | §4 Phase E still blocked on NS-31; DEC-053…056 exist on #93. | Phase E retargeted to **NS-2** before destructive slices. |
 | PR-10 | Major | NS-9 / NS-34 still treated NS-31 undecided; PARK decided (DEC-053). | NS-9 moves with park; NS-34 Depends on nothing mechanical (DECs logged). |
-| PR-11 | Product | NS-17 open on #97; Copilot: `policy_path` not plumbed into `agent_memory_defaults` / gap injection. | Keep open; strengthen Done-when (policy_path + mutation + `max_gaps==0`). |
+| PR-11 | Product | NS-17 open on #97; Copilot: `policy_path` not plumbed into `agent_memory_defaults` / gap injection. | **Closed:** #97 landed `policy_path` + mutation + zero-bound messaging; moved to §6 with NS-34. |
 | PR-12 | Unchanged P0 | Re-queried: ruleset `[]`; tip `58490c1`; branch `5970249…`; 0 tags; `license: null`. | NS-1 / NS-2 / NS-3 / NS-30 stay P0. |
 
 ---
@@ -190,32 +190,6 @@ mainline KEEP polish.
 **Depends on.** Nothing mechanical; land with the R-SR-27 park slices, not as a
 standalone KEEP investment ahead of the move.
 
-### NS-17 · Retention and scoping for the agent memory directory
-
-**Why now.** `knowledge_gap_log` / `hypothesis_register` append to
-`.mango/memory/*.json` with no bound; `MEMORY_DIR` resolves from the install
-path, so workspaces share one store and nothing reads it back (audit M4).
-Open PR #97 implements the bound + workspace scope + planner injection, but
-Copilot review is unresolved: `policy_path` is not plumbed into
-`agent_memory_defaults()` / gap injection, so non-default governance policies
-do not affect retention or planner gap limits.
-
-**Evidence.** `harness/shared/meta_tools.py`; `harness/shared/orchestrator/loop.py`;
-PR #97 review threads on `policy_path`; grep for readers outside tests.
-
-**Done when.**
-- A bound from `governance-policy.json` is enforced via the **active**
-  `policy_path` (same path `ExecutionLoop` already uses for budgets), not only
-  the built-in harness defaults.
-- Store lives under the workspace; one reader surfaces gaps into the planner
-  prompt.
-- Tests fail when retention or surfacing breaks.
-- A mutation / negative case fails closed when `max_gaps == 0` (no false
-  "logged" / non-empty trim result from the `[-0:]` pitfall).
-- PR #97 either absorbs these criteria or a follow-up closes them before NS-17
-  moves to §6.
-
-**Depends on.** Nothing.
 
 ### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
 
@@ -233,22 +207,6 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 
 **Depends on.** Nothing (Phase B MCP parity shipped).
 
-### NS-34 · Decision records as records
-
-**Why now.** ~52 decisions are pipe-delimited lines in
-`harness/node/.governance/decision-log.md`, restated into `GOVERNANCE_SKILL.md`.
-Every PR writes each decision twice (audit H15). DEC-053…056 were the last
-four NS-31 entries written in the old format (#93).
-
-**Evidence.** decision-log; `validate_governance_docs.py`; PR #93.
-
-**Done when.** One file per decision under `docs/decisions/` with status,
-context, decision, consequences, machine-readable `supersedes:`; validators
-read a generated index; skill lockstep copy deleted; `make validate` fails on a
-decision without status.
-
-**Depends on.** Nothing (NS-31 / R-SR-5 closed on #93). Prefer migrating before
-further Phase E decision churn, but the DECs are no longer a blocker.
 
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
@@ -328,6 +286,13 @@ gated on R-SR-2).
 |---|---|
 | **NS-21** Hook surface / post-turn observation | **Landed on PR #99.** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
 
+**Closed 2026-09-05d (NS-34 / NS-17):**
+
+| Was | Now |
+|---|---|
+| **NS-34** Decision records as records | **Landed on PR (this change).** One file per decision under `docs/decisions/` with YAML frontmatter (`status`, `supersedes`, …); generated `index.md` / `index.json`; `validate_governance_docs` fails on missing status, index drift, or skill restatement; skill points at the index; thin legacy `decision-log.md` retains DEC ids for `--decision-log` consumers. |
+| **NS-17** Agent memory retention / scoping | **Landed on PR #97.** Policy-bounded FIFO retention via active `policy_path`, workspace-scoped `.mango/memory`, planner `{open_gaps}` injection, zero-bound fail-closed messaging + mutation tests. |
+
 **Closed 2026-09-05 (prior rewrite's evidence pass):**
 
 | Was | Now |
@@ -359,7 +324,7 @@ file at `6f0f18b`…`58490c1` and `docs/reports/ROADMAP-PEER-REVIEW.md`.
 - **Completed milestones v2.1.3 - v2.4.0** -
   [`docs/releases/milestone-history.md`](docs/releases/milestone-history.md).
 - **Per-release narrative** - `CHANGELOG.md`; long bodies in `docs/releases/`.
-- **Decisions** - `harness/node/.governance/decision-log.md` (migrate via NS-34).
+- **Decisions** - `docs/decisions/` (index in `docs/decisions/index.md`; NS-34).
 - **Specifications** - `docs/specs/`; Phase B / R-SR-5 status boxes in
   `2026-standards-remediation-plan.md` (revision 3).
 

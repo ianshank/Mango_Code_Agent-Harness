@@ -301,7 +301,7 @@ The `.mango/` ecosystem enables specialized subagent collaboration during develo
 When introducing new features or modules:
 
 - **Write Tests Across All 7 Tiers:** Ensure coverage spans Unit, Integration, Functional, E2E, User Journey, Security, and Stress/Sanity tiers.
-- **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. Any temporary waiver must be formally declared in `.governance/skip-waivers.json` citing an approved decision from `decision-log.md`.
+- **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. Any temporary waiver must be formally declared in `.governance/skip-waivers.json` citing an approved decision from `docs/decisions/` (thin ID index still at `harness/node/.governance/decision-log.md` for `--decision-log`).
 - **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code and test docstrings, ensuring `python harness/shared/check_traceability.py` validates 100% requirement coverage.
 
 ### 5.3 Local Development & Gate Validation
