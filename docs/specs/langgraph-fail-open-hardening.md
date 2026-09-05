@@ -6,10 +6,14 @@
 
 ## Problem statement
 
-Five defects in `harness/shared/langgraph/` were reproduced against the real
-`langgraph` package (1.2.11, installed from `requirements-langgraph.txt`) on
-2026-09-04. Each is a run of the compiled graph, not a reading of the source,
-and every line reference below is to the file as it stood before this change.
+Six defect themes in `harness/shared/langgraph/` were reproduced against the
+real `langgraph` package (1.2.11, installed from `requirements-langgraph.txt`)
+on 2026-09-04 (DEC-052). DEC-052's opening word "Five" is stale relative to its
+own `(1)`..`(6)` numbering; the authoritative set is the six numbered themes
+there. Items 1-5 below are the pre-review reproductions; the write-after-denial
+finding amends item 1 / R-LGH-3 rather than introducing a seventh theme. Each
+is a run of the compiled graph, not a reading of the source, and every line
+reference below is to the file as it stood before this change.
 
 1. **An authority denial does not change the outcome.** `@with_authority`
    records `{"node", "error", "traceback"}` into the `errors` channel and the
@@ -37,6 +41,13 @@ and every line reference below is to the file as it stood before this change.
    graph. Containment is correct and is preserved here. What is absent is a
    consumer: a contained error that no gate reads is indistinguishable from no
    error at all.
+
+   **Write-after-denial (R-LGH-3 amendment, found on PR #87 review).** Checking
+   the blocking error only at `quality_gate` (downstream of `implementer`) made
+   a denial terminal in *verdict* while the write-capable node had already run
+   (`revision_count: 1 | patches: 1 ['stub.py']`). The blocking-error exit must
+   be the first branch in `_route_plan_gate`, ahead of every route that can
+   reach `implementer`, so a denial costs zero writes.
 
 2. **The quality gate passes vacuously.** With no orchestrator in
    `configurable`, `evaluation_node` returns
@@ -137,9 +148,13 @@ change below survives R-SR-27's relocation of this package under
   non-blocking, because INV-16 requires an observation-mode producer's failure
   to leave the incumbent path unaffected.
 - R-LGH-2: `quality_gate_node` MUST NOT report `pass` on an inconclusive
-  verification result — an empty `test_results` channel, or a latest entry
-  whose `passed` and `failed` counts are both zero. Zero executed tests is an
+  verification result: an empty `test_results` channel, a latest entry whose
+  `passed` and `failed` counts are both zero, or a latest entry whose counts
+  are missing, non-integral, boolean, or negative. Zero executed tests is an
   absence of evidence, and DEC-024 makes an absence of evidence a non-pass.
+  Malformed counts MUST grade inconclusive without raising. `skipped` alone
+  does not count as executed evidence: a row with `passed=0, failed=0` and a
+  positive `skipped` remains inconclusive.
 - R-LGH-3: A control-plane error MUST route to `escalate` rather than consume
   revision budget: the `errors` channel is an `operator.add` accumulator that
   no node clears, so a retry can never remove the entry that failed the gate,
@@ -204,6 +219,12 @@ change below survives R-SR-27's relocation of this package under
       a latest result of `passed=0, failed=0`, both report `fail` and a verdict
       other than `VERIFIED`, where today both report `pass` — verified by
       `pytest harness/shared/tests/test_langgraph_nodes.py -k inconclusive`
+      · stage: `make coverage-python` (R-LGH-2)
+- [x] AC-17: a latest `test_results` row with missing, non-integral, boolean,
+      negative, or non-integer (`None`, `""`, float) `passed`/`failed` counts,
+      and a skipped-only `0/0` row, all leave the gate `fail` /
+      `REASON_INCONCLUSIVE` without raising — verified by
+      `pytest harness/shared/tests/test_langgraph_nodes.py -k inconclusive_malformed`
       · stage: `make coverage-python` (R-LGH-2)
 - [x] AC-4: `quality_gate_node` still reports `pass` and `VERIFIED` on a
       conclusive passing result (`passed=1, failed=0`, no errors), so the

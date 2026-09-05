@@ -155,7 +155,17 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
             reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
             test_results = state.get("test_results", [])
             last_result = test_results[-1] if test_results else {}
-            if last_result.get("failed", 0) > 0 and last_result.get("message"):
+            prior_failed = (
+                _nonneg_int_count(last_result.get("failed"))
+                if isinstance(last_result, dict)
+                else None
+            )
+            if (
+                prior_failed is not None
+                and prior_failed > 0
+                and isinstance(last_result, dict)
+                and last_result.get("message")
+            ):
                 reasoner_prompt += (
                     f"\n\nPREVIOUS TEST FAILURE (Revision {revision}):\n"
                     f"{last_result.get('message')}\n"
@@ -260,6 +270,19 @@ def plan_gate_node(state: MangoState, config=None, **_kwargs: Any) -> dict:
     }
 
 
+def _nonneg_int_count(value: object) -> int | None:
+    """Return ``value`` when it is a non-boolean, non-negative int; else ``None``.
+
+    ``bool`` is a subclass of ``int``, so ``True`` must be rejected explicitly:
+    otherwise ``{"passed": True, "failed": 0}`` would look like a green suite.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
 def _conclusive(latest: object) -> bool:
     """Whether a ``test_results`` entry is evidence that a suite actually ran.
 
@@ -267,10 +290,30 @@ def _conclusive(latest: object) -> bool:
     no-orchestrator path, and grading it by ``failed > 0`` alone made zero
     executed tests indistinguishable from a green suite. DEC-024 makes an
     absence of evidence a non-pass, so it is graded as one (R-LGH-2).
+
+    Both ``passed`` and ``failed`` MUST be present and MUST be non-boolean,
+    non-negative integers before either is summed. A malformed or incomplete
+    row (negative counts, strings, booleans, missing keys) is inconclusive,
+    never a raise and never a vacuous pass (Copilot review on PR #87).
     """
     if not isinstance(latest, dict):
         return False
-    return (latest.get("passed", 0) or 0) + (latest.get("failed", 0) or 0) > 0
+    if "passed" not in latest or "failed" not in latest:
+        logger.debug(
+            "test_results row inconclusive: missing passed/failed keys (keys=%s)",
+            sorted(latest.keys()),
+        )
+        return False
+    passed = _nonneg_int_count(latest.get("passed"))
+    failed = _nonneg_int_count(latest.get("failed"))
+    if passed is None or failed is None:
+        logger.debug(
+            "test_results row inconclusive: malformed counts passed=%r failed=%r",
+            latest.get("passed"),
+            latest.get("failed"),
+        )
+        return False
+    return passed + failed > 0
 
 
 def _quality_gate_reason(state: MangoState) -> str | None:
@@ -281,7 +324,14 @@ def _quality_gate_reason(state: MangoState) -> str | None:
     latest = test_results[-1] if test_results else None
     if not _conclusive(latest):
         return REASON_INCONCLUSIVE
-    if isinstance(latest, dict) and (latest.get("failed", 0) or 0) > 0:
+    # ``_conclusive`` already proved ``latest`` is a dict with valid counts;
+    # re-read through the same helper so the gate never raises on bad input.
+    if not isinstance(latest, dict):
+        return REASON_INCONCLUSIVE
+    failed = _nonneg_int_count(latest.get("failed"))
+    if failed is None:
+        return REASON_INCONCLUSIVE
+    if failed > 0:
         return REASON_TESTS_FAILED
     return None
 

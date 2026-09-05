@@ -10,9 +10,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### LangGraph follow-up: conclusive counts fail closed on malformed rows
+
+Copilot review leftovers from PR #87 / PR #88. `_conclusive` requires both
+`passed` and `failed` to be present non-boolean non-negative integers before
+summing; malformed or incomplete rows (including `None`, `""`, floats, and
+skipped-only `0/0`) grade inconclusive instead of raising or reaching
+`VERIFIED`. `implementer_node` reuses the same count helper when deciding
+whether to append a prior-failure prompt. DEBUG logs name rejected shapes.
+AC-17 pins the malformed matrix. Taxonomy: DEC-052's six numbered themes are
+authoritative; its opening "Five" is stale; write-after-denial amends theme
+(1) / R-LGH-3 rather than a seventh CHANGELOG bullet. DEC-026 `skipif` for
+the optional langgraph extra remains acknowledged.
+
 ### LangGraph: the graph fails closed on errors and on absent evidence
 
-Spec `docs/specs/langgraph-fail-open-hardening.md`; DEC-052. Five defects, each
+Spec `docs/specs/langgraph-fail-open-hardening.md`; DEC-052. Six defects, each
 reproduced against the real `langgraph` package (1.2.11) rather than read off
 the source.
 
@@ -24,6 +37,8 @@ the source.
   (`INV-LG-6`). `INV-LG-3`'s containment is unchanged; what is added is
   consequence, and that invariant is retitled from "Fail-Open" to "Contained"
   Error Channel Routing because the old name read as licensing the outcome.
+  Review on PR #87 further required the blocking-error exit first in
+  `_route_plan_gate`, so a denial costs zero writes (R-LGH-3).
 - **The quality gate no longer passes vacuously.** With no orchestrator,
   `evaluation_node` reports `passed=0, failed=0`; grading by `failed > 0` alone
   made zero executed tests indistinguishable from a green suite — the shape
@@ -52,7 +67,7 @@ the source.
 
 Three assertions that pinned the vacuous pass are rewritten to assert the
 graded outcome, including one reading `verdict in ("VERIFIED", "FAILED",
-"BLOCKED", "")` — the channel's whole domain. No skip, `xfail` or waiver added.
+"BLOCKED", "")` — the channel's whole domain. No `xfail` or waiver added; the DEC-026 `@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, ...)` conditional remains for the optional extra.
 `CHANGELOG`-adjacent docs re-synced: `c4_architecture.md` §4.7 now documents
 `INV-LG-5` (live in code and cited by the LATS spec, but never listed) plus the
 two new invariants, and README's regression-suite count and coverage figures
