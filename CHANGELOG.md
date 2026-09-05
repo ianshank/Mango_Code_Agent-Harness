@@ -3,12 +3,22 @@
 All notable changes to this project will be documented in this file.
 
 > **Scope:** repository-level changes (roadmap, CI, tooling, docs). Harness
-> gate-contract versions v2.0.0–v2.1.5 are kept in the *Harness gate-contract
+> gate-contract versions v2.0.0-v2.1.5 are kept in the *Harness gate-contract
 > history* block at the end of this file; later ones live in the versioned
 > sections. Release sections are capped at `limits.changelog_section_lines`
 > (`governance-policy.json`); a longer release body moves to `docs/releases/`.
 
 ## [Unreleased]
+
+### Docs: roadmap peer rewrite after #89-#95 / #93 (2026-09-05b)
+
+Second evidence pass against `main` @ `58490c1`. `NEXT_STEPS.md` moves NS-11,
+NS-31, and NS-33 to Delivered; retargets Phase E / NS-9 / NS-34 off undecided
+NS-31 onto NS-2 + DEC-053 PARK; strengthens NS-17 Done-when for `policy_path`,
+mutation coverage, and `max_gaps==0` (cites open #97); fixes Dependabot closed
+disposition. Remediation plan → revision 3 (AC-5 ticked; Phase F drops delivered
+`ruff format`). Peer-review record appended in
+`docs/reports/ROADMAP-PEER-REVIEW.md` §5. Docs only.
 
 ### Hotfix: split `command_actions` write-target extraction (size budget)
 
@@ -16,8 +26,8 @@ NS-33's `ruff format` apply expanded `harness/shared/governance/command_actions.
 from 472 to 552 lines and breached `limits.size_budget_lines` (500), turning
 `validate_invariants` / `build-full` red on `main` and blocking open PRs. The
 write-target walk (`write_targets`, redirect operators, `WRITE_TARGET_PROGRAMS`)
-moves to `command_write_targets.py` — the seam the broker already draws between
-action classification and path enumeration — with DEC-035 re-exports so callers
+moves to `command_write_targets.py` - the seam the broker already draws between
+action classification and path enumeration - with DEC-035 re-exports so callers
 and tests keep importing from `command_actions`. Budget is not raised. DEBUG
 logging on the new module names path *counts*, never command text. Same commit
 regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
@@ -62,7 +72,7 @@ reproduced against the real `langgraph` package (1.2.11) rather than read off
 the source.
 
 - **An authority denial now changes the outcome.** `@with_authority` recorded a
-  denial into the `errors` channel and the graph carried on — neither router
+  denial into the `errors` channel and the graph carried on - neither router
   read `errors`, and `quality_gate_node` consulted it only when `test_results`
   was empty, which no path through the compiled graph produces. A denied
   planner returned `VERIFIED` over an empty plan. The channel has a consumer
@@ -73,7 +83,7 @@ the source.
   `_route_plan_gate`, so a denial costs zero writes (R-LGH-3).
 - **The quality gate no longer passes vacuously.** With no orchestrator,
   `evaluation_node` reports `passed=0, failed=0`; grading by `failed > 0` alone
-  made zero executed tests indistinguishable from a green suite — the shape
+  made zero executed tests indistinguishable from a green suite - the shape
   DEC-024 rejects, inside the graph's own gate. An inconclusive result is a
   non-pass.
 - **Terminality is decided in one place.** `langgraph/errors.py` stamps each
@@ -81,7 +91,7 @@ the source.
   (`shadow_planner`, `peer_reviewer`, `security_reviewer`) do not, because
   INV-16 requires an observation-mode producer's failure to leave the incumbent
   path unaffected; an unrecognised node blocks, so an unclassified error fails
-  closed. A blocking error escalates without spending revision budget —
+  closed. A blocking error escalates without spending revision budget -
   `errors` is an `operator.add` accumulator no node clears.
 - **Policy reaches the runtime.** `runtime_config()` is the producer for the
   `configurable.policy` key the policy-wiring spec's consumers already read and
@@ -99,7 +109,7 @@ the source.
 
 Three assertions that pinned the vacuous pass are rewritten to assert the
 graded outcome, including one reading `verdict in ("VERIFIED", "FAILED",
-"BLOCKED", "")` — the channel's whole domain. No `xfail` or waiver added; the DEC-026 `@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, ...)` conditional remains for the optional extra.
+"BLOCKED", "")` - the channel's whole domain. No `xfail` or waiver added; the DEC-026 `@pytest.mark.skipif(not LANGGRAPH_AVAILABLE, ...)` conditional remains for the optional extra.
 `CHANGELOG`-adjacent docs re-synced: `c4_architecture.md` §4.7 now documents
 `INV-LG-5` (live in code and cited by the LATS spec, but never listed) plus the
 two new invariants, and README's regression-suite count and coverage figures
@@ -282,7 +292,7 @@ does not -- a cancelled run there is a lost notification). Decision: DEC-048.
 
 `write_file Makefile` is refused; `write_file forge.py` then `run_command
 python3 forge.py` was not, and the script rewrote the protected `Makefile` so
-the next `VerificationRunner.run` returned `VERIFIED` on a failing suite —
+the next `VerificationRunner.run` returned `VERIFIED` on a failing suite -
 reproduced through the real dispatcher, broker and process backend. `-f
 Makefile` pinned *which* file was read; nothing pinned *what it said*.
 
@@ -290,13 +300,13 @@ Makefile` pinned *which* file was read; nothing pinned *what it said*.
   `make test-python` would honour: `GNUmakefile`, `makefile`, `setup.py`,
   `setup.cfg`, `pytest.ini`, `tox.ini`, `sitecustomize.py`,
   `usercustomize.py`, `*.pth`, `**/conftest.py`. Nine are declared dormant in
-  `test_protected_path_liveness.py` — no such file is tracked; the pattern arms
+  `test_protected_path_liveness.py` - no such file is tracked; the pattern arms
   the guard before an agent creates one.
 - `make` is graded by what it is told to read (`governance/indirect_exec.py`):
   `-f <anything but Makefile>`, `-C`, `--eval`, `-I`, a bundled short flag or a
   `NAME=value` override all grade `destructive`. `pnpm exec <x>` / `npx <x>`
   grade as `<x>`, accepted only for the programs `_BY_PROGRAM` already grades
-  `test_execute` — one table, read through the delegator.
+  `test_execute` - one table, read through the delegator.
 - `VerificationRunner.snapshot_enforcement` digests every protected file
   before the first agent turn (`ExecutionLoop.execute_loop`); `run` refuses
   with `BLOCKED` / `enforcement_tampered` naming the files if any changed,
@@ -311,7 +321,7 @@ Makefile` pinned *which* file was read; nothing pinned *what it said*.
 
 Regression tier: `regression/test_verdict_forgery_regression.py` drives the
 audit's recipe through `bash -c` in the real backend, proves the forged
-makefile passes on its own, and asserts the harness refuses it —
+makefile passes on its own, and asserts the harness refuses it -
 plus the negative controls (untouched passing tree → VERIFIED; untouched
 failing tree → FAILED; forgery reverted to the exact bytes → the real suite runs).
 
@@ -319,14 +329,14 @@ failing tree → FAILED; forgery reverted to the exact bytes → the real suite 
 
 A version number is a name a registry resolves. `requirements-lock.txt` pinned
 79 distributions and carried zero hashes, so a file replaced under an existing
-pin would have installed with no diff here and no warning there — while
+pin would have installed with no diff here and no warning there - while
 `test_workflow_contracts.py` asserted CI installs "from the lock" and was
 satisfied. That test was true and not sufficient.
 
 All four `uv pip compile` recipes (`lock`, `lock-check`, `lock-upgrade-check`,
 `lock-upgrade`) now pass `--generate-hashes`. Regenerating changed **0 pins** and
 added **2,249 hash lines**, verified by diffing the pin lines of the old and new
-files. All **three** workflow install steps pass `--require-hashes` — the plan
+files. All **three** workflow install steps pass `--require-hashes` - the plan
 said two, and missed the one in `scheduled-drift.yml`. A hashed lock read by an
 install that does not check it is decoration.
 
@@ -347,7 +357,7 @@ No known vulnerabilities found
 Scanning the lock alone is **broader** than what it replaces, not narrower.
 `requirements-dev.txt` opens with `-r requirements.txt` and the lock compiles
 from dev + langgraph, so all 15 distributions named across the three inputs are
-pinned in the lock — which carries 79. The other 64 are transitive dependencies
+pinned in the lock - which carries 79. The other 64 are transitive dependencies
 the range files never mention and the old invocation scanned only as a
 by-product of resolution. The ranges were also the wrong thing to scan: a range
 resolves to whatever the index offers that day, so the old form audited versions
@@ -355,7 +365,7 @@ no leg installs.
 
 `test_dependency_lock_contracts.py` makes that subsumption a gate rather than a
 comment, and takes the lock concern out of `test_workflow_contracts.py` at
-653/700 lines — the seam DEC-035 names: workflow *shape* there, dependency *set*
+653/700 lines - the seam DEC-035 names: workflow *shape* there, dependency *set*
 here, with `_workflow_paths.py` holding what both read instead of a second copy.
 
 Five mutation proofs: stripping one requirement's hashes, removing
@@ -363,9 +373,9 @@ Five mutation proofs: stripping one requirement's hashes, removing
 install step, restoring a range file to the audit target, and breaking the
 range-file parser's `-r` skip each fail their tests.
 
-### The Dependabot queue, dispositioned — and the plan was wrong about half of it
+### The Dependabot queue, dispositioned - and the plan was wrong about half of it
 
-R-CQ-2 predicted "#62–#66 superseded by the SHA pins of R-CQ-9". **They are not.**
+R-CQ-2 predicted "#62-#66 superseded by the SHA pins of R-CQ-9". **They are not.**
 Within minutes of #82 merging, Dependabot rebased all five onto the new pins and
 now proposes majors *in the pinned form*: #64 offers
 `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, which is
@@ -373,8 +383,8 @@ the exact commit `git ls-remote --tags` reports for `refs/tags/v7.0.1`, comment
 preserved.
 
 That is a better result than the plan expected and a different one. It proves the
-pin form survives Dependabot's own rewrite as a one-line diff — the thing R-CQ-9
-needed and could not check until a bot did it — and it leaves five *accurate*
+pin form survives Dependabot's own rewrite as a one-line diff - the thing R-CQ-9
+needed and could not check until a bot did it - and it leaves five *accurate*
 major-bump proposals rather than five stale ones. DEC-045 deferred those majors
 deliberately, and `.github/dependabot.yml` keeps the `github-actions` ecosystem
 enabled to "keep the majors moving", so they stay open as the queue for that
@@ -383,7 +393,7 @@ deferred decision. Closing them as superseded would have recorded a false reason
 **#67 (mypy 1.11.2 → 2.3.1) is closed as blocked on NS-6**, measured rather than
 assumed. mypy 2.3.1 declares `Requires-Python >=3.10`, and
 `mypy --python-version 3.9` answers `error: argument --python-version: Python
-3.9 is not supported (must be 3.10 or higher)` — the mypy 2.0 removal, confirmed
+3.9 is not supported (must be 3.10 or higher)` - the mypy 2.0 removal, confirmed
 against the release. `make ci-python` runs mypy on every matrix leg including
 3.9, and `[tool.mypy]` sets no `python_version`, so mypy targets whichever
 interpreter runs it. Two independent blocks on one leg: no installable candidate
@@ -399,7 +409,7 @@ outlived the decision that retired them.
 `.github/dependabot.yml` deliberately keeps; closing PRs the configuration
 exists to produce would contradict the configuration rather than tidy it.
 
-Five closed, eight open with a recorded reason each — not R-CQ-2's twelve
+Five closed, eight open with a recorded reason each - not R-CQ-2's twelve
 closures.
 
 ### The workflows pin what they run, and the repository stops exempting itself
@@ -418,27 +428,27 @@ object would resolve to nothing at run time.
 
 The version comment is load-bearing rather than decorative. `NODE24_ACTION_MAJORS`
 is enforced against the major the comment states, so a bare SHA would drop a
-reference out of the Node 24 check silently — which is why a SHA without a
+reference out of the Node 24 check silently - which is why a SHA without a
 comment is itself a finding.
 
 **Pinned at the majors already in use**, not the ones the open Dependabot PRs
 propose. `actions/checkout` v7, `actions/setup-python` v7, `actions/setup-node`
 v7, `actions/setup-go` v7 and `pnpm/action-setup` v6 all exist; taking them
 would fold five untested major bumps into a supply-chain change whose entire
-point is that what CI runs stops moving. #62–#66 are superseded in mechanism —
+point is that what CI runs stops moving. #62-#66 are superseded in mechanism -
 Dependabot now updates the SHA and its comment, and a tag-bump PR no longer
-applies as written — not in substance. Whether to take the bumps is its own PR.
+applies as written - not in substance. Whether to take the bumps is its own PR.
 
 `uses_lines` now parses only the strict form, and `unpinned_uses` reports
 everything it rejects. Splitting them is deliberate: a malformed reference
 arriving at `uses_lines` as a silently missing row is how an unpinned action
 would pass the Node 24 table by being invisible to it, so a test asserts every
 `uses:` line is either graded or reported. A `./`-relative composite action is
-exempt — it lives here and has no SHA to pin.
+exempt - it lives here and has no SHA to pin.
 
 Six mutation proofs, and the fix failed one of them first. The short-SHA case
 carried no version comment, so the pattern rejected it for the missing comment
-and loosening `{40}` to `+` left the test passing — a case that cannot fail for
+and loosening `{40}` to `+` left the test passing - a case that cannot fail for
 the reason it names pins nothing. It now carries a valid comment and is joined
 by an over-long and an upper-case case, so the quantifier and the character
 class are each pinned from both sides.
@@ -456,13 +466,13 @@ parametrised over a third case that has a local composite action, and the revert
 fails on it.
 
 And two of the three form cases carried reasons that were **false**. `git
-rev-parse` resolves an abbreviated object id, and resolves an upper-case one —
+rev-parse` resolves an abbreviated object id, and resolves an upper-case one -
 both verified against a real git, both the opposite of what the case claimed.
 The cases are right and the rule is right; the reasons were invented. Each now
 states the rule being enforced, which is this repository's and not git's: one
 canonical 40-hex lowercase form, because an abbreviation stays unambiguous only
 until the upstream repository grows a colliding prefix, and because `git
-ls-remote` and Dependabot both emit lowercase — one spelling is what keeps pins
+ls-remote` and Dependabot both emit lowercase - one spelling is what keeps pins
 comparable by eye and Dependabot's rewrite a one-line diff. A failure message
 stating a false reason is worse than one stating none: it misleads exactly the
 person who hit the gate.
@@ -474,7 +484,7 @@ NS-1 for four releases as the thing to import. It could not have been imported.
 It required one code-owner approval; `.github/CODEOWNERS` routes `*` to
 `@ianshank`, who authors every pull request in this repository; GitHub does not
 accept an author's approval of their own pull request. Importing it would have
-made `main` unmergeable rather than protected — so nobody did, and every gate in
+made `main` unmergeable rather than protected - so nobody did, and every gate in
 the repository stayed advisory. That is not a footnote to NS-1, it is the reason
 NS-1 never moved, and four revisions of that item never said it.
 
@@ -487,15 +497,15 @@ goes to `0` and `require_code_owner_review` goes with it; the nine required
 status checks and the empty `bypass_actors` list are untouched. The other two
 shapes were rejected on their own terms rather than on preference: a bypass
 actor for the repository-admin role is scoped to the *ruleset*, not to the
-review rule, so it would exempt its holder from the nine checks as well —
-reopening the #60 hole in order to close a review hole — and a second reviewing
+review rule, so it would exempt its holder from the nine checks as well -
+reopening the #60 hole in order to close a review hole - and a second reviewing
 account requires an account that does not exist. The review layer being given up
 was already fictional; the compensating controls are the `openspec-peer-review`
 and `repo-invariant-review` skills and the third-party PR review that found five
 real defects across PR #79 and PR #80.
 
 `test_nobody_can_bypass` asserted `bypass_actors == []`, which both rejected
-shapes also satisfy — it graded one field of a shape rather than the shape. It
+shapes also satisfy - it graded one field of a shape rather than the shape. It
 now runs `unchosen_shape_reason`, which is the shape's definition, against the
 committed export *and* against `tmp_path` copies reshaped into each rejected
 shape, so a drift back cannot pass by being merely well-formed. Five mutation
@@ -511,15 +521,15 @@ reason.
 
 Corrected with it: `NEXT_STEPS.md` claimed "Phase 1 is now complete" and "8 are
 ticked (all of Phase 1)". Seven are ticked, and the two open boxes in that block
-— AC-1 and AC-2 — are Phase 0 prerequisites, not Phase 1 slices. R-CQ-2 requires
+- AC-1 and AC-2 - are Phase 0 prerequisites, not Phase 1 slices. R-CQ-2 requires
 the NS-2 credential rotated *before any Phase 1 slice merges*; all six merged
 ahead of it.
 
 ### The containment classifier is observable, and one more literal is linked
 
 `command_actions` had no logger at all. `Classification.reason` is the whole
-diagnostic — "the glob `*[a-z].pem` commits to `.pem` and can expand to
-`key.pem`" — and it reached the agent through `ExecutionResult.reason` and
+diagnostic - "the glob `*[a-z].pem` commits to `.pem` and can expand to
+`key.pem`" - and it reached the agent through `ExecutionResult.reason` and
 stopped there, so an operator reading logs saw an action name and nothing else.
 An **allowed** grading left no trace whatsoever, which is the shape that
 matters: a credential read that graded `read` would be invisible by
@@ -527,16 +537,16 @@ construction. Four rounds of bypass fixes on this module were every one of them
 found by review, never by a log, because there was no log.
 
 `classify` is now a thin wrapper over `_classify` and logs each verdict at
-DEBUG from one place — five return points, each a security decision, and
+DEBUG from one place - five return points, each a security decision, and
 logging at each would be five chances to add a sixth that logs nothing. The
 command **and the reason** are both redacted and truncated to 200 characters,
 guarded on `isEnabledFor` so nothing is paid for at the default level. The
 broker's denial warning now carries the reason it was already returning,
-redacted the same way — and at WARNING, which ships by default.
+redacted the same way - and at WARNING, which ships by default.
 
 Redacting the reason is not belt-and-braces. Almost every reason quotes the
-fragment it is about — `"{segment!r}, a credential-bearing file"`, `"the brace
-expression {token!r}"`, `"{argv[0]} is not a modelled program"` — so the first
+fragment it is about - `"{segment!r}, a credential-bearing file"`, `"the brace
+expression {token!r}"`, `"{argv[0]} is not a modelled program"` - so the first
 version of this change masked the key in one field and printed it verbatim in
 the next:
 
@@ -551,8 +561,8 @@ in `ExecutionResult.reason`: it sent the command, so nothing is disclosed there
 it did not have, and the reason is the whole diagnostic value of a refusal.
 
 `VerificationRunner`'s `timeout=300` default was `orchestrator.api_timeout_sec`
-written down a second time — the unlinked-literal shape R-CQ-7 removed from
-`HookRunner` — and now resolves from policy when the caller passes none.
+written down a second time - the unlinked-literal shape R-CQ-7 removed from
+`HookRunner` - and now resolves from policy when the caller passes none.
 
 ### A policy that lost a key stops the gate instead of feeding it a literal (DEC-043)
 
@@ -568,7 +578,7 @@ failure silent. Deleting `orchestrator.max_iterations` returned 10 and the loop
 ran on. Deleting `coverage.lines` returned 90 while the file a reviewer had been
 pointed at said nothing about coverage. Worst was
 `load_protected_patterns`, whose `[".github/**"]` fallback left one pattern
-matching — so the run printed `[PASS] Protected Paths` with the enforcement
+matching - so the run printed `[PASS] Protected Paths` with the enforcement
 layer, the agent control surface and the runtime gates all unprotected.
 
 `policy_loader` resolves a block through `_Section`, which carries the data and
@@ -579,17 +589,17 @@ hole. `validate_invariants` drops both defaults, and type-checks what it reads
 rather than coercing it. `int(limits[key])` accepted `"9999"` and `True` (a
 bool is an int, and `int(True)` is 1), so a policy could state a budget as a
 string, have the gate enforce it, and have the strict reader refuse the
-identical file — two readers of one policy disagreeing about what is valid,
+identical file - two readers of one policy disagreeing about what is valid,
 which is the drift this change exists to remove. `list(policy["protected_paths"])`
 on a bare string was worse: `list("Makefile")` is eleven single-character
 patterns matching no path at all, so the gate reported `[PASS] Protected Paths`
-over nothing — the same fail-open as the removed default, reached by a
+over nothing - the same fail-open as the removed default, reached by a
 different mistake. Both found by a review bot on the PR.
 
 **Behaviour change.** `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and
 `MAX_SHIM_LINES` may now only *tighten* a budget; a loosening value is ignored
 and logged. They were returned verbatim, so anyone able to set an environment
-variable could switch a gate off while it went on printing its PASS line — and a
+variable could switch a gate off while it went on printing its PASS line - and a
 gate whose report is indistinguishable from a real pass is worse than no gate,
 because it is trusted. A stricter local run still works.
 
@@ -614,7 +624,7 @@ real modules before it was fixed, all present on `main` at `487870a`.
 `process_backend` runs every command through `bash -c`, so by the time a program
 receives an argument the shell has stripped its quotes, resolved its
 backslashes, expanded its braces and expanded its globs. `command_actions`
-scanned the raw command text with `(?:^|[\s/])` boundaries instead — a string no
+scanned the raw command text with `(?:^|[\s/])` boundaries instead - a string no
 filesystem call ever sees. Five spellings of one credential read therefore
 graded `read`, the action **every** role holds including the verifier, while
 opening the file: `cat .en?`, `head .e*`, `cat '.env'`, `cat \.env` and
@@ -623,8 +633,8 @@ compound-command set, so it ran a second command under the same grade.
 
 The check now runs over `shlex.split` output with bounded brace expansion, which
 closes quoting and escaping at the seam rather than by adding three more
-patterns to a regex. A glob must *commit* to a credential name — its literal
-prefix begins one, or its literal suffix ends one — so `ls src/*` and `cat *.py`
+patterns to a regex. A glob must *commit* to a credential name - its literal
+prefix begins one, or its literal suffix ends one - so `ls src/*` and `cat *.py`
 stay ordinary reads, and dotglob is honoured so a dotless pattern cannot reach
 `.env`. That suffix is found by scanning for whole wildcard *tokens*, because a
 bracket class ends at its `]`: taking the last of `*?[` split `*[a-z].pem` into
@@ -638,7 +648,7 @@ the classifier owns what a command *does*.
 
 `write_denial_reason` had no credential rule. `protected_paths` names
 control-surface files and `.env` is deliberately untracked, so it matched
-nothing and returned `None` — while `resolve_environment` reads
+nothing and returned `None` - while `resolve_environment` reads
 `NVIDIA_BASE_URL` from the repository-root `.env`, which is the API server's
 workspace. One `apply_patch` redirected the next `complete_chat` to a host of
 the model's choosing with the real bearer token attached. The alternation moved
@@ -655,9 +665,9 @@ patch in-process. They hold no `write` action in `agent-policy.json` and were
 already refused on the MCP transport; the loop now honours what the model always
 declared.
 
-Seven runtime-enforcement modules join `protected_paths` — `tool_executors.py`,
+Seven runtime-enforcement modules join `protected_paths` - `tool_executors.py`,
 `orchestrator/**`, `nemotron_bridge.py`, `tool_schemas.py`, `agent_prompts.py`,
-`tool_dispatch.py` and the root `conftest.py` — a third group beside the
+`tool_dispatch.py` and the root `conftest.py` - a third group beside the
 enforcement layer and the agent control surface, because the verifier's verdict
 is a `make test-python` run that imports that `conftest.py`. `HookRunner`
 resolves `orchestrator.tool_timeout_sec` rather than storing `None` and handing
@@ -666,7 +676,7 @@ it to `subprocess.run`, where it means no timeout at all;
 
 `regression/test_credential_containment_regression.py` reproduces every one of
 the five end to end, through the broker and dispatcher an agent turn actually
-uses, and executes real `bash` to prove each spelling reaches the secret — a
+uses, and executes real `bash` to prove each spelling reaches the secret - a
 gate proved against a threat that does not exist is worse than no gate. Every
 fix carries a mutation proof, and the procedure behind them is now
 `.mango/skills/gate-mutation-proof/SKILL.md` (NS-20), written after running it
@@ -674,7 +684,7 @@ ten times by hand in this change.
 
 ### End-to-end tests for the wiring no unit test reached
 
-Every gate this branch added ran the real thing in its unit tests — real git
+Every gate this branch added ran the real thing in its unit tests - real git
 repositories, `runpy` of the scripts. None of them exercised the *wiring*: no
 test in the repository invoked `make` as a subprocess, so the `$(if
 $(BASE_REF),…)` conditional, the `FILE=` usage guard and the `command -v`
@@ -689,8 +699,8 @@ lived in exactly that layer.
   error, proving the flag reached the script; `make secrets-allowlist-check`
   fails closed without gitleaks rather than reporting a pass.
 - **The workflow's own shell, executed.** The attestation step's `run:` block
-  is read from the YAML — not copied, so the test and the workflow cannot
-  drift the way the skill and the tool did (DEC-038) — and run under `bash`
+  is read from the YAML - not copied, so the test and the workflow cannot
+  drift the way the skill and the tool did (DEC-038) - and run under `bash`
   with `curl` stubbed. A fetched description flows through to the check; a
   failed fetch stops at the fetch and says nothing about tables. That second
   claim was the reason `set -euo pipefail` is there (DEC-040), and it had only
@@ -705,11 +715,11 @@ lived in exactly that layer.
 
   It lives in the Node suite deliberately. `pnpm`/`tsx` exist only on
   `build-full`, while the Python regression tier also runs on the three matrix
-  legs — a Python-side version would have to skip there, and INV-2 forbids it.
+  legs - a Python-side version would have to skip there, and INV-2 forbids it.
   `python` is present wherever this suite runs.
 - **A limit, stated.** The E2E tests use this repository's own Makefile with
   the branch as its own base ref, so their premise is an empty protected set.
-  Mutating a protected file in place — the workflow, `attestation.py` — breaks
+  Mutating a protected file in place - the workflow, `attestation.py` - breaks
   that premise before the case under test runs; the fixture says so rather
   than failing obscurely. Those two proofs were run by feeding the harness a
   mutated shell string and at the unit level respectively, not by editing
@@ -718,7 +728,7 @@ lived in exactly that layer.
 
 ### A 700-line budget that was silent until it failed, and the module sixteen lines from it (DEC-041)
 
-`test_verify_zero_skips.py` stood at **684 of 700** — the suite for INV-2, the
+`test_verify_zero_skips.py` stood at **684 of 700** - the suite for INV-2, the
 invariant most likely to gain a test, since every new waiver shape lands there.
 Nothing surfaced that: the per-file size budget reported only breaches, so the
 first signal a contributor would get was a red gate mid-PR.
@@ -730,7 +740,7 @@ first signal a contributor would get was a red gate mid-PR.
   *what it approves* untouched, and that distinction is what DEC-026 and the
   later waiver narrowing both turned on.
 - **`run_script` and the fixture move to `_zero_skip_harness.py`**, imported by
-  both halves rather than copied — a duplicated runner is how the two would come
+  both halves rather than copied - a duplicated runner is how the two would come
   to disagree about what "run the gate" means. Imported by name rather than put
   in the directory `conftest.py`, where `test_files` would be visible to every
   module in `harness/shared/tests/`; DEC-030 records what conftest-scoping
@@ -743,7 +753,7 @@ first signal a contributor would get was a red gate mid-PR.
   actual subject is a waiver declaring `framework: junit` without the fields
   naming which node id it addresses.
 - **The budget now reports headroom.** `_check_line_budget` logs the closest
-  file and its remaining lines on a passing run — INFO-only, unable to change
+  file and its remaining lines on a passing run - INFO-only, unable to change
   the verdict, suppressed on a failing run so the failure leads. It reports the
   measurement the check already performs rather than adding a second threshold
   to keep in step with the first.
@@ -758,7 +768,7 @@ on its second real run:
 1. **Stale.** The description was corrected minutes after the push that queued
    the run, so the check reported a missing row against a table that already
    had one.
-2. **Unclearable** — the serious one. `edited` was not a trigger type, and
+2. **Unclearable** - the serious one. `edited` was not a trigger type, and
    "Re-run failed jobs" replays the *original* payload, so a stale description
    could never be cleared. The only way past the gate would have been an
    otherwise pointless commit, and a gate whose only escape is a no-op commit
@@ -767,7 +777,7 @@ on its second real run:
    entire description into the step-setup group of the CI log.
 
 The step now fetches the pull request with the job token, writes `.body` to a
-file, and passes only the path — the description still never reaches the shell
+file, and passes only the path - the description still never reaches the shell
 as code. `set -euo pipefail` is explicit, because the runner's default
 `bash -e` does not set pipefail and a failed fetch would otherwise leave an
 empty file that the gate reports as a *missing table*: a true failure for a
@@ -776,7 +786,7 @@ other job keeps `contents: read` and nothing more. `edited` joins the trigger
 types for the same reason `labeled` is already there.
 
 The first version of the `edited` assertion searched the trigger section for
-that string and passed on the *comment* explaining why `edited` is there —
+that string and passed on the *comment* explaining why `edited` is there -
 deleting the type left it green. Found by mutating the workflow, not by reading
 the test; it now asserts against the parsed `types:` list.
 
@@ -786,7 +796,7 @@ the test; it now asserts against the parsed `types:` list.
 and "the table is the inventory; the test is what stops it rotting." Every
 assertion ran in one direction: each *listed* row was checked for a valid
 policy or decision link, and nothing checked that every constant which exists
-is listed. The way to defeat the inventory was to not write the row — and seven
+is listed. The way to defeat the inventory was to not write the row - and seven
 live operational defaults had:
 
 | Constant | Why it was worth finding |
@@ -794,13 +804,13 @@ live operational defaults had:
 | `meta_tools.DEFAULT_LOCK_TIMEOUT_S`, `DEFAULT_LOCK_POLL_S`, `MIN_LOCK_POLL_S` | Three timings on the advisory lock guarding the meta-tool store, none of them registered anywhere. |
 | `debug_dump.DUMP_DIR_MODE` | `0o700`. The previous code took `0o777 & ~umask`, leaving prompt-and-tool-output history world-readable on a shared host. A security posture with no record. |
 | `debug_dump.MIN_ENV_CREDENTIAL_LENGTH` | A correctness floor: `redact_text` replaces by substring, so treating a one-character env value as a credential would rewrite every occurrence of that character. |
-| `tool_dispatch.DEFAULT_HYPOTHESIS_CONFIDENCE` | The value recorded when a model omits confidence — any other number asserts a belief the model did not express. |
+| `tool_dispatch.DEFAULT_HYPOTHESIS_CONFIDENCE` | The value recorded when a model omits confidence - any other number asserts a belief the model did not express. |
 | `agent_prompts.TASK_LOG_PREVIEW_CHARS` | Log-volume bound; the mildest of the seven, and still unlinked. |
 
 `TestTheInventoryIsComplete` discovers module-level numeric constants across
-`harness/shared`, `harness/api_server` and `harness/control-plane` with `ast` —
+`harness/shared`, `harness/api_server` and `harness/control-plane` with `ast` -
 **parsed, not imported**, so the gate does not run the import side effects of
-the modules it judges — and requires each to be triaged or carry an `EXCLUDED`
+the modules it judges - and requires each to be triaged or carry an `EXCLUDED`
 entry saying why it is a fact rather than a limit. Exclusions must state a
 reason, must still be discovered (a stale one is standing permission for a
 future constant of that name), and must not outnumber the triaged rows.
@@ -826,8 +836,8 @@ pinning the detector itself.
 
 ### The attestation skill still carried a second, weaker matcher
 
-`.mango/skills/protected-path-attestation/SKILL.md` — the procedure a human
-actually follows — contained an inline script that re-derived the protected set
+`.mango/skills/protected-path-attestation/SKILL.md` - the procedure a human
+actually follows - contained an inline script that re-derived the protected set
 with its own `fnmatch` loop, hard-coded `origin/main` twice, and enumerated
 only `merge-base...HEAD`, so it could not see the staged, unstaged or untracked
 protected files the gate *does* see. DEC-038 made the tool single-source and
@@ -839,7 +849,7 @@ is labelled as an illustration of the columns rather than something to paste.
 
 `harness/CONTRACT.md` requires a PR touching a protected path to carry a
 per-file table, because applying `infra-reviewed` is the human attestation the
-`check_protected_paths` gate stands on. Nothing derived that table — it was
+`check_protected_paths` gate stands on. Nothing derived that table - it was
 copied out of a CI log, and on this branch's own PR a comment claimed thirteen
 attested rows where the validator's set was ten. An inflated count reads as
 thoroughness, which makes it the more dangerous direction of the DEC-024 failure
@@ -852,7 +862,7 @@ class, reproduced inside the control written to prevent it.
   **symbol identity**, not agreement on today's tree, so the printed table and
   the enforced set cannot diverge the way a second implementation would.
 - **Fails closed three ways**: no attestation section, a section with no table,
-  or any row-to-path mismatch in either direction — a row naming a path the
+  or any row-to-path mismatch in either direction - a row naming a path the
   change does not touch is reported too, since it invites the reviewer to attest
   to something absent.
 - **Nothing is hard-coded.** The base branch resolves from `--base-ref`, then
@@ -862,7 +872,7 @@ class, reproduced inside the control written to prevent it.
   than by position, so a table introduced by a paragraph parses correctly.
 - **Wired**: `make attestation` / `make attestation-check`, and a `build-full`
   step that runs on every pull request and is deliberately *not* gated on the
-  label — the reviewer must be able to read a verified table before deciding.
+  label - the reviewer must be able to read a verified table before deciding.
   The description reaches the script through a file written from an environment
   variable, never interpolated into a shell command.
 - The module sits under `harness/shared/governance/` so the existing
@@ -881,7 +891,7 @@ neither stack could see:
   parameters to the same endpoint. `test_wire_format_parity_with_typescript`
   exists to prevent exactly this and could not detect it: it asserts the request
   succeeds rather than comparing the two bodies, and its docstring enumerated
-  the fields from the Python payload alone — which is why `top_p` was missing
+  the fields from the Python payload alone - which is why `top_p` was missing
   from the list too. The docstring now says what the test does and does not
   prove.
 - **The two duplicated request-body literals collapse into one builder.**
@@ -891,7 +901,7 @@ neither stack could see:
   the body follows the policy it is given rather than one that happens to agree
   with the shipped file. Sixteen new tests, two of them mutation-proven: making
   the bodies diverge, and reverting `top_p` to the literal, each fail.
-  `SAMPLING_BOUNDS` stays out of policy deliberately — the clamp ranges are the
+  `SAMPLING_BOUNDS` stays out of policy deliberately - the clamp ranges are the
   provider's accepted input domain, and a policy widening them would describe a
   request the endpoint rejects.
 - **Five constants were unlinked in practice.** `test_constant_triage.py`'s
@@ -900,23 +910,23 @@ neither stack could see:
   the table registered two. `resetTimeoutMs`, `halfOpenSuccessThreshold` and
   `maxBackoffMs` are now registered against the decision that already justified
   them. `pretooluse_guard.FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC` duplicated
-  `orchestrator.tool_timeout_sec` with nothing holding them equal — they agreed
+  `orchestrator.tool_timeout_sec` with nothing holding them equal - they agreed
   at 30 by coincidence, and the only test asserted `> 0`; it is now policy-linked.
 - **`JITTER_CEILING_MS` needed a decision, not a table row.** DEC-025 names
-  neither it nor `retry.ts`, so a row citing DEC-025 fails the linkage check —
+  neither it nor `retry.ts`, so a row citing DEC-025 fails the linkage check -
   `NEXT_STEPS.md` NS-16 had called this "a triage row", implying a table edit.
   DEC-037 records why it is a true constant: Python jitters proportionally, Node
   adds an absolute millisecond ceiling, so they are not one knob in two
   languages.
 - **Two comments asserted things the code contradicts.** `types.ts` documented
-  `maxRetries` as "default: 3" while the policy declares 0 — the drift
+  `maxRetries` as "default: 3" while the policy declares 0 - the drift
   `policy.ts` was written about, surviving in prose; it now names the policy key
   instead of restating a number. The client's header comment implied DEC-025
   covered the endpoint, which it does not.
 
 Adding the policy key required `policy_loader` (exact-equality pinned by
 `test_policy_consistency.py`) and a rebuilt `policy-artifact.json`, which
-digests the shared policy — `publish_policy_artifact.py build`, not
+digests the shared policy - `publish_policy_artifact.py build`, not
 `make digest-regen`: the per-stack mirrors carry no `nemotron` block, so their
 root-of-trust digests are untouched.
 
@@ -924,19 +934,19 @@ Behaviour change, intended and stated: the Python bridge now sends `top_p`
 where it previously let the provider default apply. The Node value is unchanged.
 
 
-### Gate truthfulness — eight gates that could pass on absent evidence (R-GT-1..R-GT-10)
+### Gate truthfulness - eight gates that could pass on absent evidence (R-GT-1..R-GT-10)
 
 Spec: `docs/specs/gate-truthfulness.md`. Opened by
 `docs/reports/ROADMAP-PEER-REVIEW.md`. DEC-032 fixed four gates reporting PASS
 without the evidence they claim to check; the same shape survived in eight more
-places. The shared defect is that a gate's *scope* was unbounded — nothing
+places. The shared defect is that a gate's *scope* was unbounded - nothing
 asserted that the set it examined is the set that exists.
 
 - **`make lint-node` runs in CI for the first time, and the blocker on record
   was not the real one (DEC-034).** DEC-013 and `docs/specs/ci-enforcement-gaps.md`
   recorded a `typescript` / `typescript-eslint` incompatibility. Measured
   against the installed workspace: ESLint passes, Knip passes, and
-  `prettier --check` fails on exactly one file —
+  `prettier --check` fails on exactly one file -
   `harness/node/.governance/policy.json`, over whitespace in the
   `coverage.optional_extras.path_prefixes` array DEC-028 added. That file's bytes
   are pinned by `.governance/root-of-trust.json`, so Prettier's formatting and
@@ -945,10 +955,10 @@ asserted that the set it examined is the set that exists.
   excludes the pinned tree; `lint-node` becomes a direct prerequisite of `ci` and
   deliberately not of `ci-python` or the shared `lint` target, whose matrix legs
   install no pnpm. This also brings R-TDH-23's policy-sourced ESLint `max-lines`
-  rule into a job for the first time — it was enforced nowhere.
+  rule into a job for the first time - it was enforced nowhere.
 - **The coverage measured set is bounded.** Adding a source file to
   `[tool.coverage.run] omit` dropped it from the per-file floor *and raised* the
-  aggregate, because its uncovered lines vanished — every number improved and no
+  aggregate, because its uncovered lines vanished - every number improved and no
   gate objected. `coverage_gate.check_measured_set` compares the report's file
   set against the on-disk first-party set and fails closed on divergence, on a
   report with no `files` block, and on an empty expected set. Coupled to
@@ -962,7 +972,7 @@ asserted that the set it examined is the set that exists.
   `LOG_LEVEL=DEBUG` "which policy is this run enforcing" was unanswerable.
   DEBUG-only and silent by default. Each block is now a `TypedDict`, so an
   undeclared key is a `mypy` error rather than the runtime `KeyError` DEC-032
-  fixed by hand — which immediately surfaced four `dict[str, Any]` annotations in
+  fixed by hand - which immediately surfaced four `dict[str, Any]` annotations in
   `langgraph/policy.py` that were discarding exactly that checking.
 - **Three agent-surface mutations now fail.** A `SKILL.md` could name a `make`
   target that does not exist; a persona's `tools:` frontmatter could declare an
@@ -973,7 +983,7 @@ asserted that the set it examined is the set that exists.
   membership or pairing.
 - **Skip waivers are node-scoped.** Seven of eight rows paired a module-wide
   `unique_id_glob` with `test: "*"`, pre-approving any skip added to that module
-  later provided its reason mentions the decision id — which the reusable
+  later provided its reason mentions the decision id - which the reusable
   `POSIX_ONLY` marker's reason already does. Two globs addressed ~135 node ids to
   approve 4 real skips; both are narrowed to the classes that carry the
   condition. `test_skip_waiver_scope.py` is the first test to read the shipped
@@ -989,7 +999,7 @@ asserted that the set it examined is the set that exists.
   filename said v2.5.0, nothing in this file did, and no git tag had ever existed.
 - **The gitleaks allowlist proves it still suppresses something.** An allowlist
   path exempts its whole file from every rule, and the existing check asserted
-  only that the path exists — which is how the list reached 23 paths of which 18
+  only that the path exists - which is how the list reached 23 paths of which 18
   blinded their files for nothing. `make secrets-allowlist-check` scans with the
   allowlist removed and fails any entry matching no finding; a scan yielding zero
   findings is itself a failure, since it cannot be distinguished from a ruleset
@@ -1002,7 +1012,7 @@ asserted that the set it examined is the set that exists.
 Every assertion was mutation-tested against the defect it claims to catch. No
 test skip, `xfail` or waiver was added, and the skip count is unchanged.
 
-### Post-implementation review of the batch above — two of its own gates were weakenable (DEC-035)
+### Post-implementation review of the batch above - two of its own gates were weakenable (DEC-035)
 
 Probing the new gates rather than trusting them found two defects no test would
 have caught, both the shape the batch exists to close: a control an unreviewed
@@ -1016,7 +1026,7 @@ edit somewhere else can widen.
   reading the entry sees its exemption beside it.
 - **`declared_source_roots` matched nothing when `[tool.coverage.run]` was the
   last table in `pyproject.toml`.** The lookahead required a following `[`. It
-  failed closed, so nothing was unsafe — but it reported "declares no table",
+  failed closed, so nothing was unsafe - but it reported "declares no table",
   which is true of the regex and false of the file, and would leave an adopter
   fork shaped that way unable to run the gate at all.
 
@@ -1024,12 +1034,12 @@ Both carry regression tests that fail against the pre-fix code.
 
 ### `coverage_gate.py` split along the seam its own defects drew (DEC-035)
 
-The gate reached 470 lines against a 500-line `limits.size_budget_lines` — one
+The gate reached 470 lines against a 500-line `limits.size_budget_lines` - one
 edit of headroom. The measurement-*scope* concern moves to
 `harness/shared/coverage_scope.py` (per-file floor, optional-extra waivers,
 source discovery, measured-set bound); `coverage_gate.py` keeps the
 aggregate-*threshold* concern. The seam is not the line count: every defect
-found in this area has been a scope defect rather than a threshold one — the
+found in this area has been a scope defect rather than a threshold one - the
 `startswith` waiver prefix that covered siblings, the waiver set that covered
 everything and still printed `[PASS] 0 file(s)` (both DEC-032), and the `omit`
 entry that dropped a file from the floor while raising the aggregate.
@@ -1045,7 +1055,7 @@ reported, each fixed rather than worked around:
 
 - `test_the_gates_own_directory_cannot_shadow_the_extra` patched
   `coverage_gate.__file__`, but `_importable` now reads `coverage_scope.__file__`
-  — so the DEC-032 regression had silently stopped exercising anything.
+  - so the DEC-032 regression had silently stopped exercising anything.
   Production behaviour is identical: both modules sit in `harness/shared/`, so
   "the script's own directory" resolves to the same path.
 - Sixteen `caplog.at_level(..., logger=cg.logger.name)` sites stopped seeing
@@ -1057,7 +1067,7 @@ reported, each fixed rather than worked around:
 **Deferred with its measurement, not silently.** `langgraph/__init__.py:52`'s
 pragma hides an `except ImportError: pass` that swallows a real failure to
 import `graph.py`. Removing the pragma alone leaves that arc unreachable wherever
-langgraph *is* installed — 8/10 = 80% against a 90% floor, red on 3.10 and 3.12.
+langgraph *is* installed - 8/10 = 80% against a 90% floor, red on 3.10 and 3.12.
 Deleting the swallow reads 7/7 there but 5/7 on a machine without the extra and
 without `MANGO_CI_DESELECT_LANGGRAPH=1`, where no waiver applies. Its failure
 mode lands on a contributor's first `make ci`, so it needs its own change with
@@ -1068,8 +1078,8 @@ the extra installed. Tracked as NS-9.
 - **`NEXT_STEPS.md` was 93% changelog.** 496 of 533 lines were completed-milestone
   history duplicating this file, and eight open items were buried inside it under
   mixed `🚧`/`✅` headings, so the forward plan could not be read in one place.
-  The record moves verbatim to `docs/releases/milestone-history.md` — the
-  treatment R-TDH-24 gave the v2.2.4 release body — with a banner marking it a
+  The record moves verbatim to `docs/releases/milestone-history.md` - the
+  treatment R-TDH-24 gave the v2.2.4 release body - with a banner marking it a
   snapshot rather than a tracker. The rewrite is forward-looking only: every item
   carries why-now, re-runnable evidence, a falsifiable done-when and its
   dependency; parked items name the gate blocking them; declined work is listed
@@ -1086,7 +1096,7 @@ the extra installed. Tracked as NS-9.
   shipping this batch and leaving it listed would repeat that defect. Section 6
   states each with its evidence.
 
-### Review follow-up — the neuro-symbolic sandbox suite (PR #33 threads left open on main)
+### Review follow-up - the neuro-symbolic sandbox suite (PR #33 threads left open on main)
 
 The feature itself landed as `2362d84` with three follow-up commits; these are
 the review threads those commits did not close.
@@ -1114,7 +1124,7 @@ the review threads those commits did not close.
   simulates the violation in a mock. The milestone now says so, and `AC-CE-1`
   stays open in the code-execution spec.
 
-### Post-implementation review — four gates that could pass on absent evidence (DEC-032)
+### Post-implementation review - four gates that could pass on absent evidence (DEC-032)
 
 An objective peer review of the branch found, in the gates this branch itself
 shipped, the exact failure class DEC-024 was written about: a gate reporting
@@ -1123,8 +1133,8 @@ fails without the fix.
 
 - **The Python zero-skip gate could not see a collection-time skip.** A
   module-level `pytest.importorskip` is reported as a `CollectReport`, never
-  the `TestReport` the evidence hook read, so the module — sometimes a whole
-  directory, when it is a conftest that skips — vanished with no row and
+  the `TestReport` the evidence hook read, so the module - sometimes a whole
+  directory, when it is a conftest that skips - vanished with no row and
   `make verify-zero-skips-python` printed `passed`. Four live sites skip this
   way, including `test_egress_floor.py`, whose silent disappearance would
   remove the proof that the egress floor is armed. Added
@@ -1134,7 +1144,7 @@ fails without the fix.
 - **A coverage waiver widened by one character.**
   `coverage_gate._waiving_extra` matched with a raw `str.startswith`, so a
   policy prefix written without its trailing slash (`harness/shared/langgraph`)
-  waived every sibling that merely began the same way — `langgraph_helpers.py`,
+  waived every sibling that merely began the same way - `langgraph_helpers.py`,
   `langgraphX.py`. The only policy check asserts the prefix names a real
   directory, which the slashless form does. Now matched on whole path segments.
 - **A waiver covering everything still reported `[PASS]`.** `check_per_file`
@@ -1143,13 +1153,13 @@ fails without the fix.
   Now fails closed on zero measured files, per the module's own "absence of
   evidence is never a pass" contract.
 - **The constant-triage decision check was vacuous.** It evaluated
-  `Path("harness.shared.retry_policy").name.split(".")[0]` — `"harness"`, a
-  substring of essentially every decision-log line — and with `or`/`and`
+  `Path("harness.shared.retry_policy").name.split(".")[0]` - `"harness"`, a
+  substring of essentially every decision-log line - and with `or`/`and`
   precedence only the symbol was really checked, so a constant could cite a
   decision about a different or nonexistent module and stay green. R-TDH-16 /
   AC-16's whole enforcement rested on that expression. Replaced with a
-  shape-aware derivation plus negative tests. `TEST_SIZE_BUDGET_LINES` — the one
-  constant this branch introduced without a triage row — is now pinned to
+  shape-aware derivation plus negative tests. `TEST_SIZE_BUDGET_LINES` - the one
+  constant this branch introduced without a triage row - is now pinned to
   `limits.test_size_budget_lines`.
 - **A reproducible order-dependent test failure.**
   `json_logging.configure_gate_logging(__name__)` under
@@ -1157,7 +1167,7 @@ fails without the fix.
   process-global `__main__` logger. Fourteen modules across the three suites run
   scripts that way, and `test_nemotron_bridge.py` failed whenever
   `test_pretooluse_guard.py` collected first. The suite was green only because
-  alphabetical order happened to be favourable — reverse file order was red. An
+  alphabetical order happened to be favourable - reverse file order was red. An
   autouse fixture in the repository-root conftest restores it; production
   behaviour is untouched.
 - **A trimmed policy killed collection with a bare `KeyError`.**
@@ -1165,27 +1175,27 @@ fails without the fix.
   scope, reached from the root conftest before collection, so an adopter fork
   without the block could not run any suite and got no diagnostic. Absent now
   falls back; malformed still fails closed with a reason.
-- **`deselect_langgraph` — the whole R-TDH-4 mechanism — had no test**, and is
+- **`deselect_langgraph` - the whole R-TDH-4 mechanism - had no test**, and is
   invisible to the coverage gate because `harness/shared/tests/*` is omitted
   from measurement. Now covered directly, including the refusal to deselect on
   a leg that has the library and the run-header announcement.
 - Corrects the record: DEC-027 called the parked modules "byte-identical after
-  the move". `lats_optimizer.py` is; `autonomous_healing.py` is not — it carries
+  the move". `lats_optimizer.py` is; `autonomous_healing.py` is not - it carries
   the Phase 2 `BROKER_SUCCESS` substitution.
 - `CLAUDE.md` and the reasoner persona pointed at `META_TOOLS_SCHEMA` in
   `mango_mas_orchestrator.py`; it lives in `harness/shared/meta_tools.py` and is
   composed by `tool_schemas.py`. The symbol has not been on that module since
   the decomposition.
 
-### Post-implementation hygiene sweep — documentation truth, dead ignore rules, allowlist narrowing
+### Post-implementation hygiene sweep - documentation truth, dead ignore rules, allowlist narrowing
 
-An objective review of the branch against `main` after Phases 0–5. No source
+An objective review of the branch against `main` after Phases 0-5. No source
 behaviour changes; the corrections are to claims, ignore rules, and one
 security control that had drifted wider than its own description.
 
 - **The gitleaks allowlist is narrowed from 23 paths to 7.** A path there
   exempts the whole file from every rule. Measured against the default ruleset
-  with the block removed, the tree yields exactly 8 findings across 5 files —
+  with the block removed, the tree yields exactly 8 findings across 5 files -
   so 18 entries were suppressing nothing while permanently blinding their
   files, under a description that called the list "strict". The 5 files with a
   real finding are kept, plus `.*\.example.*` (adopter scaffolds) and the
@@ -1199,7 +1209,7 @@ security control that had drifted wider than its own description.
   with the whole suite green and an unlocked dependency set would have shipped.
   `test_makefile_contracts.py` now asserts it is a direct prerequisite of both
   `ci` and `ci-python` and that its recipe still recompiles and diffs.
-- **Two dead `.gitignore` rules removed** — `weather_cli/` (never tracked; only
+- **Two dead `.gitignore` rules removed** - `weather_cli/` (never tracked; only
   a `tmp_path` fixture name) and `.agents/` (the directory was consolidated
   into `.mango/skills/` and a test now fails if it returns, so ignoring it
   would have hidden exactly that). Both sat at depth 0, where the existing
@@ -1208,17 +1218,17 @@ security control that had drifted wider than its own description.
   its two sibling test trees; `COPY harness/` had begun shipping 101 tests into
   the runtime image. `.dockerignore` also now records that
   `harness/shared/governance-policy.json` is load-bearing for the Node runtime
-  since R-TDH-13 — `policy.ts` reads it at module load, so the image's own
+  since R-TDH-13 - `policy.ts` reads it at module load, so the image's own
   `CMD` fails to start without it.
 - **README figures corrected** against measured values: 2,882 automated tests
   (97 Vitest + 2,785 Pytest, was 2,357), coverage 99.64% lines / 97.93%
-  branches (was 98.17/95.71 — the README had been contradicting the CHANGELOG
+  branches (was 98.17/95.71 - the README had been contradicting the CHANGELOG
   on the same branch), the per-module test counts, 22 specs (was 15), and the
   `make ci` stage list. The Python skip-waiver path now names its real location
   instead of the dormant root `.governance/`.
 - **`harness/CONTRACT.md` INV-2** described only the Node half; it now records
   the Python half (DEC-026) and where the hooks live (DEC-030).
-- **C4 gate chain and AQA container updated** — `retry.ts`, the root
+- **C4 gate chain and AQA container updated** - `retry.ts`, the root
   `conftest.py` session hooks, the control-plane suite, and the four gates the
   branch added (`lock-check`, the Python zero-skip half, vulture, the two size
   budgets) were all invisible in the diagrams.
@@ -1230,7 +1240,7 @@ security control that had drifted wider than its own description.
   requirements change, `make lock-upgrade` to take newer releases, never
   hand-edit.
 
-### Tech-debt hardening plan, Phase 5 — control-plane tests colocated, session hooks at the rootdir
+### Tech-debt hardening plan, Phase 5 - control-plane tests colocated, session hooks at the rootdir
 
 - **`harness/control-plane/tests/` exists and is collected** (R-TDH-26).
   `test_build_policy_bundle.py`, `test_publish_policy_artifact.py` and
@@ -1260,13 +1270,13 @@ security control that had drifted wider than its own description.
   twelve report zero missing lines and branches. Python coverage moves from
   lines 98.44% / branches 96.01% to lines 99.64% / branches 97.93%; no
   source file changed and no skip was added.
-- **Dependabot PRs #38–#46 closed as superseded** (R-TDH-10, DEC-031): the
+- **Dependabot PRs #38-#46 closed as superseded** (R-TDH-10, DEC-031): the
   universal lock and the Phase 1 toolchain bump carry every proposed version
   at or above; #40's fastapi floor of `>=0.141.1` is not adopted because it
   breaks the 3.9 leg. The weekly `lock-upgrade-check` job is the upgrade
   signal from here on.
 
-### Tech-debt hardening plan, Phase 4 — test size budget, gate test split, Node client split, structure decisions
+### Tech-debt hardening plan, Phase 4 - test size budget, gate test split, Node client split, structure decisions
 
 - **Test modules have a line budget.** `validate_invariants.check_test_size_budget`
   enforces `limits.test_size_budget_lines` (700) over every `test_*.py` /
@@ -1300,7 +1310,7 @@ security control that had drifted wider than its own description.
   join the policy; the Node and JVM template policies mirror them and the node
   root-of-trust digest is re-pinned.
 
-### Tech-debt hardening plan, Phase 4 — documentation consolidation
+### Tech-debt hardening plan, Phase 4 - documentation consolidation
 
 - **The v2.2.4 release body moves out of `CHANGELOG.md`** (R-TDH-24). Its
   ~1,300 lines now live in `docs/releases/v2.2.4.md`; the root keeps the
@@ -1314,7 +1324,7 @@ security control that had drifted wider than its own description.
   the repository root), `PEER-REVIEW-REMEDIATION.md` and `TEST-REPORT.md`
   (from `harness/`), basenames unchanged.
 - **`harness/CHANGELOG.md` folds into this file** as the trailing *Harness
-  gate-contract history* block (v2.0.0–v2.1.5, headings demoted one level)
+  gate-contract history* block (v2.0.0-v2.1.5, headings demoted one level)
   and is deleted; the scope note at the top no longer points to it.
 - **Two document pairs merge, one survivor each.**
   `docs/NEMOTRON_E2E_TRIAGE_AND_RCA.md` merges into
@@ -1326,7 +1336,7 @@ security control that had drifted wider than its own description.
   `README.md`, `harness/README.md`, `NEXT_STEPS.md` and one test docstring
   follow the moves.
 
-### Tech-debt hardening plan — CI repair on the pushed head (DEC-028)
+### Tech-debt hardening plan - CI repair on the pushed head (DEC-028)
 
 - **Per-file coverage is waived for optional extras a leg cannot install,
   and nowhere else.** `governance-policy.json → coverage.optional_extras`
@@ -1344,7 +1354,7 @@ security control that had drifted wider than its own description.
   and 3.12 legs is clean and the 3.9 audit leg reports the retained pytest
   advisory (that leg was already continue-on-error).
 
-### Tech-debt hardening plan, Phase 2 (Node) — Nemotron client defaults from policy
+### Tech-debt hardening plan, Phase 2 (Node) - Nemotron client defaults from policy
 
 - **`harness/node/src/ai/nemotron/policy.ts` reads the `nemotron` block of
   `governance-policy.json`** (child spec `docs/specs/node-policy-wiring.md`,
@@ -1357,7 +1367,7 @@ security control that had drifted wider than its own description.
   backoff window and `top_p` have no policy key yet and stay literal
   (R-TDH-23).
 
-### Tech-debt hardening plan, Phase 3b — unwired features parked, facade trimmed
+### Tech-debt hardening plan, Phase 3b - unwired features parked, facade trimmed
 
 - **`autonomous_healing.py` and `lats_optimizer.py` moved to
   `harness/shared/experimental/` (DEC-027).** Neither has ever been reachable
@@ -1370,7 +1380,7 @@ security control that had drifted wider than its own description.
   used them address `dispatcher` and `hook_runner` directly.
   `execute_sequential_thinking_loop` stays (R-ORCH-4, R-VP-11).
 
-### Tech-debt hardening plan, Phase 3a — Python skip accounting, deprecations, dead-code gate
+### Tech-debt hardening plan, Phase 3a - Python skip accounting, deprecations, dead-code gate
 
 - **INV-2 now has a Python half (DEC-026).** `conftest.py` writes every skip
   the run produced to `harness/shared/tests/.artifacts/pytest-skips.tsv`
@@ -1395,7 +1405,7 @@ security control that had drifted wider than its own description.
   `vulture_whitelist.py` for framework-registered names; the dead
   `RunnableConfig` fallback import in `langgraph/nodes.py` is gone.
 
-### Tech-debt hardening plan, Phase 2 — policy single-source (Python)
+### Tech-debt hardening plan, Phase 2 - policy single-source (Python)
 
 - **`ExecutionLoop` budgets come from the policy.** The constructor defaulted
   to `15 / 30 / 50` while `governance-policy.json` said `10 / 300 / 100`; the
@@ -1429,7 +1439,7 @@ security control that had drifted wider than its own description.
   `NEMOTRON_MAX_RETRIES` example now equals the policy (was 3, policy 0).
   `policy-artifact.json` regenerated (it digests the policy file).
 
-### Tech-debt hardening plan, Phase 1 — toolchain
+### Tech-debt hardening plan, Phase 1 - toolchain
 
 - **One universal dependency lock.** `requirements-lock.txt` is compiled by
   `make lock` (`uv pip compile --universal`, floor read from pyproject's
@@ -1460,7 +1470,7 @@ security control that had drifted wider than its own description.
   `--no-deps`, cache keys, langgraph behind a ≥3.10 marker, no Postgres
   checkpointer, action majors, the drift loop, the Dependabot ecosystem.
 
-### Tech-debt hardening plan, Phase 0c — landed specs reconciled
+### Tech-debt hardening plan, Phase 0c - landed specs reconciled
 
 Five specs whose work had shipped still showed every acceptance box open.
 Each box was re-run: 22 ticked with command evidence, the rest annotated with
@@ -1470,7 +1480,7 @@ the way: `harness/node/scripts/run_vitest.sh` calls `verify_zero_skips.py`
 without the waiver and decision-log arguments and so fails standalone (the
 `make test-node` + `make verify-zero-skips` path is the working one).
 
-### Tech-debt hardening plan, Phase 0a — the control that keeps `main` green
+### Tech-debt hardening plan, Phase 0a - the control that keeps `main` green
 
 - **Ruleset export** at `.github/rulesets/main.json` (DEC-024): the nine
   status checks `test_ci_gate_coverage.py` derives from the workflow, strict
@@ -1482,7 +1492,7 @@ without the waiver and decision-log arguments and so fails standalone (the
   (`python -m ruff`, never a bare binary; DEC-013). PR #60 merged with every
   CI run on its head red under a commit message claiming `make ci` clean.
 
-### Tech-debt hardening plan, Phase 0b — `main` green again
+### Tech-debt hardening plan, Phase 0b - `main` green again
 
 Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
 
@@ -1562,7 +1572,7 @@ were recorded rather than patched in 2.1.8.
   `.github/CODEOWNERS`) were left in a single-stack frame by the layout
   migration in `1eb2f7f`, which migrated only the `scripts/*` entries. Because
   `fnmatch` is whole-string anchored, they matched nothing and the gate reported
-  PASS *because nothing matched* — an agent could add itself a test skip-waiver,
+  PASS *because nothing matched* - an agent could add itself a test skip-waiver,
   widen the git push allowlist, or edit the external root of trust unreviewed.
   Patterns are added, never replaced: the originals cover a single-stack adopter
   layout and the `**/` twins cover this repo's multi-stack one.
@@ -1579,11 +1589,11 @@ were recorded rather than patched in 2.1.8.
 
 - **The container image could never have built.** `.dockerignore` excludes the
   whole `.mango/` tree, so `COPY .mango/ /app/.mango/` had no source to resolve
-  — reproduced against a real daemon as `"/.mango": not found`, with a
+  - reproduced against a real daemon as `"/.mango": not found`, with a
   `COPY harness/` control build succeeding to isolate the cause. Dead since the
   v2.1.1 `.claude/` → `.mango/` rename; no `docker build` runs anywhere to have
   caught it. The runtime stage now sources `/app/harness` from `build` rather
-  than the context, which keeps that stage in the graph — BuildKit skips
+  than the context, which keeps that stage in the graph - BuildKit skips
   unreferenced stages, which would have silently dropped its `tsc --noEmit`.
 - `.dockerignore`'s `.governance/vitest-results.json` and `.governance/coverage/`
   had the same anchoring bug as the `.gitignore` entries fixed in 2.1.8 and
@@ -1595,7 +1605,7 @@ were recorded rather than patched in 2.1.8.
   `ci_required_targets` but had no CI stage; both meta-tests asserting "CI
   invokes every required target" read the per-stack `ci.yml`, never the root
   workflow. Invoked as `bash harness/shared/validate_specs.sh` because that file
-  is mode 644 — a bare `./` invocation would have been a guaranteed red CI.
+  is mode 644 - a bare `./` invocation would have been a guaranteed red CI.
 - **`harness/control-plane` is now measured by the coverage gate**, making
   `publish_policy_artifact.py` (158 statements, 78%) governed. Three CLIs are
   omitted because they run `argparse` at module scope with required arguments
@@ -1603,11 +1613,11 @@ were recorded rather than patched in 2.1.8.
   0% as an artifact. `regenerate_bundle_digests.py` is deliberately kept
   measured: it *is* importable, so its 0% is a real gap. Total: 95.69% → 92.97%.
 
-### Security — INV-1 had no live enforcement
+### Security - INV-1 had no live enforcement
 
 - **The secret scan never ran in CI.** The gitleaks steps live in
   `harness/{node,jvm}/.github/workflows/ci.yml`, which are **adopter templates
-  GitHub never executes** — it reads workflows only from the repository-root
+  GitHub never executes** - it reads workflows only from the repository-root
   `.github/workflows/`, which contained no secret scan at all. INV-1 ("secret scan
   covers working tree and full history and fails closed when tooling is absent")
   was therefore unenforced on every commit in this repository's history.
@@ -1620,31 +1630,31 @@ were recorded rather than patched in 2.1.8.
 - Verified by running the pinned scanner: clean on the working tree (98.7 MB) and
   across all 73 commits of history. No allowlist changes were needed.
 
-  **Superseded — this verification was vacuous.** The config passed to
+  **Superseded - this verification was vacuous.** The config passed to
   `--config` declared no `[[rules]]` and no `[extend] useDefault = true`, and
   `--config` *replaces* gitleaks' built-in ruleset rather than extending it. The
   scan therefore ran with zero rules: "clean across all 73 commits" was a
   statement about a scanner that was not looking for anything, and a planted
   `AKIA...` key scanned clean under this exact config. "No allowlist changes
   were needed" was true for the same reason, and is falsified now that the scan
-  runs — one entry (`test_debug_dump.py`) was required. Corrected under
+  runs - one entry (`test_debug_dump.py`) was required. Corrected under
   [Unreleased]; pinned by `test_lint_config_liveness.TestGitleaksActuallyScans`.
 
-### Changed — CI gate coverage (INV-5)
+### Changed - CI gate coverage (INV-5)
 
 - **`make remotes`** now exists and runs in `make ci`. The remote-allowlist gate
   (INV-3) had a shared implementation and a per-stack target, but no root wiring.
 - `test_ci_gate_coverage.py` enforces INV-5 directly: every `ci_required_targets`
-  entry must map to a root Make target that CI actually invokes — reachable from
-  `make ci`, or run by a root workflow job — or be declared in `KNOWN_GAPS` with a
+  entry must map to a root Make target that CI actually invokes - reachable from
+  `make ci`, or run by a root workflow job - or be declared in `KNOWN_GAPS` with a
   reason. `audit` (osv-scanner) is the one declared gap. The suite resolves Make
   prerequisites transitively and expands Make variables, so a mapping that points
   at an unreachable or renamed target fails rather than reading as covered. It
   also fails if a coverage source root declared in `pyproject.toml` is not passed
-  to the gate — the exact configured-but-unmeasured state `harness/control-plane`
+  to the gate - the exact configured-but-unmeasured state `harness/control-plane`
   was in. Verified against 12 mutants, all killed.
 
-### Fixed — documentation that contradicted the contract
+### Fixed - documentation that contradicted the contract
 
 - `PRE_PR_VERIFICATION_REFERENCE.md` **misnumbered two invariants**: it labelled
   INV-5 "Size Budget" and INV-7 "Traceability", while `harness/CONTRACT.md`
@@ -1661,13 +1671,13 @@ were recorded rather than patched in 2.1.8.
   measured counts, and the C4 gate diagram includes the spec, remote,
   protected-path, and CI-gate-coverage gates. Diagram re-validated as Mermaid.
 
-### Security — the coverage gate lowered itself, and most declared thresholds ran nowhere
+### Security - the coverage gate lowered itself, and most declared thresholds ran nowhere
 
 A second audit traced every key in `governance-policy.json` to the code that reads
 it. Findings below were each confirmed by running, not by reading.
 
 - **The coverage gate failed *open*.** `COV_MIN` fell back to the literal `80`
-  whenever the policy was unreadable or its `coverage` block absent — while the
+  whenever the policy was unreadable or its `coverage` block absent - while the
   policy declared 90. Governance fails closed everywhere else
   (`validate_invariants` exits non-zero on an unreadable policy); this one gate
   silently weakened itself. It now fails closed, and `coverage-python` aborts on an
@@ -1675,36 +1685,36 @@ it. Findings below were each confirmed by running, not by reading.
   so any `pytest --cov` run that did not pass the Makefile's explicit flag enforced
   the weaker number; that declaration is removed, leaving one source of truth.
 - **`harness/node/vitest.config.ts` hard-coded all five thresholds**, duplicating
-  the policy block it was copied from with nothing detecting divergence — a direct
+  the policy block it was copied from with nothing detecting divergence - a direct
   violation of CLAUDE.md's "no hard-coded values; thresholds come from
   governance-policy.json". It now reads the policy and fails closed on a malformed
   one.
 - **Four of the five declared thresholds are enforced nowhere in the root
   pipeline.** Only `coverage.lines` is applied, and only in aggregate.
   `statements`, `functions` and `branches` are enforced solely by the vitest config
-  — which `make test-node` never activates, because it runs `vitest run` **without
+  - which `make test-node` never activates, because it runs `vitest run` **without
   `--coverage`**. Measured: enabling it fails six Node files today, so it is
   recorded as a quantified follow-up rather than switched on into three open PRs.
   `per_file: true` has no Python implementation at all; six measured files fall
   below `lines`, and aggregate headroom is ~60 statements, so an entirely untested
   new module can ship green. `test_coverage_policy_enforcement.py` now fails if a
   threshold key is neither enforced nor declared a gap with a measured reason.
-- **`dedup.exempt` was an unguarded bypass** — an entry silently disables the
+- **`dedup.exempt` was an unguarded bypass** - an entry silently disables the
   shim-vs-copy drift gate for that file. It is empty today and now asserted so.
 
-### Security — the new gates verified names, not substance
+### Security - the new gates verified names, not substance
 
 An adversarial review of the gates added earlier in this release found they
 asserted a target's *name* was wired in without ever asserting the target still
-*did* anything. Every case below was confirmed by mutation — the suite stayed
-green — and every one is now killed.
+*did* anything. Every case below was confirmed by mutation - the suite stayed
+green - and every one is now killed.
 
 - **The protected-path gate could be deleted outright.** Removing the
   `validate_invariants.py` line from the `validate` recipe left its name in `ci`
   and the whole suite passing, disarming every guarantee
   `test_protected_path_liveness.py` exists to make. The same held for `ruff` and
   `mypy` (`lint`), and for the remote-allowlist recipe. `GATE_TO_EVIDENCE` now
-  requires each mapped gate's recipe — and its prerequisites' — to still invoke the
+  requires each mapped gate's recipe - and its prerequisites' - to still invoke the
   enforcing artifact.
 - **Deleting a `protected_paths` pattern was invisible.** Liveness only caught
   patterns that stayed but matched nothing, so `Makefile`, `.mango/settings.json`,
@@ -1725,7 +1735,7 @@ green — and every one is now killed.
   reported every commented-out stage as reachable. Prerequisites are now truncated
   at the first unescaped `#`, line continuations are spliced, and every reachable
   name must resolve to a real rule.
-- **Four `make ci` stages were unguarded** — `test-node`, `verify-zero-skips`,
+- **Four `make ci` stages were unguarded** - `test-node`, `verify-zero-skips`,
   `check-dedup` and `digest-regen` could all be dropped silently.
   `REQUIRED_CI_STAGES` pins them with a reason each.
 - **`--cov={source}` was a substring test**, so broadening the declared coverage
@@ -1737,16 +1747,16 @@ green — and every one is now killed.
   and the liveness suite now pass `-c core.quotePath=false`; covered by a regression
   test that fails without it.
 - Corrected a factually wrong justification in the dormant-pattern rationale:
-  `validate_policy.py` does **not** backstop the shared policy — it runs with
+  `validate_policy.py` does **not** backstop the shared policy - it runs with
   CWD=`harness/node` and reads that stack's own `policy.json`.
 
 Also newly protected: `.gitleaks.toml` (allowlist edits neuter the INV-1 scan),
 `requirements-dev.txt`, the per-stack `Makefile`s, `regenerate_bundle_digests.py`,
 and the two gate test modules themselves. Protected files: 104 → 111.
 
-### Added — gate diagnostics
+### Added - gate diagnostics
 
-- `json_logging.configure_gate_logging()` — a reusable, operator-controlled gate
+- `json_logging.configure_gate_logging()` - a reusable, operator-controlled gate
   logger. Level comes from `LOG_LEVEL` (names or numerics, case-insensitive); an
   unusable value **degrades to the default rather than raising**, because
   misconfigured verbosity must never be able to fail a governance gate. Writes to
@@ -1758,12 +1768,12 @@ and the two gate test modules themselves. Protected files: 104 → 111.
   `basicConfig()` elsewhere cannot reroute them onto stdout.
 - The traceability gate now names **which side** each requirement is missing from
   (`absent from implementation and tests`) instead of only that something is
-  missing, and at `DEBUG` reports which globs matched which files — which is how a
+  missing, and at `DEBUG` reports which globs matched which files - which is how a
   glob scoped to a single stack, silently checking nothing outside it, becomes
   visible. The original leading sentence is preserved, so existing CI-log and test
   matches are unaffected.
 
-### Fixed — an untested script inside `make ci`
+### Fixed - an untested script inside `make ci`
 
 - `regenerate_bundle_digests.py` ran in the `digest-regen` stage with **0% test
   coverage**, because its paths were module constants that could not be pointed at
@@ -1771,13 +1781,13 @@ and the two gate test modules themselves. Protected files: 104 → 111.
   zero-argument form the Makefile uses is unchanged), and the digest computation is
   separated from persistence so drift behaviour is testable without writing to the
   real bundle. Coverage 0% → 92.59%.
-- Stale manifest entries were dropped **silently** — a deleted protected file
+- Stale manifest entries were dropped **silently** - a deleted protected file
   vanished from the bundle with no output at all. Drops are now logged at WARNING
   with the specific paths and summarised on stderr, leaving the stdout summary a
   stable shape. Exit semantics are unchanged: `digest-regen` still pairs this with
   `git diff --exit-code`, which is what turns a drop red.
 
-### Security — three more gates that failed open, and a gate module left unprotected
+### Security - three more gates that failed open, and a gate module left unprotected
 
 Found by reviewing a *plan* rather than a diff: a proposal to classify unused
 policy keys was reframed into "which gate reports PASS without doing its job",
@@ -1788,8 +1798,8 @@ to be a non-issue; three fail-open gates and an unprotected gate module did not.
   `validate_invariants.size_budget_lines`, `check_dedup.load_config`, and
   `check_py_compat.load_skip_dirs` each wrapped the policy read in a broad
   `except` that returned the built-in default. This is the same inversion
-  `COV_MIN` had two commits earlier — a gate that lowers itself on exactly the
-  input that should stop it — and all three were missed while fixing the first.
+  `COV_MIN` had two commits earlier - a gate that lowers itself on exactly the
+  input that should stop it - and all three were missed while fixing the first.
   Confirmed by running against a corrupted policy: all three returned their
   defaults and reported PASS.
 - The three now distinguish **absent** from **malformed**. An absent policy still
@@ -1802,16 +1812,16 @@ to be a non-issue; three fail-open gates and an unprotected gate module did not.
   (`size_budget_lines: 500` vs `SIZE_BUDGET_LINES = 500`; `max_shim_lines: 40` vs
   `DEFAULT_MAX_SHIM_LINES = 40`), so no existing assertion could tell whether the
   policy was read at all. Each gate now has a probe test driving a deliberately
-  distinguishable value through to the *behaviour* — a 7-line size budget must
-  reject a 10-line file — which is what makes deleting the block detectable.
+  distinguishable value through to the *behaviour* - a 7-line size budget must
+  reject a 10-line file - which is what makes deleting the block detectable.
 - **`test_coverage_policy_enforcement.py` was not in `protected_paths`**, though
   the two sibling gate modules added in the same branch were. It owns the entire
   coverage-threshold classification, so an agent could have deleted that gate
   outright with `make ci` green and no `infra-reviewed` label. It is now
-  protected and in the `CRITICAL_PATTERNS` floor, which makes removal — not just
-  decay — detectable.
+  protected and in the `CRITICAL_PATTERNS` floor, which makes removal - not just
+  decay - detectable.
 
-### Testing — the spec gate had no behavioural tests
+### Testing - the spec gate had no behavioural tests
 
 - **`make specs` was wired into `make ci` last release with nothing asserting it
   does anything.** The only coverage was `test_ci_gate_coverage.py` checking that
@@ -1820,15 +1830,15 @@ to be a non-issue; three fail-open gates and an unprotected gate module did not.
   fixture spec directories and asserts on exit status and diagnostics. Verified
   against 8 mutants (gutted structural tier, each rule removed individually,
   `rglob`→`glob`, `*`-bullets unscanned, empty-directory pass, strict tier failing
-  open) — all killed.
+  open) - all killed.
 - The suite pins the negative space as well: prose containing "MUST", bullets
   without "MUST", and nested spec files must *not* be rejected, so the rules
   cannot be tightened into uselessness either.
 - **The strict tier does not run in root CI, and now says so.**
   `validate_specs.sh` is two-tier; `openspec` is pinned nowhere and
   `REQUIRE_STRICT_SPEC_VALIDATOR=1` is set only in
-  `harness/{node,jvm}/.github/workflows/ci.yml` — adopter templates GitHub never
-  executes — so root CI takes the WARNING branch on every run. Declared in
+  `harness/{node,jvm}/.github/workflows/ci.yml` - adopter templates GitHub never
+  executes - so root CI takes the WARNING branch on every run. Declared in
   `PARTIAL_COVERAGE["specs"]` with a measured reason rather than left implied.
   Installing an unpinned validator as a hard CI dependency is a product decision,
   not a gate fix. A test asserts the waiver is **removed** the moment anything in
@@ -1841,7 +1851,7 @@ to be a non-issue; three fail-open gates and an unprotected gate module did not.
 ### Testing
 
 - `test_protected_path_liveness.py` replaces a tautological test that asserted
-  only that a pattern *string* appeared in the policy — which passes whether or
+  only that a pattern *string* appeared in the policy - which passes whether or
   not the pattern protects anything, and is how the dead patterns survived. The
   new suite asserts on the set of tracked files each pattern actually matches,
   requires intentionally-dead patterns to be declared with a reason, and checks
@@ -1863,7 +1873,7 @@ correctness defects. All are fixed and covered by new tests in this same
 release; see `docs/specs/mangomas-integration-core.md` for the requirement
 IDs.
 
-- **BLOCKER** — `publish_policy_artifact.check_artifact` never verified the
+- **BLOCKER** - `publish_policy_artifact.check_artifact` never verified the
   artifact's `files` manifest actually covered `POLICY_FILES`: deleting an
   entry from a tampered artifact passed cleanly, defeating the drift gate
   this function exists to provide. Now verifies `artifact_id`, `policy_id`,
@@ -1871,24 +1881,24 @@ IDs.
   echoed back), requires the file manifest to match `POLICY_FILES` exactly,
   cross-checks the previously-dead `bytes` field, and rejects an absolute or
   `..`-traversal manifest key (closes a hash-oracle probe for files outside
-  the repo) — `_reject_unsafe_relpath` is kept as defense-in-depth for if
+  the repo) - `_reject_unsafe_relpath` is kept as defense-in-depth for if
   `POLICY_FILES` is ever made config-driven, and is unit-tested directly
   since the manifest-scope check now makes it unreachable via the full
   pipeline. `_deny` now raises `PolicyArtifactError` (a plain `Exception`)
   instead of `SystemExit` (a `BaseException` that escaped `except Exception`
-  in any caller, including the module's own use as a library) — `main()` is
+  in any caller, including the module's own use as a library) - `main()` is
   now the sole place a DENY becomes a process exit.
-- `cognitive_signal.validate_signal_dict` — timestamp parsing normalizes a
+- `cognitive_signal.validate_signal_dict` - timestamp parsing normalizes a
   trailing `Z` before `datetime.fromisoformat`, whose acceptance of that
   suffix is a Python 3.11+ behavior (verified: rejected on 3.10, accepted on
   3.11/3.12); the CI matrix spans 3.9-3.12 and `Z` is the most common
   ISO-8601 UTC suffix an external producer would emit, so this was a real,
   interpreter-dependent acceptance gap. `payload` keys are now required to be
-  strings — JSON's duplicate-key collapse (`{1: 'a', '1': 'b'}` silently
+  strings - JSON's duplicate-key collapse (`{1: 'a', '1': 'b'}` silently
   losing `'a'`) was otherwise reachable through the validator. `payload`'s
   type annotation is `dict[str, Any]` (was bare `dict`, a `mypy --strict`
   `type-arg` finding and the type-level root cause of the key gap).
-- `cognitive_signal.CognitiveSignalSink.append` — serializes with
+- `cognitive_signal.CognitiveSignalSink.append` - serializes with
   `ensure_ascii=True` (was `False`): a payload containing U+2028/U+2029/
   U+0085 previously produced a byte-safe single line that a Unicode-aware
   reader (`str.splitlines()`, exactly what the shadow-channel-analysis skill
@@ -1896,16 +1906,16 @@ IDs.
   `UnicodeEncodeError` uncaught. `ensure_ascii=True` closes both. Also now
   catches `RecursionError` (deep payload nesting) alongside the existing
   `TypeError`/`ValueError`, and `OSError` from `mkdir` (a sink path blocked
-  by an existing file) — all as `SignalValidationError`, keeping the "one
+  by an existing file) - all as `SignalValidationError`, keeping the "one
   exception type" contract the module already documented but didn't fully
   deliver on.
-- `shadow_planner._policy_identity` — a policy file that parses but carries
+- `shadow_planner._policy_identity` - a policy file that parses but carries
   an empty, null, or non-string `policy_id` now degrades to `"unknown"`
   instead of passing the bad value through: previously this made the very
   first `sink.append` (the incumbent signal) raise `SignalValidationError`,
-  silently discarding the entire run — zero signals written, channel
+  silently discarding the entire run - zero signals written, channel
   effectively dead with no diagnostic.
-- `shadow_planner._run` — a shadow-side failure now emits a best-effort
+- `shadow_planner._run` - a shadow-side failure now emits a best-effort
   `plan.shadow_error` terminal signal (same `run_id`, `parent_signal_id` set)
   before the channel's own containment swallows it, so a `run_id` with only
   an incumbent signal is no longer indistinguishable from "still in flight"
@@ -1920,7 +1930,7 @@ IDs.
   gap where deleting either layer's `try/except` still passed the existing
   assertions.
 - `harness/shared/tests/test_publish_policy_artifact.py`,
-  `test_cognitive_signal.py`, `test_shadow_planner.py` — new tests for every
+  `test_cognitive_signal.py`, `test_shadow_planner.py` - new tests for every
   fix above, plus `producer_id` assertions on the enabled-path signal test
   (the field C-MMI-2 is entirely about, previously unchecked) and a
   double-failure containment test (the bridge call fails and the best-effort
@@ -1928,84 +1938,84 @@ IDs.
 
 ### Changed (coverage config)
 
-- `pyproject.toml` — added `harness/control-plane` to
+- `pyproject.toml` - added `harness/control-plane` to
   `[tool.coverage.run] source`. Verified this does **not** yet change what
   `make coverage-python`/CI measures: pytest-cov's `--cov=harness/shared
   --cov=harness/api_server` flags on the `Makefile` command line take
   precedence over the static `source` list for that invocation. Making the
   publisher's coverage actually gate requires adding
-  `--cov=harness/control-plane` to that protected `Makefile` line — recorded
+  `--cov=harness/control-plane` to that protected `Makefile` line - recorded
   in `NEXT_STEPS.md` rather than done here. `publish_policy_artifact.py`
   itself is independently verified clean under `mypy --strict` (the errors
   that command reports are all pre-existing debt in modules it transitively
-  imports — `governance/{verify_zero_skips,remotes,pretooluse_guard,
-  check_traceability}.py` — not in the file itself).
+  imports - `governance/{verify_zero_skips,remotes,pretooluse_guard,
+  check_traceability}.py` - not in the file itself).
 
 ### Added
 
-- `docs/specs/mangomas-integration-core.md` — spec for the MangoMas integration core (R-MMI-1..10, C-MMI-1..6): CognitiveSignal envelope, shadow planner channel, policy-artifact publisher.
-- `harness/shared/cognitive_signal.py` — immutable versioned CognitiveSignal envelope with fail-closed validation and a workspace-scoped, locked JSONL sink; `confidence` is untrusted metadata and producer identity carries no authority.
-- `harness/shared/schemas/cognitive-signal.schema.json` — documentation schema pinned to the validator and dataclass by a drift-guard test.
-- `harness/shared/shadow_planner.py` — observation-only shadow plan comparison behind `MANGO_SHADOW_PLANNER=1`: value-object boundary, empty tool schema, bounded timeout, contained failures; records incumbent/shadow signals with lineage, `elapsed_ms`, and provider usage.
-- `harness/control-plane/publish_policy_artifact.py` — versioned, digest-pinned policy artifact builder with fail-closed `check` mode and optional `EvidenceBuilder` HMAC attestation whose signature transitively covers the artifact core.
-- `harness/shared/tests/test_cognitive_signal.py`, `test_shadow_planner.py`, `test_publish_policy_artifact.py` — envelope validation/metamorphic suites, byte-identity-when-disabled and authority-boundary suites, publisher tamper matrix and subprocess CLI smoke tests.
-- `harness/control-plane/policy-artifact.json` — committed policy artifact; `test_committed_artifact_matches_working_tree` drift-gates `governance-policy.json`/`agent-policy.json` inside `make ci` via the existing pytest stage (no protected-path change — `make digest-regen` only ever pinned the per-stack mirrors, never the authoritative files).
-- `.mango/skills/boundary-invariant-review/SKILL.md` — reviews whether a diff gives a cognitive-plane field authority; the static boundary scan pins only today's module names, so this is the check that catches the next one.
-- `.mango/skills/shadow-channel-analysis/SKILL.md` — freezes the UC-4 agreement/latency/token analysis method before any real producer exists, so the preregistered kill criteria stay preregistered.
-- `.claude/settings.json`, `.claude/hooks/session-start.sh` — SessionStart hook installing pinned Python dev dependencies on remote sessions; registers this hook only, deliberately not the tool-guard hooks already declared in `.mango/settings.json`.
-- `harness/CONTRACT.md` — INV-16 (one-directional cognitive/execution boundary).
-- `harness/docs/C4_ARCHITECTURE.md` — Level 2 nodes for the cognitive boundary and control plane; a new Level 4.2 diagram for the shadow channel and INV-16.
-- `.env.example` — the four shadow-channel variables and `AGENT_EVIDENCE_KEY` (required by `CONTRACT.md`/`evidence-signing` but previously undocumented here).
+- `docs/specs/mangomas-integration-core.md` - spec for the MangoMas integration core (R-MMI-1..10, C-MMI-1..6): CognitiveSignal envelope, shadow planner channel, policy-artifact publisher.
+- `harness/shared/cognitive_signal.py` - immutable versioned CognitiveSignal envelope with fail-closed validation and a workspace-scoped, locked JSONL sink; `confidence` is untrusted metadata and producer identity carries no authority.
+- `harness/shared/schemas/cognitive-signal.schema.json` - documentation schema pinned to the validator and dataclass by a drift-guard test.
+- `harness/shared/shadow_planner.py` - observation-only shadow plan comparison behind `MANGO_SHADOW_PLANNER=1`: value-object boundary, empty tool schema, bounded timeout, contained failures; records incumbent/shadow signals with lineage, `elapsed_ms`, and provider usage.
+- `harness/control-plane/publish_policy_artifact.py` - versioned, digest-pinned policy artifact builder with fail-closed `check` mode and optional `EvidenceBuilder` HMAC attestation whose signature transitively covers the artifact core.
+- `harness/shared/tests/test_cognitive_signal.py`, `test_shadow_planner.py`, `test_publish_policy_artifact.py` - envelope validation/metamorphic suites, byte-identity-when-disabled and authority-boundary suites, publisher tamper matrix and subprocess CLI smoke tests.
+- `harness/control-plane/policy-artifact.json` - committed policy artifact; `test_committed_artifact_matches_working_tree` drift-gates `governance-policy.json`/`agent-policy.json` inside `make ci` via the existing pytest stage (no protected-path change - `make digest-regen` only ever pinned the per-stack mirrors, never the authoritative files).
+- `.mango/skills/boundary-invariant-review/SKILL.md` - reviews whether a diff gives a cognitive-plane field authority; the static boundary scan pins only today's module names, so this is the check that catches the next one.
+- `.mango/skills/shadow-channel-analysis/SKILL.md` - freezes the UC-4 agreement/latency/token analysis method before any real producer exists, so the preregistered kill criteria stay preregistered.
+- `.claude/settings.json`, `.claude/hooks/session-start.sh` - SessionStart hook installing pinned Python dev dependencies on remote sessions; registers this hook only, deliberately not the tool-guard hooks already declared in `.mango/settings.json`.
+- `harness/CONTRACT.md` - INV-16 (one-directional cognitive/execution boundary).
+- `harness/docs/C4_ARCHITECTURE.md` - Level 2 nodes for the cognitive boundary and control plane; a new Level 4.2 diagram for the shadow channel and INV-16.
+- `.env.example` - the four shadow-channel variables and `AGENT_EVIDENCE_KEY` (required by `CONTRACT.md`/`evidence-signing` but previously undocumented here).
 
 ### Changed
 
-- `harness/shared/meta_tools.py` — `_file_lock` promoted to public `file_lock(path, timeout_s, poll_s)`. The retry loop is now bounded by a poll budget as well as the deadline (previously a clock-source mutation, e.g. mixing `time.time()`/`time.monotonic()`, turned lock contention into an unbounded spin instead of a timeout); `Path.replace()`/`contextlib.suppress` hygiene cleanup.
-- `harness/shared/cognitive_signal.py` — every sink rejection is now `SignalValidationError`, including a payload holding a non-JSON-serializable value (previously a raw `TypeError` leaked past the fail-closed contract); added `MAX_SINK_BYTES`, a whole-file ceiling checked under the lock, so unbounded sink growth is a structural refusal-to-write rather than a documented limitation; `Path.open()` in place of `open()`.
-- `harness/shared/mango_mas_orchestrator.py` — guarded, observation-only shadow comparison hook after the incumbent planner call; disabled behavior byte-identical; minor ruff hygiene (`Path.open()`, unused loop variable).
-- `harness/shared/tests/conftest.py` — autouse scrub of shadow-channel env vars keeps the mocked suite hermetic.
-- `README.md` — documented the shadow-channel environment variables; refreshed the repository structure tree (10 skills, the live `pre-nemotron-run.sh` hook, `cognitive_signal.py`/`shadow_planner.py`/`schemas/`, `control-plane/publish_policy_artifact.py`); corrected stale test-count claims (575+ combined Python/Node, 486+ under `harness/shared/tests`).
-- `NEXT_STEPS.md`, `NEXT_STEPS_PLAN_v2.md` — recorded the completed MangoMas integration core milestone and its follow-ups.
-- `harness/docs/PRE_PR_VERIFICATION_REFERENCE.md` — coverage threshold description now points at the dynamic policy read instead of a hard-coded (and stale) percentage.
-- `.mango/skills/evidence-signing/SKILL.md` — documented `publish_policy_artifact --attest` as a consumer.
-- `.mango/skills/harness-engineering/SKILL.md` — corrected two references to a `.claude/` agent-state directory this repo does not use for that purpose.
+- `harness/shared/meta_tools.py` - `_file_lock` promoted to public `file_lock(path, timeout_s, poll_s)`. The retry loop is now bounded by a poll budget as well as the deadline (previously a clock-source mutation, e.g. mixing `time.time()`/`time.monotonic()`, turned lock contention into an unbounded spin instead of a timeout); `Path.replace()`/`contextlib.suppress` hygiene cleanup.
+- `harness/shared/cognitive_signal.py` - every sink rejection is now `SignalValidationError`, including a payload holding a non-JSON-serializable value (previously a raw `TypeError` leaked past the fail-closed contract); added `MAX_SINK_BYTES`, a whole-file ceiling checked under the lock, so unbounded sink growth is a structural refusal-to-write rather than a documented limitation; `Path.open()` in place of `open()`.
+- `harness/shared/mango_mas_orchestrator.py` - guarded, observation-only shadow comparison hook after the incumbent planner call; disabled behavior byte-identical; minor ruff hygiene (`Path.open()`, unused loop variable).
+- `harness/shared/tests/conftest.py` - autouse scrub of shadow-channel env vars keeps the mocked suite hermetic.
+- `README.md` - documented the shadow-channel environment variables; refreshed the repository structure tree (10 skills, the live `pre-nemotron-run.sh` hook, `cognitive_signal.py`/`shadow_planner.py`/`schemas/`, `control-plane/publish_policy_artifact.py`); corrected stale test-count claims (575+ combined Python/Node, 486+ under `harness/shared/tests`).
+- `NEXT_STEPS.md`, `NEXT_STEPS_PLAN_v2.md` - recorded the completed MangoMas integration core milestone and its follow-ups.
+- `harness/docs/PRE_PR_VERIFICATION_REFERENCE.md` - coverage threshold description now points at the dynamic policy read instead of a hard-coded (and stale) percentage.
+- `.mango/skills/evidence-signing/SKILL.md` - documented `publish_policy_artifact --attest` as a consumer.
+- `.mango/skills/harness-engineering/SKILL.md` - corrected two references to a `.claude/` agent-state directory this repo does not use for that purpose.
 
 ### Fixed
 
-- `docs/specs/SPEC_TEMPLATE.md` — added the `## Requirements` section `validate_specs.sh` requires; the template no longer fails the structural spec gate it scaffolds for.
-- `harness/shared/tests/test_mango_mas_orchestrator.py` — removed a dead `pytest.importorskip("bash")` that silently skipped the hook execution test on every platform.
-- `.gitignore` — `.governance/vitest-results.json` and `.governance/coverage/` were anchored to a repo-root `.governance/` that does not exist (git treats a mid-pattern slash as directory-relative), so `harness/node/.governance/vitest-results.json` and the coverage dir were never actually ignored; running the Node suite and checking `git status` surfaced it. Changed to `**/.governance/vitest-results.json` / `**/.governance/coverage/`, verified to still leave the tracked config files in the same directories (`policy.json`, `decision-log.md`, `traceability.json`, …) unignored.
+- `docs/specs/SPEC_TEMPLATE.md` - added the `## Requirements` section `validate_specs.sh` requires; the template no longer fails the structural spec gate it scaffolds for.
+- `harness/shared/tests/test_mango_mas_orchestrator.py` - removed a dead `pytest.importorskip("bash")` that silently skipped the hook execution test on every platform.
+- `.gitignore` - `.governance/vitest-results.json` and `.governance/coverage/` were anchored to a repo-root `.governance/` that does not exist (git treats a mid-pattern slash as directory-relative), so `harness/node/.governance/vitest-results.json` and the coverage dir were never actually ignored; running the Node suite and checking `git status` surfaced it. Changed to `**/.governance/vitest-results.json` / `**/.governance/coverage/`, verified to still leave the tracked config files in the same directories (`policy.json`, `decision-log.md`, `traceability.json`, …) unignored.
 
 ## [2.1.7] - 2026-08-27
 
 ### Added
 
-- `harness/shared/tests/test_validation_scripts_extra.py` — Added unit tests for governance validation scripts to ensure 80% coverage.
-- `harness/shared/check_py_compat.py` — runtime Python 3.9 compatibility gate; detects PEP 604 unions and `datetime.UTC` without `from __future__ import annotations`. Now also covers `ast.AnnAssign` (module/class-level variable annotations).
-- `harness/shared/check_dedup.py` — drift gate that fails CI when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`.
-- `harness/shared/governance/broker.py` — `ExecutionBroker` enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Paths extracted to module-level constants; structured `logging` throughout.
-- `harness/shared/governance/evidence_manifest.py` — `EvidenceBuilder` refactored: `signing_key` now injectable via constructor (env-var fallback), raises `ValueError` (not `OSError`) for missing key, top-level imports, DEBUG logging on export.
-- `harness/shared/tests/test_evidence_manifest.py` — 17-test suite covering key resolution priority, all `add_*` methods, HMAC signature verification, manifest immutability, and debug logging.
-- `harness/shared/tests/test_governance_broker.py` — 11-test suite covering INV-8/INV-9, PDP allow/deny/absent, human-approved flag, logging, and `ExecutionResult` dataclass.
-- `harness/shared/tests/test_mango_mas_orchestrator.py` — Platform-guarded bash hook tests (skip on Windows where bare `bash` cannot interpret Windows paths).
-- `pyproject.toml` — Added `[project]` table and `[tool.setuptools.packages.find]` so `pip install -e .` resolves only `harness*` and does not fail with "Multiple top-level packages".
-- `.gitignore` — Added `harness/node/test-*/` and `.hypothesis/` exclusions for pytest/hypothesis temp directories.
+- `harness/shared/tests/test_validation_scripts_extra.py` - Added unit tests for governance validation scripts to ensure 80% coverage.
+- `harness/shared/check_py_compat.py` - runtime Python 3.9 compatibility gate; detects PEP 604 unions and `datetime.UTC` without `from __future__ import annotations`. Now also covers `ast.AnnAssign` (module/class-level variable annotations).
+- `harness/shared/check_dedup.py` - drift gate that fails CI when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`.
+- `harness/shared/governance/broker.py` - `ExecutionBroker` enforcing INV-8 (pretooluse_guard) and INV-9 (no host-process fallback). Paths extracted to module-level constants; structured `logging` throughout.
+- `harness/shared/governance/evidence_manifest.py` - `EvidenceBuilder` refactored: `signing_key` now injectable via constructor (env-var fallback), raises `ValueError` (not `OSError`) for missing key, top-level imports, DEBUG logging on export.
+- `harness/shared/tests/test_evidence_manifest.py` - 17-test suite covering key resolution priority, all `add_*` methods, HMAC signature verification, manifest immutability, and debug logging.
+- `harness/shared/tests/test_governance_broker.py` - 11-test suite covering INV-8/INV-9, PDP allow/deny/absent, human-approved flag, logging, and `ExecutionResult` dataclass.
+- `harness/shared/tests/test_mango_mas_orchestrator.py` - Platform-guarded bash hook tests (skip on Windows where bare `bash` cannot interpret Windows paths).
+- `pyproject.toml` - Added `[project]` table and `[tool.setuptools.packages.find]` so `pip install -e .` resolves only `harness*` and does not fail with "Multiple top-level packages".
+- `.gitignore` - Added `harness/node/test-*/` and `.hypothesis/` exclusions for pytest/hypothesis temp directories.
 
 ### Changed
 
-- `harness/shared/validate_agent_policy.py`, `harness/shared/validate_policy.py`, `harness/shared/validate_governance_docs.py` — Refactored to use `main()` functions for importability and testability.
-- `.github/workflows/python-package.yml` — Fixed misleading PEP 604 comment; null-guarded `ALLOW_GITHUB_CHANGES` against push events where `pull_request` context is absent.
-- `harness/node/.npmrc`, `harness/node/pnpm-workspace.yaml` — Added the pnpm 11 esbuild build-script allowlist configuration.
-- `Makefile` — `lint-python` now runs `ruff check .` (all first-party Python); `lint` depends on new `check-compat` target; `ci` depends on new `check-dedup` target; added `spec`, `review`, `pre-pr` targets.
-- `harness/shared/governance-policy.json` — Updated `protected_paths` from stale `scripts/*` references to correct `harness/shared/*` layout; added `dedup` and `py_compat` policy sections.
-- `harness/control-plane/policy-bundle.example.json` — Regenerated digests after governance script changes.
+- `harness/shared/validate_agent_policy.py`, `harness/shared/validate_policy.py`, `harness/shared/validate_governance_docs.py` - Refactored to use `main()` functions for importability and testability.
+- `.github/workflows/python-package.yml` - Fixed misleading PEP 604 comment; null-guarded `ALLOW_GITHUB_CHANGES` against push events where `pull_request` context is absent.
+- `harness/node/.npmrc`, `harness/node/pnpm-workspace.yaml` - Added the pnpm 11 esbuild build-script allowlist configuration.
+- `Makefile` - `lint-python` now runs `ruff check .` (all first-party Python); `lint` depends on new `check-compat` target; `ci` depends on new `check-dedup` target; added `spec`, `review`, `pre-pr` targets.
+- `harness/shared/governance-policy.json` - Updated `protected_paths` from stale `scripts/*` references to correct `harness/shared/*` layout; added `dedup` and `py_compat` policy sections.
+- `harness/control-plane/policy-bundle.example.json` - Regenerated digests after governance script changes.
 
 ### Fixed
 
-- `requirements-dev.txt` — Added `pytest-mock` to fix missing `mocker` fixture dependencies.
-- `test_mango_mas_orchestrator.py` — Fixed missing mock usage in `test_live_execute_agent`.
-- `test_validate_invariants.py::test_main_default_workspace_runs` — Made hermetic by patching `DEFAULT_WORKSPACE_DIR` to a temp repo instead of accepting any exit code from the real working tree.
-- `governance/evidence_manifest.py` — Removed insecure HMAC fallback key (`"default-insecure-key"`); raises `ValueError` when `AGENT_EVIDENCE_KEY` is unset.
-- `governance/broker.py` — Replaced f-strings in logger calls with lazy `%s` format; extracted hardcoded PDP/policy paths to module-level constants.
+- `requirements-dev.txt` - Added `pytest-mock` to fix missing `mocker` fixture dependencies.
+- `test_mango_mas_orchestrator.py` - Fixed missing mock usage in `test_live_execute_agent`.
+- `test_validate_invariants.py::test_main_default_workspace_runs` - Made hermetic by patching `DEFAULT_WORKSPACE_DIR` to a temp repo instead of accepting any exit code from the real working tree.
+- `governance/evidence_manifest.py` - Removed insecure HMAC fallback key (`"default-insecure-key"`); raises `ValueError` when `AGENT_EVIDENCE_KEY` is unset.
+- `governance/broker.py` - Replaced f-strings in logger calls with lazy `%s` format; extracted hardcoded PDP/policy paths to module-level constants.
 
 ## [2.1.6] - 2026-08-26
 
@@ -2050,14 +2060,14 @@ IDs.
 
 ## Harness gate-contract history (formerly `harness/CHANGELOG.md`)
 
-> Versions v2.0.0–v2.1.5 of the harness gate contract (`harness/CONTRACT.md`)
+> Versions v2.0.0-v2.1.5 of the harness gate contract (`harness/CONTRACT.md`)
 > and its enforcement surface, folded in from `harness/CHANGELOG.md` under
 > R-TDH-24. Headings are demoted one level; the entries are otherwise
 > unchanged. Gate-contract changes after v2.1.5 are recorded in the versioned
 > sections above. This block is not a `## [x.y.z]` release section, so the
 > per-section line cap in `test_documentation_truth.py` does not apply to it.
 
-### v2.1.5 — .mango Architecture, Continuous Learning & Persona Topology
+### v2.1.5 - .mango Architecture, Continuous Learning & Persona Topology
 
 - **Continuous Learning Meta-Tools (`data_agent` synthesis):**
   - Synthesized continuous learning concepts from the `data_agent` project.
@@ -2078,7 +2088,7 @@ IDs.
   - Repaired `test_validators.py` timezone drift issues that broke local test execution environments.
   - Re-attained 85% AQA Python Test Coverage for `harness/shared` and validated zero E501/trailing-whitespace violations in `meta_tools.py` and `mango_mas_orchestrator.py`.
 
-### v2.1.4 — Python AQA Framework, Code Hygiene & CI Wiring
+### v2.1.4 - Python AQA Framework, Code Hygiene & CI Wiring
 
 - **Python AQA Test Engine (`harness/shared/tests/`):**
   - Implemented full `pytest` test suite: **133 tests, 98.44% coverage** across 10 governance scripts.
@@ -2088,7 +2098,7 @@ IDs.
 - **Code Hygiene Remediation:**
   - Resolved all `ruff` lint violations in test code (unused imports, duplicate import blocks, unsorted imports).
   - Added `[tool.ruff]` and `[tool.mypy]` configuration to `pyproject.toml`.
-  - Created `__init__.py` package markers for `harness/shared` and `tests/` — resolves mypy module resolution.
+  - Created `__init__.py` package markers for `harness/shared` and `tests/` - resolves mypy module resolution.
   - Fixed non-deterministic `datetime.now()` (added UTC timezone) and implicit `Optional` type hints.
   - Governance validator scripts excluded from ruff style enforcement via `per-file-ignores` (intentionally compact).
 - **DevOps & Infrastructure:**
@@ -2098,11 +2108,11 @@ IDs.
 - **Documentation:**
   - Updated C4 Architecture (Level 2) with Python AQA Engine container and `runpy` execution strategy.
   - Updated `TEST-REPORT.md` with Python test suite metrics.
-  - Updated `NEXT_STEPS.md` — fixed deprecated model reference, added completed milestones.
+  - Updated `NEXT_STEPS.md` - fixed deprecated model reference, added completed milestones.
 
 ---
 
-### v2.1.2 — Nemotron Live Integration Smoke Tests & Model Migration
+### v2.1.2 - Nemotron Live Integration Smoke Tests & Model Migration
 
 - **Model Migration:**
   - Migrated default model from deprecated `nvidia/llama-3.1-nemotron-70b-instruct` (HTTP 404) to `nvidia/llama-3.3-nemotron-super-49b-v1`.
@@ -2113,7 +2123,7 @@ IDs.
   - Added `cli-live.test.ts`: CLI subprocess validation (`--json`, `--stream`, `--help`).
   - Added `mango-agent-live.test.ts`: .mango agent delegation tests exercising planner, nemotron-reasoner, and verifier system prompts against the live API.
   - Added `test_nemotron_bridge_live.py`: Python bridge live validation with wire parity contract test.
-  - All live tests gated behind `NVIDIA_API_KEY` — auto-skipped in CI.
+  - All live tests gated behind `NVIDIA_API_KEY` - auto-skipped in CI.
 - **ESLint TypeScript Parser:**
   - Configured `typescript-eslint` parser in `eslint.config.js` to fix `interface` reserved keyword errors.
   - Updated `knip.json` schema to v6 and removed stale `ignoreDependencies`.
@@ -2122,7 +2132,7 @@ IDs.
 
 ---
 
-### v2.1.1 — Mango Multi-Agent Platform Migration
+### v2.1.1 - Mango Multi-Agent Platform Migration
 
 - **Mango Multi-Agent Migration (`.mango/`):**
   - Rebranded `.claude` multi-agent framework into `.mango` ecosystem.
@@ -2132,7 +2142,7 @@ IDs.
 
 ---
 
-### v2.1.0 — NVIDIA Nemotron Ultra AI Integration & Pong 2026 Game Engine
+### v2.1.0 - NVIDIA Nemotron Ultra AI Integration & Pong 2026 Game Engine
 
 - **NVIDIA Nemotron Ultra Client Adapter (`src/ai/nemotron/`):**
   - Implemented provider-agnostic `NemotronClient` with OpenAI-compatible `/chat/completions` protocol.
