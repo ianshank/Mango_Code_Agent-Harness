@@ -1,6 +1,6 @@
 # Spec: 2026 standards remediation plan (audit round 4)
 
-> Status: IN PROGRESS, revision 1 (peer-reviewed before first publication) · Date: 2026-09-04 · Base: `main` @ `71223f1` (PR #85)
+> Status: IN PROGRESS (Phase B Done; A/C/D/E/F open — A and E owner-blocked), revision 2 · Date: 2026-09-05 · Base: `main` @ `2441547` (post PRs #86–#88)
 >
 > Supersedes the open remainder of `docs/specs/code-quality-tech-debt-plan.md`
 > (closed 2026-09-04 at revision 2) and owns every Blocker, High and Medium
@@ -11,27 +11,30 @@
 
 ## Executive summary
 
-The uncomfortable finding is not that `main` is unprotected — the roadmap has said
-so for four releases — it is that the runtime verdict the whole harness exists to
-produce is **forgeable by the agent it judges**, in two tool calls, through the
-real dispatcher, broker and backend (audit B4). The previous program plan spent
-six product-path PRs closing string-level spellings of credential reads and never
-looked at script execution. Its remaining thirteen PRs were inventory, gate and
-document ceremony. This plan reorders around four facts: the verdict is
-forgeable, the API server 500s on every tool-using run, the language floor is a
-year past end-of-life, and none of the nine required checks is required.
+The uncomfortable finding was not that `main` is unprotected — the roadmap has said
+so for four releases — it was that the runtime verdict the whole harness exists to
+produce was **forgeable by the agent it judges**, in two tool calls, through the
+real dispatcher, broker and backend (audit B4; closed by PR #86 / DEC-049–051).
+The previous program plan spent six product-path PRs closing string-level spellings
+of credential reads and never looked at script execution. Its remaining thirteen
+PRs were inventory, gate and document ceremony. This plan reordered around four
+facts: the verdict was forgeable (now contained; residual OS isolation stays Phase
+F), the API server 500ed on every tool-using run (closed by #86), the language
+floor is a year past end-of-life, and none of the nine required checks is required.
 
 | Phase | Outcome | PRs | Protected rows | Owner decision |
 |---|---|---|---|---|
 | A | Ruleset imported; DEC-014 credential rotated; `LICENSE` chosen; `v2.4.0` tagged; four in-or-out decisions recorded as DECs | 0 code, 1 doc | ~2 | **yes**: all five |
-| B | Runtime correctness and containment: typed API history, verification timeout key, per-task budget, run id and structured events, schema-validated tool args, indirect-execution door closed, verification tamper check, unix-socket egress floor, order randomization, gate-runner fixes, documentation truth, vacuous-selector gate | 1 (this PR, #86) | ~30 | no |
+| B | Runtime correctness and containment: typed API history, verification timeout key, per-task budget, run id and structured events, schema-validated tool args, indirect-execution door closed, verification tamper check, unix-socket egress floor, order randomization, gate-runner fixes, documentation truth, vacuous-selector gate | 1 (#86, merged) | ~30 | no |
 | C | Floor to 3.10 with every compensating waiver deleted; 3.14 in the matrix; mypy 2.x; `target-version` removed | 1 + spec | ~8 | **yes**: adopters' floor |
 | D | CI truthfulness: attestation bound to head SHA, scheduled branch-protection self-report, signed commits, Dockerfile, Dependabot ecosystems and cooldown | 2 | ~6 | no |
 | E | Decide, then delete: JVM relocated, LangGraph parked, `openspec/` folded, per-stack mirroring collapsed behind `[project.scripts]` | 5–7 | ~55 | **yes**: DEC-005 posture |
 | F | Slack items, each one PR: `ruff format`, PEP 621 metadata, ESLint type-checked, ADR directory and changelog cap, OS sandbox, eval harness and live smoke, mutation score, context budget, HITL, provider boundary | per item | varies | no |
 
-Phase B is in flight on this branch. Phases A and C block nothing in B and
-everything in E.
+Phase B is Done via PR #86 (AC-6…AC-22, AC-33). Phases C–F remain open; Phase A
+and E are blocked on owner actions (NS-1/2/3/30/31). Status and Phase E order in
+this file win; `NEXT_STEPS.md` must not restate them. Phases A and C block nothing
+in B and everything in E.
 
 ## Review record
 
@@ -45,7 +48,10 @@ own command or `file:line` on `71223f1`.
 | Program plan rev 2, 19 PRs | 9/31 requirements landed; 0/3 audit Blockers and 2/16 Highs covered; three ticked criteria collected zero tests; R-CQ-14 landed the wrong timeout key | ledger in the closed plan's header; `verification.py:81-89`; `-k patch_denied_read` → 0 collected | Plan closed; carried items listed in R-SR-30; dropped items listed in §Explicitly not doing |
 | `tech-debt-hardening-plan.md` (29/29 ticked) | AC-28 false (no `-W error::DeprecationWarning` stage exists); AC-12 third clause false; two more vacuous selectors (AC-1, AC-9) | `grep -rn "error::DeprecationWarning" Makefile pyproject.toml .github/workflows` → 0 | Selectors corrected in place; the `-W error` stage is R-SR-19 |
 | `NEXT_STEPS.md` (14 open) | 1 done and still listed; 3 without Done-when; 1 with no observable; 0 bound to a stage; duplicates R-CQ on five items; audit omitted NS-2 | `validate_plan.py --spec-dir . --all` → 0 acceptance bullets parsed | Roadmap rewritten to point here; NS-2 is R-SR-2 |
-| Four in-or-out memos | JVM: relocate (4 lines of product Kotlin, never built); LangGraph: park with sunset (5/10 stubs, one experimental caller); `openspec/`: fold (tier mis-specified, never run); mirroring: collapse after the other three, gated on a DEC superseding DEC-005 | memos' blast-radius lists | Phase E, in that order; R-SR-26 … R-SR-29 |
+| Four in-or-out memos | JVM: relocate (4 lines of product Kotlin, never built); LangGraph: park with sunset (5/10 stubs, one experimental caller); `openspec/`: fold (tier mis-specified, never run); mirroring: collapse after the other three, gated on a DEC superseding DEC-005 | Memo artefacts are **not in the tree**; the summaries in this table are the only in-repo record until DEC-053… are logged | Phase E, JVM → LangGraph → openspec → mirroring (SoT; R-SR-26 … R-SR-29) |
+| PR #86 | Phase B landed; AC-6…AC-22 and AC-33 ticked; DEC-048…DEC-051 carry the containment/runtime narrative. Title understated (`docs(reports): 2026 coding-standards audit`) relative to the code it shipped | `gh pr view 86` MERGED; plan boxes AC-6…22, AC-33 `[x]` | **Done** — Phase B closed |
+| PR #87 / #88 + DEC-052 | LangGraph fail-closed on recorded errors and absent evidence; conclusive counts fail closed. Hardens the package **in place** under `harness/shared/langgraph/` | DEC-052; `docs/specs/langgraph-fail-open-hardening.md`; merge SHAs on `main` | **Does NOT satisfy R-SR-27** (park + sunset). Out of scope for AC-6…22 |
+| Proposed DEC-053 | Park LangGraph with a named sunset (and the other three Phase E decisions); draft exists off-tree / owner-pending | Not present in `decision-log.md` (max DEC on main is 052) | **Drafted, not logged** — do not treat as done; logging DEC-053 is preferred before describing Phase C as starting the R-SR-27 sunset |
 | Audit rev 1 §5 numbered roadmap | A fourth owner of the same work | `code-quality-tech-debt-plan.md`, `NEXT_STEPS.md` | Audit §5 now points here |
 
 ## Problem statement
@@ -58,15 +64,8 @@ finding id given; only the deciding facts are restated.
    #60/#79/#80 carry no approving review (B1). The `infra-reviewed` label that
    gates protected-path changes survives later pushes (H3). The required check
    `dependency-audit (3.9)` is `continue-on-error` (H1).
-2. **The verdict is forgeable.** `python x.py`, `make <x>`, `pytest`,
-   `coverage run x.py`, `pnpm exec <x>` grade `test_execute`, held by implementer
-   and verifier. A written script rewrites the protected `Makefile`; the next
-   verification returns `VERIFIED` on a failing suite (B4). `GNUmakefile`,
-   `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`, `pytest.ini`,
-   `tox.ini`, `setup.cfg` are unprotected code-execution surfaces (B4).
-3. **The API server rejects its own output.** `TaskResponse.history:
-   list[dict[str, str]]` fails on `content: None`, `tool_calls`, `tool_call_id`;
-   nothing normalizes history; the client gets 500 on every tool-using run (B3).
+2. **The verdict was forgeable (closed by #86 / DEC-049–051).** The B4 script-rewrite path through the dispatcher/broker/backend returned VERIFIED on a failing suite; those surfaces are now protected and digests are checked. **Residual:** script execution can still read on-disk `.env` and open sockets until OS isolation lands (Phase F).
+3. **The API server rejected its own output (closed by #86).** `TaskResponse.history` failed on tool-call shapes; clients got 500 on every tool-using run (B3).
 4. **The floor is EOL.** `requires-python >= 3.9`; 3.9 EOL 2025-10-31; 3.10 EOL
    2026-10-31; every runtime dependency is `>= 3.10`; four waivers hold the floor
    (H1). mypy is pinned to August 2024 because 2.x removed `--python-version 3.9`
@@ -114,11 +113,12 @@ names the audit finding or closed-plan requirement it carries.
   version, and `test_documentation_truth.TestTheDeclaredVersionIsARealRelease`
   MUST additionally require that tag (NS-3; carries OQ1 of the hardening plan).
 - R-SR-5: Four decision-log entries MUST record, before Phase E code lands: JVM
-  relocation (Memo 2 option B), LangGraph park with sunset (Memo 1 option B),
-  `openspec/` fold (Memo 3 option Y), and the mirroring collapse including the
-  superseding of DEC-005's push posture (Memo 4).
+  relocation (review-record / Memo 2 option B), LangGraph park with sunset
+  (proposed DEC-053; Memo 1 option B — memos not in tree), `openspec/` fold
+  (Memo 3 option Y), and the mirroring collapse including the superseding of
+  DEC-005's push posture (Memo 4). DEC-052 MUST NOT count as one of the four.
 
-### Phase B — runtime correctness and containment (this PR)
+### Phase B — runtime correctness and containment (merged #86)
 
 - R-SR-6: Executing a workspace file MUST NOT be a route around the write policy:
   `GNUmakefile`, `makefile`, `setup.py`, nested `conftest.py`, `sitecustomize.py`
@@ -208,6 +208,12 @@ names the audit finding or closed-plan requirement it carries.
   `disallow_any_generics` on for source via overrides; ruff `target-version` MUST
   be removed so it derives from `requires-python` (H1, M10; supersedes DEC-028;
   carries R-CQ-16, R-CQ-23 by deletion).
+  **Note (rev 2):** Phase C is safe before NS-31 for waiver deletion, but MUST
+  NOT be described as starting the R-SR-27 sunset until DEC-053 is logged.
+  Prefer: log DEC-053 first (even if park code waits), then land C, or land C
+  with an explicit sentence that the sunset clock starts at the next tagged
+  minor after DEC-053. Sync `.github/rulesets/main.json` in the same PR as the
+  context deletions if NS-1 has not yet been applied.
 
 ### Phase D — CI truthfulness
 
@@ -218,24 +224,33 @@ names the audit finding or closed-plan requirement it carries.
 - R-SR-25: The Dockerfile MUST pin its base by digest, run as a non-root user, and
   ship no dev dependency at runtime; Dependabot MUST cover `docker` and declare an
   explicit `cooldown` (M17, M18; carries R-CQ-11).
+  **Note (rev 2):** Action majors were closed after DEC-046 without
+  merge; open queue empty 2026-09-05
+  package bumps via recreate; not Phase E.
+  R-SR-25 still owns docker + cooldown only.
 
 ### Phase E — decide, then delete
 
 - R-SR-26: `harness/jvm/` MUST be relocated to `docs/adopters/jvm-template/` with
   its shims, personas and `.governance/` deleted, the bundle tooling tolerating an
   absent stack, and every test that loops over `("node", "jvm")` retargeted
-  (H14; Memo 2 option B).
+  (H14; review-record / Memo 2 option B — memos not in tree).
 - R-SR-27: `harness/shared/langgraph/` MUST move under `harness/shared/experimental/`
   with PEP 562 shims at the old paths for one minor release and a sunset clause in
-  its DEC (M3; Memo 1 option B; carries R-CQ-22).
+  its DEC (M3; review-record summary of Memo 1 option B — memos not in tree;
+  carries R-CQ-22). DEC-052 (#87/#88) fail-closed the graph **in place** and does
+  **not** satisfy this requirement; proposed DEC-053 (park + named sunset; drafted,
+  not logged) is the decision that does, and must state that the DEC-052 suite
+  relocates with the package.
 - R-SR-28: The three `openspec/changes/*` proposals MUST become `docs/specs/*.md`
   passing `make specs`, and the strict tier, its env var, its tests and the
-  `openspec/` tree MUST be deleted (M22; Memo 3 option Y).
+  `openspec/` tree MUST be deleted (M22; review-record / Memo 3 option Y — memos not in tree).
 - R-SR-29: Per-stack mirroring MUST collapse to a root `.governance/` plus a
   `--workspace` flag on the seven CWD-relative gates, with `[project.scripts]`
   entry points replacing the 28 shim scripts and `check_dedup.py` deleted, in the
-  five-PR order Memo 4 gives, each PR green on its own (M23, H12; carries
-  R-CQ-18's bootstrap clause and R-CQ-25 by decision; supersedes DEC-029 (2)).
+  five-PR order summarised in the review record (Memo 4 artefact not in tree),
+  each PR green on its own (M23, H12; carries R-CQ-18's bootstrap clause and
+  R-CQ-25 by decision; supersedes DEC-029 (2)).
 
 ### Carried and dropped
 
@@ -282,8 +297,12 @@ names the audit finding or closed-plan requirement it carries.
 - [ ] AC-4: `git tag -l v2.4.0` prints the tag and
       `pytest harness/shared/tests/test_documentation_truth.py -k real_release`
       fails when the tag is absent · stage: `make test-python` (R-SR-4)
-- [ ] AC-5: `git grep -nE "DEC-0(4[8-9]|5[0-9]).*(jvm|langgraph|openspec|mirroring)" harness/node/.governance/decision-log.md`
-      returns four entries and `make validate` passes on them
+- [ ] AC-5: Four Phase E decision-log entries exist with **explicit** park /
+      relocate / fold / mirroring language (expected ids DEC-053+; titles must
+      name JVM relocate, LangGraph park+sunset, `openspec/` fold, and mirroring
+      collapse). `git grep -nE "DEC-05[3-9].*(park|reloc|fold|mirroring|jvm|openspec)" harness/node/.governance/decision-log.md`
+      returns those four and MUST NOT treat DEC-048…DEC-052 (Phase B / fail-closed)
+      as satisfying this criterion; `make validate` passes on them
       (`validate_governance_docs.py` rejects an entry missing from
       `GOVERNANCE_SKILL.md`) · stage: `make validate` (R-SR-5)
 - [x] AC-6: `pytest harness/shared/tests/test_command_actions_indirect_exec.py`
@@ -446,9 +465,8 @@ names the audit finding or closed-plan requirement it carries.
 
 ## Steps
 
-Ordered by dependency. Phase B is one PR (#86) because its slices were developed
-in parallel worktrees against the same base and merged once; later phases are one
-PR per numbered step.
+Ordered by dependency. Phase B was one PR (#86), merged 2026-09-04; later phases
+are one PR per numbered step. Phase E order below is the source of truth.
 
 ### Phase A (0 code)
 
@@ -456,28 +474,15 @@ PR per numbered step.
    `v2.4.0`, and records the four DECs (R-SR-1 … R-SR-5) — produces the API
    response for AC-1, `LICENSE`, the tag, four decision-log entries.
 
-### Phase B (this PR)
+### Phase B (Merged #86)
 
-2. Containment: protected paths, classifier grades, verification tamper check,
-   prose (R-SR-6, R-SR-7, R-SR-8) — consumes `governance-policy.json`; produces
-   `test_command_actions_indirect_exec.py`, a regression test, a regenerated
-   bundle.
-3. API server: typed history, health/readiness, lifespan logging (R-SR-9,
-   R-SR-10) — produces `harness/api_server/main.py` models, tests, a regression
-   test.
-4. Loop and policy: verification timeout key, shared budget, run id and
-   structured events, dispatch validation, gate logging (R-SR-11 … R-SR-14,
-   R-SR-16) — consumes the policy; produces `tool_arg_validation.py`,
-   `OrchestratorLimits.verification_timeout_sec`, tests, a regenerated bundle.
-5. MCP: registry reuse, `to_thread`, per-call logging (R-SR-15).
-6. Test infrastructure and gate runners (R-SR-17, R-SR-18, R-SR-19) — consumes
-   `requirements-dev.txt`; produces the regenerated hashed lock, workflow
-   timeouts and concurrency, Makefile PATH and `.SHELLFLAGS`, hook install line.
-7. Documentation truth (R-SR-20); vacuous-selector gate (R-SR-21); audit skill
-   (R-SR-22) — produces `test_spec_selectors_collect.py`,
-   `.mango/skills/standards-audit/SKILL.md`, corrected spec lines.
-8. Merge, `make ci`, `make lint-cold`, `make audit`, `make secrets`,
-   `make attestation`; tick AC-6 … AC-22 with the command each names.
+2–7. Containment, API server, loop/policy, MCP, test infrastructure, documentation
+   truth / vacuous-selector gate / audit skill (R-SR-6 … R-SR-22) — landed on
+   `main` via PR #86 (merge `d9ab598`, 2026-09-04). Title understated relative to
+   the code shipped; evidence is the ticked AC-6…AC-22 / AC-33 boxes and
+   DEC-048…DEC-051.
+8. **Merged #86.** `make ci` / attestation evidence is on the merge commit; do not
+   open a second Phase B PR under this plan.
 
 ### Phase C
 
@@ -489,11 +494,14 @@ PR per numbered step.
 10. Attestation bound to SHA; scheduled protection report; signatures
     (R-SR-24). 11. Dockerfile and Dependabot (R-SR-25).
 
-### Phase E (after Phase A's DECs)
+### Phase E (after Phase A's DECs) — SoT order
 
-12. JVM relocation, two PRs per Memo 2 (R-SR-26). 13. LangGraph park, three PRs
-    per Memo 1 (R-SR-27). 14. `openspec/` fold, two PRs per Memo 3 (R-SR-28).
-15. Mirroring collapse, five PRs per Memo 4, `[project.scripts]` first (R-SR-29).
+12. JVM relocation (R-SR-26). 13. LangGraph park with sunset after DEC-053
+    (R-SR-27; DEC-052 does not satisfy). 14. `openspec/` fold (R-SR-28).
+15. Mirroring collapse, `[project.scripts]` first (R-SR-29).
+    Order **JVM → LangGraph → openspec → mirroring** is authoritative here;
+    memo files are not on `main` — do not invent a second order from absent
+    artefacts.
 
 ### Phase F
 
@@ -515,7 +523,7 @@ PR per numbered step.
 ## Files touched
 
 Protected paths are marked (P); every (P) slice carries the attestation table and
-the `infra-reviewed` label. Phase B's list is what PR #86 carries; later phases
+the `infra-reviewed` label. Phase B's list is what PR #86 carried; later phases
 list their principal files and defer the full set to their own PR bodies.
 
 - Phase A: `.github/rulesets/main.json`, `LICENSE` (new), `pyproject.toml` (P),
@@ -647,8 +655,10 @@ Recorded so the next audit does not rediscover them, each with the reason:
    blocked. The superseding DEC must say which control replaces the absence
    (the PreToolUse guard and pre-push hook are the candidates). Blocks Phase E
    step 15 only.
-3. **3.10 or 3.11.** 3.10 is EOL in eight weeks; moving straight to 3.11 avoids a
-   second floor change in November but drops one more adopter interpreter. The
-   plan recommends 3.10 now, 3.11 in the November release, both in one spec.
-4. **LangGraph sunset date.** Memo 1 proposes "first minor release after the
-   floor moves". The DEC must name the release.
+3. **3.10 or 3.11 (narrowed rev 2).** Recommend `requires-python >= 3.10` now;
+   3.10 EOL is 2026-10-31. Schedule 3.11 in the same spec as a non-default
+   follow-on matrix note — do not block the floor bump on choosing 3.11 first.
+4. **LangGraph sunset date (narrowed rev 2).** Proposed DEC-053 must name the
+   sunset release; default remains "first minor release after the floor moves"
+   unless NS-31 picks otherwise. Memo 1 is not in the tree; DEC-052 is fail-closed
+   in place and is **not** the park decision.

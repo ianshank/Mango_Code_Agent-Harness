@@ -1,8 +1,8 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.4.0
+**Version:** 2.4.1
 **Status:** Active roadmap — forward-looking only
-**Last reviewed:** 2026-09-04 · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md)
+**Last reviewed:** 2026-09-05 · tip `main` @ `2441547` (post #86–#88) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) (rev 2)
 
 ---
 
@@ -50,7 +50,7 @@ releases: it had no agent-executable front. Section 2 gives it one.
 **Why now.** Every gate in this repository is advisory. `GET
 /repos/ianshank/Mango_Code_Agent-Harness/rules/branches/main` returns `[]` and
 the branches API reports `"protected": false` (both re-queried 2026-09-04
-during the standards audit). PR #60 merged with all four `build` checks
+during the standards audit; re-queried 2026-09-05 still empty). PR #60 merged with all four `build` checks
 `failure`; PRs #60, #79 and #80 carry no approving review. DEC-044 already
 removed the code-owner rule that made the export unappliable.
 
@@ -97,9 +97,9 @@ proves nothing (R-SR-2, AC-2). `make secrets` stays ref-scoped per DEC-014.
 
 **Why now.** No git tag has ever existed, so "2.4.0" names no commit;
 `docs/rca/e2e_origin_sync_triage_rca_v2.5.0.md` says v2.5.0 while the four
-version mirrors say 2.4.0; and `CHANGELOG.md`'s `[Unreleased]` is 1,197 lines
-against a 400-line cap whose regex matches only `## [x.y.z]` headings, so the
-cap cannot fire on it. The Phase E removal clocks in the program plan count
+version mirrors say 2.4.0; and `CHANGELOG.md`'s `[Unreleased]` remains far over the 400-line cap (re-check with
+`wc -l` / the cap regex in `test_documentation_truth.py`); the regex matches
+only `## [x.y.z]` headings, so the cap cannot fire on `[Unreleased]`. The Phase E removal clocks in the program plan count
 from a release that does not exist.
 
 **Evidence.** `git tag -l` and `git ls-remote --tags origin` are empty;
@@ -147,12 +147,13 @@ something a constraint in the closed plan told it to keep (C-CQ-2).
 H14, M3, M22, M23.
 
 **Done when.** Four decision-log entries exist (JVM relocation, LangGraph park
-with a named sunset release, `openspec/` fold, mirroring collapse including the
-DEC-005 push posture), each restated in `GOVERNANCE_SKILL.md` so
-`validate_governance_docs.py` passes, and `make validate` rejects an entry
-missing from either (R-SR-5, AC-5). The posture question (open question 2 of
-the plan) is the one that needs thought; the other three are recommendations
-the memos already make.
+with a named sunset release — proposed **DEC-053** is one of these four —
+`openspec/` fold, mirroring collapse including the DEC-005 push posture), each
+restated in `GOVERNANCE_SKILL.md` so `validate_governance_docs.py` passes, and
+`make validate` rejects an entry missing from either (R-SR-5, AC-5). DEC-052
+(fail-closed in place) MUST NOT count as the park entry. The posture question
+(open question 2 of the plan) is the one that needs thought; the other three are
+recommendations the review record already summarises (memo files not in tree).
 
 **Depends on.** Nothing.
 
@@ -160,26 +161,7 @@ the memos already make.
 
 ## 2. P0 — agent-executable, no decision needed
 
-### NS-32 · Land Phase B of the remediation plan (PR #86)
-
-**Why now.** The audit's two runtime Blockers are one PR away: the API server
-returns 500 on every tool-using run, and the harness verdict is forgeable by
-scripting a rewrite of the protected `Makefile` (audit B3, B4). Phase B also
-carries the verification-timeout key, the per-task budget, run ids and
-structured events, schema-validated tool arguments, the unix-socket egress
-floor, order randomization, the two gate-runner fixes, documentation truth,
-and the vacuous-selector gate.
-
-**Evidence.** `docs/specs/2026-standards-remediation-plan.md` R-SR-6 … R-SR-22;
-PR #86's Validation section carries the `make ci` tails on its head.
-
-**Done when.** PR #86 is merged with every required check green on its head,
-its attestation table verified by `make attestation-check`, and plan criteria
-AC-6 … AC-22 ticked with the command each names. Any criterion whose command
-cannot fail is not ticked (the `test_spec_selectors_collect.py` gate enforces
-this for `-k` selectors).
-
-**Depends on.** Nothing mechanical. NS-1 makes its green checks mean something.
+No open P0 agent-executable items. Phase B (former NS-32) is in §6 Delivered.
 
 ---
 
@@ -211,7 +193,7 @@ decides whether 3.11 lands in the same spec.
 **Depends on.** Nothing. Unblocks the ESLint and packaging halves of Phase F and
 the mypy bump.
 
-### NS-9 · Justify the last pragma, and stop the swallow behind it
+### NS-9 · Justify the last pragma, and stop the swallow behind it *(spec required)*
 
 **Why now.** `langgraph/__init__.py:52` carries the one remaining
 `# pragma: no cover`, and the `except ImportError: pass` it covers turns a real
@@ -230,8 +212,10 @@ are recorded from a run with the extra installed. `harness/shared/langgraph/**`
 is a protected path, so this carries an attestation. If NS-31 parks the
 package first (R-SR-27), this item moves with it.
 
-**Depends on.** Nothing, but do not batch it: its failure mode lands on whoever
-has not installed the optional extra.
+**Depends on.** Nothing mechanically. Soft-block: prefer after NS-31's LangGraph
+DEC (KEEP vs park+sunset / DEC-053); if park wins, this item moves with R-SR-27.
+Do not batch it: its failure mode lands on whoever has not installed the optional
+extra.
 
 ### NS-11 · Reconcile the regression tier with the contract it claims
 
@@ -253,7 +237,7 @@ guarantee is the one adopters read.
 
 **Depends on.** Nothing.
 
-### NS-17 · Retention and scoping for the agent memory directory
+### NS-17 · Retention and scoping for the agent memory directory *(spec required)*
 
 **Why now.** `knowledge_gap_log` and `hypothesis_register` append to
 `.mango/memory/*.json` with no bound, and `MEMORY_DIR` resolves from the harness
@@ -287,7 +271,7 @@ DEC-003.
 count with a test that fails when it stops being fired, or a decision-log entry
 records that the `post-*-run` namespace stays empty and why.
 
-**Depends on.** NS-32 (the events it would consume).
+**Depends on.** Nothing.
 
 ### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
 
@@ -306,7 +290,7 @@ registry to both transports (R-SR-15); the persona still describes neither.
 fails when the persona names a tool the bridge does not expose. Protected
 path; attestation required.
 
-**Depends on.** NS-32.
+**Depends on.** Nothing.
 
 ### NS-33 · Adopt `ruff format`
 
@@ -316,16 +300,16 @@ that replaced them is absent (audit H11). It is one commit, and it must be its
 own commit so `git blame` can skip it.
 
 **Evidence.** `grep -rn "ruff format" Makefile pyproject.toml .github/workflows`
-→ nothing; `python -m ruff format --check .` → 176 files.
+→ nothing; `python -m ruff format --check .` (re-run for current count; was 176 on 2026-09-04).
 
 **Done when.** One reformat commit is listed in `.git-blame-ignore-revs`,
 `make lint-python` runs `ruff format --check`, and
 `pytest harness/shared/tests/test_makefile_contracts.py -k format_check` fails
 when the step is removed.
 
-**Depends on.** NS-32 (to avoid reformatting files Phase B is editing).
+**Depends on.** Nothing.
 
-### NS-34 · Decision records as records
+### NS-34 · Decision records as records *(spec required)*
 
 **Why now.** 48 decisions are single pipe-delimited lines (longest 4,591
 characters) in `harness/node/.governance/decision-log.md`, each restated by
@@ -375,7 +359,20 @@ Dependabot lacks `docker` and an explicit `cooldown` (M18).
 the commands they name; a PR with a stale SHA in its attestation table fails
 `build-full`.
 
-**Depends on.** NS-1 (signatures need the ruleset live).
+**Depends on.** R-SR-24 needs NS-1 (signatures / protection report assume the
+ruleset is live). R-SR-25 (Dockerfile + Dependabot docker/cooldown) does **not**
+— it can land independently.
+
+### Dependabot disposition (post-DEC-046)
+
+**Why now / record.** DEC-046 kept Action majors open as the tracked vehicle;
+as of 2026-09-05 the listed bot PRs ended closed and unmerged,
+and the open Dependabot queue is empty. Package bumps are expected to reappear
+via Dependabot recreate (ops). Deferred maps: mypy 2.x / floor still NS-6;
+docker + cooldown still R-SR-25 / NS-36; Action major upgrades remain an owner
+decision when the bot reopens them.
+
+**Evidence.** Open Dependabot pulls: 0. Closed set covers #62-#78 with null merged_at.
 
 ### NS-29 · The program plans
 
@@ -392,7 +389,7 @@ Status is that spec's boxes, read there, not here.
 
 | Item | Blocked on |
 |---|---|
-| **Phase E of the plan** (JVM relocation, LangGraph park, `openspec/` fold, mirroring collapse; R-SR-26 … R-SR-29) | NS-31's four decision-log entries; NS-2's rotation before any Phase E slice. Order fixed by the memos: JVM → openspec → LangGraph → mirroring, with `[project.scripts]` first inside the last. |
+| **Phase E of the plan** (JVM relocation, LangGraph park, `openspec/` fold, mirroring collapse; R-SR-26 … R-SR-29) | NS-31's four decision-log entries; NS-2's rotation before any Phase E slice. Order (plan §Steps SoT): **JVM → LangGraph → openspec → mirroring**, with `[project.scripts]` first inside the last. Memo files are not on `main` — do not invent a second order. |
 | **NS-19 · NIM multi-model routing and prompt-cache cost tracking** | No spec; and no provider boundary to route through — `complete_chat` is a monkeypatched module function with `stream: False` hard-coded and `usage` discarded (audit M5). The boundary is a Phase F item; routing follows it. |
 | **Context-window budget and human-in-the-loop interrupts** (audit H4, H5) | The Phase B events give the loop token counts for the first time; a budget needs a policy key and a spec. HITL needs the LangGraph decision (interrupts live there or nowhere). |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false` and INV-15 requires an ablation gate that does not exist (DEC-027). Moves with the LangGraph decision. |
@@ -426,6 +423,13 @@ Recorded so a future audit does not rediscover them as findings:
 ---
 
 ## 6. Delivered, and removed from the list above
+
+**Closed 2026-09-05 (post #86-#88 status sync):**
+
+| Was | Now |
+|---|---|
+| **NS-32** Land Phase B of the remediation plan (PR #86) | **Delivered.** PR #86 merged 2026-09-04 (d9ab598). Title understated (`docs(reports): 2026 coding-standards audit`) relative to the Phase B code it shipped; evidence is plan AC-6…AC-22 / AC-33 [x] and DEC-048…DEC-051, not the PR title. |
+| **#87 / #88 · DEC-052** LangGraph fail-closed / conclusive counts | **Landed on main** (merges 633f728, 2441547). Fail-closed **in place** under `harness/shared/langgraph/`. Does **not** satisfy R-SR-27 (park + sunset); that remains NS-31 / proposed DEC-053. Spec: `docs/specs/langgraph-fail-open-hardening.md`. |
 
 **Closed on 2026-09-04 by the standards audit and the plan rewrite:**
 
