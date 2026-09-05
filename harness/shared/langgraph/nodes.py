@@ -155,7 +155,17 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
             reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
             test_results = state.get("test_results", [])
             last_result = test_results[-1] if test_results else {}
-            if last_result.get("failed", 0) > 0 and last_result.get("message"):
+            prior_failed = (
+                _nonneg_int_count(last_result.get("failed"))
+                if isinstance(last_result, dict)
+                else None
+            )
+            if (
+                prior_failed is not None
+                and prior_failed > 0
+                and isinstance(last_result, dict)
+                and last_result.get("message")
+            ):
                 reasoner_prompt += (
                     f"\n\nPREVIOUS TEST FAILURE (Revision {revision}):\n"
                     f"{last_result.get('message')}\n"
@@ -289,10 +299,19 @@ def _conclusive(latest: object) -> bool:
     if not isinstance(latest, dict):
         return False
     if "passed" not in latest or "failed" not in latest:
+        logger.debug(
+            "test_results row inconclusive: missing passed/failed keys (keys=%s)",
+            sorted(latest.keys()),
+        )
         return False
     passed = _nonneg_int_count(latest.get("passed"))
     failed = _nonneg_int_count(latest.get("failed"))
     if passed is None or failed is None:
+        logger.debug(
+            "test_results row inconclusive: malformed counts passed=%r failed=%r",
+            latest.get("passed"),
+            latest.get("failed"),
+        )
         return False
     return passed + failed > 0
 
@@ -306,7 +325,7 @@ def _quality_gate_reason(state: MangoState) -> str | None:
     if not _conclusive(latest):
         return REASON_INCONCLUSIVE
     # ``_conclusive`` already proved ``latest`` is a dict with valid counts;
-    # re-read through the same helper so the gate never raises on a race.
+    # re-read through the same helper so the gate never raises on bad input.
     if not isinstance(latest, dict):
         return REASON_INCONCLUSIVE
     failed = _nonneg_int_count(latest.get("failed"))

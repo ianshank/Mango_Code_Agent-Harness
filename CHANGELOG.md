@@ -12,11 +12,16 @@ All notable changes to this project will be documented in this file.
 
 ### LangGraph follow-up: conclusive counts fail closed on malformed rows
 
-Copilot review leftovers from PR #87. `_conclusive` now requires both `passed`
-and `failed` to be present non-boolean non-negative integers before summing;
-malformed or incomplete rows grade inconclusive instead of raising or reaching
-`VERIFIED`. CHANGELOG/spec defect counts and skip wording aligned with what
-shipped (six defects; DEC-026 skipif acknowledged).
+Copilot review leftovers from PR #87 / PR #88. `_conclusive` requires both
+`passed` and `failed` to be present non-boolean non-negative integers before
+summing; malformed or incomplete rows (including `None`, `""`, floats, and
+skipped-only `0/0`) grade inconclusive instead of raising or reaching
+`VERIFIED`. `implementer_node` reuses the same count helper when deciding
+whether to append a prior-failure prompt. DEBUG logs name rejected shapes.
+AC-17 pins the malformed matrix. Taxonomy: DEC-052's six numbered themes are
+authoritative; its opening "Five" is stale; write-after-denial amends theme
+(1) / R-LGH-3 rather than a seventh CHANGELOG bullet. DEC-026 `skipif` for
+the optional langgraph extra remains acknowledged.
 
 ### LangGraph: the graph fails closed on errors and on absent evidence
 
@@ -32,6 +37,8 @@ the source.
   (`INV-LG-6`). `INV-LG-3`'s containment is unchanged; what is added is
   consequence, and that invariant is retitled from "Fail-Open" to "Contained"
   Error Channel Routing because the old name read as licensing the outcome.
+  Review on PR #87 further required the blocking-error exit first in
+  `_route_plan_gate`, so a denial costs zero writes (R-LGH-3).
 - **The quality gate no longer passes vacuously.** With no orchestrator,
   `evaluation_node` reports `passed=0, failed=0`; grading by `failed > 0` alone
   made zero executed tests indistinguishable from a green suite — the shape
