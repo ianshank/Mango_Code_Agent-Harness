@@ -24,6 +24,15 @@ regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
 that NS-33 reformatted without refreshing the bundle (the related digest gate
 failure on `main`).
 
+### NS-11: reconcile the regression tier with CONTRACT.md
+
+Moved the coverage-gate shadowing probe and the sibling-suite session-hook
+pytester reproduction into `harness/shared/tests/regression/` (standalone
+modules, not copies). Added `test_regression_tier_pin.py` so
+`make test-regression` fails if either module is missing or the reproduction
+function is defined anywhere under the unit suite. Dropped the duplicate
+`make test-regression` step from `build-full`; the tier still runs once via
+`make ci` / `coverage-python`.
 
 ### Adopt `ruff format` (NS-33 / audit H11)
 
