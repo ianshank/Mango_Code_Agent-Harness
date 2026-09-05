@@ -51,9 +51,7 @@ def utc_today() -> dt.date:
     return dt.datetime.now(dt.timezone.utc).date()
 
 
-def load_module_by_path(
-    path: Path | str, name: str, register: bool = True
-) -> ModuleType:
+def load_module_by_path(path: Path | str, name: str, register: bool = True) -> ModuleType:
     """Import a module from an explicit path.
 
     ``register`` puts the module in ``sys.modules`` (needed when the module
@@ -90,9 +88,7 @@ def imported_module(path: Path | str, name: str) -> Iterator[ModuleType]:
             sys.modules[name] = previous
 
 
-def chat_response(
-    content: str | None = None, tool_calls: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+def chat_response(content: str | None = None, tool_calls: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """An OpenAI-style chat completion response for a mocked bridge."""
     message: dict[str, Any] = {"role": "assistant", "content": content}
     if tool_calls:
@@ -188,9 +184,7 @@ def seed_minimal_decision_records(
     )
     (decisions / f"{dec_id}.md").write_text(record, encoding="utf-8")
     payload = dr.index_payload(dr.load_all(decisions))
-    (decisions / "index.json").write_text(
-        dr.render_index_json(payload), encoding="utf-8"
-    )
+    (decisions / "index.json").write_text(dr.render_index_json(payload), encoding="utf-8")
     (decisions / "index.md").write_text(dr.render_index_md(payload), encoding="utf-8")
 
     if write_skill:
@@ -234,7 +228,5 @@ def ruff_json(args: list[str], timeout: int = 300) -> list[dict]:
             f"ruff returned unparseable JSON for {' '.join(args)}: {exc}\nstdout begins: {result.stdout[:200]!r}"
         ) from exc
     if not isinstance(parsed, list):
-        raise AssertionError(
-            f"ruff JSON output was {type(parsed).__name__}, expected a list"
-        )
+        raise AssertionError(f"ruff JSON output was {type(parsed).__name__}, expected a list")
     return parsed

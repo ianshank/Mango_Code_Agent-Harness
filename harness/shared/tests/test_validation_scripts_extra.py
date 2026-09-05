@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from harness.shared.tests._helpers import seed_minimal_decision_records, utc_today
 from harness.shared.validate_agent_policy import main as validate_agent_policy
 from harness.shared.validate_governance_docs import main as validate_governance_docs
@@ -111,9 +112,7 @@ def temp_workspace(tmp_path: Path) -> Path:
     # Valid Docs (decision SoT is docs/decisions/; thin log kept for consumers)
     (docs / "PROJECT-CHARTER.md").write_text("Charter v1")
     (gov / "decision-log.md").write_text("- DEC-001\n")
-    seed_minimal_decision_records(
-        tmp_path, dec_id="DEC-001", date="2026-01-02", since="2026-01-01"
-    )
+    seed_minimal_decision_records(tmp_path, dec_id="DEC-001", date="2026-01-02", since="2026-01-01")
 
     return tmp_path
 
@@ -129,9 +128,7 @@ def test_agent_policy_valid(temp_workspace):
     validate_agent_policy(policy)
     # Pin that the fixture really is the shape under test, so a fixture that
     # drifted into something trivially valid cannot quietly weaken the suite.
-    assert json.loads(policy.read_text())["agents"], (
-        "fixture declares no agents to validate"
-    )
+    assert json.loads(policy.read_text())["agents"], "fixture declares no agents to validate"
 
 
 def test_agent_policy_missing_roles(temp_workspace):
@@ -157,9 +154,7 @@ def test_agent_policy_missing_high_risk(temp_workspace):
     d = json.loads(p.read_text())
     d["high_risk_actions"] = []
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: high_risk_actions must be declared"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: high_risk_actions must be declared"):
         validate_agent_policy(p)
 
 
@@ -168,9 +163,7 @@ def test_agent_policy_delegation_depth(temp_workspace):
     d = json.loads(p.read_text())
     d["agents"][0]["delegation_depth"] = 10
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: orchestrator exceeds delegation depth"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: orchestrator exceeds delegation depth"):
         validate_agent_policy(p)
 
 
@@ -179,9 +172,7 @@ def test_agent_policy_allowed_not_list(temp_workspace):
     d = json.loads(p.read_text())
     d["agents"][0]["allowed_actions"] = "all"
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: orchestrator has no allowed_actions"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: orchestrator has no allowed_actions"):
         validate_agent_policy(p)
 
 
@@ -227,9 +218,7 @@ def test_agent_policy_missing_rule(temp_workspace):
     d = json.loads(p.read_text())
     d["rules"].pop("self_modify_policy")
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: missing rule self_modify_policy"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: missing rule self_modify_policy"):
         validate_agent_policy(p)
 
 
@@ -238,9 +227,7 @@ def test_agent_policy_self_modify_true(temp_workspace):
     d = json.loads(p.read_text())
     d["rules"]["self_modify_policy"] = True
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: agents may not self-modify policy"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: agents may not self-modify policy"):
         validate_agent_policy(p)
 
 
@@ -249,9 +236,7 @@ def test_agent_policy_secrets_prop_false(temp_workspace):
     d = json.loads(p.read_text())
     d["rules"]["secrets_may_not_be_propagated_to_subagents"] = False
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: secret propagation must be prohibited"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: secret propagation must be prohibited"):
         validate_agent_policy(p)
 
 
@@ -260,9 +245,7 @@ def test_agent_policy_delegation_transfer_false(temp_workspace):
     d = json.loads(p.read_text())
     d["rules"]["delegation_does_not_transfer_authority"] = False
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: delegation must not transfer authority"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: delegation must not transfer authority"):
         validate_agent_policy(p)
 
 
@@ -271,9 +254,7 @@ def test_agent_policy_trace_id_false(temp_workspace):
     d = json.loads(p.read_text())
     d["rules"]["every_side_effect_requires_trace_id"] = False
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="agent-policy: side effects require trace IDs"
-    ):
+    with pytest.raises(SystemExit, match="agent-policy: side effects require trace IDs"):
         validate_agent_policy(p)
 
 
@@ -285,9 +266,7 @@ def test_policy_valid(temp_workspace):
     fixture as well as on the absence of an exception."""
     policy = temp_workspace / ".governance/policy.json"
     validate_policy(policy)
-    assert json.loads(policy.read_text())["target_contract"], (
-        "fixture has no target_contract to validate"
-    )
+    assert json.loads(policy.read_text())["target_contract"], "fixture has no target_contract to validate"
 
 
 def test_policy_missing_key(temp_workspace):
@@ -322,9 +301,7 @@ def test_policy_no_root_trust(temp_workspace):
     d = json.loads(p.read_text())
     d["external_root_of_trust_required"] = False
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="policy: external root of trust must be required"
-    ):
+    with pytest.raises(SystemExit, match="policy: external root of trust must be required"):
         validate_policy(p)
 
 
@@ -333,9 +310,7 @@ def test_policy_no_side_effects(temp_workspace):
     d = json.loads(p.read_text())
     d["agent_defaults"]["deny_unclassified_side_effects"] = False
     p.write_text(json.dumps(d))
-    with pytest.raises(
-        SystemExit, match="policy: unclassified side effects must be denied"
-    ):
+    with pytest.raises(SystemExit, match="policy: unclassified side effects must be denied"):
         validate_policy(p)
 
 
@@ -346,9 +321,7 @@ def test_docs_valid(temp_workspace):
     """Happy path; see test_agent_policy_valid for the fixture assertion."""
     validate_governance_docs(temp_workspace)
     assert (temp_workspace / ".governance/policy.json").is_file()
-    assert json.loads((temp_workspace / ".governance/policy.json").read_text())[
-        "charter_version"
-    ]
+    assert json.loads((temp_workspace / ".governance/policy.json").read_text())["charter_version"]
 
 
 def test_docs_missing_version(temp_workspace):
@@ -374,29 +347,23 @@ def test_docs_missing_skill(temp_workspace):
 
 def test_docs_missing_reviewed(temp_workspace):
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text("No reviewed date")
-    with pytest.raises(
-        SystemExit, match="governance skill has no Reviewed: YYYY-MM-DD"
-    ):
+    with pytest.raises(SystemExit, match="governance skill has no Reviewed: YYYY-MM-DD"):
         validate_governance_docs(temp_workspace)
 
 
 def test_docs_future_reviewed(temp_workspace):
     future = (utc_today() + dt.timedelta(days=1)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {future}\n## Decisions since 2026-01-01\n"
-        "Source of truth: docs/decisions/ (see index.md).\n",
+        f"Reviewed: {future}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/ (see index.md).\n",
     )
-    with pytest.raises(
-        SystemExit, match="governance skill review date is in the future"
-    ):
+    with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
 
 
 def test_docs_stale_reviewed(temp_workspace):
     past = (utc_today() - dt.timedelta(days=91)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {past}\n## Decisions since 2026-01-01\n"
-        "Source of truth: docs/decisions/ (see index.md).\n",
+        f"Reviewed: {past}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/ (see index.md).\n",
     )
     with pytest.raises(SystemExit, match="governance skill review is stale"):
         validate_governance_docs(temp_workspace)
@@ -404,12 +371,8 @@ def test_docs_stale_reviewed(temp_workspace):
 
 def test_docs_missing_since(temp_workspace):
     today = utc_today().isoformat()
-    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {today}\nNo decisions section"
-    )
-    with pytest.raises(
-        SystemExit, match="governance skill lacks Decisions since YYYY-MM-DD section"
-    ):
+    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\nNo decisions section")
+    with pytest.raises(SystemExit, match="governance skill lacks Decisions since YYYY-MM-DD section"):
         validate_governance_docs(temp_workspace)
 
 
@@ -426,12 +389,9 @@ def test_docs_missing_decision_in_skill(temp_workspace):
     today = utc_today().isoformat()
     # Point at docs/decisions without citing index.md so per-id pointers are required.
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {today}\n## Decisions since 2026-01-01\n"
-        "Source of truth: docs/decisions/\nNot here\n",
+        f"Reviewed: {today}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/\nNot here\n",
     )
-    with pytest.raises(
-        SystemExit, match="governance skill is missing recent decisions: DEC-001"
-    ):
+    with pytest.raises(SystemExit, match="governance skill is missing recent decisions: DEC-001"):
         validate_governance_docs(temp_workspace)
 
 

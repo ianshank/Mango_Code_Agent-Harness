@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
+
 from harness.shared.tests._helpers import seed_minimal_decision_records
 
 
@@ -203,9 +204,7 @@ def mock_repo(tmp_path: Path):
             {
                 "enabled": True,
                 "decision_id": "DEC-123",
-                "mappings": [
-                    {"source": "src/test.py", "projection": "docs/specs/test.md"}
-                ],
+                "mappings": [{"source": "src/test.py", "projection": "docs/specs/test.md"}],
             }
         )
     )
@@ -243,32 +242,24 @@ def mock_repo(tmp_path: Path):
 
 
 # --- validate_governance_docs.py ---
-def test_valid_project_passes_gov_docs(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_project_passes_gov_docs(run_script: RunScript, project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "validate_governance_docs.py")
     assert res.returncode == 0
 
 
-def test_missing_doc_fails_gov_docs(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_missing_doc_fails_gov_docs(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / "docs" / "PROJECT-CHARTER.md").unlink()
     res = run_script(project_root, mock_repo, "validate_governance_docs.py")
     assert res.returncode != 0
 
 
 # --- validate_agent_policy.py ---
-def test_valid_agent_policy_passes(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_agent_policy_passes(run_script: RunScript, project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "validate_agent_policy.py")
     assert res.returncode == 0
 
 
-def test_invalid_agent_policy_fails(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_invalid_agent_policy_fails(run_script: RunScript, project_root: Path, mock_repo: Path):
     gov = mock_repo / ".governance"
     (gov / "agent-policy.json").write_text(json.dumps({"bad": "data"}))
     res = run_script(project_root, mock_repo, "validate_agent_policy.py")
@@ -276,24 +267,18 @@ def test_invalid_agent_policy_fails(
     assert "agent-policy:" in res.stderr
 
 
-def test_valid_policy_passes(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_policy_passes(run_script: RunScript, project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "validate_policy.py")
     assert res.returncode == 0
 
 
-def test_missing_policy_fails(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_missing_policy_fails(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "policy.json").unlink()
     res = run_script(project_root, mock_repo, "validate_policy.py")
     assert res.returncode != 0
 
 
-def test_valid_adoption_passes(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_adoption_passes(run_script: RunScript, project_root: Path, mock_repo: Path):
     wf = mock_repo / ".github" / "workflows"
     wf.mkdir(parents=True, exist_ok=True)
     (wf / "ci.yml").write_text("uses: actions/checkout@abc123def456")
@@ -302,9 +287,7 @@ def test_valid_adoption_passes(
     assert "adoption: passed" in res.stdout
 
 
-def test_adoption_blocker_detected(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_blocker_detected(run_script: RunScript, project_root: Path, mock_repo: Path):
     wf = mock_repo / ".github" / "workflows"
     wf.mkdir(parents=True, exist_ok=True)
     (wf / "ci.yml").write_text("PIN_FULL_COMMIT_SHA is here")
@@ -313,18 +296,14 @@ def test_adoption_blocker_detected(
     assert "third-party action SHAs are not pinned" in res.stderr
 
 
-def test_adoption_invalid_root_of_trust_json(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_invalid_root_of_trust_json(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "root-of-trust.json").write_text("not json")
     res = run_script(project_root, mock_repo, "validate_adoption.py")
     assert res.returncode != 0
     assert "root-of-trust.json invalid" in res.stderr
 
 
-def test_adoption_gradle_files_missing(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_gradle_files_missing(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / "build.gradle.kts").write_text("")
     res = run_script(project_root, mock_repo, "validate_adoption.py")
     assert res.returncode != 0
@@ -339,9 +318,7 @@ def test_adoption_commented_remotes_missing_rot_and_lockfile(
     a package.json without pnpm-lock.yaml fails the Node lock check."""
     wf = mock_repo / ".github" / "workflows"
     (wf / "ci.yml").write_text("uses: actions/checkout@abc123def456")
-    (mock_repo / ".governance" / "allowed-remotes.txt").write_text(
-        "# no approved destinations yet\n   \n"
-    )
+    (mock_repo / ".governance" / "allowed-remotes.txt").write_text("# no approved destinations yet\n   \n")
     (mock_repo / ".governance" / "root-of-trust.json").unlink()
     (mock_repo / "package.json").write_text("{}")
     res = run_script(project_root, mock_repo, "validate_adoption.py")
@@ -351,9 +328,7 @@ def test_adoption_commented_remotes_missing_rot_and_lockfile(
     assert "pnpm-lock.yaml missing" in res.stderr
 
 
-def test_adoption_rot_without_external_ref_or_valid_digest(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_rot_without_external_ref_or_valid_digest(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "root-of-trust.json").write_text(
         json.dumps({"external_policy_ref": "", "policy_sha256": "not-a-digest"})
     )
@@ -362,9 +337,7 @@ def test_adoption_rot_without_external_ref_or_valid_digest(
     assert "lacks external policy ref or SHA-256 digest" in res.stderr
 
 
-def test_adoption_rot_valid_but_policy_json_missing(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_rot_valid_but_policy_json_missing(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "policy.json").unlink()
     (mock_repo / ".governance" / "root-of-trust.json").write_text(
         json.dumps(
@@ -379,9 +352,7 @@ def test_adoption_rot_valid_but_policy_json_missing(
     assert ".governance/policy.json missing" in res.stderr
 
 
-def test_adoption_rot_digest_mismatch(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_adoption_rot_digest_mismatch(run_script: RunScript, project_root: Path, mock_repo: Path):
     (mock_repo / ".governance" / "root-of-trust.json").write_text(
         json.dumps(
             {
@@ -395,16 +366,12 @@ def test_adoption_rot_digest_mismatch(
     assert "policy_sha256 does not match local policy.json" in res.stderr
 
 
-def test_valid_projections_pass(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_projections_pass(run_script: RunScript, project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "check_projections.py")
     assert res.returncode == 0
 
 
-def test_missing_projection_fails(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_missing_projection_fails(run_script: RunScript, project_root: Path, mock_repo: Path):
     gov = mock_repo / ".governance"
     (gov / "projections.json").write_text(
         json.dumps(
@@ -420,9 +387,7 @@ def test_missing_projection_fails(
     assert "missing mapping endpoint" in res.stderr
 
 
-def test_projections_disabled_explicitly(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_projections_disabled_explicitly(run_script: RunScript, project_root: Path, mock_repo: Path):
     gov = mock_repo / ".governance"
     (gov / "projections.json").write_text(
         json.dumps(
@@ -439,9 +404,7 @@ def test_projections_disabled_explicitly(
     assert "explicitly not applicable" in res.stdout
 
 
-def test_projections_disabled_without_decision(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_projections_disabled_without_decision(run_script: RunScript, project_root: Path, mock_repo: Path):
     gov = mock_repo / ".governance"
     (gov / "projections.json").write_text(
         json.dumps(
@@ -457,16 +420,12 @@ def test_projections_disabled_without_decision(
     assert "disabled without a decision-log entry" in res.stderr
 
 
-def test_valid_traceability_passes(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_valid_traceability_passes(run_script: RunScript, project_root: Path, mock_repo: Path):
     res = run_script(project_root, mock_repo, "check_traceability.py")
     assert res.returncode == 0
 
 
-def test_missing_requirement_fails(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-):
+def test_missing_requirement_fails(run_script: RunScript, project_root: Path, mock_repo: Path):
     req_file = mock_repo / "docs" / "reqs.md"
     req_file.parent.mkdir(parents=True, exist_ok=True)
     req_file.write_text("R-123")
@@ -485,9 +444,7 @@ def test_missing_requirement_fails(
     assert "missing implementation and/or test citation" in res.stderr
 
 
-def test_validate_specs_default_and_template(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_validate_specs_default_and_template(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from harness.shared import validate_specs
 
     # Test default args (specs_dir is None)
@@ -503,9 +460,7 @@ def test_validate_specs_default_and_template(
     assert res == 0
 
 
-def test_validate_specs_unreadable_file_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_validate_specs_unreadable_file_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from harness.shared import validate_specs
 
     specs_dir = tmp_path / "specs"
@@ -521,8 +476,6 @@ def test_validate_specs_unreadable_file_fails(
     assert res == 1
 
 
-def test_validate_specs_run_script(
-    run_script: RunScript, project_root: Path, mock_repo: Path
-) -> None:
+def test_validate_specs_run_script(run_script: RunScript, project_root: Path, mock_repo: Path) -> None:
     res = run_script(project_root, mock_repo, "validate_specs.py")
     assert res.returncode == 0
