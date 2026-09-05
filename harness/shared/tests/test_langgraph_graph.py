@@ -28,6 +28,7 @@ from harness.shared.langgraph.nodes import (
     CLARIFY_COUNT,
     QUALITY_GATE_REASON,
     REASON_ERROR,
+    REASON_INCONCLUSIVE,
     evaluation_node,
     implementer_node,
     plan_gate_node,
@@ -176,12 +177,36 @@ class TestQualityGateRoutingOnBlockingError:
         assert _route_quality_gate(state) == "escalate"
 
     def test_a_failing_suite_still_retries(self) -> None:
-        """The reason matters: only ``error`` skips the revision loop."""
+        """The reason matters: a failing suite is the *only* retryable one,
+        because the implementer is handed the failure message and can act on
+        it."""
         state = {
             "gate_status": {"quality_gate": "fail", QUALITY_GATE_REASON: "tests_failed"},
             "revision_count": 0,
         }
         assert _route_quality_gate(state) == "implementer"
+
+    def test_inconclusive_is_terminal_too(self) -> None:
+        """R-LGH-8. The first version treated only ``error`` as terminal, so an
+        inconclusive result fell through to the revision loop — and nothing
+        inside the loop can supply the evidence it lacks, so every retry ran the
+        write-capable implementer to produce another `passed=0, failed=0` row.
+        Found by review on PR #87."""
+        state = {
+            "gate_status": {"quality_gate": "fail", QUALITY_GATE_REASON: REASON_INCONCLUSIVE},
+            "revision_count": 0,
+        }
+        assert _route_quality_gate(state) == "escalate"
+
+    def test_an_unrecognised_reason_is_terminal(self) -> None:
+        """The set is stated as *retryable*, so a reason added later is terminal
+        until someone argues otherwise — which is the failure mode above,
+        inverted."""
+        state = {
+            "gate_status": {"quality_gate": "fail", QUALITY_GATE_REASON: "some_future_reason"},
+            "revision_count": 0,
+        }
+        assert _route_quality_gate(state) == "escalate"
 
 
 class TestRuntimeConfig:

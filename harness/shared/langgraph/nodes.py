@@ -42,12 +42,25 @@ from harness.shared.langgraph.state import MangoState
 QUALITY_GATE_REASON = "quality_gate_reason"
 CLARIFY_COUNT = "clarify_count"
 
-#: Why ``quality_gate_node`` withheld a pass. ``REASON_ERROR`` is terminal —
-#: ``errors`` is an ``operator.add`` accumulator no node clears, so a retry
-#: cannot remove the record that failed the gate (R-LGH-3).
+#: Why ``quality_gate_node`` withheld a pass.
 REASON_ERROR = "error"
 REASON_INCONCLUSIVE = "inconclusive"
 REASON_TESTS_FAILED = "tests_failed"
+
+#: The only reason a revision can fix, and therefore the only one that may
+#: spend revision budget. Stated as the *retryable* set rather than the
+#: terminal one so that a new reason is terminal until someone argues
+#: otherwise — the first version listed the terminal reason instead, and
+#: ``REASON_INCONCLUSIVE`` fell through to the retry loop by omission.
+#:
+#: A failing suite is retryable because the implementer is handed the failure
+#: message and can act on it. The other two are not: ``errors`` is an
+#: ``operator.add`` accumulator no node clears, so the record that failed the
+#: gate is still there next pass; and an inconclusive result means the
+#: verification path produced no evidence, which nothing inside the loop can
+#: change. Retrying either spends a write-capable revision per attempt to
+#: reach the same terminal (R-LGH-3, R-LGH-8).
+RETRYABLE_REASONS = frozenset({REASON_TESTS_FAILED})
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +409,7 @@ __all__ = [
     "REASON_ERROR",
     "REASON_INCONCLUSIVE",
     "REASON_TESTS_FAILED",
+    "RETRYABLE_REASONS",
     "clarify_node",
     "escalate_node",
     "implementer_node",

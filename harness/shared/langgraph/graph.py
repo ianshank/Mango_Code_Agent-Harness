@@ -41,7 +41,7 @@ from harness.shared.langgraph.errors import blocking_error
 from harness.shared.langgraph.nodes import (
     CLARIFY_COUNT,
     QUALITY_GATE_REASON,
-    REASON_ERROR,
+    RETRYABLE_REASONS,
     _get_configurable,
     clarify_node,
     escalate_node,
@@ -131,12 +131,15 @@ def _route_quality_gate(
     gate_status = state.get("gate_status", {})
     if gate_status.get("quality_gate") == "pass":
         return str(END)
-    if gate_status.get(QUALITY_GATE_REASON) == REASON_ERROR:
-        # Terminal, not retryable: `errors` is an `operator.add` accumulator
-        # that no node clears, so the record that failed this gate is still
-        # there on the next pass. Routing to `implementer` would spend every
-        # revision in the budget to arrive at the same `escalate` (R-LGH-3).
-        logger.warning("quality_gate failed on a blocking error; escalating without retry")
+    reason = gate_status.get(QUALITY_GATE_REASON)
+    if reason is not None and reason not in RETRYABLE_REASONS:
+        # Only a failing suite is worth another revision. A blocking error and an
+        # absence of evidence are both terminal, and retrying either spends a
+        # *write-capable* revision per attempt to reach the same `escalate` — an
+        # inconclusive run wrote five patches under `max_iterations=5` and
+        # produced five identical `passed=0, failed=0` rows before stopping
+        # (R-LGH-8; found by review on PR #87).
+        logger.warning("quality_gate failed with terminal reason %r; escalating without retry", reason)
         return "escalate"
     configurable = _get_configurable(config, kwargs)
     policy: GraphPolicy = configurable.get("policy") or GraphPolicy()

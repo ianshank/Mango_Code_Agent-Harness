@@ -113,7 +113,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
 │   │   │   ├── indirect_exec.py         # make/pnpm/npx argument grading: no indirect shell via test_execute
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (3,760 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (3,840 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_langgraph_regression.py      # 37 tests: StateGraph invariants, calling, reductions & fail-closed verdict
@@ -203,7 +203,7 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
           /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
 ```
 
-- **Total Automated Tests:** **3,883 automated tests** (123 Vitest + 3,760 Pytest across 7 tiers), measured 2026-09-04 by `pnpm exec vitest run` and `pytest --collect-only` on the Phase B head. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
+- **Total Automated Tests:** **3,963 automated tests** (123 Vitest + 3,840 Pytest across 7 tiers), measured 2026-09-05 by `pnpm exec vitest run` and `pytest --collect-only` on the fail-open-hardening head; `--collect-only` reports `3833/3840 tests collected (7 deselected)`, and the collected figure is the one paired with Vitest's, which likewise counts its 11 skipped among 123. Re-measured because updating a child count without its parents is how the previous disagreement started. The two counts in this file disagreed before this measurement (3,107 here, 3,131 in the tree above) and both were stale — a figure nobody re-measures is a claim, which is the failure DEC-024 names
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
 - **Python AQA Coverage:** **99.20% Lines | 97.91% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 82 files with all 79 gated files meeting the per-file floor and **none waived**. Measured 2026-09-04 on Python 3.11 with the `langgraph` extra installed — the configuration `build-full` runs, re-measured after the fail-closed-verdict change rather than carried forward. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached

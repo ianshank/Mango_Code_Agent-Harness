@@ -28,6 +28,8 @@ from harness.shared.langgraph.errors import error_record
 from harness.shared.langgraph.graph import runtime_config
 from harness.shared.langgraph.nodes import (
     CLARIFY_COUNT,
+    QUALITY_GATE_REASON,
+    REASON_INCONCLUSIVE,
     clarify_node,
     escalate_node,
     evaluation_node,
@@ -418,3 +420,52 @@ class TestClarifyCycleTerminates:
         )
 
         assert output["gate_status"][CLARIFY_COUNT] == 5
+
+
+class TestInconclusiveDoesNotBuyRetries:
+    """docs/specs/langgraph-fail-open-hardening.md R-LGH-8.
+
+    An inconclusive result is an absence of evidence, and nothing inside the
+    revision loop can supply it: with no orchestrator in ``configurable``,
+    ``evaluation_node`` returns `passed=0, failed=0` on every pass, and the
+    configuration cannot change mid-run. Treating only `error` as terminal
+    therefore bought a *guaranteed* sequence of unverified writes — under
+    ``max_iterations=5`` the run spent five revisions and wrote five patches to
+    produce five identical rows before escalating. Found by review on PR #87.
+    """
+
+    def test_an_inconclusive_run_does_not_write_once_per_revision(self) -> None:
+        import harness.shared.langgraph.graph as graph_module
+
+        graph = graph_module.build_graph()
+        output = graph.invoke(
+            {**DEFAULT_STATE, "task": "demo"},
+            config=graph_module.runtime_config(GraphPolicy(max_iterations=5)),
+        )
+
+        assert output["verdict"] == BLOCKED
+        assert output["gate_status"][QUALITY_GATE_REASON] == REASON_INCONCLUSIVE
+        # One pass through the implementer is unavoidable: the plan gate passes
+        # and no evidence exists until `test_eval` has run once. What must not
+        # happen is a write per revision thereafter.
+        assert output["revision_count"] == 1, (
+            f"an inconclusive run spent {output['revision_count']} revisions; "
+            "retrying cannot supply the evidence it lacks"
+        )
+        assert len(output["patches"]) == 1
+        assert len(output["test_results"]) == 1
+
+    def test_the_cap_does_not_change_the_count(self) -> None:
+        """A higher cap must not buy more unverified writes — the old behaviour
+        scaled the damage with `max_iterations`."""
+        import harness.shared.langgraph.graph as graph_module
+
+        graph = graph_module.build_graph()
+        counts = []
+        for cap in (2, 5, 9):
+            out = graph.invoke(
+                {**DEFAULT_STATE, "task": "demo"},
+                config=graph_module.runtime_config(GraphPolicy(max_iterations=cap)),
+            )
+            counts.append(out["revision_count"])
+        assert counts == [1, 1, 1], f"revision count tracked the cap: {counts}"

@@ -27,6 +27,14 @@ decided once here rather than re-derived by each reader:
 
 An unrecognised node name grades as *blocking*: a node this module has never
 heard of is not evidence that its failure is safe to ignore (R-LGH-6).
+
+The node's classification is a **floor**, not a default. A record may raise
+itself to blocking by declaring ``blocking: True``; nothing it declares can
+lower it below what its node says, and a non-boolean flag is not a declaration
+at all. Reading the flag as a default is how the first version of this module
+let a hand-written or adopter-supplied ``blocking: False`` walk a control-plane
+denial — and an unrecognised node — straight through the gate, contradicting
+the paragraph above (found by review on PR #87).
 """
 
 from __future__ import annotations
@@ -70,6 +78,8 @@ def error_record(node: str, error: object, traceback_text: str = "") -> dict[str
     ``node`` is stored as given — the existing regression suite pins the exact
     strings nodes record — while ``blocking`` is derived from its normalised
     form, so the two producers agree without either changing what it stores.
+    The stored flag is a convenience for readers; :func:`blocking_error` does
+    not trust it below the node's own classification.
     """
     return {
         "node": node,
@@ -91,7 +101,16 @@ def blocking_error(errors: Iterable[Any] | None) -> dict[str, Any] | None:
         if not isinstance(entry, dict):
             return error_record("", entry)
         node = entry.get("node", "")
-        if entry.get("blocking", is_blocking_node(node if isinstance(node, str) else "")):
+        floor = is_blocking_node(node if isinstance(node, str) else "")
+        # The node classification is a *floor*, not a default. Reading the flag
+        # with `entry.get("blocking", floor)` let a record carrying
+        # `blocking: False` clear a control-plane node — and an unrecognised one
+        # — straight through the gate, which is the opposite of what this
+        # module's own docstring promises. A record may make itself *stricter*
+        # by declaring `True`; it may never make itself laxer than its node.
+        # Anything that is not a bool is not a declaration, so the floor stands
+        # (R-LGH-6; found by review on PR #87).
+        if floor or entry.get("blocking") is True:
             return entry
     return None
 

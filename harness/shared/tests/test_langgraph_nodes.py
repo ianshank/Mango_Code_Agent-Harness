@@ -354,6 +354,32 @@ class TestErrorClassification:
         assert error_record("some_future_node", "x")["blocking"] is True
         assert blocking_error([{"node": "some_future_node", "error": "x"}]) is not None
 
+    def test_an_explicit_false_cannot_lower_a_control_plane_record(self) -> None:
+        """The node classification is a floor, not a default.
+
+        Reading the flag as a default let ``{"node": "planner", "blocking":
+        False}`` — hand-written, or supplied by an adopter's state — walk a
+        control-plane denial straight through the gate, contradicting the
+        module's own guarantee. Found by review on PR #87.
+        """
+        assert blocking_error([{"node": "planner", "blocking": False}]) is not None
+        assert blocking_error([{"node": "implementer", "blocking": False}]) is not None
+
+    def test_an_explicit_false_cannot_lower_an_unknown_node(self) -> None:
+        assert blocking_error([{"node": "who_is_this", "blocking": False}]) is not None
+
+    def test_an_explicit_true_may_raise_an_observation_record(self) -> None:
+        """The floor may be raised, only never lowered."""
+        assert blocking_error([{"node": "shadow_planner", "blocking": True}]) is not None
+
+    @pytest.mark.parametrize("flag", ["yes", 1, 0, None, [], {}])
+    def test_a_non_boolean_flag_is_not_a_declaration(self, flag: object) -> None:
+        """Only ``True`` raises the floor; anything else leaves the node to decide,
+        so a truthy string cannot block an observation node and a falsy one
+        cannot clear a control-plane node."""
+        assert blocking_error([{"node": "shadow_planner", "blocking": flag}]) is None
+        assert blocking_error([{"node": "planner", "blocking": flag}]) is not None
+
     def test_record_without_a_blocking_key_is_graded_by_its_node(self) -> None:
         """Records written before this classification existed, or by an adopter."""
         assert blocking_error([{"node": "shadow_planner", "error": "x"}]) is None

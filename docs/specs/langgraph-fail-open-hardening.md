@@ -168,7 +168,16 @@ change below survives R-SR-27's relocation of this package under
 - R-LGH-6: Every error record written by a node or a decorator MUST carry its
   own blocking classification, so a single definition decides R-LGH-1 for both
   producers and no caller infers terminality from the node name at the point of
-  reading.
+  reading. The node's classification MUST be a **floor**: a record may declare
+  itself blocking, and MUST NOT be able to declare itself less blocking than
+  its node, since a record is data the graph is handed rather than a
+  judgement it made.
+- R-LGH-8: Only a failing test suite MUST be retryable. A blocking error and
+  an inconclusive result MUST route to `escalate` on the first occurrence,
+  because neither can be changed from inside the revision loop and each retry
+  runs the **write-capable** implementer. The set MUST be expressed as the
+  retryable reasons rather than the terminal ones, so a reason added later is
+  terminal until someone argues otherwise.
 - C-LGH-1: The change MUST NOT alter `build_graph`'s node count, its
   `add_conditional_edges` count, or its `compile()` call signature, all pinned
   by `test_build_graph_assembles_nodes_and_edges`, which the policy-wiring
@@ -240,6 +249,17 @@ change below survives R-SR-27's relocation of this package under
       compiled graph is silently denied its `config` — verified by
       `pytest harness/shared/tests/test_langgraph_graph.py -k emits_no_injection_warning`
       · stage: `make coverage-python` (R-LGH-7)
+- [x] AC-15: a record declaring `blocking: False` on a control-plane or
+      unrecognised node still blocks, an explicit `True` raises an
+      observation-plane record, and a non-boolean flag leaves the node to
+      decide — verified by
+      `pytest harness/shared/tests/test_langgraph_nodes.py -k TestErrorClassification`
+      · stage: `make coverage-python` (R-LGH-6)
+- [x] AC-16: an inconclusive run escalates after one revision and one patch
+      whatever `max_iterations` says, where it previously wrote one patch per
+      revision up to the cap — verified by
+      `pytest harness/shared/tests/regression/test_langgraph_regression.py -k TestInconclusiveDoesNotBuyRetries`
+      · stage: `make coverage-python` (R-LGH-8)
 - [x] AC-14: a run whose planner is denied reaches `BLOCKED` with
       `revision_count == 0` and an empty `patches` channel, so the
       write-capable implementer never executes after a denial — verified by
