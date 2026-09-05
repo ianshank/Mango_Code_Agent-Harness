@@ -225,7 +225,8 @@ the tool bridge (audit M2). Phase B's MCP slice already serves one registry to
 both transports (R-SR-15).
 
 **Evidence.** `.mango/agents/nemotron-reasoner.md`;
-`harness/shared/orchestrator/loop.py`; `harness/shared/tool_schemas.py`.
+`harness/shared/orchestrator/loop.py`; `harness/shared/tool_schemas.py`;
+`docs/specs/reasoner-bridge-tool-parity.md`.
 
 **Done when.** Runtime system prompt tool paragraph is generated from
 `NEMOTRON_TOOLS`; prompt sha logged on `run_id` events; tests fail when the
