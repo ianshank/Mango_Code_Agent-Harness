@@ -156,9 +156,9 @@ class TestOnlyKnownHooksExecute:
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError):
             orch.hook_runner.run_hook("post-attacker-run")
-        assert not (
-            mock_workspace / "planted_marker.txt"
-        ).exists(), "an unlisted hook executed; the allowlist is not reached before the spawn"
+        assert not (mock_workspace / "planted_marker.txt").exists(), (
+            "an unlisted hook executed; the allowlist is not reached before the spawn"
+        )
 
     @pytest.mark.parametrize("name", sorted(PERMITTED_HOOK_NAMES))
     def test_every_permitted_hook_still_runs(self, name: str, mock_workspace: Path) -> None:
@@ -326,6 +326,24 @@ class TestPermittedHookMissingLogsDebug:
         assert any(
             "missing on disk" in rec.getMessage() and "post-planner-run" in rec.getMessage() for rec in caplog.records
         ), "expected DEBUG when a permitted post-run script is absent"
+
+    def test_directory_named_like_hook_is_skipped_not_executed(self, mock_workspace, caplog):
+        """A directory at the hook path must not be treated as an executable script."""
+        import logging
+
+        from harness.shared.agent_prompts import PRE_RUN_HOOK
+        from harness.shared.orchestrator.hook_runner import HookRunner
+
+        hooks = mock_workspace / ".mango" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        decoy = hooks / f"{PRE_RUN_HOOK}.sh"
+        decoy.mkdir()  # directory, not a file
+        runner = HookRunner(workspace_dir=mock_workspace, hooks_dir=hooks, tool_timeout=5)
+        with caplog.at_level(logging.DEBUG):
+            runner.run_hook(PRE_RUN_HOOK, status="success")
+        assert "not a file" in caplog.text or "skipping" in caplog.text
+        # Must not have attempted to plant side effects via bash on a directory
+        assert not (mock_workspace / "planted_marker.txt").exists()
 
 
 def _repo_hooks_dir() -> Path:

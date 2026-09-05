@@ -144,9 +144,9 @@ class TestSkillsAreDated:
         # touched. The assertion exists to catch a typo'd year, not to police
         # the hour, so a day of tolerance costs it nothing.
         today_utc = datetime.now(timezone.utc).date()
-        assert reviewed <= today_utc + timedelta(
-            days=1
-        ), f"{name} claims a review date in the future: {reviewed} > {today_utc}"
+        assert reviewed <= today_utc + timedelta(days=1), (
+            f"{name} claims a review date in the future: {reviewed} > {today_utc}"
+        )
 
     @pytest.mark.parametrize("name", _skill_names())
     def test_reviewed_line_is_inside_the_frontmatter(self, name: str) -> None:
@@ -168,9 +168,9 @@ class TestEverySkillIsWiredOrDeclared:
     @pytest.mark.parametrize("name", sorted(WIRED_SKILLS))
     def test_wired_skill_is_actually_named_by_make_review(self, name: str) -> None:
         """Claiming a skill is wired is cheap; this checks the claim."""
-        assert name in (REPO / "Makefile").read_text(
-            encoding="utf-8"
-        ), f"{name} is listed as wired but the Makefile never names it"
+        assert name in (REPO / "Makefile").read_text(encoding="utf-8"), (
+            f"{name} is listed as wired but the Makefile never names it"
+        )
 
     @pytest.mark.parametrize("name", sorted(STANDALONE_SKILLS))
     def test_standalone_reason_is_substantive(self, name: str) -> None:
@@ -323,15 +323,15 @@ class TestSessionStartPreparesTheGates:
         the install aborted it left mypy and pytest missing with nothing said
         (2026 standards audit, §2). Same recipe, same artefacts, same hashes."""
         text = self.HOOK.read_text(encoding="utf-8")
-        assert (
-            "python -m pip install --quiet --require-hashes -r requirements-lock.txt" in text
-        ), "the hook does not install the hashed lock with --require-hashes"
-        assert (
-            "python -m pip install --quiet -e . --no-deps" in text
-        ), "the editable install must not re-resolve the ranges over the lock (--no-deps)"
-        assert not re.search(
-            r"pip install .*-r requirements-dev\.txt", text
-        ), "the hook still installs requirements-dev.txt directly, which is unhashed and unlocked"
+        assert "python -m pip install --quiet --require-hashes -r requirements-lock.txt" in text, (
+            "the hook does not install the hashed lock with --require-hashes"
+        )
+        assert "python -m pip install --quiet -e . --no-deps" in text, (
+            "the editable install must not re-resolve the ranges over the lock (--no-deps)"
+        )
+        assert not re.search(r"pip install .*-r requirements-dev\.txt", text), (
+            "the hook still installs requirements-dev.txt directly, which is unhashed and unlocked"
+        )
 
     @POSIX_ONLY
     @pytest.mark.parametrize(
@@ -353,9 +353,9 @@ class TestSessionStartPreparesTheGates:
         """
         result = self._run_with_fake_python(tmp_path, failing_step=failing_step)
         assert result.returncode != 0, "a failed install must not leave the hook reporting success"
-        assert (
-            f"session-start: FAILED — 'python -m pip install {named_command}' exited non-zero" in result.stderr
-        ), f"the failure line does not name the step that failed:\n{result.stderr}"
+        assert f"session-start: FAILED — 'python -m pip install {named_command}' exited non-zero" in result.stderr, (
+            f"the failure line does not name the step that failed:\n{result.stderr}"
+        )
 
     @POSIX_ONLY
     def test_a_successful_install_is_silent_about_failure(self, tmp_path: Path) -> None:
@@ -604,9 +604,9 @@ class TestHookNamespacePartition:
             "top of every agent turn and HookRunner.run_hook no-ops when the script is absent, "
             "so the governance validation it runs would silently stop happening."
         )
-        assert "validate_invariants.py" in hook.read_text(
-            encoding="utf-8"
-        ), f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
+        assert "validate_invariants.py" in hook.read_text(encoding="utf-8"), (
+            f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
+        )
 
     def test_every_post_run_hook_exists_on_disk(self) -> None:
         """NS-21: every permitted post-*-run name has a tracked script, or observation is gone."""
@@ -621,9 +621,9 @@ class TestHookNamespacePartition:
             "silently stop appearing."
         )
         recorder = self.MANGO_HOOKS / "lib" / "record_post_run.sh"
-        assert (
-            recorder.is_file()
-        ), f"{recorder.relative_to(REPO)} is missing; the thin post-*-run entrypoints need the shared recorder body"
+        assert recorder.is_file(), (
+            f"{recorder.relative_to(REPO)} is missing; the thin post-*-run entrypoints need the shared recorder body"
+        )
 
     def test_post_run_hooks_are_not_settings_registered(self) -> None:
         """Orchestrator post-run hooks must not wake via .mango/settings.json (DEC-003)."""
