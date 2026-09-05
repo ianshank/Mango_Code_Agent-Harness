@@ -145,6 +145,7 @@ class TestGenerateDecisionIndex:
         gdi.main(["--root", str(tmp_path)])
         script = Path(gdi.__file__).resolve()
         runpy.run_path(str(script), run_name="__main__")
+        assert (tmp_path / "docs/decisions/index.md").is_file()
 
 
 class TestValidateGovernanceDocsExtraBranches:
