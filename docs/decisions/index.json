@@ -1,0 +1,691 @@
+{
+  "decisions": [
+    {
+      "id": "DEC-000",
+      "status": "accepted",
+      "date": "2026-08-24",
+      "title": "Projections are explicitly not applicable in the uninstantiated template",
+      "path": "docs/decisions/DEC-000.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "template-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-001",
+      "status": "accepted",
+      "date": "2026-08-26",
+      "title": "Live smoke tests against remote NVIDIA NIM API are conditionally skipped when endpoints are rate-lim",
+      "path": "docs/decisions/DEC-001.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "ai-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-002",
+      "status": "accepted",
+      "date": "2026-08-27",
+      "title": "`protected_paths` covers the agent control surface and carries root-relative twins for the multi-sta",
+      "path": "docs/decisions/DEC-002.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-003",
+      "status": "accepted",
+      "date": "2026-08-27",
+      "title": "The unbound `.mango/hooks/` scripts remain dormant",
+      "path": "docs/decisions/DEC-003.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-004",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "Unwired policy keys are classified with reviewed reasons instead of deleted",
+      "path": "docs/decisions/DEC-004.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-005",
+      "status": "superseded",
+      "date": "2026-08-28",
+      "title": "The MAS orchestrator consults the PreToolUse guard in-process from the installed harness, never from",
+      "path": "docs/decisions/DEC-005.md",
+      "supersedes": [],
+      "superseded_by": "DEC-056",
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-006",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "The guard canonicalises its payload envelope across `tool_input` and `args` and denies a JSON object",
+      "path": "docs/decisions/DEC-006.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-007",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "`protected_paths` is enforced at tool-call time by the write gate, not only by CI",
+      "path": "docs/decisions/DEC-007.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-008",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "Role tool exposure is derived from `agent-policy.json` (union of canonical contracts minus approval-",
+      "path": "docs/decisions/DEC-008.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-009",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "The policy decision point runs in process",
+      "path": "docs/decisions/DEC-009.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-010",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "A command's action is derived from the command and fails closed to an action no role holds",
+      "path": "docs/decisions/DEC-010.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-011",
+      "status": "accepted",
+      "date": "2026-08-28",
+      "title": "`run_command` routes through `ExecutionBroker`, so INV-8 is enforced on the live path",
+      "path": "docs/decisions/DEC-011.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-012",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "`read_file` and `apply_patch` join the tool surface behind a new `read_policy.py`, the read-side cou",
+      "path": "docs/decisions/DEC-012.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-013",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "A local bare `ruff` resolving to 0.15.8 (vs",
+      "path": "docs/decisions/DEC-013.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-014",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "`make secrets`'s `gitleaks git` invocation (all three Makefiles) scanned every ref in the local clon",
+      "path": "docs/decisions/DEC-014.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-015",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "GitHub Copilot's review of PR #35 found six real defects in the DEC-013/DEC-014 batch, all fixed her",
+      "path": "docs/decisions/DEC-015.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-016",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "DEC-015's `PIP_AUDIT_VERSION` pin (2.10.1) broke the new `audit-matrix` job's 3.9 leg immediately: `",
+      "path": "docs/decisions/DEC-016.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-017",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "`audit-matrix`'s first real run found 7 known CVEs across `starlette`/`click`/`python-dotenv`, all r",
+      "path": "docs/decisions/DEC-017.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-018",
+      "status": "accepted",
+      "date": "2026-08-30",
+      "title": "`NEXT_STEPS.md`'s required-status-check list (for the still-unapplied branch ruleset) was accurate w",
+      "path": "docs/decisions/DEC-018.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-019",
+      "status": "accepted",
+      "date": "2026-08-31",
+      "title": "The triplicated `digest()` helper across the three control-plane scripts is confirmed intentional (e",
+      "path": "docs/decisions/DEC-019.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-020",
+      "status": "accepted",
+      "date": "2026-08-31",
+      "title": "New gate-like modules land under `harness/shared/gates/` going forward",
+      "path": "docs/decisions/DEC-020.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-021",
+      "status": "accepted",
+      "date": "2026-08-31",
+      "title": "A coverage-regression check was implemented via `scheduled-drift.yml`'s nightly `main-drift` loop (`",
+      "path": "docs/decisions/DEC-021.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-022",
+      "status": "accepted",
+      "date": "2026-08-31",
+      "title": "Two second-round audit findings evaluated individually rather than mechanically fixed: `verification",
+      "path": "docs/decisions/DEC-022.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-023",
+      "status": "accepted",
+      "date": "2026-09-01",
+      "title": "PR #55's unconditional `mcp>=1.0.0,<3.0` in `requirements.txt` broke CI two ways: Python 3.9 (no pub",
+      "path": "docs/decisions/DEC-023.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-024",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "PR #60 merged with every CI run on its head red under a commit message claiming `make ci` and mypy c",
+      "path": "docs/decisions/DEC-024.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-025",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "Constant triage: every operational constant the audit found unlinked is now a policy value (`process",
+      "path": "docs/decisions/DEC-025.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-026",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "Python skip accounting: `conftest.py` writes every pytest skip to a TSV that `make verify-zero-skips",
+      "path": "docs/decisions/DEC-026.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-027",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "`autonomous_healing.py` and `lats_optimizer.py` parked under `harness/shared/experimental/` (unchang",
+      "path": "docs/decisions/DEC-027.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-028",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "The Python 3.9 floor stays",
+      "path": "docs/decisions/DEC-028.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-029",
+      "status": "superseded",
+      "date": "2026-09-02",
+      "title": "DEC-020 stands: `harness/shared/` is not regrouped (cyclic on the real import graph",
+      "path": "docs/decisions/DEC-029.md",
+      "supersedes": [],
+      "superseded_by": "DEC-056",
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-030",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "The Python skip-evidence hooks (DEC-026) and the langgraph deselection live in the repository-root `",
+      "path": "docs/decisions/DEC-030.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-031",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "Dependabot PRs #38–#46 closed as superseded by the universal lock and the Phase 1 toolchain bump (ev",
+      "path": "docs/decisions/DEC-031.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-032",
+      "status": "accepted",
+      "date": "2026-09-02",
+      "title": "Post-implementation review found four gates that could report PASS on absent or wrong evidence, all ",
+      "path": "docs/decisions/DEC-032.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-033",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "The `pip` ecosystem is removed from `.github/dependabot.yml`, completing DEC-031 instead of restatin",
+      "path": "docs/decisions/DEC-033.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-034",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "`make lint-node` is wired into `make ci`, and the recorded blocker was not the real one",
+      "path": "docs/decisions/DEC-034.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-035",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "`coverage_gate.py` (470/500 lines) splits into threshold enforcement and `coverage_scope.py` (which ",
+      "path": "docs/decisions/DEC-035.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-036",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "`nemotron.top_p` becomes a policy key read by both stacks",
+      "path": "docs/decisions/DEC-036.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-037",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "`retry.ts`'s `JITTER_CEILING_MS` is a true constant, recorded separately because DEC-025 names neith",
+      "path": "docs/decisions/DEC-037.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-038",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "The protected-path attestation table is derived and verified, not transcribed",
+      "path": "docs/decisions/DEC-038.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-039",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "Seven operational defaults accepted as true constants, and the constant inventory made complete",
+      "path": "docs/decisions/DEC-039.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-040",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "The attestation check reads the PR description from the API, not `github.event.pull_request.body`, a",
+      "path": "docs/decisions/DEC-040.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-041",
+      "status": "accepted",
+      "date": "2026-09-03",
+      "title": "`test_verify_zero_skips.py` (684/700 lines) splits at its own section banner: the `unique_id_glob` c",
+      "path": "docs/decisions/DEC-041.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-042",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The containment layer grades the words the shell produces, not the command text",
+      "path": "docs/decisions/DEC-042.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-043",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "A _present_ policy that has lost a key fails closed in every Python reader, matching `policy.ts`",
+      "path": "docs/decisions/DEC-043.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-044",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "`main`'s ruleset drops the human-approval rules and keeps the nine required checks",
+      "path": "docs/decisions/DEC-044.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-045",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "Every `uses:` in `.github/workflows/` is a 40-hex commit SHA with the version comment Dependabot wri",
+      "path": "docs/decisions/DEC-045.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-046",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The thirteen open Dependabot pull requests are dispositioned, and R-CQ-2's premise for five was wron",
+      "path": "docs/decisions/DEC-046.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-047",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The lock pins artefacts, not just versions, and `audit-python` scans the lock alone",
+      "path": "docs/decisions/DEC-047.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-048",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The 2026 standards audit's gate-runner and test-hygiene slice",
+      "path": "docs/decisions/DEC-048.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-049",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The verdict was forgeable by the agent it judges",
+      "path": "docs/decisions/DEC-049.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-050",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "One slice of the 2026 standards-audit remediation (H16, M1, H6, H7, M25)",
+      "path": "docs/decisions/DEC-050.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-051",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The verification grader is imported from the toolchain, not the workspace, and the digested set is t",
+      "path": "docs/decisions/DEC-051.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-052",
+      "status": "accepted",
+      "date": "2026-09-04",
+      "title": "The LangGraph graph fails closed on a recorded error and on absent evidence",
+      "path": "docs/decisions/DEC-052.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-053",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "`harness/shared/langgraph/` is parked under `harness/shared/experimental/langgraph/` with PEP 562 sh",
+      "path": "docs/decisions/DEC-053.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-054",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "`harness/jvm/` is relocated to `docs/adopters/jvm-template/` (Memo 2 option B / R-SR-26 / NS-31)",
+      "path": "docs/decisions/DEC-054.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-055",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "The `openspec/` tree is folded into `docs/specs/` and deleted (Memo 3 option Y / R-SR-28 / NS-31)",
+      "path": "docs/decisions/DEC-055.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-056",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "Per-stack governance mirroring collapses to a root `.governance/` plus `--workspace` on shared gates",
+      "path": "docs/decisions/DEC-056.md",
+      "supersedes": [
+        "DEC-005",
+        "DEC-029"
+      ],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    }
+  ]
+}

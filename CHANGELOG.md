@@ -10,6 +10,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### NS-34: decision records under docs/decisions/
+
+Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`
+with YAML frontmatter (`id`, `status`, `date`, `supersedes`, `superseded_by`,
+`owners`) and Context / Decision / Consequences sections. Generated
+`index.md` / `index.json` are the machine SoT for validators; the node
+`.governance/decision-log.md` becomes a thin ID index for `--decision-log`
+consumers; the jvm log is a pointer only (no divergent SoT).
+`validate_governance_docs.py` fails closed on missing status, unparseable
+`supersedes`, index drift, or a governance skill that restates decision
+bodies. `GOVERNANCE_SKILL.md` (node + jvm) points at `docs/decisions/`.
+`generate_decision_index.py` regenerates the index and thin log.
+Constant-triage reads record files instead of the pipe log. Roadmap: NS-34
+and NS-17 move to Delivered (NS-17 landed on #97).
+
 ### NS-21: post-turn hooks record status and tool-call spend
 
 Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`

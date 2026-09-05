@@ -1,5 +1,6 @@
 # Governance Decision Log
 
-Format: `YYYY-MM-DD | ID | decision | owner`
+> **Moved.** Source of truth is repository-root [`docs/decisions/`](../../../docs/decisions/).
+> The jvm stack does not keep a divergent decision SoT.
 
-2026-08-24 | DEC-000 | Template has no generated projections until an adopter configures mappings | template-maintainers
+Known decision IDs: see `docs/decisions/index.md`.

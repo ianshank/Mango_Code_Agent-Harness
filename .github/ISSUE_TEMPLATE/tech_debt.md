@@ -19,11 +19,11 @@ assignees: ''
 
 ## Is this already tracked?
 
-<!-- Check NEXT_STEPS.md, docs/specs/, and harness/node/.governance/decision-log.md
+<!-- Check NEXT_STEPS.md, docs/specs/, and docs/decisions/index.md
      before filing — a large fraction of findings here are already known and
      either fixed or deliberately deferred with a documented reason. -->
 
 ## Suggested next step
 
-<!-- A spec (`make spec NAME=...`), a small direct fix, or a decision-log entry
+<!-- A spec (`make spec NAME=...`), a small direct fix, or a `docs/decisions/` record
      recording it as accepted debt. -->
