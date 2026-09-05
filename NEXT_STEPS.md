@@ -217,20 +217,39 @@ PR #97 review threads on `policy_path`; grep for readers outside tests.
 
 **Depends on.** Nothing.
 
-### NS-21 · The hook surface has one live hook and no loop
+### NS-21 · The hook surface has one live hook and no post-turn recorder
 
-**Why now.** Five of six `.mango/hooks/` scripts are dormant by DEC-003; three
-of four `PERMITTED_HOOK_NAMES` have no script on disk. Phase B already added
-`run_id` + structured events (R-SR-13) - the observation point this item wanted.
+**Why now.** The `post-*-run` shell scripts shipped on a previous branch were
+rolled back (CHANGELOG 2026-09-05: NS-21 rollback clarification). The invocation
+infrastructure (`loop.py` calls `hook_runner.run_hook(f"post-{role}-run", ...)`,
+`PERMITTED_HOOK_NAMES` includes all post-hook names) is **intact** — only the
+scripts are absent. `test_ns21_rollback_regression.py` pins this state.
 
-**Evidence.** `harness/shared/orchestrator/hook_runner.py`; `.mango/hooks/`;
+**Evidence.** `harness/shared/orchestrator/loop.py` L222, L227, L234;
+`.mango/hooks/` (scripts absent); `harness/shared/agent_prompts.PERMITTED_HOOK_NAMES`;
 DEC-003; DEC-050.
 
-**Done when.** Either a post-turn hook records verdict and tool-call count with
-a failing test when it stops firing, or a decision-log entry records that the
-`post-*-run` namespace stays empty and why.
+**Done when.** The three `post-*-run` scripts and `lib/record_post_run.sh` are
+restored to `.mango/hooks/`, `test_ns21_rollback_regression.py`
+`TestNS21HookScriptsAreRolledBack` assertions are updated to `assert script.exists()`,
+and JSONL-record contract tests (liveness + outcome schema) are added.
 
-**Depends on.** Nothing (Phase B events already shipped).
+**Depends on.** Nothing (invocation infra already in `loop.py`).
+
+### NS-35 · Windows CI parity on Linux runner
+
+**Why now.** The 133 expected skips on the Windows dev machine (DEC-058 make-guards,
+DEC-059 asyncio guards) should be **zero on a Linux CI runner** where `make` is
+available and `AF_UNIX` exists. Until the suite runs on Linux CI these guards are
+unverified.
+
+**Evidence.** `harness/shared/tests/skip-waivers.json` DEC-058 / DEC-059 rows;
+`test_windows_portability_regression.py`; `.github/workflows/`.
+
+**Done when.** A Linux CI matrix entry runs `make test-python` and the skip count
+is ≤ 5 (langgraph deselect only, no make-guard or asyncio-guard skips).
+
+**Depends on.** Nothing.
 
 ### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
 
@@ -328,6 +347,12 @@ gated on R-SR-2).
 ---
 
 ## 6. Delivered, and removed from the open list
+
+**Closed 2026-09-05c (Windows portability hardening):**
+
+| Was | Now |
+|---|---|
+| **Windows parity** RCA-1 → RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-057 (AF_UNIX), DEC-058 (make guards), DEC-059 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `test_ns21_rollback_regression.py` and `test_ns17_rollback_regression.py` added. `pyrightconfig.json` added for IDE parity. NS-21 re-opened (scripts absent); NS-35 opened for Linux CI parity. |
 
 **Closed 2026-09-05b (this rewrite's evidence pass):**
 

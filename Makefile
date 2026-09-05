@@ -143,6 +143,8 @@ lint: lint-python check-compat ## Run code style, static analysis, and runtime-c
 # --- Python Testing & Coverage ---
 .PHONY: test-python
 test-python: ## Run full pytest suite in a seeded random order across every core (excludes live tests)
+	# Expected skip counts: 0 on Linux CI (all make/POSIX guards inactive);
+	# 133 on Windows dev (DEC-058 make-guards + DEC-059 asyncio guards). See skip-waivers.json.
 	$(PYTEST) $(PYTEST_RUN_FLAGS) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" -v
 
 .PHONY: test-regression
@@ -202,7 +204,37 @@ verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last c
 		--decision-log $(NODE_DIR)/.governance/decision-log.md \
 		--waivers $(SHARED_TESTS)/skip-waivers.json
 
-# --- Governance Validators ---
+# Validate the skip-waivers.json registry schema (pure Python, no make/POSIX dependency).
+# Each waiver must have: test_id, skip_reason_pattern, decision_id, scope, and rationale.
+# Fails fast if the registry is malformed, missing required fields, or has duplicate test_ids.
+.PHONY: verify-skip-waivers
+verify-skip-waivers: ## Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-058/059)
+	$(PYTHON) -c "
+import json, sys
+from pathlib import Path
+REQUIRED = {'test_id', 'skip_reason_pattern', 'decision_id', 'scope', 'rationale'}
+path = Path('$(SHARED_TESTS)/skip-waivers.json')
+data = json.loads(path.read_text(encoding='utf-8'))
+waivers = data.get('waivers', [])
+errors = []
+test_ids_seen = {}
+for i, w in enumerate(waivers):
+    missing = REQUIRED - set(w)
+    if missing:
+        errors.append(f'  waiver[{i}] missing fields: {sorted(missing)}')
+    tid = w.get('test_id')
+    if tid in test_ids_seen:
+        errors.append(f'  duplicate test_id: {tid!r} at index {i} and {test_ids_seen[tid]}')
+    if tid:
+        test_ids_seen[tid] = i
+if errors:
+    print('verify-skip-waivers FAILED:', file=sys.stderr)
+    for e in errors:
+        print(e, file=sys.stderr)
+    sys.exit(1)
+print(f'verify-skip-waivers OK: {len(waivers)} waivers validated')
+"
+
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"

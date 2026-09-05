@@ -66,3 +66,12 @@ coverage.json
 # so the ignore rule always has a live parent.
 harness/shared/tests/.artifacts/*
 !harness/shared/tests/.artifacts/.gitkeep
+
+# IDE tooling (workspace-local; not build inputs)
+# .mcp_storage/ — Antigravity IDE MCP server cache; regenerated per session
+.mcp_storage/
+# .agents/ — workspace-local agent customisations for Antigravity IDE
+.agents/
+# pyrightconfig.json IS committed (mirrors pytest pythonpath = ["."]);
+# if you want it local-only, uncomment the line below:
+# pyrightconfig.json

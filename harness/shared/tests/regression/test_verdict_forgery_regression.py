@@ -36,6 +36,7 @@ never have honoured.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -49,7 +50,15 @@ from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.tests._helpers import chat_response, tool_call
 from harness.shared.write_policy import write_denial_reason
 
-pytestmark = pytest.mark.governance
+# Every test in this module invokes GNU Make through a scratch workspace. Skip
+# on platforms where `make` is not installed (DEC-058; Windows dev environment).
+pytestmark = [
+    pytest.mark.governance,
+    pytest.mark.skipif(
+        shutil.which("make") is None,
+        reason="make not found on PATH (DEC-058; Windows expected skip)",
+    ),
+]
 
 #: The interpreter this test runs under, written into the fixture makefile so
 #: the recipe does not depend on a `python3` being on PATH. `make -n` prints the
