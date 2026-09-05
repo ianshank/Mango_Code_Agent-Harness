@@ -144,9 +144,9 @@ class TestSkillsAreDated:
         # touched. The assertion exists to catch a typo'd year, not to police
         # the hour, so a day of tolerance costs it nothing.
         today_utc = datetime.now(timezone.utc).date()
-        assert reviewed <= today_utc + timedelta(days=1), (
-            f"{name} claims a review date in the future: {reviewed} > {today_utc}"
-        )
+        assert reviewed <= today_utc + timedelta(
+            days=1
+        ), f"{name} claims a review date in the future: {reviewed} > {today_utc}"
 
     @pytest.mark.parametrize("name", _skill_names())
     def test_reviewed_line_is_inside_the_frontmatter(self, name: str) -> None:
@@ -168,9 +168,9 @@ class TestEverySkillIsWiredOrDeclared:
     @pytest.mark.parametrize("name", sorted(WIRED_SKILLS))
     def test_wired_skill_is_actually_named_by_make_review(self, name: str) -> None:
         """Claiming a skill is wired is cheap; this checks the claim."""
-        assert name in (REPO / "Makefile").read_text(encoding="utf-8"), (
-            f"{name} is listed as wired but the Makefile never names it"
-        )
+        assert name in (REPO / "Makefile").read_text(
+            encoding="utf-8"
+        ), f"{name} is listed as wired but the Makefile never names it"
 
     @pytest.mark.parametrize("name", sorted(STANDALONE_SKILLS))
     def test_standalone_reason_is_substantive(self, name: str) -> None:
@@ -323,15 +323,15 @@ class TestSessionStartPreparesTheGates:
         the install aborted it left mypy and pytest missing with nothing said
         (2026 standards audit, §2). Same recipe, same artefacts, same hashes."""
         text = self.HOOK.read_text(encoding="utf-8")
-        assert "python -m pip install --quiet --require-hashes -r requirements-lock.txt" in text, (
-            "the hook does not install the hashed lock with --require-hashes"
-        )
-        assert "python -m pip install --quiet -e . --no-deps" in text, (
-            "the editable install must not re-resolve the ranges over the lock (--no-deps)"
-        )
-        assert not re.search(r"pip install .*-r requirements-dev\.txt", text), (
-            "the hook still installs requirements-dev.txt directly, which is unhashed and unlocked"
-        )
+        assert (
+            "python -m pip install --quiet --require-hashes -r requirements-lock.txt" in text
+        ), "the hook does not install the hashed lock with --require-hashes"
+        assert (
+            "python -m pip install --quiet -e . --no-deps" in text
+        ), "the editable install must not re-resolve the ranges over the lock (--no-deps)"
+        assert not re.search(
+            r"pip install .*-r requirements-dev\.txt", text
+        ), "the hook still installs requirements-dev.txt directly, which is unhashed and unlocked"
 
     @POSIX_ONLY
     @pytest.mark.parametrize(
@@ -353,9 +353,9 @@ class TestSessionStartPreparesTheGates:
         """
         result = self._run_with_fake_python(tmp_path, failing_step=failing_step)
         assert result.returncode != 0, "a failed install must not leave the hook reporting success"
-        assert f"session-start: FAILED — 'python -m pip install {named_command}' exited non-zero" in result.stderr, (
-            f"the failure line does not name the step that failed:\n{result.stderr}"
-        )
+        assert (
+            f"session-start: FAILED — 'python -m pip install {named_command}' exited non-zero" in result.stderr
+        ), f"the failure line does not name the step that failed:\n{result.stderr}"
 
     @POSIX_ONLY
     def test_a_successful_install_is_silent_about_failure(self, tmp_path: Path) -> None:
@@ -566,16 +566,16 @@ class TestSkillsNameRealTargets:
 
 
 class TestHookNamespacePartition:
-    """R-GT-8: every hook script belongs to a namespace, and the live one exists.
+    """R-GT-8: every hook script belongs to a namespace, and the live ones exist.
 
-    `.mango/hooks/` holds two disjoint kinds of script: `pre-nemotron-run.sh`,
-    which `ExecutionLoop` fires at the top of every agent turn, and five that
-    `.mango/settings.json` registers and DEC-003 keeps dormant. Nothing asserted
-    the partition, so a new script belonged to neither and no test said so; and
-    nothing asserted the live one exists, because `HookRunner.run_hook` no-ops
-    when the file is missing -- correct behaviour, but it means deleting or
-    renaming the script leaves the whole suite green while the hook silently
-    stops running.
+    `.mango/hooks/` holds three disjoint kinds of script: `pre-nemotron-run.sh`
+    (pre-turn gate), the `post-*-run` recorders `ExecutionLoop` fires at turn
+    end (NS-21), and five that `.mango/settings.json` registers and DEC-003
+    keeps dormant. Nothing asserted the partition, so a new script belonged to
+    neither and no test said so; and nothing asserted the live ones exist,
+    because `HookRunner.run_hook` no-ops when the file is missing -- correct
+    behaviour, but it means deleting or renaming a script leaves the whole
+    suite green while the hook silently stops running.
     """
 
     MANGO_HOOKS = REPO / ".mango" / "hooks"
@@ -604,9 +604,41 @@ class TestHookNamespacePartition:
             "top of every agent turn and HookRunner.run_hook no-ops when the script is absent, "
             "so the governance validation it runs would silently stop happening."
         )
-        assert "validate_invariants.py" in hook.read_text(encoding="utf-8"), (
-            f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
+        assert "validate_invariants.py" in hook.read_text(
+            encoding="utf-8"
+        ), f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
+
+    def test_every_post_run_hook_exists_on_disk(self) -> None:
+        """NS-21: every permitted post-*-run name has a tracked script, or observation is gone."""
+        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
+
+        post_names = sorted(name for name in PERMITTED_HOOK_NAMES if name.startswith("post-") and name.endswith("-run"))
+        assert post_names, "PERMITTED_HOOK_NAMES has no post-*-run entries"
+        missing = [name for name in post_names if not (self.MANGO_HOOKS / f"{name}.sh").is_file()]
+        assert not missing, (
+            f"post-run hooks missing on disk: {missing}. ExecutionLoop fires these at turn end and "
+            "HookRunner.run_hook no-ops when the script is absent, so the NS-21 JSONL record would "
+            "silently stop appearing."
         )
+        recorder = self.MANGO_HOOKS / "lib" / "record_post_run.sh"
+        assert (
+            recorder.is_file()
+        ), f"{recorder.relative_to(REPO)} is missing; the thin post-*-run entrypoints need the shared recorder body"
+
+    def test_post_run_hooks_are_not_settings_registered(self) -> None:
+        """Orchestrator post-run hooks must not wake via .mango/settings.json (DEC-003)."""
+        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
+
+        registered = self._settings_registered()
+        post_scripts = {
+            script.stem
+            for script in self._scripts()
+            if script.stem.startswith("post-") and script.stem.endswith("-run")
+        }
+        assert post_scripts, "no post-*-run scripts on disk; partition pin is vacuous"
+        assert post_scripts <= PERMITTED_HOOK_NAMES
+        overlap = post_scripts & registered
+        assert not overlap, f"orchestrator post-run hooks must not appear in .mango/settings.json: {sorted(overlap)}"
 
     def test_every_hook_script_belongs_to_a_namespace(self) -> None:
         """Either the orchestrator may fire it, or a settings file registers it."""

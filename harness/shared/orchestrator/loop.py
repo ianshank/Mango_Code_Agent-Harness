@@ -219,19 +219,40 @@ class ExecutionLoop:
             if not tool_calls:
                 final_content = self._finalize_response(self.conversation_history, content)
                 self._dump_debug_history(agent_name)
-                self.hook_runner.run_hook(f"post-{agent_name}-run", status="success")
+                self.hook_runner.run_hook(
+                    f"post-{agent_name}-run",
+                    status="success",
+                    run_id=run_id,
+                    agent=agent_name,
+                    tool_calls_used=turn_budget.used,
+                    tool_calls_limit=turn_budget.limit,
+                )
                 return final_content
 
             logger.info("[%s] requested %d tool calls.", agent_name, len(tool_calls))
             if not turn_budget.consume(len(tool_calls)):
-                self.hook_runner.run_hook(f"post-{agent_name}-run", status="budget_exceeded")
+                self.hook_runner.run_hook(
+                    f"post-{agent_name}-run",
+                    status="budget_exceeded",
+                    run_id=run_id,
+                    agent=agent_name,
+                    tool_calls_used=turn_budget.used,
+                    tool_calls_limit=turn_budget.limit,
+                )
                 raise RuntimeError(
                     f"Agent {agent_name} exceeded the tool-call budget "
                     f"({turn_budget.limit} per task; policy agent_defaults.max_tool_calls_per_task)."
                 )
             self.dispatcher.dispatch(self.conversation_history, tool_calls, run_id=run_id)
 
-        self.hook_runner.run_hook(f"post-{agent_name}-run", status="timeout")
+        self.hook_runner.run_hook(
+            f"post-{agent_name}-run",
+            status="timeout",
+            run_id=run_id,
+            agent=agent_name,
+            tool_calls_used=turn_budget.used,
+            tool_calls_limit=turn_budget.limit,
+        )
         raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
 
     def _harness_verdict(self) -> Verdict:
