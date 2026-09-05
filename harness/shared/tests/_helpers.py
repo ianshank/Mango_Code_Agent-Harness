@@ -51,7 +51,9 @@ def utc_today() -> dt.date:
     return dt.datetime.now(dt.timezone.utc).date()
 
 
-def load_module_by_path(path: Path | str, name: str, register: bool = True) -> ModuleType:
+def load_module_by_path(
+    path: Path | str, name: str, register: bool = True
+) -> ModuleType:
     """Import a module from an explicit path.
 
     ``register`` puts the module in ``sys.modules`` (needed when the module
@@ -88,7 +90,9 @@ def imported_module(path: Path | str, name: str) -> Iterator[ModuleType]:
             sys.modules[name] = previous
 
 
-def chat_response(content: str | None = None, tool_calls: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def chat_response(
+    content: str | None = None, tool_calls: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """An OpenAI-style chat completion response for a mocked bridge."""
     message: dict[str, Any] = {"role": "assistant", "content": content}
     if tool_calls:
@@ -138,6 +142,69 @@ def tool_call(
 RUFF_ERROR_EXIT = 2
 
 
+def seed_minimal_decision_records(
+    workspace: Path,
+    *,
+    dec_id: str = "DEC-001",
+    date: str | None = None,
+    title: str = "Example decision",
+    skill_path: str = "agents/GOVERNANCE_SKILL.md",
+    reviewed: str | None = None,
+    since: str | None = None,
+    write_skill: bool = True,
+) -> Path:
+    """Seed minimal ``docs/decisions/`` + generated indexes (+ optional skill pointer).
+
+    Validators treat ``docs/decisions/`` as the decision SoT. Temp fixtures that
+    only wrote a pipe ``decision-log.md`` fail closed after NS-34; call this
+    helper so happy-path fixtures match the contract without duplicating
+    frontmatter/index boilerplate in every suite.
+    """
+    from harness.shared import decision_records as dr
+
+    if date is None:
+        date = utc_today().isoformat()
+    if reviewed is None:
+        reviewed = utc_today().isoformat()
+    if since is None:
+        since = date
+
+    decisions = workspace / "docs" / "decisions"
+    decisions.mkdir(parents=True, exist_ok=True)
+    record = (
+        "---\n"
+        f"id: {dec_id}\n"
+        f'title: "{title}"\n'
+        "status: accepted\n"
+        f"date: {date}\n"
+        "supersedes: []\n"
+        "superseded_by: null\n"
+        'owners: ["governance-maintainers"]\n'
+        "---\n\n"
+        f"# {dec_id}: {title}\n\n"
+        "## Context\n\nWhy.\n\n"
+        "## Decision\n\nWhat.\n\n"
+        "## Consequences\n\nEffects.\n"
+    )
+    (decisions / f"{dec_id}.md").write_text(record, encoding="utf-8")
+    payload = dr.index_payload(dr.load_all(decisions))
+    (decisions / "index.json").write_text(
+        dr.render_index_json(payload), encoding="utf-8"
+    )
+    (decisions / "index.md").write_text(dr.render_index_md(payload), encoding="utf-8")
+
+    if write_skill:
+        skill = workspace / skill_path
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text(
+            f"# Governance Skill\nReviewed: {reviewed}\n\n"
+            f"## Decisions since {since}\n\n"
+            "Source of truth: docs/decisions/ (see index.md).\n",
+            encoding="utf-8",
+        )
+    return decisions
+
+
 def run_ruff(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
     """Run ruff with ``args``, raising if the invocation itself failed.
 
@@ -167,5 +234,7 @@ def ruff_json(args: list[str], timeout: int = 300) -> list[dict]:
             f"ruff returned unparseable JSON for {' '.join(args)}: {exc}\nstdout begins: {result.stdout[:200]!r}"
         ) from exc
     if not isinstance(parsed, list):
-        raise AssertionError(f"ruff JSON output was {type(parsed).__name__}, expected a list")
+        raise AssertionError(
+            f"ruff JSON output was {type(parsed).__name__}, expected a list"
+        )
     return parsed
