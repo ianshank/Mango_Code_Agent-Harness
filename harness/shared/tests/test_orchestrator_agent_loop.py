@@ -460,9 +460,7 @@ class TestExecutionLoopPlannerGapPolicyPath:
         from harness.shared.orchestrator.loop import ExecutionLoop
         from harness.shared.tests._helpers import REPO
 
-        shipped = json.loads(
-            (REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8")
-        )
+        shipped = json.loads((REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8"))
         shipped["agent_memory"] = {
             "max_gaps": 100,
             "max_hypotheses": 100,
@@ -515,4 +513,3 @@ class TestExecutionLoopPlannerGapPolicyPath:
         assert "middle-gap" not in prompt
         assert "oldest-gap" not in prompt
         assert prompt.count("- Q:") == 1
-
