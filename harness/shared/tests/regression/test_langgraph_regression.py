@@ -4,9 +4,13 @@ Pins critical runtime invariants and prevents regressions across:
 1. Node calling conventions (positional vs keyword RunnableConfig).
 2. Input state immutability across node boundaries.
 3. 12-channel accumulator list-concatenation vs LWW semantics.
-4. Fail-open error isolation and recording to errors channel.
-5. Plan gate divergence boundary condition precision (0.35 threshold).
-6. Safe fallback and feature detection behavior.
+4. Contained error isolation and recording to the errors channel (INV-LG-3).
+5. Fail-closed verdict: a blocking error or an inconclusive result cannot
+   reach VERIFIED, while an observation-plane failure stays non-blocking
+   per INV-16 (INV-LG-6).
+6. Termination of the plan_gate/clarify cycle at its policy bound (INV-LG-6).
+7. Plan gate divergence boundary condition precision (0.35 threshold).
+8. Safe fallback and feature detection behavior.
 """
 
 from __future__ import annotations
@@ -168,7 +172,9 @@ class TestLangGraphChannelReducersRegression:
 
 
 class TestLangGraphErrorIsolationRegression:
-    """Pins that exceptions inside active nodes fail-open to the errors channel."""
+    """Pins INV-LG-3: an exception inside an active node is contained in the
+    `errors` channel rather than propagating. What the gate then does with
+    that record is INV-LG-6, pinned by TestControlPlaneErrorIsTerminal."""
 
     def test_planner_exception_isolated(self) -> None:
         mock_orch = MagicMock()
