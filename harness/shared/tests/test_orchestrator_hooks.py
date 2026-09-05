@@ -339,9 +339,12 @@ class TestPermittedHookMissingLogsDebug:
         decoy = hooks / f"{PRE_RUN_HOOK}.sh"
         decoy.mkdir()  # directory, not a file
         runner = HookRunner(workspace_dir=mock_workspace, hooks_dir=hooks, tool_timeout=5)
-        with caplog.at_level(logging.DEBUG):
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator.hook_runner"):
             runner.run_hook(PRE_RUN_HOOK, status="success")
-        assert "not a file" in caplog.text or "skipping" in caplog.text
+        assert any("not a file" in rec.getMessage() and PRE_RUN_HOOK in rec.getMessage() for rec in caplog.records), (
+            "expected DEBUG distinguishing a non-file hook path"
+        )
+        assert "missing on disk" not in caplog.text
         # Must not have attempted to plant side effects via bash on a directory
         assert not (mock_workspace / "planted_marker.txt").exists()
 

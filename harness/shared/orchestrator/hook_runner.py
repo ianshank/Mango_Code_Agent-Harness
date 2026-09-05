@@ -47,16 +47,14 @@ class HookRunner:
                 f"refusing to run unrecognised hook {hook_name!r}; permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
             )
         hook_path = self.hooks_dir / f"{hook_name}.sh"
-        # Require a regular file: a same-named directory must not be treated as
-        # an executable script (bash <dir> fails the turn).
+        # Presence of a regular file remains the enablement switch. Distinguish
+        # missing paths from same-named directories (or other non-files) so
+        # operators and tests see a clear signal; never bash a non-file.
+        if not hook_path.exists():
+            logger.debug("permitted hook %s missing on disk at %s; skipping", hook_name, hook_path)
+            return
         if not hook_path.is_file():
-            # Presence of a real script remains the enablement switch; DEBUG
-            # makes a missing or non-file path visible without changing the no-op.
-            logger.debug(
-                "permitted hook %s not a file at %s; skipping",
-                hook_name,
-                hook_path,
-            )
+            logger.debug("permitted hook %s not a file at %s; skipping", hook_name, hook_path)
             return
         logger.info("Executing hook: %s", hook_name)
         try:
