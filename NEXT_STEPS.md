@@ -326,7 +326,7 @@ gated on R-SR-2).
 
 | Was | Now |
 |---|---|
-| **NS-21** Hook surface / post-turn observation | **Landed on PR (this).** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
+| **NS-21** Hook surface / post-turn observation | **Landed on PR #99.** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
 
 **Closed 2026-09-05 (prior rewrite's evidence pass):**
 
