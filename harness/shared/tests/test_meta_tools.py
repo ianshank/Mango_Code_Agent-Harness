@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
+from harness.shared.meta_tools import (
+    format_gaps_for_planner,
+    hypothesis_register,
+    knowledge_gap_log,
+    load_open_gaps,
+    resolve_memory_dir,
+)
 
 
 def test_knowledge_gap_log(tmp_path, monkeypatch):
@@ -232,3 +238,110 @@ def test_read_json_safe_rename_oserror(tmp_path: Path, monkeypatch: pytest.Monke
     # this is the data-loss-prevention behavior the RuntimeError exists for.
     assert target.read_text(encoding="utf-8") == "invalid"
     assert not list(tmp_path.glob("locked.json.malformed.*"))
+
+
+# ---------------------------------------------------------------------------
+# NS-17: retention, workspace scoping, planner surfacing
+# ---------------------------------------------------------------------------
+
+
+def test_knowledge_gap_retention_fifo_trim(tmp_path, monkeypatch):
+    """Writing past max_gaps keeps only the newest entries (FIFO)."""
+    from harness.shared import meta_tools, policy_loader
+
+    mock_memory_dir = tmp_path / ".mango" / "memory"
+    monkeypatch.setattr(meta_tools, "MEMORY_DIR", mock_memory_dir)
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 3,
+            "max_hypotheses": 100,
+            "planner_gap_limit": 10,
+        },
+    )
+
+    for i in range(5):
+        knowledge_gap_log(f"q{i}", f"need{i}", f"approach{i}")
+
+    data = load_open_gaps()  # most recent first
+    assert len(data) <= 3
+    # FIFO: oldest q0,q1 dropped; retained q2,q3,q4 (most recent first → q4..q2)
+    questions = [g["question"] for g in data]
+    assert questions == ["q4", "q3", "q2"]
+
+
+def test_hypothesis_retention_fifo_trim(tmp_path, monkeypatch):
+    from harness.shared import meta_tools, policy_loader
+
+    mock_memory_dir = tmp_path / ".mango" / "memory"
+    monkeypatch.setattr(meta_tools, "MEMORY_DIR", mock_memory_dir)
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 100,
+            "max_hypotheses": 3,
+            "planner_gap_limit": 10,
+        },
+    )
+
+    for i in range(5):
+        hypothesis_register(f"claim{i}", f"reason{i}", 0.5)
+
+    hyp_file = mock_memory_dir / "hypotheses.json"
+    data = json.loads(hyp_file.read_text(encoding="utf-8"))
+    assert len(data) <= 3
+    assert [h["claim"] for h in data] == ["claim2", "claim3", "claim4"]
+
+
+def test_memory_dir_workspace_isolation(tmp_path):
+    """Two workspaces must not share stores; None keeps the legacy root."""
+    ws_a = tmp_path / "a"
+    ws_b = tmp_path / "b"
+    ws_a.mkdir()
+    ws_b.mkdir()
+
+    knowledge_gap_log("only-a", "need-a", "approach-a", workspace_dir=ws_a)
+    knowledge_gap_log("only-b", "need-b", "approach-b", workspace_dir=ws_b)
+
+    gaps_a = load_open_gaps(ws_a)
+    gaps_b = load_open_gaps(ws_b)
+    assert [g["question"] for g in gaps_a] == ["only-a"]
+    assert [g["question"] for g in gaps_b] == ["only-b"]
+
+    assert resolve_memory_dir(ws_a) == ws_a / ".mango" / "memory"
+    assert resolve_memory_dir(ws_b) == ws_b / ".mango" / "memory"
+
+    # Legacy path (None) still resolves to the install-root MEMORY_DIR constant.
+    from harness.shared import meta_tools
+
+    assert resolve_memory_dir(None) == meta_tools.MEMORY_DIR
+
+
+def test_format_gaps_for_planner_empty_store_ok(tmp_path):
+    assert format_gaps_for_planner(workspace_dir=tmp_path / "empty-ws") == ""
+    assert format_gaps_for_planner([]) == ""
+
+
+def test_format_gaps_for_planner_surfaces_seeded_gap(tmp_path, monkeypatch):
+    from harness.shared import policy_loader
+
+    monkeypatch.setattr(
+        policy_loader,
+        "agent_memory_defaults",
+        lambda policy_path=None: {
+            "max_gaps": 100,
+            "max_hypotheses": 100,
+            "planner_gap_limit": 2,
+        },
+    )
+    knowledge_gap_log("oldest", "n0", "a0", workspace_dir=tmp_path)
+    knowledge_gap_log("middle", "n1", "a1", workspace_dir=tmp_path)
+    knowledge_gap_log("newest", "n2", "a2", workspace_dir=tmp_path)
+
+    rendered = format_gaps_for_planner(workspace_dir=tmp_path)
+    assert "newest" in rendered
+    assert "middle" in rendered
+    assert "oldest" not in rendered  # truncated by planner_gap_limit=2
+    assert rendered.index("newest") < rendered.index("middle")

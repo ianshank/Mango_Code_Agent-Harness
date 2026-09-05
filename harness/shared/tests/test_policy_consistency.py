@@ -361,6 +361,13 @@ class TestFallbackConstantsMirrorPolicy:
         missing = REPO / "does-not-exist.json"
         assert policy_loader.langgraph_defaults(missing) == _load(SHARED_POLICY)["langgraph"]
 
+    def test_policy_loader_agent_memory_fallbacks_mirror_policy(self):
+        """NS-17: agent_memory loader defaults must equal the committed policy block."""
+        from harness.shared import policy_loader
+
+        missing = REPO / "does-not-exist.json"
+        assert policy_loader.agent_memory_defaults(missing) == _load(SHARED_POLICY)["agent_memory"]
+
     def test_policy_loader_tool_budget_fallback_mirrors_policy(self):
         from harness.shared import policy_loader
 

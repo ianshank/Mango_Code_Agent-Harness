@@ -68,12 +68,16 @@ class ToolDispatcher:
             ),
             "run_command": lambda args: self._execute_run_command(args.get("command") or ""),
             "knowledge_gap_log": lambda args: knowledge_gap_log(
-                args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
+                args.get("question") or "",
+                args.get("what_needed") or "",
+                args.get("proposed_approach") or "",
+                workspace_dir=self.workspace_dir,
             ),
             "hypothesis_register": lambda args: hypothesis_register(
                 args.get("claim") or "",
                 args.get("reasoning") or "",
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
+                workspace_dir=self.workspace_dir,
             ),
         }
 

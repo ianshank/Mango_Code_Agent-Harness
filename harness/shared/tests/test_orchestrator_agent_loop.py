@@ -75,11 +75,13 @@ class TestExecuteAgent:
     ) -> None:
         calls: list[str] = []
 
-        def _fake_gap(question: str, what_needed: str, proposed_approach: str) -> str:
+        def _fake_gap(
+            question: str, what_needed: str, proposed_approach: str, workspace_dir=None
+        ) -> str:
             calls.append("gap")
             return "gap-logged"
 
-        def _fake_hyp(claim: str, reasoning: str, confidence: float) -> str:
+        def _fake_hyp(claim: str, reasoning: str, confidence: float, workspace_dir=None) -> str:
             calls.append("hyp")
             return "hyp-logged"
 

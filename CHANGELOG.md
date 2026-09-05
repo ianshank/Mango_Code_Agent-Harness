@@ -24,6 +24,12 @@ regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
 that NS-33 reformatted without refreshing the bundle (the related digest gate
 failure on `main`).
 
+### NS-17: agent memory retention and workspace scoping
+
+Bound `knowledge_gap_log` / `hypothesis_register` stores via policy
+`agent_memory` (FIFO trim), scope memory under `<workspace>/.mango/memory`
+when a workspace is supplied (legacy install-root path when not), and surface
+open gaps into the planner prompt (`{open_gaps}`).
 
 ### Adopt `ruff format` (NS-33 / audit H11)
 
