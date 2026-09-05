@@ -24,12 +24,8 @@ UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 #: Basename -> a unique token that must appear in that regression module and
 #: must not appear as a live unit-tier reproduction of the same defect.
 REQUIRED_REGRESSION_MODULES = {
-    "test_coverage_gate_shadowing_regression.py": (
-        "test_the_gates_own_directory_cannot_shadow_the_extra"
-    ),
-    "test_session_hooks_skip_evidence_regression.py": (
-        "test_a_skip_in_each_of_two_sibling_suites_is_recorded"
-    ),
+    "test_coverage_gate_shadowing_regression.py": ("test_the_gates_own_directory_cannot_shadow_the_extra"),
+    "test_session_hooks_skip_evidence_regression.py": ("test_a_skip_in_each_of_two_sibling_suites_is_recorded"),
 }
 
 
@@ -49,15 +45,9 @@ def test_required_reproduction_lives_in_the_regression_tier(basename: str) -> No
 def test_required_reproduction_is_not_only_under_the_unit_tier(basename: str) -> None:
     """A move back into unit/ alone must fail: the tier's guarantee is the path."""
     token = REQUIRED_REGRESSION_MODULES[basename]
-    unit_hits = sorted(
-        path
-        for path in UNIT_TESTS_DIR.glob("test_*.py")
-        if token in path.read_text(encoding="utf-8")
-    )
+    unit_hits = sorted(path for path in UNIT_TESTS_DIR.glob("test_*.py") if token in path.read_text(encoding="utf-8"))
     regression_path = REGRESSION_DIR / basename
-    assert regression_path.is_file(), (
-        f"{basename} is absent from regression/; cannot judge unit-only drift"
-    )
+    assert regression_path.is_file(), f"{basename} is absent from regression/; cannot judge unit-only drift"
     assert not unit_hits, (
         f"{token} reappeared only under the unit tier at "
         f"{[p.relative_to(REPO).as_posix() for p in unit_hits]}; keep the "

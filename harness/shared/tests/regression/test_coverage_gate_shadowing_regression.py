@@ -28,9 +28,7 @@ from harness.shared import coverage_scope as cs
 pytestmark = pytest.mark.governance
 
 
-def test_the_gates_own_directory_cannot_shadow_the_extra(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_gates_own_directory_cannot_shadow_the_extra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Reproduced: a same-named package beside the gate looked importable."""
     shadow = tmp_path / "gate_dir" / "shadowextra"
     shadow.mkdir(parents=True)
@@ -38,9 +36,7 @@ def test_the_gates_own_directory_cannot_shadow_the_extra(
     (shadow / "graph.py").write_text("", encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path / "gate_dir"))
     importlib.invalidate_caches()
-    assert cg._importable("shadowextra.graph") is True, (
-        "sanity: visible when it is just another path entry"
-    )
+    assert cg._importable("shadowextra.graph") is True, "sanity: visible when it is just another path entry"
 
     # Patched on the module that *defines* `_importable`, which is where the
     # `__file__` it reads lives. That is `coverage_scope` since the scope concern
@@ -51,6 +47,4 @@ def test_the_gates_own_directory_cannot_shadow_the_extra(
     monkeypatch.setattr(cs, "__file__", str(tmp_path / "gate_dir" / "coverage_scope.py"))
     assert cg._importable("shadowextra.graph") is False
     assert "shadowextra" not in sys.modules, "the probe must not leave its imports behind"
-    assert cg._importable("json.decoder") is True, (
-        "removing the own directory must not hide real modules"
-    )
+    assert cg._importable("json.decoder") is True, "removing the own directory must not hide real modules"
