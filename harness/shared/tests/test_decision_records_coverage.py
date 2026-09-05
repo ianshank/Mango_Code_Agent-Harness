@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import runpy
 import sys
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -133,19 +135,31 @@ class TestGenerateDecisionIndex:
         with pytest.raises(SystemExit, match="missing"):
             gdi.main(["--root", str(tmp_path)])
 
-    def test_module_as_main(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_module_as_main(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         seed_minimal_decision_records(tmp_path, write_skill=False)
         (tmp_path / "Makefile").write_text("# stub\n", encoding="utf-8")
+        # Ensure indexes match before the __main__ --check run.
+        gdi.main(["--root", str(tmp_path)])
         monkeypatch.setattr(
             sys,
             "argv",
             ["generate_decision_index.py", "--root", str(tmp_path), "--check"],
         )
-        # Ensure indexes match before check.
-        gdi.main(["--root", str(tmp_path)])
         script = Path(gdi.__file__).resolve()
-        runpy.run_path(str(script), run_name="__main__")
-        assert (tmp_path / "docs/decisions/index.md").is_file()
+        stdout = StringIO()
+        stderr = StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            try:
+                runpy.run_path(str(script), run_name="__main__")
+                code = 0
+            except SystemExit as exc:
+                code = 0 if exc.code in (None, 0) else int(exc.code) if isinstance(exc.code, int) else 1
+        assert code == 0, stderr.getvalue()
+        out = stdout.getvalue()
+        assert "generate-decision-index: checked" in out
+        assert "artefacts" in out
 
 
 class TestValidateGovernanceDocsExtraBranches:
