@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from harness.shared import coverage_gate as cg
-from harness.shared import coverage_scope as cs
 
 GATE = Path(cg.__file__).resolve()
 
