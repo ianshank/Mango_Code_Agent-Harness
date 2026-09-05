@@ -1,0 +1,18 @@
+{
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Windows",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["."],
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "information",
+  "reportMissingModuleSource": "information",
+  "include": ["harness"],
+  "exclude": [
+    "**/__pycache__",
+    "**/.git",
+    "**/.mypy_cache",
+    "**/.pytest_cache",
+    "**/node_modules"
+  ]
+}
