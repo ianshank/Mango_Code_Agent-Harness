@@ -135,9 +135,7 @@ class TestGenerateDecisionIndex:
         with pytest.raises(SystemExit, match="missing"):
             gdi.main(["--root", str(tmp_path)])
 
-    def test_module_as_main(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_module_as_main(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         seed_minimal_decision_records(tmp_path, write_skill=False)
         (tmp_path / "Makefile").write_text("# stub\n", encoding="utf-8")
         # Ensure indexes match before the __main__ --check run.
