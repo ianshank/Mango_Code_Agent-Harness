@@ -216,10 +216,7 @@ def knowledge_gap_log(
         temp_file.replace(gaps_file)
 
     if max_gaps == 0:
-        return (
-            f"Knowledge gap entry not retained: retention disabled "
-            f"(agent_memory.max_gaps=0). ID: {entry['id']}."
-        )
+        return f"Knowledge gap entry not retained: retention disabled " f"(agent_memory.max_gaps=0). ID: {entry['id']}."
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
 
@@ -264,8 +261,7 @@ def hypothesis_register(
 
     if max_hypotheses == 0:
         return (
-            f"Hypothesis entry not retained: retention disabled "
-            f"(agent_memory.max_hypotheses=0). ID: {entry['id']}."
+            f"Hypothesis entry not retained: retention disabled " f"(agent_memory.max_hypotheses=0). ID: {entry['id']}."
         )
     return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
 
