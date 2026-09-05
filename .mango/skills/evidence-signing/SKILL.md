@@ -85,6 +85,7 @@ To verify a manifest independently (without the agent runtime):
 ```python
 import hashlib, hmac, json
 
+
 def verify_manifest(manifest: dict, key: str) -> bool:
     sig = manifest.pop("_signature")
     payload = json.dumps(manifest, sort_keys=True).encode("utf-8")

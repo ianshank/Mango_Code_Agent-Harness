@@ -15,6 +15,7 @@ but never silently: each drop is logged at WARNING and summarised on stderr. The
 still turns CI red; the logging is what makes the *reason* visible. Run with
 `LOG_LEVEL=DEBUG` to see every file digested.
 """
+
 from __future__ import annotations
 
 import hashlib

@@ -220,22 +220,16 @@ class TestSink:
 
     def test_for_workspace_env_override_wins(self, tmp_path: Path) -> None:
         override = tmp_path / "elsewhere"
-        sink = CognitiveSignalSink.for_workspace(
-            tmp_path / "ws", environ={SIGNAL_DIR_ENV: str(override)}
-        )
+        sink = CognitiveSignalSink.for_workspace(tmp_path / "ws", environ={SIGNAL_DIR_ENV: str(override)})
         assert sink.path == override.resolve() / SIGNAL_FILE_NAME
 
-    def test_for_workspace_relative_override_resolved(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_for_workspace_relative_override_resolved(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         sink = CognitiveSignalSink.for_workspace(tmp_path / "ws", environ={SIGNAL_DIR_ENV: "rel"})
         assert sink.path.is_absolute()
         assert sink.path == (tmp_path / "rel").resolve() / SIGNAL_FILE_NAME
 
-    def test_for_workspace_reads_process_env_by_default(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_for_workspace_reads_process_env_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(SIGNAL_DIR_ENV, str(tmp_path / "proc-env"))
         sink = CognitiveSignalSink.for_workspace(tmp_path / "ws")
         assert sink.path == (tmp_path / "proc-env").resolve() / SIGNAL_FILE_NAME
@@ -320,9 +314,7 @@ class TestSink:
 
 @pytest.mark.governance
 def test_schema_document_matches_validator_and_dataclass(shared_dir: Path) -> None:
-    schema = json.loads(
-        (shared_dir / "schemas" / "cognitive-signal.schema.json").read_text(encoding="utf-8")
-    )
+    schema = json.loads((shared_dir / "schemas" / "cognitive-signal.schema.json").read_text(encoding="utf-8"))
     field_names = {f.name for f in dataclasses.fields(CognitiveSignal)}
     assert set(schema["properties"]) == field_names
     from harness.shared.cognitive_signal import _REQUIRED_STR_FIELDS
@@ -453,9 +445,7 @@ class TestPayloadHardening:
         stored = json.loads(raw_text)
         assert stored["payload"]["v"] == payload_value
 
-    def test_deeply_nested_payload_raises_signal_validation_error_not_recursion_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_deeply_nested_payload_raises_signal_validation_error_not_recursion_error(self, tmp_path: Path) -> None:
         nested: typing.Any = "leaf"
         for _ in range(20_000):
             nested = {"n": nested}
@@ -464,9 +454,7 @@ class TestPayloadHardening:
             sink.append(pinned_signal(payload={"v": nested}))
         assert not sink.path.exists()
 
-    def test_sink_dir_blocked_by_existing_file_raises_signal_validation_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_sink_dir_blocked_by_existing_file_raises_signal_validation_error(self, tmp_path: Path) -> None:
         blocker = tmp_path / "blocker"
         blocker.write_text("not a directory", encoding="utf-8")
         sink = CognitiveSignalSink(blocker / "nested" / "signals")

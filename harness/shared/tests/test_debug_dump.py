@@ -97,15 +97,11 @@ class TestRedactHistory:
     def test_nested_lists_and_dicts_are_walked(self) -> None:
         secret = "sk-nested-credential"
         history = [{"content": {"outer": [secret, {"inner": secret}]}}]
-        assert redact_history(history, secret, env={})[0]["content"] == {
-            "outer": [REDACTED, {"inner": REDACTED}]
-        }
+        assert redact_history(history, secret, env={})[0]["content"] == {"outer": [REDACTED, {"inner": REDACTED}]}
 
     def test_non_string_values_survive_unchanged(self) -> None:
         history = [{"content": None, "count": 3, "ok": True, "score": 1.5}]
-        assert redact_history(history, "sk-x", env={})[0] == {
-            "content": None, "count": 3, "ok": True, "score": 1.5
-        }
+        assert redact_history(history, "sk-x", env={})[0] == {"content": None, "count": 3, "ok": True, "score": 1.5}
 
     def test_the_input_is_not_mutated(self) -> None:
         history = [{"content": "sk-original"}]
@@ -145,9 +141,7 @@ class TestWriteDump:
         assert stat.S_IMODE(root.stat().st_mode) == DUMP_DIR_MODE
 
     @POSIX_ONLY
-    def test_a_pre_existing_lax_directory_is_tightened(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_pre_existing_lax_directory_is_tightened(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``mkdir``'s mode argument is ignored when the directory exists, so a
         leftover from an earlier, laxer run would keep its permissions."""
         monkeypatch.setenv("MANGO_DEBUG_DUMP", "1")

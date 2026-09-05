@@ -132,11 +132,7 @@ def credential_env_names(env: Mapping[str, str] | None = None) -> list[str]:
     ``os.environ``. This is the list a child process must not inherit.
     """
     source = os.environ if env is None else env
-    return [
-        name
-        for name in source
-        if name in CREDENTIAL_ENV_VARS or CREDENTIAL_NAME_PATTERN.search(name)
-    ]
+    return [name for name in source if name in CREDENTIAL_ENV_VARS or CREDENTIAL_NAME_PATTERN.search(name)]
 
 
 def redact_text(text: str, secrets: Iterable[str] = ()) -> str:

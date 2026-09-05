@@ -130,9 +130,7 @@ class TestWithoutABaselineTheRunnerRecordsOneAndSaysSo:
     """Backward compatibility for direct callers, made visible rather than
     silent: a run with no baseline can only compare the tree to itself."""
 
-    def test_a_run_with_no_baseline_warns_and_proceeds(
-        self, workspace: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_run_with_no_baseline_warns_and_proceeds(self, workspace: Path, caplog: pytest.LogCaptureFixture) -> None:
         runner = _runner()
         with caplog.at_level(logging.WARNING):
             check = runner.run(workspace)
@@ -161,9 +159,7 @@ class TestWithoutABaselineTheRunnerRecordsOneAndSaysSo:
 
 
 class TestAnUnreadableEnforcementSetIsBlockedNotIgnored:
-    def test_run_blocks_as_unavailable(
-        self, workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_run_blocks_as_unavailable(self, workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         broken = tmp_path / "broken.json"
         broken.write_text("{", encoding="utf-8")
         monkeypatch.setattr(enforcement_digest, "DEFAULT_POLICY_PATH", broken)
@@ -193,8 +189,14 @@ class TestTheVocabulary:
         evidence is typed into the check, so no combination of the other
         fields can grade past it."""
         check = HarnessCheck(
-            target="test-python", command="make -f Makefile test-python", status="SUCCESS",
-            exit_code=0, reason="", probe_ok=True, latency_ms=1, tampered_files=("Makefile",),
+            target="test-python",
+            command="make -f Makefile test-python",
+            status="SUCCESS",
+            exit_code=0,
+            reason="",
+            probe_ok=True,
+            latency_ms=1,
+            tampered_files=("Makefile",),
         )
         verdict = derive_verdict(check)
         assert (verdict.status, verdict.termination_reason) == (BLOCKED, TAMPERED)
@@ -214,8 +216,14 @@ class TestTheVocabulary:
         from harness.shared.governance import verdict
 
         reasons = {
-            verdict.NOT_CONFIGURED, verdict.REENTRANT, verdict.UNAVAILABLE, verdict.HARNESS_FAULT,
-            verdict.DENIED, verdict.FAILED_CHECK, verdict.UNRECOGNISED, verdict.TAMPERED,
+            verdict.NOT_CONFIGURED,
+            verdict.REENTRANT,
+            verdict.UNAVAILABLE,
+            verdict.HARNESS_FAULT,
+            verdict.DENIED,
+            verdict.FAILED_CHECK,
+            verdict.UNRECOGNISED,
+            verdict.TAMPERED,
         }
         assert len(reasons) == 8
         assert TAMPERED == "enforcement_tampered"
@@ -350,7 +358,8 @@ class TestTheBaselineFailureIsRemembered:
 
         real = verification_mod.enforcement_digests
         monkeypatch.setattr(
-            verification_mod, "enforcement_digests",
+            verification_mod,
+            "enforcement_digests",
             lambda cwd, policy_path=None: (_ for _ in ()).throw(enforcement_digest.EnforcementDigestError("x")),
         )
         runner = _runner()

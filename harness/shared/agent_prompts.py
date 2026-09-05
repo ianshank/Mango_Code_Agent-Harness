@@ -17,13 +17,10 @@ PRE_RUN_HOOK = "pre-nemotron-run"
 #: a second edit, and a list maintained by hand is exactly the thing that goes
 #: stale into a permission. Every name here is one this module constructs
 #: itself; nothing a caller passes can widen the set.
-PERMITTED_HOOK_NAMES = frozenset(
-    {PRE_RUN_HOOK} | {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL}
-)
+PERMITTED_HOOK_NAMES = frozenset({PRE_RUN_HOOK} | {f"post-{role}-run" for role in ACTIVE_TO_CANONICAL})
 
 AUTONOMOUS_AGENT_GUARDRAIL = (
-    "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants "
-    "and fail closed when approval is required."
+    "YOU ARE AN AUTONOMOUS AGENT. You must follow repository invariants and fail closed when approval is required."
 )
 
 PLANNER_PROMPT_TEMPLATE = (

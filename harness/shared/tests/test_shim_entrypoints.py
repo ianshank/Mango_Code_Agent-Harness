@@ -104,9 +104,7 @@ class TestMainDispatchBranch:
         assert exc.value.code not in (0, None)
 
     def test_pretooluse_guard_main_leg_allows_benign_command(self, monkeypatch):
-        monkeypatch.setattr(
-            sys, "stdin", io.StringIO(json.dumps({"tool_input": {"command": "git status"}}))
-        )
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"tool_input": {"command": "git status"}})))
         with pytest.raises(SystemExit) as exc:
             runpy.run_path(str(SHARED / "pretooluse_guard.py"), run_name="__main__")
         assert exc.value.code == 0
@@ -121,9 +119,7 @@ class TestMainDispatchBranch:
             for line in allowlist.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.startswith("#")
         )
-        monkeypatch.setattr(
-            sys, "argv", ["remotes.py", "--check-url", allowed, "--allowlist", str(allowlist)]
-        )
+        monkeypatch.setattr(sys, "argv", ["remotes.py", "--check-url", allowed, "--allowlist", str(allowlist)])
         with pytest.raises(SystemExit) as exc:
             runpy.run_path(str(SHARED / "remotes.py"), run_name="__main__")
         assert exc.value.code == 0
@@ -146,7 +142,5 @@ class TestCheckTraceabilityShim:
             f"ns = runpy.run_path({str(SHARED / 'check_traceability.py')!r}); "
             "assert callable(ns['check_traceability'])"
         )
-        result = subprocess.run(
-            [sys.executable, "-S", "-c", probe], cwd=tmp_path, capture_output=True, text=True
-        )
+        result = subprocess.run([sys.executable, "-S", "-c", probe], cwd=tmp_path, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr

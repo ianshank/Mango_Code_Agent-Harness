@@ -116,7 +116,10 @@ def _policy_limit(key: str, default: int, policy_path: Path | None, env_var: str
     if requested >= budget:
         logger.warning(
             "Ignoring %s=%d: an override may only tighten %s (policy says %d)",
-            env_var, requested, key, budget,
+            env_var,
+            requested,
+            key,
+            budget,
         )
         return budget
     logger.info("%s=%d tightens %s from the policy's %d", env_var, requested, key, budget)
@@ -234,9 +237,7 @@ def check_protected_paths(workspace_dir: Path, protected_patterns: list[str]) ->
             seen.add(mf)
             ordered.append(mf)
     if ordered and os.environ.get("ALLOW_GITHUB_CHANGES") != "1":
-        logger.error(
-            "[FAIL] Protected Paths: Unauthorized modifications to protected paths detected: %s", ordered
-        )
+        logger.error("[FAIL] Protected Paths: Unauthorized modifications to protected paths detected: %s", ordered)
         return False
     if ordered:
         logger.warning(

@@ -172,9 +172,7 @@ class TestCheckPyCompatFallback:
         (tmp_path / "pkg").mkdir()
         (tmp_path / "pkg" / "mod.py").write_text("def f(x: str | None = None) -> int | None:\n    return None\n")
         monkeypatch.syspath_prepend(str(SHARED))
-        monkeypatch.setattr(
-            sys, "argv", ["check_py_compat.py", "--repo-root", str(tmp_path), "--min-version", "3.9"]
-        )
+        monkeypatch.setattr(sys, "argv", ["check_py_compat.py", "--repo-root", str(tmp_path), "--min-version", "3.9"])
         with pytest.raises(SystemExit) as exc:
             runpy.run_path(str(SHARED / "check_py_compat.py"), run_name="__main__")
         assert exc.value.code == 1

@@ -1,4 +1,5 @@
 """Tests for harness/shared/governance/evidence_manifest.py."""
+
 from __future__ import annotations
 
 import hashlib
@@ -39,26 +40,20 @@ def test_signing_key_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert b._resolve_key() == b"env-key"
 
 
-def test_constructor_key_takes_precedence_over_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_constructor_key_takes_precedence_over_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(EVIDENCE_KEY_ENV, "env-key")
     b = EvidenceBuilder(project_root=tmp_path, signing_key="ctor-key")
     assert b._resolve_key() == b"ctor-key"
 
 
-def test_missing_key_raises_value_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_missing_key_raises_value_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(EVIDENCE_KEY_ENV, raising=False)
     b = EvidenceBuilder(project_root=tmp_path)
     with pytest.raises(ValueError, match=EVIDENCE_KEY_ENV):
         b._resolve_key()
 
 
-def test_export_raises_value_error_when_no_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_export_raises_value_error_when_no_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(EVIDENCE_KEY_ENV, raising=False)
     b = EvidenceBuilder(project_root=tmp_path)
     with pytest.raises(ValueError):
@@ -171,9 +166,7 @@ def test_export_includes_all_sections(builder: EvidenceBuilder) -> None:
     assert len(result["synthesis_results"]) == 1
 
 
-def test_export_logs_debug(
-    builder: EvidenceBuilder, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_export_logs_debug(builder: EvidenceBuilder, caplog: pytest.LogCaptureFixture) -> None:
     builder.add_action("t", "h", "ok", 1)
     with caplog.at_level(logging.DEBUG, logger="harness.shared.governance.evidence_manifest"):
         builder.export()

@@ -10,6 +10,7 @@ Run with ``LOG_LEVEL=DEBUG`` to see which globs matched which files. That is the
 fastest way to diagnose the common failure where a glob is scoped to one stack and
 silently checks nothing outside it.
 """
+
 from __future__ import annotations
 
 import glob
@@ -99,13 +100,9 @@ def check_traceability() -> None:
             gaps[req] = absent_from
     if gaps:
         # Leading sentence is unchanged: CI logs and the test suite match on it.
-        detail = "".join(
-            f"\n  {req}: absent from {' and '.join(sides)}" for req, sides in gaps.items()
-        )
+        detail = "".join(f"\n  {req}: absent from {' and '.join(sides)}" for req, sides in gaps.items())
         raise SystemExit(
-            "traceability: requirement IDs missing implementation and/or test citation: "
-            + ", ".join(gaps)
-            + detail
+            "traceability: requirement IDs missing implementation and/or test citation: " + ", ".join(gaps) + detail
         )
     print(f"traceability: passed ({len(ids)} requirements)")
 

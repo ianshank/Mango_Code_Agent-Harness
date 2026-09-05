@@ -17,6 +17,7 @@ unrepresentable instead of merely tested.
 ``execute_agent(..., budget=None)`` creates a fresh budget per call, which is
 byte-for-byte the behaviour every existing caller had.
 """
+
 from __future__ import annotations
 
 import dataclasses

@@ -84,7 +84,10 @@ def test_complete_chat_missing_key(mock_urlopen, mock_resolve):
 @patch("urllib.request.urlopen")
 def test_complete_chat_http_error(mock_urlopen):
     err = urllib.error.HTTPError(
-        "url", 401, "Unauthorized", email.message.Message(),
+        "url",
+        401,
+        "Unauthorized",
+        email.message.Message(),
         io.BytesIO(b"Bad Key my_secret_key"),
     )
     mock_urlopen.side_effect = err
@@ -182,13 +185,17 @@ def test_complete_chat_no_retry_by_default(mock_urlopen, mock_sleep):
 
     # Supply every env key so resolve_environment()'s short-circuit fires
     # before it reads .env (which may set NEMOTRON_MAX_RETRIES=3).
-    with patch.dict(os.environ, {
-        "NEMOTRON_DEFAULT_MODEL": "dummy-model",
-        "NEMOTRON_MAX_RETRIES": "0",
-        "NVIDIA_API_KEY": "test-key",
-        "NVIDIA_BASE_URL": "https://example.com/v1",
-        "NEMOTRON_TIMEOUT_MS": "30000",
-    }, clear=False):
+    with patch.dict(
+        os.environ,
+        {
+            "NEMOTRON_DEFAULT_MODEL": "dummy-model",
+            "NEMOTRON_MAX_RETRIES": "0",
+            "NVIDIA_API_KEY": "test-key",
+            "NVIDIA_BASE_URL": "https://example.com/v1",
+            "NEMOTRON_TIMEOUT_MS": "30000",
+        },
+        clear=False,
+    ):
         with pytest.raises(RuntimeError, match="HTTP 503"):
             complete_chat([], api_key="secret-key")
 

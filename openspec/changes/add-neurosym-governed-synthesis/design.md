@@ -110,13 +110,14 @@ from pathlib import Path
 # Policy layer (Governance Control Plane)
 # -----------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class PolicyDecision:
     verdict: Literal["ALLOW", "DENY", "BLOCKED"]
     policy_bundle_digest: str
-    candidate_digest: str        # SHA-256 of candidate source
-    timestamp: str               # ISO-8601 UTC
-    evidence_id: str             # immutable; links to EvidenceBuilder record
+    candidate_digest: str  # SHA-256 of candidate source
+    timestamp: str  # ISO-8601 UTC
+    evidence_id: str  # immutable; links to EvidenceBuilder record
     violations: list[dict[str, object]] = field(default_factory=list)
 
 
@@ -124,15 +125,14 @@ class PolicyDecision:
 # Critique layer (DEC-NS-002: versioned critique schema)
 # -----------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Critique:
-    schema_version: str          # from governance-policy.json → synthesis.critique_schema_version
-    failure_type: Literal[
-        "policy", "parser", "compiler", "test", "sandbox", "secret"
-    ]
+    schema_version: str  # from governance-policy.json → synthesis.critique_schema_version
+    failure_type: Literal["policy", "parser", "compiler", "test", "sandbox", "secret"]
     evidence_id: str
-    location: str | None         # file:line if applicable
-    normalized_message: str      # redacted; no raw paths or secrets
+    location: str | None  # file:line if applicable
+    normalized_message: str  # redacted; no raw paths or secrets
     redacted: bool = True
 
 
@@ -140,13 +140,14 @@ class Critique:
 # Execution layer (wraps existing ExecutionBroker)
 # -----------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ExecutionRequest:
     language: Literal["python", "typescript", "javascript"]
     source: str
-    capability_profile: str      # references capability-profiles/<name>.json
+    capability_profile: str  # references capability-profiles/<name>.json
     timeout_ms: int
-    workspace_digest: str        # SHA-256 of workspace snapshot
+    workspace_digest: str  # SHA-256 of workspace snapshot
 
 
 @dataclass
@@ -161,6 +162,7 @@ class SandboxViolation:
 # Synthesis layer
 # -----------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class SearchBudget:
     max_depth: int
@@ -168,7 +170,7 @@ class SearchBudget:
     max_inference_count: int
     max_wall_clock_ms: int
     max_cost_usd: float
-    max_repair_cycles: int       # from governance-policy.json → synthesis.max_repair_cycles
+    max_repair_cycles: int  # from governance-policy.json → synthesis.max_repair_cycles
 
 
 @dataclass
@@ -184,7 +186,7 @@ class SynthesisResult:
     status: Literal["VERIFIED", "FAILED", "BLOCKED"]
     evidence_id: str
     policy_bundle_digest: str
-    termination_reason: str | None = None   # "budget_exhausted", "deny_terminal", etc.
+    termination_reason: str | None = None  # "budget_exhausted", "deny_terminal", etc.
     best_candidate_summary: str | None = None
     digests: dict[str, str] = field(default_factory=dict)  # policy, test, sandbox, source, tool_versions
 

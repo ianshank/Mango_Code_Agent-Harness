@@ -1,4 +1,5 @@
 """Tests for governance/check_traceability: requirement traceability gate."""
+
 from __future__ import annotations
 
 import json
@@ -38,7 +39,10 @@ class TestCheckTraceability:
     """Exercises the bidirectional traceability gate."""
 
     def test_all_cited_passes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         _scaffold_traceability(
             tmp_path,

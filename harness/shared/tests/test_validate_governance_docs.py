@@ -1,4 +1,5 @@
 """Tests for validate_governance_docs: charter version, governance skill freshness, decision log."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -45,7 +46,10 @@ class TestValidateGovernanceDocs:
     """Exercises the governance-docs validator pass and fail paths."""
 
     def test_valid_structure_passes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         _scaffold_valid(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -113,7 +117,9 @@ class TestValidateGovernanceDocs:
         assert "decision log" in str(exc_info.value).lower()
 
     def test_decision_in_log_missing_from_skill_fails(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Cover lines 56-58: a decision log entry after the anchor date that is not in the skill body."""
         _scaffold_valid(tmp_path)
@@ -129,7 +135,9 @@ class TestValidateGovernanceDocs:
         assert "DEC-MISSING" in str(exc_info.value)
 
     def test_skill_missing_decisions_since_section_fails(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Cover line 42: governance skill has Reviewed: date but no 'Decisions since' section."""
         _scaffold_valid(tmp_path)

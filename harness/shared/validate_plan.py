@@ -115,8 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if findings:
         classes = sorted({f.defect_class for f in findings})
         print(
-            f"plan: FAILED — {len(findings)} finding(s) across {len(plans)} plan(s): "
-            f"{', '.join(classes)}",
+            f"plan: FAILED — {len(findings)} finding(s) across {len(plans)} plan(s): {', '.join(classes)}",
             file=sys.stderr,
         )
         return 1

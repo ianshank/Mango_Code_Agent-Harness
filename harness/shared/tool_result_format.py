@@ -11,6 +11,7 @@ does not reach the model, which is why a verdict cannot be recovered from this
 string and is derived from the structured result instead (see
 ``harness.shared.governance.verdict``).
 """
+
 from __future__ import annotations
 
 import json

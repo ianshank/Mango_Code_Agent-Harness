@@ -72,6 +72,7 @@ def _policy(root: Path, dedup: dict) -> Path:
 
 # --- discovery ---
 
+
 def test_discover_stacks_finds_stacks_with_scripts(repo: Path):
     assert cd.discover_stacks(repo) == ["jvm", "node"]
 
@@ -103,6 +104,7 @@ def test_find_shared_module_returns_none_when_absent(repo: Path):
 
 # --- classify_shim ---
 
+
 @pytest.mark.parametrize(
     "text,expected",
     [
@@ -130,6 +132,7 @@ def test_classify_shim_verifies_target_stem():
 
 
 # --- config resolution ---
+
 
 def test_load_config_defaults_without_policy(repo: Path):
     cfg = cd.load_config(repo)
@@ -159,9 +162,7 @@ def test_load_config_env_may_only_tighten_the_policy(repo: Path, monkeypatch: py
     assert cd.load_config(repo).max_shim_lines == 5, "an override must still tighten it"
 
 
-def test_load_config_says_why_it_ignored_a_loosening_override(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, caplog
-):
+def test_load_config_says_why_it_ignored_a_loosening_override(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
     """A silently ignored override is its own trap: the caller believes the
     budget moved and reads the PASS as meaning something it does not."""
     _policy(repo, {"max_shim_lines": 12})
@@ -205,8 +206,7 @@ def test_load_config_uses_defaults_when_policy_is_absent(repo: Path):
 
 def test_load_config_reads_a_distinguishable_policy_value(repo: Path):
     """Proves the policy is read at all, rather than coinciding with the default."""
-    _write(repo / "harness" / "shared" / "governance-policy.json",
-           '{"dedup": {"max_shim_lines": 1}}')
+    _write(repo / "harness" / "shared" / "governance-policy.json", '{"dedup": {"max_shim_lines": 1}}')
     assert cd.load_config(repo).max_shim_lines == 1
 
 
@@ -245,6 +245,7 @@ def test_load_config_ignores_a_wrongly_typed_exempt(repo: Path):
 
 
 # --- check_script ---
+
 
 def test_check_script_accepts_import_shim(repo: Path):
     _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
@@ -300,6 +301,7 @@ def test_two_identical_shims_are_not_drift(repo: Path):
 
 
 # --- run / report ---
+
 
 def test_run_passes_on_clean_layout(repo: Path):
     _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
@@ -357,6 +359,7 @@ def test_report_to_dict_shape(repo: Path):
 
 
 # --- CLI ---
+
 
 def test_main_returns_zero_on_clean_repo(repo: Path):
     _write(repo / "harness" / "shared" / "thing.py", REAL_LOGIC)
@@ -488,6 +491,7 @@ def test_classify_shim_treats_an_unrenderable_run_path_argument_as_no_delegation
     found", never as a gate crash -- classification is not allowed to be the thing
     that fails the dedup gate. The import spelling, which never unparses, must be
     unaffected, proving the failure is scoped to the argument it could not render."""
+
     def boom(node: object) -> str:
         raise ValueError("unrenderable node")
 
@@ -497,6 +501,7 @@ def test_classify_shim_treats_an_unrenderable_run_path_argument_as_no_delegation
 
 
 # --- check_script: I/O failures on either side of the comparison ---
+
 
 def test_check_script_reports_an_unreadable_script(repo: Path):
     """A stack script that cannot be read is itself a failure with a reason, not a

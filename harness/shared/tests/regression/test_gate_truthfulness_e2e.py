@@ -110,8 +110,7 @@ def base_ref() -> Iterator[str]:
         # command echo); the `[PASS]` line for an empty set goes to stderr via logging.
         rows = [line for line in listed.stdout.splitlines() if line.startswith("|")]
         assert not rows, (
-            "these cases need an empty protected set; the working tree has modified protected "
-            f"files:\n{listed.stdout}"
+            f"these cases need an empty protected set; the working tree has modified protected files:\n{listed.stdout}"
         )
         yield name
     finally:

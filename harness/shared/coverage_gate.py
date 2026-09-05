@@ -106,9 +106,7 @@ def load_thresholds(policy_path: Path) -> dict[str, float]:
     for metric in ENFORCED_METRICS:
         value = coverage.get(metric)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
-            logger.error(
-                "[FAIL] Governance policy %s: coverage.%s is missing or non-numeric", policy_path, metric
-            )
+            logger.error("[FAIL] Governance policy %s: coverage.%s is missing or non-numeric", policy_path, metric)
             raise SystemExit(1)
         thresholds[metric] = float(value)
     return thresholds
@@ -127,7 +125,9 @@ def measure(coverage_json: Path) -> dict[str, float]:
             logger.error(
                 "[FAIL] Coverage report %s lacks %s/%s -- was pytest run with "
                 "--cov-report=json and branch coverage enabled?",
-                coverage_json, num_key, den_key,
+                coverage_json,
+                num_key,
+                den_key,
             )
             raise SystemExit(1)
         if denominator == 0:
@@ -157,9 +157,10 @@ def per_file_enabled(policy_path: Path) -> bool:
     per_file = coverage["per_file"]
     if not isinstance(per_file, bool):
         logger.error(
-            "[FAIL] Governance policy %s declares coverage.per_file as %r (%s); "
-            "it must be true or false",
-            policy_path, per_file, type(per_file).__name__,
+            "[FAIL] Governance policy %s declares coverage.per_file as %r (%s); it must be true or false",
+            policy_path,
+            per_file,
+            type(per_file).__name__,
         )
         raise SystemExit(1)
     return per_file

@@ -62,9 +62,7 @@ def _asserts_something(node: ast.AST) -> bool:
     for child in ast.walk(node):
         if isinstance(child, ast.Assert):
             return True
-        if isinstance(child, ast.Attribute) and (
-            child.attr.startswith("assert") or child.attr in _ASSERTING_ATTRS
-        ):
+        if isinstance(child, ast.Attribute) and (child.attr.startswith("assert") or child.attr in _ASSERTING_ATTRS):
             return True
         if isinstance(child, ast.Name) and child.id.startswith("assert"):
             return True
@@ -149,10 +147,7 @@ class TestSuiteHasNoUnfailableAssertions:
                         isinstance(left, ast.Name)
                         and left.id in imported
                         and any(isinstance(op, ast.IsNot) for op in child.test.ops)
-                        and any(
-                            isinstance(c, ast.Constant) and c.value is None
-                            for c in child.test.comparators
-                        )
+                        and any(isinstance(c, ast.Constant) and c.value is None for c in child.test.comparators)
                     ):
                         offenders.append(f"{name} (line {child.lineno})")
             del tree

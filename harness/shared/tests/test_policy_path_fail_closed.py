@@ -76,9 +76,7 @@ UNUSABLE_KINDS = [
     pytest.param("directory"),
     pytest.param(
         "dangling_symlink",
-        marks=pytest.mark.skipif(
-            not _supports("dangling_symlink"), reason="platform cannot create symlinks"
-        ),
+        marks=pytest.mark.skipif(not _supports("dangling_symlink"), reason="platform cannot create symlinks"),
     ),
     pytest.param(
         "fifo",
@@ -88,7 +86,7 @@ UNUSABLE_KINDS = [
         "not_a_directory",
         marks=pytest.mark.skipif(
             sys.platform == "win32",
-            reason="NTFS path resolution through a file raises FileNotFoundError, not NotADirectoryError"
+            reason="NTFS path resolution through a file raises FileNotFoundError, not NotADirectoryError",
         ),
     ),
 ]
@@ -155,8 +153,12 @@ _READER_IDS = [name for name, _, _ in READERS]
 class TestPolicyPathFailsClosed:
     @pytest.mark.parametrize("kind", UNUSABLE_KINDS)
     def test_an_unusable_policy_path_stops_the_run(
-        self, name: str, reader: Callable[[Path], object], error: type[BaseException],
-        kind: str, tmp_path: Path,
+        self,
+        name: str,
+        reader: Callable[[Path], object],
+        error: type[BaseException],
+        kind: str,
+        tmp_path: Path,
     ) -> None:
         policy = _make_unusable(tmp_path / "governance-policy.json", kind)
         with pytest.raises(error) as exc:
@@ -167,14 +169,20 @@ class TestPolicyPathFailsClosed:
         )
 
     def test_a_genuinely_absent_policy_is_still_the_adopter_path(
-        self, name: str, reader: Callable[[Path], object], error: type[BaseException],
+        self,
+        name: str,
+        reader: Callable[[Path], object],
+        error: type[BaseException],
         tmp_path: Path,
     ) -> None:
         """The fix must not turn the supported adopter case into a failure."""
         assert reader(tmp_path / "governance-policy.json") is not None
 
     def test_a_real_policy_file_is_read(
-        self, name: str, reader: Callable[[Path], object], error: type[BaseException],
+        self,
+        name: str,
+        reader: Callable[[Path], object],
+        error: type[BaseException],
         tmp_path: Path,
     ) -> None:
         """And the guard must not reject the ordinary case it stands in front of."""
@@ -182,11 +190,12 @@ class TestPolicyPathFailsClosed:
         policy.write_text('{"decision_id_pattern": "^(DEC-[0-9]+)$"}', encoding="utf-8")
         assert reader(policy) is not None
 
-    @pytest.mark.skipif(
-        not _supports("dangling_symlink"), reason="platform cannot create symlinks"
-    )
+    @pytest.mark.skipif(not _supports("dangling_symlink"), reason="platform cannot create symlinks")
     def test_a_symlink_to_a_real_policy_is_followed(
-        self, name: str, reader: Callable[[Path], object], error: type[BaseException],
+        self,
+        name: str,
+        reader: Callable[[Path], object],
+        error: type[BaseException],
         tmp_path: Path,
     ) -> None:
         """Rejecting every symlink would be a fail-*closed* bug of its own.
@@ -210,9 +219,7 @@ class TestGuardsProbeErrnoNotPredicates:
     style choice -- so they are asserted, not left in a comment.
     """
 
-    def test_the_path_predicates_report_an_unreachable_path_as_absent(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_path_predicates_report_an_unreachable_path_as_absent(self, tmp_path: Path) -> None:
         blocker = tmp_path / "a-regular-file"
         blocker.write_text("not a directory", encoding="utf-8")
         unreachable = blocker / "governance-policy.json"
@@ -225,9 +232,7 @@ class TestGuardsProbeErrnoNotPredicates:
         with pytest.raises((NotADirectoryError, FileNotFoundError)):
             unreachable.stat()
 
-    def test_stat_distinguishes_the_cases_the_predicates_collapse(
-        self, tmp_path: Path
-    ) -> None:
+    def test_stat_distinguishes_the_cases_the_predicates_collapse(self, tmp_path: Path) -> None:
         directory = tmp_path / "as-a-directory"
         directory.mkdir()
         assert not stat.S_ISREG(directory.stat().st_mode)
@@ -243,11 +248,7 @@ _BANNED_GUARD = re.compile(r"if not (\w*POLICY_PATH)\.is_file\(\)")
 
 def _offending_lines(source: str) -> list[int]:
     """1-indexed lines where a policy path is guarded by is_file()."""
-    return [
-        index + 1
-        for index, line in enumerate(source.splitlines())
-        if _BANNED_GUARD.search(line)
-    ]
+    return [index + 1 for index, line in enumerate(source.splitlines()) if _BANNED_GUARD.search(line)]
 
 
 class TestNoReaderReintroducesTheShape:
@@ -264,7 +265,8 @@ class TestNoReaderReintroducesTheShape:
 
     def _sources(self) -> list[Path]:
         return sorted(
-            p for p in (REPO / "harness").rglob("*.py")
+            p
+            for p in (REPO / "harness").rglob("*.py")
             if "/tests/" not in p.as_posix() and "__pycache__" not in p.as_posix()
         )
 
@@ -285,23 +287,27 @@ class TestNoReaderReintroducesTheShape:
     def test_the_gate_detects_the_shape_it_bans(self) -> None:
         """A positive control. A pattern that matched nothing would leave the
         test above passing vacuously forever, and nothing would say so."""
-        offending = "\n".join((
-            "POLICY_PATH = Path('governance-policy.json')",
-            "def read():",
-            "    if not POLICY_PATH.is_file():",
-            "        return FALLBACK",
-        ))
+        offending = "\n".join(
+            (
+                "POLICY_PATH = Path('governance-policy.json')",
+                "def read():",
+                "    if not POLICY_PATH.is_file():",
+                "        return FALLBACK",
+            )
+        )
         assert _offending_lines(offending) == [3]
 
     def test_the_gate_accepts_the_shape_it_wants(self) -> None:
         """And the inverse control: the fixed form must not be flagged."""
-        accepted = "\n".join((
-            "def read():",
-            "    try:",
-            "        info = POLICY_PATH.stat()",
-            "    except FileNotFoundError:",
-            "        return FALLBACK",
-        ))
+        accepted = "\n".join(
+            (
+                "def read():",
+                "    try:",
+                "        info = POLICY_PATH.stat()",
+                "    except FileNotFoundError:",
+                "        return FALLBACK",
+            )
+        )
         assert _offending_lines(accepted) == []
 
 
@@ -343,4 +349,3 @@ class TestPolicyFileIsAbsentErrorBranches:
         monkeypatch.setattr(Path, "lstat", mock_lstat)
         with pytest.raises(policy_loader.PolicyError, match="symlink whose target does not exist"):
             policy_loader.policy_file_is_absent(p)
-

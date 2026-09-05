@@ -1,4 +1,5 @@
 """Tests for tool_dispatch: argument normalisation and constants."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ from harness.shared.tool_dispatch import (
 
 # -- DEFAULT_HYPOTHESIS_CONFIDENCE -------------------------------------------
 
+
 class TestDefaultHypothesisConfidence:
     """Constant must be a valid probability in [0, 1]."""
 
@@ -23,6 +25,7 @@ class TestDefaultHypothesisConfidence:
 
 
 # -- _normalize_tool_arguments -----------------------------------------------
+
 
 class TestNormalizeToolArguments:
     """Every shape a model can send must degrade to a dict, never raise."""

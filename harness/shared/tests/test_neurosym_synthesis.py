@@ -1,4 +1,5 @@
 """Tests for neuro-symbolic synthesis policy gates (INV-9..INV-15)."""
+
 from __future__ import annotations
 
 import json

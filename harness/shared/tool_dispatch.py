@@ -40,7 +40,8 @@ def _normalize_tool_arguments(raw: Any, func_name: Any) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         logger.warning(
             "Tool %s sent JSON %s arguments, expected an object; treating as empty",
-            func_name, type(parsed).__name__,
+            func_name,
+            type(parsed).__name__,
         )
         return {}
     return parsed

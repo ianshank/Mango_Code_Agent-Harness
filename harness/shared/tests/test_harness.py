@@ -260,19 +260,25 @@ class HarnessTests(unittest.TestCase):
             }
             self.assertEqual(
                 subprocess.run(
-                    [*base, "--vitest-json", str(r / "vitest.json")], env=pp_env,
-                ).returncode, 0,
+                    [*base, "--vitest-json", str(r / "vitest.json")],
+                    env=pp_env,
+                ).returncode,
+                0,
             )
             self.assertEqual(
                 subprocess.run(
-                    [*base, "--junit-events", str(r / "junit.tsv")], env=pp_env,
-                ).returncode, 0,
+                    [*base, "--junit-events", str(r / "junit.tsv")],
+                    env=pp_env,
+                ).returncode,
+                0,
             )
             (r / "junit.tsv").write_text(f"{uid}\t{jname}\tDEC-999 fabricated\n", encoding="utf-8")
             self.assertNotEqual(
                 subprocess.run(
-                    [*base, "--junit-events", str(r / "junit.tsv")], env=pp_env,
-                ).returncode, 0,
+                    [*base, "--junit-events", str(r / "junit.tsv")],
+                    env=pp_env,
+                ).returncode,
+                0,
             )
 
     def test_agent_role_contracts_and_policy_identity(self):

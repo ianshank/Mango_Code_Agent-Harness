@@ -71,6 +71,7 @@ def _write(root: Path, rel: str, text: str) -> Path:
 
 # --- minimum version resolution ---
 
+
 def test_resolve_min_version_from_workflow_matrix(repo: Path):
     assert cc.resolve_min_version(repo) == (3, 9)
 
@@ -108,6 +109,7 @@ def test_parse_matrix_versions_regex_fallback():
 
 # --- AST detection ---
 
+
 def test_find_pep604_detects_arg_and_return():
     import ast
 
@@ -135,6 +137,7 @@ def test_find_datetime_utc():
 
 
 # --- run ---
+
 
 def test_run_flags_pep604_without_future(repo: Path):
     _write(repo, "pkg/mod.py", PEP604_RUNTIME)
@@ -200,6 +203,7 @@ def test_run_reports_syntax_errors(repo: Path):
 
 # --- CLI ---
 
+
 def test_main_returns_zero_when_compatible(repo: Path):
     _write(repo, "pkg/mod.py", LEGACY_SAFE)
     assert cc.main(["--repo-root", str(repo)]) == 0
@@ -241,19 +245,24 @@ def test_real_repository_is_compatible_with_its_declared_minimum():
 
 def test_parse_matrix_versions_import_error(monkeypatch: pytest.MonkeyPatch):
     import builtins
+
     real_import = builtins.__import__
+
     def fake_import(name, *args, **kwargs):
         if name == "yaml":
             raise ImportError("no yaml")
         return real_import(name, *args, **kwargs)
+
     monkeypatch.setattr(builtins, "__import__", fake_import)
     assert cc._parse_matrix_versions('        python-version: ["3.9"]\n') == [(3, 9)]
 
+
 def test_resolve_min_version_read_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
-    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1/0)
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: 1 / 0)
     with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
         cc.resolve_min_version(repo)
     assert "Could not read" in caplog.text
+
 
 def test_load_skip_dirs_fails_closed_on_malformed_policy(repo: Path, caplog):
     """Silently using the built-in skip set could skip directories the policy meant
@@ -270,6 +279,7 @@ def test_load_skip_dirs_uses_defaults_when_policy_is_absent(repo: Path):
     """An absent policy is the adopter path and still legitimately defaults."""
     assert cc.load_skip_dirs(repo) == frozenset(cc.DEFAULT_SKIP_DIRS)
 
+
 def test_run_read_file_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
     """An unreadable *source file* is skipped with a diagnostic, not fatal.
 
@@ -281,18 +291,14 @@ def test_run_read_file_error(repo: Path, monkeypatch: pytest.MonkeyPatch, caplog
     what the `except` clause has to survive in production.
     """
     _write(repo, "pkg/mod.py", "print(1)")
-    monkeypatch.setattr(
-        Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("boom"))
-    )
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("boom")))
     with caplog.at_level(logging.DEBUG, logger=cc.logger.name):
         report = cc.run(repo, (3, 9), skip_dirs=frozenset(cc.DEFAULT_SKIP_DIRS))
     assert "Skipping unreadable" in caplog.text
     assert report.scanned == 0
 
 
-def test_load_skip_dirs_fails_closed_on_an_unreadable_policy(
-    repo: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_load_skip_dirs_fails_closed_on_an_unreadable_policy(repo: Path, monkeypatch: pytest.MonkeyPatch):
     """Present-but-unreadable is corruption, not the adopter path.
 
     Distinct from the absent-policy case: `FileNotFoundError` is a subclass of
@@ -300,23 +306,24 @@ def test_load_skip_dirs_fails_closed_on_an_unreadable_policy(
     pins that ordering.
     """
     (repo / cc.POLICY_RELPATH).write_text(json.dumps({"py_compat": {}}), encoding="utf-8")
-    monkeypatch.setattr(
-        Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("denied"))
-    )
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("denied")))
     with pytest.raises(SystemExit) as exc:
         cc.load_skip_dirs(repo)
     assert exc.value.code == 1
+
 
 def test_main_block(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("sys.argv", ["check_py_compat.py", "--min-version", "3.12"])
     with pytest.raises(SystemExit) as exc:
         import runpy
+
         runpy.run_path(str(cc.DEFAULT_REPO_ROOT / "harness" / "shared" / "check_py_compat.py"), run_name="__main__")
     assert exc.value.code == 0
 
 
 def test_find_pep604_assignments(repo: Path):
     import ast
+
     code_alias = "MyType = str | None\nflags = 1 | 2\n"
     tree = ast.parse(code_alias)
     assert cc.find_pep604_assignments(tree) == [1]
@@ -324,7 +331,6 @@ def test_find_pep604_assignments(repo: Path):
     report = cc.run(repo, (3, 9))
     assert not report.ok
     assert any("runtime type alias" in v for v in report.violations)
-
 
 
 def test_cli_survives_a_bogus_log_level(repo: Path):
@@ -373,6 +379,7 @@ def test_parse_matrix_versions_falls_back_to_regex_when_yaml_parsing_fails(monke
     """A workflow PyYAML rejects (the non-ImportError leg) must not crash the gate:
     the regex fallback still recovers the matrix, and the reason is logged. Without
     the fallback a malformed unrelated workflow would take the whole gate down."""
+
     def broken_safe_load(text: str) -> object:
         raise ValueError("mapping values are not allowed here")
 

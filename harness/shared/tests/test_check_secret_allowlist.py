@@ -129,7 +129,7 @@ class TestParsing:
         text = CONFIG + '\n[other]\nkeep = "me"\n'
         stripped = gate.config_without_allowlist(text)
         assert "[allowlist]" not in stripped
-        assert '[other]' in stripped and 'keep = "me"' in stripped
+        assert "[other]" in stripped and 'keep = "me"' in stripped
 
 
 class TestUnearnedEntries:
@@ -193,9 +193,7 @@ class TestMainFailsClosed:
     def test_all_entries_earning_their_place_passes(self, tmp_path: Path, monkeypatch) -> None:
         config = self._config(tmp_path)
         monkeypatch.setattr(gate.shutil, "which", lambda _name: "/usr/bin/true")
-        monkeypatch.setattr(
-            gate, "scan_findings", lambda *_a, **_k: _findings("live/one.py", "dead/nothing.py")
-        )
+        monkeypatch.setattr(gate, "scan_findings", lambda *_a, **_k: _findings("live/one.py", "dead/nothing.py"))
         assert gate.main(["--config", str(config)]) == 0
 
 
@@ -217,9 +215,9 @@ class TestScanFindings:
     def test_a_non_json_report_fails(self, tmp_path: Path, caplog) -> None:
         stub = self._stub(
             tmp_path,
-            '#!/bin/sh\nwhile [ $# -gt 0 ]; do\n'
+            "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n"
             '  if [ "$1" = "--report-path" ]; then printf "not json" > "$2"; fi\n'
-            '  shift\ndone\nexit 0\n',
+            "  shift\ndone\nexit 0\n",
         )
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit):
             gate.scan_findings(tmp_path, CONFIG, stub)
@@ -228,9 +226,9 @@ class TestScanFindings:
     def test_a_report_that_is_not_a_list_fails(self, tmp_path: Path, caplog) -> None:
         stub = self._stub(
             tmp_path,
-            '#!/bin/sh\nwhile [ $# -gt 0 ]; do\n'
+            "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n"
             '  if [ "$1" = "--report-path" ]; then printf "{}" > "$2"; fi\n'
-            '  shift\ndone\nexit 0\n',
+            "  shift\ndone\nexit 0\n",
         )
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit):
             gate.scan_findings(tmp_path, CONFIG, stub)

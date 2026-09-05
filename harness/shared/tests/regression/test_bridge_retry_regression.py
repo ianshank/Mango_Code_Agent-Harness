@@ -142,9 +142,7 @@ class TestRetryAfter:
 
     @patch("harness.shared.nemotron_bridge.time.sleep")
     @patch("urllib.request.urlopen")
-    def test_bridge_backoff_never_exceeds_the_cap(
-        self, mock_urlopen: MagicMock, mock_sleep: MagicMock
-    ) -> None:
+    def test_bridge_backoff_never_exceeds_the_cap(self, mock_urlopen: MagicMock, mock_sleep: MagicMock) -> None:
         """Unbounded doubling reached ~34 minutes on the 11th retry, so a
         transient outage turned a build into a hang rather than a failure."""
         mock_urlopen.side_effect = urllib.error.URLError("down")
@@ -203,9 +201,7 @@ class TestDotEnvReachability:
         """
         pkg = tmp_path / "repo" / "harness" / "shared"
         pkg.mkdir(parents=True)
-        (tmp_path / "repo" / ".env").write_text(
-            "NEMOTRON_MAX_RETRIES=4\nNEMOTRON_TIMEOUT_MS=7000\n", encoding="utf-8"
-        )
+        (tmp_path / "repo" / ".env").write_text("NEMOTRON_MAX_RETRIES=4\nNEMOTRON_TIMEOUT_MS=7000\n", encoding="utf-8")
         monkeypatch.setattr(nemotron_bridge, "__file__", str(pkg / "nemotron_bridge.py"))
         monkeypatch.setenv("NVIDIA_API_KEY", "process-key")
         monkeypatch.setenv("NEMOTRON_DEFAULT_MODEL", "process-model")
@@ -219,9 +215,7 @@ class TestDotEnvReachability:
         # The process environment still wins for keys it supplies.
         assert resolved["api_key"] == "process-key"
 
-    def test_process_environment_still_wins_over_env_file(
-        self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_process_environment_still_wins_over_env_file(self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
         pkg = tmp_path / "repo" / "harness" / "shared"
         pkg.mkdir(parents=True)
         (tmp_path / "repo" / ".env").write_text("NVIDIA_API_KEY=file-key\n", encoding="utf-8")
@@ -267,12 +261,18 @@ class TestEnvFileDoesNotOverrideRetryKnob:
     @patch("harness.shared.nemotron_bridge.time.sleep")
     @patch("urllib.request.urlopen")
     def test_no_retry_with_all_env_vars_populated(
-        self, mock_urlopen: MagicMock, mock_sleep: MagicMock,
+        self,
+        mock_urlopen: MagicMock,
+        mock_sleep: MagicMock,
     ) -> None:
         """With ``NEMOTRON_MAX_RETRIES=0`` AND all other env vars populated,
         a 503 must surface immediately — zero retries, zero sleeps."""
         err = urllib.error.HTTPError(
-            "url", 503, "Service Unavailable", _headers(), io.BytesIO(b"busy"),
+            "url",
+            503,
+            "Service Unavailable",
+            _headers(),
+            io.BytesIO(b"busy"),
         )
         mock_urlopen.side_effect = err
 
@@ -308,6 +308,4 @@ class TestEnvFileDoesNotOverrideRetryKnob:
         with patch.dict(os.environ, full_env, clear=False):
             result = nemotron_bridge.resolve_environment()
 
-        assert result["max_retries"] == "0", (
-            f"Expected max_retries='0' but got {result['max_retries']!r}"
-        )
+        assert result["max_retries"] == "0", f"Expected max_retries='0' but got {result['max_retries']!r}"

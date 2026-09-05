@@ -198,9 +198,7 @@ class TestLanggraphDeselection:
     def _items(self) -> list[TestLanggraphDeselection._Item]:
         return [self._Item("test_marked.py::test_a", True), self._Item("test_plain.py::test_b", False)]
 
-    def test_marked_items_are_deselected_when_the_extra_is_absent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_marked_items_are_deselected_when_the_extra_is_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(_session_hooks, "LANGGRAPH_AVAILABLE", False)
         monkeypatch.setenv(_session_hooks.LANGGRAPH_DESELECT_ENV, "1")
         config, items = self._Config(), self._items()
@@ -210,9 +208,7 @@ class TestLanggraphDeselection:
             "pytest was not told about the deselection, so it would not appear in the summary"
         )
 
-    def test_nothing_is_deselected_when_the_extra_is_installed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_nothing_is_deselected_when_the_extra_is_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A leg that HAS langgraph must keep running the suites, env or no env."""
         monkeypatch.setattr(_session_hooks, "LANGGRAPH_AVAILABLE", True)
         monkeypatch.setenv(_session_hooks.LANGGRAPH_DESELECT_ENV, "1")
@@ -244,9 +240,7 @@ class TestDeselectEnvResolution:
     def test_the_shipped_policy_supplies_the_name(self) -> None:
         assert _session_hooks.LANGGRAPH_DESELECT_ENV == "MANGO_CI_DESELECT_LANGGRAPH"
 
-    def test_a_policy_without_the_extra_falls_back_instead_of_raising(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_policy_without_the_extra_falls_back_instead_of_raising(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Indexing the extras dict unguarded raised ``KeyError`` out of a
         module-level statement reached from the root conftest, so an adopter fork
         that trimmed the block could not collect any suite at all — and got no

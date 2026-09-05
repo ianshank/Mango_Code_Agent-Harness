@@ -182,9 +182,7 @@ def parse_plan(text: str, name: str) -> Plan:
         acceptance=tuple(b for b in split_bullets(acceptance_block) if b.strip()),
         declared=frozenset(declared),
         cited=frozenset(REQ_PATTERN.findall(acceptance_block + "\n" + matrix)),
-        carries_new_sections=any(
-            any(key.startswith(marker) for marker in NEW_SECTION_KEYS) for key in sections
-        ),
+        carries_new_sections=any(any(key.startswith(marker) for marker in NEW_SECTION_KEYS) for key in sections),
     )
 
 

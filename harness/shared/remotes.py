@@ -1,4 +1,5 @@
 """Backward-compatible shim for remotes."""
+
 import sys
 from pathlib import Path
 

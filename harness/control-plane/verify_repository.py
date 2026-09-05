@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Independent repository verifier; deploy/run this from the protected control plane."""
+
 from __future__ import annotations
 
 import argparse

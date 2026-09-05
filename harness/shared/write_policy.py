@@ -121,9 +121,7 @@ CREDENTIAL_FILENAME_PATTERN = re.compile(rf"^(?:{CREDENTIAL_FILENAME_ALTERNATION
 #: ``.env.production`` still matches, because ``production`` is not a placeholder.
 CREDENTIAL_PLACEHOLDER_SUFFIXES = ("example", "sample", "template", "dist", "defaults")
 
-_CREDENTIAL_PLACEHOLDER = re.compile(
-    rf"\.(?:{'|'.join(CREDENTIAL_PLACEHOLDER_SUFFIXES)})$", re.IGNORECASE
-)
+_CREDENTIAL_PLACEHOLDER = re.compile(rf"\.(?:{'|'.join(CREDENTIAL_PLACEHOLDER_SUFFIXES)})$", re.IGNORECASE)
 
 
 def is_credential_filename(segment: str) -> bool:
@@ -139,6 +137,7 @@ def is_credential_filename(segment: str) -> bool:
     if _CREDENTIAL_PLACEHOLDER.search(candidate):
         return False
     return bool(CREDENTIAL_FILENAME_PATTERN.match(candidate))
+
 
 #: The pre-segment-matching name. No first-party caller imports it; it is served
 #: through ``__getattr__`` below with a DeprecationWarning for one minor release
@@ -358,9 +357,7 @@ def _load_supplied_policy(policy_path: Path) -> tuple[bytes, Mapping[str, Any]]:
     return raw, parsed
 
 
-def write_denial_reason(
-    relpath: str, policy_path: Path | None = None, pin_path: Path | None = None
-) -> str | None:
+def write_denial_reason(relpath: str, policy_path: Path | None = None, pin_path: Path | None = None) -> str | None:
     """Return why ``relpath`` may not be written, or ``None`` when it may.
 
     Fails closed: a policy that cannot be read denies the write. The alternative

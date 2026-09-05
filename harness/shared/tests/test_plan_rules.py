@@ -182,10 +182,13 @@ class TestOrphanRequirement:
         assert "ORPHAN_REQUIREMENT" not in _classes(text)
 
     def test_a_citation_in_the_validation_matrix_also_counts(self) -> None:
-        text = _swap(
-            "- [ ] AC-1: `out.py` exists — verified by `pytest -k test_out` · stage: `make ci` (R-EX-1)",
-            "- [ ] AC-1: `out.py` exists — verified by `pytest -k test_out` · stage: `make ci`",
-        ) + "\n## Validation matrix\n\n- `make ci` proves R-EX-1\n"
+        text = (
+            _swap(
+                "- [ ] AC-1: `out.py` exists — verified by `pytest -k test_out` · stage: `make ci` (R-EX-1)",
+                "- [ ] AC-1: `out.py` exists — verified by `pytest -k test_out` · stage: `make ci`",
+            )
+            + "\n## Validation matrix\n\n- `make ci` proves R-EX-1\n"
+        )
         assert "ORPHAN_REQUIREMENT" not in _classes(text)
 
 
@@ -229,8 +232,7 @@ class TestMigratedStructuralRules:
         -- including this framework's own spec, which is how it was found."""
         text = _swap(
             "- [ ] AC-2: A missing input is rejected with exit 1 (R-EX-1)",
-            "- [ ] AC-2: A criterion saying `works correctly` is rejected — "
-            "stage: `make ci` (R-EX-1)",
+            "- [ ] AC-2: A criterion saying `works correctly` is rejected — stage: `make ci` (R-EX-1)",
         )
         assert "UNFALSIFIABLE_ACCEPTANCE" not in _classes(text)
 
@@ -275,8 +277,7 @@ class TestTheRuleRegistryIsComplete:
             "- [ ] AC-2: A missing input is rejected with exit 1 (R-EX-1)",
             "- [ ] AC-2: The design is sound (R-EX-1)",
         )
-        assert not [f for f in structural_findings(text, "p.md")
-                    if f.defect_class == "UNFALSIFIABLE_ACCEPTANCE"]
+        assert not [f for f in structural_findings(text, "p.md") if f.defect_class == "UNFALSIFIABLE_ACCEPTANCE"]
 
     def test_every_rule_returns_findings_naming_its_own_class(self) -> None:
         plan = parse_plan("# x\n", "p.md")
@@ -294,13 +295,16 @@ class TestMessageContract:
 
     def test_untraceable_normative_line(self) -> None:
         text = _swap("- R-EX-1: The thing MUST happen.", "- The thing MUST happen.")
-        line = next(structural_line(f) for f in structural_findings(text, "p.md")
-                    if f.defect_class == "UNTRACEABLE_NORMATIVE")
+        line = next(
+            structural_line(f) for f in structural_findings(text, "p.md") if f.defect_class == "UNTRACEABLE_NORMATIVE"
+        )
         assert line.startswith("p.md: normative MUST has no requirement ID: ")
 
     def test_banned_phrase_line(self) -> None:
-        line = next(structural_line(f) for f in structural_findings(
-            "## Requirements\n## Acceptance criteria\n- it works correctly\n", "p.md"))
+        line = next(
+            structural_line(f)
+            for f in structural_findings("## Requirements\n## Acceptance criteria\n- it works correctly\n", "p.md")
+        )
         assert line == "p.md: unfalsifiable acceptance language 'works correctly'"
 
     def test_render_names_class_ref_and_remedy(self) -> None:

@@ -132,14 +132,15 @@ def load_config(repo_root: Path, max_shim_lines: int | None = None) -> DedupConf
             if requested < cfg.max_shim_lines:
                 logger.info(
                     "MAX_SHIM_LINES=%d tightens the shim budget from %d",
-                    requested, cfg.max_shim_lines,
+                    requested,
+                    cfg.max_shim_lines,
                 )
                 cfg.max_shim_lines = requested
             else:
                 logger.warning(
-                    "Ignoring MAX_SHIM_LINES=%d: an override may only tighten the shim budget "
-                    "(policy says %d)",
-                    requested, cfg.max_shim_lines,
+                    "Ignoring MAX_SHIM_LINES=%d: an override may only tighten the shim budget (policy says %d)",
+                    requested,
+                    cfg.max_shim_lines,
                 )
 
     if max_shim_lines is not None:
@@ -153,9 +154,7 @@ def discover_stacks(repo_root: Path) -> list[str]:
     if not parent.is_dir():
         return []
     stacks = sorted(
-        d.name
-        for d in parent.iterdir()
-        if d.is_dir() and d.name != "shared" and (d / SCRIPTS_SUBDIR).is_dir()
+        d.name for d in parent.iterdir() if d.is_dir() and d.name != "shared" and (d / SCRIPTS_SUBDIR).is_dir()
     )
     logger.debug("Discovered stacks: %s", stacks)
     return stacks
@@ -241,8 +240,7 @@ def check_script(script: Path, shared_module: Path, cfg: DedupConfig) -> str | N
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not compare bytes for %s: %s", rel, e)
         return (
-            f"{rel}: not a delegating shim - must re-export from harness.shared "
-            f"or call runpy.run_path on {shared_rel}"
+            f"{rel}: not a delegating shim - must re-export from harness.shared or call runpy.run_path on {shared_rel}"
         )
 
     line_count = len(text.splitlines())
@@ -323,8 +321,9 @@ def main(argv: list[str] | None = None) -> int:
             len(report.skipped),
         )
         return 0
-    logger.error("[FAIL] %d of %d per-stack script(s) drifted from the shared kernel.",
-                 len(report.failures), len(report.checked))
+    logger.error(
+        "[FAIL] %d of %d per-stack script(s) drifted from the shared kernel.", len(report.failures), len(report.checked)
+    )
     return 1
 
 

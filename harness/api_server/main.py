@@ -117,6 +117,7 @@ async def orchestrate_task(request: TaskRequest) -> TaskResponse:
     """
     try:
         from fastapi.concurrency import run_in_threadpool
+
         api_key = os.environ.get("NVIDIA_API_KEY")
         orchestrator = MangoMASOrchestrator(workspace_dir=PROJECT_ROOT, api_key=api_key)
 

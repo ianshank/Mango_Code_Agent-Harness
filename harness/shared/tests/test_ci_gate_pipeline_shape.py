@@ -81,9 +81,7 @@ class TestRootPipelineShape:
             "the secrets gate must fail closed when gitleaks is absent, never skip"
         )
         for mode, what in (("dir", "the working tree"), ("git", "git history")):
-            assert re.search(rf"(?:\$\(GITLEAKS\)|gitleaks\S*)\s+{mode}\b", body), (
-                f"secrets gate does not scan {what}"
-            )
+            assert re.search(rf"(?:\$\(GITLEAKS\)|gitleaks\S*)\s+{mode}\b", body), f"secrets gate does not scan {what}"
         # Scoped per job: a global search for `fetch-depth: 0` is satisfied by the
         # build job's checkout, so the scanning job could go shallow undetected.
         scanning = [
@@ -121,8 +119,7 @@ class TestRootPipelineShape:
             if re.search(r"\bmake\s+audit\b(?!-)", _workflow_run_commands(block))
         ]
         assert auditing, (
-            "no root workflow job invokes `make audit`; the dependency-audit gate "
-            "would have no live enforcement"
+            "no root workflow job invokes `make audit`; the dependency-audit gate would have no live enforcement"
         )
         for job, block in auditing:
             # Same conditional-guard check as the secret scan: the invocation
@@ -139,8 +136,7 @@ class TestRootPipelineShape:
         which a stray token in a comment could otherwise satisfy."""
         prereqs = _make_prerequisites(makefile, "ci")
         assert stage in prereqs, (
-            f"`make ci` no longer runs '{stage}' — {REQUIRED_CI_STAGES[stage]}. "
-            f"Current prerequisites: {prereqs}"
+            f"`make ci` no longer runs '{stage}' — {REQUIRED_CI_STAGES[stage]}. Current prerequisites: {prereqs}"
         )
 
     def test_every_ci_prerequisite_is_a_real_target(self, makefile):
@@ -262,4 +258,3 @@ class TestRootPipelineShape:
             f"gate: {unmeasured}. The Makefile's explicit --cov flags take precedence "
             "over the static config, so these read as covered while being ignored."
         )
-

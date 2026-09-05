@@ -100,7 +100,7 @@ class TestRegressionTierIsWired:
     def test_make_test_regression_targets_the_tier(self) -> None:
         recipe = _targets().get("test-regression", "")
         assert "regression" in recipe, "make test-regression does not run the regression directory"
-        assert 'not live' in recipe, "make test-regression would run the live suites"
+        assert "not live" in recipe, "make test-regression would run the live suites"
 
     def test_the_tier_is_reachable_from_make_ci(self) -> None:
         """The dedicated target is a convenience. What must not drift is that
@@ -108,8 +108,7 @@ class TestRegressionTierIsWired:
         `test-python`, whose path argument has to keep containing the tier."""
         recipe = _targets().get("test-python", "")
         assert "$(SHARED_TESTS)" in recipe, (
-            "test-python no longer runs the shared tests directory, so the regression "
-            "tier is not covered by `make ci`"
+            "test-python no longer runs the shared tests directory, so the regression tier is not covered by `make ci`"
         )
         relative = REGRESSION_DIR.relative_to(REPO / "harness" / "shared" / "tests")
         assert relative.parts, "the tier moved outside the directory test-python runs"
@@ -144,8 +143,7 @@ class TestCompositeTargetsStayInStep:
         recipe = _targets().get("node-deps", "")
         assert recipe, "make node-deps does not exist"
         assert "--frozen-lockfile" in recipe, (
-            "node-deps must install from the lockfile; a resolving install makes CI "
-            "non-reproducible"
+            "node-deps must install from the lockfile; a resolving install makes CI non-reproducible"
         )
 
 
@@ -170,10 +168,7 @@ class TestMakefileSelfConsistency:
     def test_every_target_is_documented(self) -> None:
         """`make help` parses `## ` comments; an undocumented target is
         invisible to anyone who did not write it."""
-        undocumented = [
-            name for name in _targets()
-            if not re.search(rf"^{re.escape(name)}:[^\n]*##", _text(), re.M)
-        ]
+        undocumented = [name for name in _targets() if not re.search(rf"^{re.escape(name)}:[^\n]*##", _text(), re.M)]
         assert not undocumented, f"targets missing a `## ` description: {undocumented}"
 
     def test_review_names_every_skill_claude_md_mandates(self) -> None:
@@ -490,9 +485,14 @@ class TestAuditToolIsInstalledFromTheHashedLock:
         assert pinned is not None
         result = subprocess.run(
             [
-                "make", "-C", str(REPO), "--no-print-directory",
-                "--eval", "print-pip-audit-version:\n\t@echo $(PIP_AUDIT_VERSION)",
-                "print-pip-audit-version", f"PYTHON={sys.executable}",
+                "make",
+                "-C",
+                str(REPO),
+                "--no-print-directory",
+                "--eval",
+                "print-pip-audit-version:\n\t@echo $(PIP_AUDIT_VERSION)",
+                "print-pip-audit-version",
+                f"PYTHON={sys.executable}",
             ],
             capture_output=True,
             text=True,

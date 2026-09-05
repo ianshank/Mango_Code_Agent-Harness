@@ -167,8 +167,7 @@ def check_artifact(repo_root: Path, artifact: dict[str, typing.Any]) -> None:
         _deny("artifact is not a JSON object")
     if artifact.get("schema_version") != ARTIFACT_SCHEMA_VERSION:
         _deny(
-            f"unknown artifact schema_version {artifact.get('schema_version')!r}; "
-            f"accepted: {ARTIFACT_SCHEMA_VERSION}"
+            f"unknown artifact schema_version {artifact.get('schema_version')!r}; accepted: {ARTIFACT_SCHEMA_VERSION}"
         )
     if artifact.get("artifact_id") != ARTIFACT_ID:
         _deny(f"unknown artifact_id {artifact.get('artifact_id')!r}; expected {ARTIFACT_ID!r}")
@@ -176,8 +175,7 @@ def check_artifact(repo_root: Path, artifact: dict[str, typing.Any]) -> None:
     expected_policy_id, expected_policy_version = _policy_identity(repo_root)
     if artifact.get("policy_id") != expected_policy_id:
         _deny(
-            f"policy_id mismatch: artifact claims {artifact.get('policy_id')!r}, "
-            f"working tree is {expected_policy_id!r}"
+            f"policy_id mismatch: artifact claims {artifact.get('policy_id')!r}, working tree is {expected_policy_id!r}"
         )
     if artifact.get("policy_version") != expected_policy_version:
         _deny(

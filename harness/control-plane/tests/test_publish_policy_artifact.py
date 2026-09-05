@@ -297,16 +297,12 @@ class TestAttestation:
         artifact = ppa.build_artifact(policy_repo)
         assert ppa.verify_attestation(artifact, signing_key=self.KEY) is False
 
-    def test_no_key_anywhere_fails_closed(
-        self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_key_anywhere_fails_closed(self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AGENT_EVIDENCE_KEY", raising=False)
         artifact = self._attested(policy_repo)
         assert ppa.verify_attestation(artifact) is False
 
-    def test_attest_without_key_denies(
-        self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_attest_without_key_denies(self, policy_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AGENT_EVIDENCE_KEY", raising=False)
         with pytest.raises(ppa.PolicyArtifactError):
             ppa.build_artifact(policy_repo, attest=True)
@@ -370,9 +366,7 @@ class TestCli:
         assert "DENY: artifact file manifest does not match governed policy files" in result.stderr
 
     def test_check_unreadable_artifact_denies(self, policy_repo: Path, tmp_path: Path) -> None:
-        result = self._run(
-            "--repo-root", str(policy_repo), "check", "--artifact", str(tmp_path / "absent.json")
-        )
+        result = self._run("--repo-root", str(policy_repo), "check", "--artifact", str(tmp_path / "absent.json"))
         assert result.returncode != 0
         assert "DENY: unreadable artifact" in result.stderr
 
@@ -382,31 +376,49 @@ class TestCli:
         key = secrets.token_urlsafe(16)
         out_file = tmp_path / "artifact.json"
         built = self._run(
-            "--repo-root", str(policy_repo), "build", "--output", str(out_file), "--attest",
+            "--repo-root",
+            str(policy_repo),
+            "build",
+            "--output",
+            str(out_file),
+            "--attest",
             env_extra={"AGENT_EVIDENCE_KEY": key},
         )
         assert built.returncode == 0, built.stderr
         checked = self._run(
-            "--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation",
+            "--repo-root",
+            str(policy_repo),
+            "check",
+            "--artifact",
+            str(out_file),
+            "--verify-attestation",
             env_extra={"AGENT_EVIDENCE_KEY": key},
         )
         assert checked.returncode == 0, checked.stderr
 
-    def test_cli_attestation_verify_fails_with_wrong_key(
-        self, policy_repo: Path, tmp_path: Path
-    ) -> None:
+    def test_cli_attestation_verify_fails_with_wrong_key(self, policy_repo: Path, tmp_path: Path) -> None:
         import secrets
 
         out_file = tmp_path / "artifact.json"
         assert (
             self._run(
-                "--repo-root", str(policy_repo), "build", "--output", str(out_file), "--attest",
+                "--repo-root",
+                str(policy_repo),
+                "build",
+                "--output",
+                str(out_file),
+                "--attest",
                 env_extra={"AGENT_EVIDENCE_KEY": secrets.token_urlsafe(16)},
             ).returncode
             == 0
         )
         result = self._run(
-            "--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation",
+            "--repo-root",
+            str(policy_repo),
+            "check",
+            "--artifact",
+            str(out_file),
+            "--verify-attestation",
             env_extra={"AGENT_EVIDENCE_KEY": "a-different-key"},
         )
         assert result.returncode != 0
@@ -509,9 +521,7 @@ class TestMainInProcess:
         out_file = tmp_path / "artifact.json"
         ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file)])
         with pytest.raises(SystemExit, match="DENY: attestation verification failed"):
-            ppa.main(
-                ["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"]
-            )
+            ppa.main(["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"])
 
     def test_attested_round_trip(
         self, policy_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -521,9 +531,7 @@ class TestMainInProcess:
         monkeypatch.setenv("AGENT_EVIDENCE_KEY", secrets.token_urlsafe(16))
         out_file = tmp_path / "artifact.json"
         ppa.main(["--repo-root", str(policy_repo), "build", "--output", str(out_file), "--attest"])
-        ppa.main(
-            ["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"]
-        )
+        ppa.main(["--repo-root", str(policy_repo), "check", "--artifact", str(out_file), "--verify-attestation"])
         assert "publish_policy_artifact: passed" in capsys.readouterr().out
 
     def test_main_dispatch_leg(

@@ -359,7 +359,9 @@ def test_main_remote_allowed(mock_run, mock_stdin, tmp_git_repo):
     with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_git_repo)}):
         mock_stdin.write(json.dumps({"tool_input": {"command": "git push origin main"}}))
         mock_stdin.seek(0)
-        with patch("harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
+        with patch(
+            "harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]
+        ):
             assert main() == 0
 
 
@@ -371,7 +373,9 @@ def test_main_remote_blocked(mock_stderr, mock_run, mock_stdin, tmp_git_repo):
     with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_git_repo)}):
         mock_stdin.write(json.dumps({"tool_input": {"command": "git push origin main"}}))
         mock_stdin.seek(0)
-        with patch("harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]):
+        with patch(
+            "harness.shared.governance.pretooluse_guard.destinations", return_value=["https://github.com/org/repo.git"]
+        ):
             assert main() == 2
 
 
@@ -447,12 +451,15 @@ class TestDestinationCheckIsBounded:
 
     def test_a_timed_out_destination_check_blocks(self) -> None:
         """Fail closed, not open: a check that did not finish has not approved."""
+
         def explode(*args: object, **kwargs: object) -> None:
             raise subprocess.TimeoutExpired(cmd="remotes.py", timeout=1)
 
-        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
-                patch.object(guard_mod.subprocess, "run", explode), \
-                patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]):
+        with (
+            patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}),
+            patch.object(guard_mod.subprocess, "run", explode),
+            patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]),
+        ):
             assert check_command("git push origin main", timeout=1) == BLOCK_EXIT
 
     def test_the_default_is_a_bound_and_not_none(self) -> None:
@@ -465,9 +472,11 @@ class TestDestinationCheckIsBounded:
             seen.update(kwargs)
             return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
-        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
-                patch.object(guard_mod.subprocess, "run", capture), \
-                patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]):
+        with (
+            patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}),
+            patch.object(guard_mod.subprocess, "run", capture),
+            patch.object(guard_mod, "destinations", lambda root, seg: ["https://example.invalid/x.git"]),
+        ):
             check_command("git push origin main")
 
         assert seen.get("timeout") is not None, (
@@ -493,10 +502,7 @@ class TestDestinationCheckTimeoutIsPolicySourced:
         assert destination_check_timeout() > 0
 
     def test_an_absent_policy_is_the_adopter_path(self, tmp_path: Path) -> None:
-        assert (
-            destination_check_timeout(tmp_path / "nothing.json")
-            == FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC
-        )
+        assert destination_check_timeout(tmp_path / "nothing.json") == FALLBACK_DESTINATION_CHECK_TIMEOUT_SEC
 
     @pytest.mark.parametrize(
         "payload",
@@ -528,8 +534,7 @@ class TestDestinationCheckTimeoutIsPolicySourced:
             destination_check_timeout(policy)
 
     @pytest.mark.skipif(
-        sys.platform == "win32",
-        reason="Windows raises FileNotFoundError for path-through-file, not NotADirectoryError"
+        sys.platform == "win32", reason="Windows raises FileNotFoundError for path-through-file, not NotADirectoryError"
     )
     def test_a_policy_behind_a_non_directory_is_not_the_adopter_path(self, tmp_path: Path) -> None:
         """`stat()` raises `NotADirectoryError` -- an `OSError` that is *not*
@@ -556,9 +561,12 @@ class TestDestinationCheckTimeoutIsPolicySourced:
         """`check_command` must convert that raise into a verdict: an exception
         escaping a PreToolUse hook is a crash, which Claude Code reads as a broken
         hook rather than as a denial."""
+
         def unusable(*args: object, **kwargs: object) -> int:
             raise ValueError("unusable policy")
 
-        with patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}), \
-                patch.object(guard_mod, "destination_check_timeout", unusable):
+        with (
+            patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": str(REPO)}),
+            patch.object(guard_mod, "destination_check_timeout", unusable),
+        ):
             assert check_command("git push origin main") == BLOCK_EXIT

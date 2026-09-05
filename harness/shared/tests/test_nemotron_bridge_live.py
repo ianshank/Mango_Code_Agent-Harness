@@ -9,6 +9,7 @@ Requirement Citations:
 - R-AI-NEMO-1: Python bridge wire protocol validation
 - C-AI-SEC-1: mask_secret redaction verification
 """
+
 from __future__ import annotations
 
 import json
@@ -23,8 +24,14 @@ IS_LIVE: bool = bool(API_KEY)
 SMOKE_MAX_TOKENS: int = 50
 
 _TRANSIENT_NIM_ERRORS = (
-    "500", "502", "503", "504", "429",
-    "ResourceExhausted", "timeout", "timed out",
+    "500",
+    "502",
+    "503",
+    "504",
+    "429",
+    "ResourceExhausted",
+    "timeout",
+    "timed out",
 )
 
 
@@ -181,4 +188,3 @@ class TestCompleteChatLive(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

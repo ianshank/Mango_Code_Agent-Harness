@@ -6,6 +6,7 @@ Checks: presence of required top-level keys, ``ci_required_targets`` entry forma
 (must contain colon-delimited path:target pairs), and ``agent_defaults`` key types.
 Exits non-zero with a descriptive message on any violation.
 """
+
 import json
 import re
 from pathlib import Path
@@ -56,6 +57,7 @@ def main(policy_path: Path = Path(".governance/policy.json")) -> None:
     if p["agent_defaults"].get("deny_unclassified_side_effects") is not True:
         raise SystemExit("policy: unclassified side effects must be denied")
     print("policy: passed")
+
 
 if __name__ == "__main__":
     main()

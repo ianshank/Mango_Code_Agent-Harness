@@ -58,10 +58,7 @@ def concurrency_block(workflow_text: str) -> dict[str, str] | None:
     match = re.search(r"^concurrency:\n((?:[ ]{2}\S.*\n)+)", workflow_text, re.M)
     if match is None:
         return None
-    return {
-        key.strip(): value.strip()
-        for key, value in (line.split(":", 1) for line in match.group(1).splitlines())
-    }
+    return {key.strip(): value.strip() for key, value in (line.split(":", 1) for line in match.group(1).splitlines())}
 
 
 class TestEveryJobHasACeiling:

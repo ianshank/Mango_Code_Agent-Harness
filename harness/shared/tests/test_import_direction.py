@@ -11,6 +11,7 @@ that constructs it.
 Acyclicity alone is not enough. A layer map additionally catches "wrong direction,
 not yet cyclic", which is the state a graph passes through on its way to a cycle.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -74,17 +74,21 @@ class TestRoutingFunctions:
         assert result == "__end__"
 
     def test_quality_gate_routes_to_implementer_on_fail_with_budget(self) -> None:
-        result = _route_quality_gate({
-            "gate_status": {"quality_gate": "fail"},
-            "revision_count": 2,
-        })
+        result = _route_quality_gate(
+            {
+                "gate_status": {"quality_gate": "fail"},
+                "revision_count": 2,
+            }
+        )
         assert result == "implementer"
 
     def test_quality_gate_routes_to_escalate_on_exhausted(self) -> None:
-        result = _route_quality_gate({
-            "gate_status": {"quality_gate": "fail"},
-            "revision_count": 15,
-        })
+        result = _route_quality_gate(
+            {
+                "gate_status": {"quality_gate": "fail"},
+                "revision_count": 15,
+            }
+        )
         assert result == "escalate"
 
 
@@ -100,18 +104,12 @@ class TestQualityGateRoutingUsesPolicy:
         here, not the old literal."""
         custom_policy = GraphPolicy(max_iterations=2)
         state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 2}
-        assert (
-            _route_quality_gate(state, config={"configurable": {"policy": custom_policy}})
-            == "escalate"
-        )
+        assert _route_quality_gate(state, config={"configurable": {"policy": custom_policy}}) == "escalate"
 
     def test_custom_lower_cap_still_retries_below_its_own_threshold(self) -> None:
         custom_policy = GraphPolicy(max_iterations=2)
         state = {"gate_status": {"quality_gate": "fail"}, "revision_count": 1}
-        assert (
-            _route_quality_gate(state, config={"configurable": {"policy": custom_policy}})
-            == "implementer"
-        )
+        assert _route_quality_gate(state, config={"configurable": {"policy": custom_policy}}) == "implementer"
 
     def test_no_config_falls_back_to_default_policy_cap_unchanged(self) -> None:
         """Bare-state calls (no config at all) must observe identical
@@ -156,10 +154,7 @@ class TestPlanGateRoutingTerminates:
         a cap of 3, so the policy — not a constant — decided it."""
         state = {"gate_status": {"plan_gate": "fail", CLARIFY_COUNT: 3}}
         assert _route_plan_gate(state) == "clarify"
-        assert (
-            _route_plan_gate(state, config=runtime_config(GraphPolicy(max_iterations=3)))
-            == "escalate"
-        )
+        assert _route_plan_gate(state, config=runtime_config(GraphPolicy(max_iterations=3))) == "escalate"
 
     def test_a_passing_gate_still_reaches_the_implementer(self) -> None:
         state = {"gate_status": {"plan_gate": "pass", CLARIFY_COUNT: 99}}

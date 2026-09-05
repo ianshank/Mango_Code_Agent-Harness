@@ -35,9 +35,7 @@ class TestDecisionIdRegex:
             json.dumps({"decision_id_pattern": 42}),
         ],
     )
-    def test_malformed_policy_fails_closed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
-    ) -> None:
+    def test_malformed_policy_fails_closed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
         policy = tmp_path / "policy.json"
         policy.write_text(content, encoding="utf-8")
         monkeypatch.setattr(cp, "POLICY_PATH", policy)

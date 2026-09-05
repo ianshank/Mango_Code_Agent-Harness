@@ -22,13 +22,21 @@ def temp_workspace(tmp_path: Path) -> Path:
     # Valid agent-policy
     valid_agent = {
         "agents": [
-            {"id": "orchestrator", "allowed_actions": ["a", "b"],
-             "human_approval_required_for": ["a"], "delegation_depth": 0},
+            {
+                "id": "orchestrator",
+                "allowed_actions": ["a", "b"],
+                "human_approval_required_for": ["a"],
+                "delegation_depth": 0,
+            },
             {"id": "spec-analyst", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "implementer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "test-eval", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
-            {"id": "security-reviewer", "allowed_actions": [],
-             "human_approval_required_for": [], "delegation_depth": 0},
+            {
+                "id": "security-reviewer",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
             {"id": "peer-reviewer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
             {"id": "release-auditor", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
         ],
@@ -39,8 +47,8 @@ def temp_workspace(tmp_path: Path) -> Path:
             "self_modify_policy": False,
             "secrets_may_not_be_propagated_to_subagents": True,
             "delegation_does_not_transfer_authority": True,
-            "every_side_effect_requires_trace_id": True
-        }
+            "every_side_effect_requires_trace_id": True,
+        },
     }
     (gov / "agent-policy.json").write_text(json.dumps(valid_agent))
 
@@ -49,19 +57,30 @@ def temp_workspace(tmp_path: Path) -> Path:
         "target_contract": "yes",
         "pre_pr_order": "yes",
         "ci_required_targets": [
-            "cov", "lint", "types", "secrets", "specs",
-            "audit", "remotes", "projections", "traceability", "governance",
+            "cov",
+            "lint",
+            "types",
+            "secrets",
+            "specs",
+            "audit",
+            "remotes",
+            "projections",
+            "traceability",
+            "governance",
         ],
         "decision_id_pattern": ".*",
         "agent_defaults": {"deny_unclassified_side_effects": True},
         "protected_paths": [
-            ".governance/**", ".github/workflows/**", "Makefile",
-            "scripts/remotes.py", "scripts/verify_zero_skips.py",
+            ".governance/**",
+            ".github/workflows/**",
+            "Makefile",
+            "scripts/remotes.py",
+            "scripts/verify_zero_skips.py",
         ],
         "charter_version": "1",
         "governance_skill_path": "agents/GOVERNANCE_SKILL.md",
         "skill_max_age_days": 90,
-        "external_root_of_trust_required": True
+        "external_root_of_trust_required": True,
     }
     (gov / "policy.json").write_text(json.dumps(valid_policy_doc))
 
@@ -73,7 +92,9 @@ def temp_workspace(tmp_path: Path) -> Path:
 
     return tmp_path
 
+
 # --- validate_agent_policy tests ---
+
 
 def test_agent_policy_valid(temp_workspace):
     """The happy path. Every sibling test asserts a SystemExit; this one is
@@ -85,6 +106,7 @@ def test_agent_policy_valid(temp_workspace):
     # drifted into something trivially valid cannot quietly weaken the suite.
     assert json.loads(policy.read_text())["agents"], "fixture declares no agents to validate"
 
+
 def test_agent_policy_missing_roles(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -92,6 +114,7 @@ def test_agent_policy_missing_roles(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: missing roles"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_default_deny(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -101,6 +124,7 @@ def test_agent_policy_default_deny(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: default_deny must be true"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_missing_high_risk(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -108,6 +132,7 @@ def test_agent_policy_missing_high_risk(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: high_risk_actions must be declared"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_delegation_depth(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -117,6 +142,7 @@ def test_agent_policy_delegation_depth(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: orchestrator exceeds delegation depth"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_allowed_not_list(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -124,6 +150,7 @@ def test_agent_policy_allowed_not_list(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: orchestrator has no allowed_actions"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_approvals_not_list(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -133,6 +160,7 @@ def test_agent_policy_approvals_not_list(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: orchestrator has no human_approval_required_for list"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_approvals_not_subset(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -140,6 +168,7 @@ def test_agent_policy_approvals_not_subset(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: orchestrator approval action is not allowed to the role"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_unapproved_high_risk(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -150,6 +179,7 @@ def test_agent_policy_unapproved_high_risk(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: orchestrator high-risk actions lack human approval"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_missing_rule(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -157,6 +187,7 @@ def test_agent_policy_missing_rule(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: missing rule self_modify_policy"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_self_modify_true(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -166,6 +197,7 @@ def test_agent_policy_self_modify_true(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: agents may not self-modify policy"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_secrets_prop_false(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -173,6 +205,7 @@ def test_agent_policy_secrets_prop_false(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="agent-policy: secret propagation must be prohibited"):
         validate_agent_policy(p)
+
 
 def test_agent_policy_delegation_transfer_false(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
@@ -182,6 +215,7 @@ def test_agent_policy_delegation_transfer_false(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: delegation must not transfer authority"):
         validate_agent_policy(p)
 
+
 def test_agent_policy_trace_id_false(temp_workspace):
     p = temp_workspace / ".governance/agent-policy.json"
     d = json.loads(p.read_text())
@@ -190,7 +224,9 @@ def test_agent_policy_trace_id_false(temp_workspace):
     with pytest.raises(SystemExit, match="agent-policy: side effects require trace IDs"):
         validate_agent_policy(p)
 
+
 # --- validate_policy tests ---
+
 
 def test_policy_valid(temp_workspace):
     """Happy path; see test_agent_policy_valid for why it asserts on the
@@ -198,6 +234,7 @@ def test_policy_valid(temp_workspace):
     policy = temp_workspace / ".governance/policy.json"
     validate_policy(policy)
     assert json.loads(policy.read_text())["target_contract"], "fixture has no target_contract to validate"
+
 
 def test_policy_missing_key(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -207,6 +244,7 @@ def test_policy_missing_key(temp_workspace):
     with pytest.raises(SystemExit, match="policy: missing target_contract"):
         validate_policy(p)
 
+
 def test_policy_missing_ci(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
     d = json.loads(p.read_text())
@@ -214,6 +252,7 @@ def test_policy_missing_ci(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="policy: critical CI gates omitted: "):
         validate_policy(p)
+
 
 def test_policy_missing_protected(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -223,6 +262,7 @@ def test_policy_missing_protected(temp_workspace):
     with pytest.raises(SystemExit, match="policy: critical protected path omitted: "):
         validate_policy(p)
 
+
 def test_policy_no_root_trust(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
     d = json.loads(p.read_text())
@@ -230,6 +270,7 @@ def test_policy_no_root_trust(temp_workspace):
     p.write_text(json.dumps(d))
     with pytest.raises(SystemExit, match="policy: external root of trust must be required"):
         validate_policy(p)
+
 
 def test_policy_no_side_effects(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -239,13 +280,16 @@ def test_policy_no_side_effects(temp_workspace):
     with pytest.raises(SystemExit, match="policy: unclassified side effects must be denied"):
         validate_policy(p)
 
+
 # --- validate_governance_docs tests ---
+
 
 def test_docs_valid(temp_workspace):
     """Happy path; see test_agent_policy_valid for the fixture assertion."""
     validate_governance_docs(temp_workspace)
     assert (temp_workspace / ".governance/policy.json").is_file()
     assert json.loads((temp_workspace / ".governance/policy.json").read_text())["charter_version"]
+
 
 def test_docs_missing_version(temp_workspace):
     p = temp_workspace / ".governance/policy.json"
@@ -255,20 +299,24 @@ def test_docs_missing_version(temp_workspace):
     with pytest.raises(SystemExit, match="policy has no charter_version"):
         validate_governance_docs(temp_workspace)
 
+
 def test_docs_missing_charter(temp_workspace):
     (temp_workspace / "docs/PROJECT-CHARTER.md").unlink()
     with pytest.raises(SystemExit, match="charter is missing or does not declare"):
         validate_governance_docs(temp_workspace)
+
 
 def test_docs_missing_skill(temp_workspace):
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").unlink()
     with pytest.raises(SystemExit, match="governance skill missing:"):
         validate_governance_docs(temp_workspace)
 
+
 def test_docs_missing_reviewed(temp_workspace):
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text("No reviewed date")
     with pytest.raises(SystemExit, match="governance skill has no Reviewed: YYYY-MM-DD"):
         validate_governance_docs(temp_workspace)
+
 
 def test_docs_future_reviewed(temp_workspace):
     future = (utc_today() + dt.timedelta(days=1)).isoformat()
@@ -278,11 +326,13 @@ def test_docs_future_reviewed(temp_workspace):
     with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
 
+
 def test_docs_stale_reviewed(temp_workspace):
     past = (utc_today() - dt.timedelta(days=91)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {past}\n## Decisions since 2026-01-01\nxyz")
     with pytest.raises(SystemExit, match="governance skill review is stale"):
         validate_governance_docs(temp_workspace)
+
 
 def test_docs_missing_since(temp_workspace):
     today = utc_today().isoformat()
@@ -290,10 +340,12 @@ def test_docs_missing_since(temp_workspace):
     with pytest.raises(SystemExit, match="governance skill lacks Decisions since YYYY-MM-DD section"):
         validate_governance_docs(temp_workspace)
 
+
 def test_docs_missing_log(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").unlink()
     with pytest.raises(SystemExit, match="decision log missing"):
         validate_governance_docs(temp_workspace)
+
 
 def test_docs_missing_decision_in_skill(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").write_text("2026-01-02 | missed-id | reason")
@@ -303,6 +355,7 @@ def test_docs_missing_decision_in_skill(temp_workspace):
     )
     with pytest.raises(SystemExit, match="governance skill is missing recent decisions: missed-id"):
         validate_governance_docs(temp_workspace)
+
 
 def test_docs_multiple_failures(temp_workspace):
     (temp_workspace / ".governance/decision-log.md").unlink()

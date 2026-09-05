@@ -155,11 +155,7 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
             reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
             test_results = state.get("test_results", [])
             last_result = test_results[-1] if test_results else {}
-            prior_failed = (
-                _nonneg_int_count(last_result.get("failed"))
-                if isinstance(last_result, dict)
-                else None
-            )
+            prior_failed = _nonneg_int_count(last_result.get("failed")) if isinstance(last_result, dict) else None
             if (
                 prior_failed is not None
                 and prior_failed > 0
@@ -259,9 +255,7 @@ def plan_gate_node(state: MangoState, config=None, **_kwargs: Any) -> dict:
     configurable = _get_configurable(config, _kwargs)
     policy: GraphPolicy = configurable.get("policy") or GraphPolicy()
     divergence = state.get("plan_divergence", 0.0)
-    logger.info(
-        "plan_gate_node: divergence=%.3f threshold=%.3f", divergence, policy.plan_divergence_threshold
-    )
+    logger.info("plan_gate_node: divergence=%.3f threshold=%.3f", divergence, policy.plan_divergence_threshold)
     return {
         "gate_status": {
             **state.get("gate_status", {}),
@@ -355,7 +349,9 @@ def quality_gate_node(state: MangoState) -> dict:
 
     logger.info(
         "quality_gate_node: revision_count=%d passes=%s reason=%s",
-        revision_count, passes, reason or "-",
+        revision_count,
+        passes,
+        reason or "-",
     )
     gate_status = {
         **state.get("gate_status", {}),

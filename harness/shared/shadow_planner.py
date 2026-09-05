@@ -97,9 +97,7 @@ def _policy_identity(workspace_dir: Path) -> tuple[str, str]:
         return policy_id, digest
     except Exception:  # containment boundary, read failure must not break run
         # read it must never break the run that was going to happen anyway.
-        logger.warning(
-            "shadow_planner: could not read policy identity from %s", policy_path, exc_info=True
-        )
+        logger.warning("shadow_planner: could not read policy identity from %s", policy_path, exc_info=True)
         return (UNKNOWN_POLICY_IDENTITY, UNKNOWN_POLICY_IDENTITY)
 
 
@@ -115,9 +113,7 @@ def _shadow_timeout_sec(context: ShadowContext, environ: typing.Mapping[str, str
     return max(1, min(value, context.api_timeout))
 
 
-def run_shadow_comparison(
-    context: ShadowContext, environ: typing.Mapping[str, str] | None = None
-) -> None:
+def run_shadow_comparison(context: ShadowContext, environ: typing.Mapping[str, str] | None = None) -> None:
     """Record the incumbent plan and one shadow plan. Never raises (C-MMI-5).
 
     On any failure, best-effort records a ``plan.shadow_error`` terminal
@@ -132,8 +128,7 @@ def run_shadow_comparison(
         # the shadow channel must never be able to affect the primary path, so
         # every failure class is absorbed here by design.
         logger.warning(
-            "shadow_planner: channel-level containment caught a failure; "
-            "incumbent plan is unaffected",
+            "shadow_planner: channel-level containment caught a failure; incumbent plan is unaffected",
             exc_info=True,
         )
 
@@ -151,9 +146,7 @@ def _extract_shadow_plan_text(response: dict) -> str:
     return content if isinstance(content, str) else ""
 
 
-def _run(
-    context: ShadowContext, environ: typing.Mapping[str, str] | None = None
-) -> None:
+def _run(context: ShadowContext, environ: typing.Mapping[str, str] | None = None) -> None:
     env = os.environ if environ is None else environ
     sink = CognitiveSignalSink.for_workspace(context.workspace_dir, environ=env)
     run_id = str(uuid.uuid4())

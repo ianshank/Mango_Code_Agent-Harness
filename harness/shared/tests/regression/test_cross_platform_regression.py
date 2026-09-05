@@ -45,11 +45,7 @@ import pytest
 
 # ─── Module loading for hyphenated control-plane directory ────────────────────
 
-_PPA_PATH = (
-    Path(__file__).resolve().parent.parent.parent.parent
-    / "control-plane"
-    / "publish_policy_artifact.py"
-)
+_PPA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "control-plane" / "publish_policy_artifact.py"
 
 
 def _load_ppa():
@@ -122,15 +118,21 @@ class TestGitSubprocessEncodingPreservesUnicode:
         subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@example.com"],
-            cwd=repo, capture_output=True, check=True,
+            cwd=repo,
+            capture_output=True,
+            check=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "Test"],
-            cwd=repo, capture_output=True, check=True,
+            cwd=repo,
+            capture_output=True,
+            check=True,
         )
         subprocess.run(
             ["git", "commit", "--allow-empty", "-m", "init"],
-            cwd=repo, capture_output=True, check=True,
+            cwd=repo,
+            capture_output=True,
+            check=True,
         )
         # Create a file with a non-ASCII name (NFC-composed é = U+00E9).
         target = repo / ".github" / "workflows"
@@ -259,6 +261,7 @@ class TestPathThroughFileRaisesOSErrorOnAllPlatforms:
 
 # ─── EC-002: UNC path bypass in _reject_unsafe_relpath ───────────────────────
 
+
 class TestUNCPathIsRejectedByArtifactGuard:
     """Windows UNC paths (``\\\\server\\share``) bypass ``Path.is_absolute()`` on
     Linux because they lack a drive letter. The guard must check for a backslash
@@ -276,6 +279,7 @@ class TestUNCPathIsRejectedByArtifactGuard:
 
 # ─── EC-003: mask_secret empty-key guard ─────────────────────────────────────
 
+
 class TestMaskSecretEdgeCases:
     """``mask_secret("")`` returns ``<UNSET>`` — but if it is used with
     ``str.replace("", ...)`` the result is garbled (insertion between every
@@ -284,14 +288,17 @@ class TestMaskSecretEdgeCases:
 
     def test_mask_secret_empty_returns_unset(self) -> None:
         from harness.shared.nemotron_bridge import mask_secret
+
         assert mask_secret("") == "<UNSET>"
 
     def test_mask_secret_short_key_returns_stars(self) -> None:
         from harness.shared.nemotron_bridge import mask_secret
+
         assert mask_secret("abc123") == "****"
 
     def test_mask_secret_long_key_shows_prefix_suffix(self) -> None:
         from harness.shared.nemotron_bridge import mask_secret
+
         key = "nvapi-abcdefghijklmnop"
         masked = mask_secret(key)
         assert masked.startswith("nvapi-abcd")
@@ -300,11 +307,13 @@ class TestMaskSecretEdgeCases:
 
     def test_mask_secret_whitespace_only(self) -> None:
         from harness.shared.nemotron_bridge import mask_secret
+
         # strip() produces "", len("") <= 10 → returns "****"
         assert mask_secret("   ") == "****"
 
 
 # ─── EC-004: .env parser quoted-value stripping ──────────────────────────────
+
 
 class TestEnvFileQuotedValueStripping:
     """``.env`` files commonly use ``KEY="value"`` or ``KEY='value'`` format.
@@ -320,13 +329,11 @@ class TestEnvFileQuotedValueStripping:
         monkeypatch.delenv("NEMOTRON_MAX_RETRIES", raising=False)
 
         import harness.shared.nemotron_bridge as nb
+
         # Patch __file__ resolution to use tmp_path
-        with unittest.mock.patch.object(
-            Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"
-        ):
+        with unittest.mock.patch.object(Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"):
             result = nb.resolve_environment()
-        assert result["api_key"] == "nvapi-test-key-double", \
-            f"Expected unquoted value, got {result['api_key']!r}"
+        assert result["api_key"] == "nvapi-test-key-double", f"Expected unquoted value, got {result['api_key']!r}"
 
     def test_single_quoted_value_is_unquoted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_file = tmp_path / ".env"
@@ -338,9 +345,8 @@ class TestEnvFileQuotedValueStripping:
         monkeypatch.delenv("NEMOTRON_MAX_RETRIES", raising=False)
 
         import harness.shared.nemotron_bridge as nb
-        with unittest.mock.patch.object(
-            Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"
-        ):
+
+        with unittest.mock.patch.object(Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"):
             result = nb.resolve_environment()
         assert result["api_key"] == "nvapi-test-key-single"
 
@@ -354,9 +360,8 @@ class TestEnvFileQuotedValueStripping:
         monkeypatch.delenv("NEMOTRON_MAX_RETRIES", raising=False)
 
         import harness.shared.nemotron_bridge as nb
-        with unittest.mock.patch.object(
-            Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"
-        ):
+
+        with unittest.mock.patch.object(Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"):
             result = nb.resolve_environment()
         assert result["api_key"] == "nvapi-plain"
 
@@ -371,15 +376,15 @@ class TestEnvFileQuotedValueStripping:
         monkeypatch.delenv("NEMOTRON_MAX_RETRIES", raising=False)
 
         import harness.shared.nemotron_bridge as nb
-        with unittest.mock.patch.object(
-            Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"
-        ):
+
+        with unittest.mock.patch.object(Path, "resolve", return_value=tmp_path / "nemotron_bridge.py"):
             result = nb.resolve_environment()
         # Mismatched quotes should be preserved (not stripped)
         assert result["api_key"] == "\"nvapi-mismatched'"
 
 
 # ─── EC-007: validate_specs.py unit tests (0% → >80%) ────────────────────────
+
 
 class TestValidateSpecsPythonNative:
     """``validate_specs.py`` was at 0% coverage because the only tests called
@@ -388,6 +393,7 @@ class TestValidateSpecsPythonNative:
 
     def test_valid_spec_passes(self) -> None:
         from harness.shared.validate_specs import validate_spec
+
         content = (
             "# My Spec\n"
             "## Requirements\n"
@@ -399,38 +405,35 @@ class TestValidateSpecsPythonNative:
 
     def test_missing_requirements_header_fails(self) -> None:
         from harness.shared.validate_specs import validate_spec
+
         content = "# My Spec\n## Acceptance criteria\n- [ ] AC-1: Passes.\n"
         assert validate_spec(content, "bad-spec.md") is False
 
     def test_missing_acceptance_criteria_header_fails(self) -> None:
         from harness.shared.validate_specs import validate_spec
+
         content = "# My Spec\n## Requirements\n- R-001: The system MUST do something.\n"
         assert validate_spec(content, "bad-spec.md") is False
 
     def test_normative_must_without_req_id_fails(self) -> None:
         from harness.shared.validate_specs import validate_spec
+
         content = (
-            "# My Spec\n"
-            "## Requirements\n"
-            "- The system MUST do something.\n"
-            "## Acceptance criteria\n"
-            "- [ ] AC-1: Passes.\n"
+            "# My Spec\n## Requirements\n- The system MUST do something.\n## Acceptance criteria\n- [ ] AC-1: Passes.\n"
         )
         assert validate_spec(content, "bad-spec.md") is False
 
     def test_unfalsifiable_language_fails(self) -> None:
         from harness.shared.validate_specs import validate_spec
+
         content = (
-            "# My Spec\n"
-            "## Requirements\n"
-            "- R-1: The system MUST run.\n"
-            "## Acceptance criteria\n"
-            "- It works correctly.\n"
+            "# My Spec\n## Requirements\n- R-1: The system MUST run.\n## Acceptance criteria\n- It works correctly.\n"
         )
         assert validate_spec(content, "bad-spec.md") is False
 
     def test_main_returns_zero_on_valid_dir(self, tmp_path: Path) -> None:
         from harness.shared.validate_specs import main
+
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir()
         spec_file = specs_dir / "test-spec.md"
@@ -442,6 +445,7 @@ class TestValidateSpecsPythonNative:
 
     def test_main_returns_one_on_invalid_spec(self, tmp_path: Path) -> None:
         from harness.shared.validate_specs import main
+
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir()
         spec_file = specs_dir / "bad-spec.md"
@@ -450,6 +454,7 @@ class TestValidateSpecsPythonNative:
 
     def test_main_returns_zero_on_empty_dir(self, tmp_path: Path) -> None:
         from harness.shared.validate_specs import main
+
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir()
         assert main(specs_dir) == 0
@@ -457,11 +462,13 @@ class TestValidateSpecsPythonNative:
     def test_main_returns_zero_on_missing_dir(self, tmp_path: Path) -> None:
         """A missing specs directory is treated as 'no specs to validate' → pass."""
         from harness.shared.validate_specs import main
+
         missing = tmp_path / "nonexistent"
         assert main(missing) == 0
 
 
 # ─── EC-008: nemotron_bridge error paths ─────────────────────────────────────
+
 
 class TestNemotronBridgeErrorPaths:
     """Cover missed lines in nemotron_bridge.py: _int_from_env ValueError,
@@ -469,19 +476,23 @@ class TestNemotronBridgeErrorPaths:
 
     def test_int_from_env_garbage_returns_default(self) -> None:
         from harness.shared.nemotron_bridge import _int_from_env
+
         result = _int_from_env("not_a_number", 42, "TEST_VAR")
         assert result == 42
 
     def test_int_from_env_empty_returns_default(self) -> None:
         from harness.shared.nemotron_bridge import _int_from_env
+
         assert _int_from_env("", 99, "TEST_VAR") == 99
 
     def test_int_from_env_valid_int(self) -> None:
         from harness.shared.nemotron_bridge import _int_from_env
+
         assert _int_from_env("7", 0, "TEST_VAR") == 7
 
     def test_complete_chat_missing_model_raises(self) -> None:
         import harness.shared.nemotron_bridge as nb
+
         # Clear NEMOTRON_DEFAULT_MODEL and patch resolve_environment to prevent
         # .env file discovery from supplying a model.
         fake_env = {
@@ -497,12 +508,16 @@ class TestNemotronBridgeErrorPaths:
 
     def test_complete_chat_invalid_url_scheme_raises(self) -> None:
         import harness.shared.nemotron_bridge as nb
-        with unittest.mock.patch.dict(os.environ, {
-            "NVIDIA_API_KEY": "nvapi-test",
-            "NVIDIA_BASE_URL": "ftp://bad.example.com",
-            "NEMOTRON_DEFAULT_MODEL": "test-model",
-            "NEMOTRON_TIMEOUT_MS": "5000",
-            "NEMOTRON_MAX_RETRIES": "0",
-        }):
+
+        with unittest.mock.patch.dict(
+            os.environ,
+            {
+                "NVIDIA_API_KEY": "nvapi-test",
+                "NVIDIA_BASE_URL": "ftp://bad.example.com",
+                "NEMOTRON_DEFAULT_MODEL": "test-model",
+                "NEMOTRON_TIMEOUT_MS": "5000",
+                "NEMOTRON_MAX_RETRIES": "0",
+            },
+        ):
             with pytest.raises(ValueError, match="Invalid URL scheme"):
                 nb.complete_chat([{"role": "user", "content": "hi"}])

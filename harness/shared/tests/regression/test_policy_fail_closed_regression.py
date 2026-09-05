@@ -138,9 +138,7 @@ class TestABudgetOverrideCannotSwitchAGateOff:
         monkeypatch.setenv(env_var, "9999")
         assert getattr(validate_invariants, accessor)(path) == stated
 
-    def test_a_tightening_override_still_applies(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_tightening_override_still_applies(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         path = _policy(
             tmp_path,
             {"protected_paths": [], "limits": {"size_budget_lines": 500, "test_size_budget_lines": 700}},
@@ -148,9 +146,7 @@ class TestABudgetOverrideCannotSwitchAGateOff:
         monkeypatch.setenv("MAX_FILE_LINES", "80")
         assert validate_invariants.size_budget_lines(path) == 80
 
-    def test_the_shim_budget_override_is_refused_too(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_shim_budget_override_is_refused_too(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from harness.shared import check_dedup
 
         (tmp_path / "harness" / "shared").mkdir(parents=True)
@@ -198,7 +194,10 @@ class TestAGatesExitStaysInsideTheRunItGates:
                 ),
                 str(governance / "verify_zero_skips.py"),
             ],
-            capture_output=True, text=True, cwd=str(governance), check=False,
+            capture_output=True,
+            text=True,
+            cwd=str(governance),
+            check=False,
         )
         assert result.returncode == 0, result.stderr
 
@@ -216,8 +215,6 @@ class TestTheReproductionsAddressTheShippedReaders:
     def test_every_named_policy_accessor_exists(self, accessor: str, _block: str, _key: str) -> None:
         assert callable(getattr(policy_loader, accessor))
 
-    @pytest.mark.parametrize(
-        "accessor", ["load_protected_patterns", "size_budget_lines", "test_size_budget_lines"]
-    )
+    @pytest.mark.parametrize("accessor", ["load_protected_patterns", "size_budget_lines", "test_size_budget_lines"])
     def test_every_named_invariant_accessor_exists(self, accessor: str) -> None:
         assert callable(getattr(validate_invariants, accessor))

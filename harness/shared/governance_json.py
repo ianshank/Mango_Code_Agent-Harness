@@ -50,7 +50,5 @@ def read_json_object(path: Path) -> JsonObjectResult:
     except ValueError as e:
         return JsonObjectResult(error="malformed", detail=str(e))
     if not isinstance(parsed, dict):
-        return JsonObjectResult(
-            error="malformed", detail=f"root must be a JSON object, got {type(parsed).__name__}"
-        )
+        return JsonObjectResult(error="malformed", detail=f"root must be a JSON object, got {type(parsed).__name__}")
     return JsonObjectResult(value=parsed)

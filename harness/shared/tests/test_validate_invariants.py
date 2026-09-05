@@ -18,6 +18,7 @@ from harness.shared.tests.conftest import _write_lines, invariants_policy_path
 
 # --- load_protected_patterns ---
 
+
 def test_load_protected_patterns_reads_policy(invariants_repo: Path):
     patterns = vi.load_protected_patterns(invariants_policy_path(invariants_repo))
     assert patterns == [".github/workflows/**", "Makefile"]
@@ -34,6 +35,7 @@ def test_load_protected_patterns_fails_closed_when_the_policy_is_missing(tmp_pat
 
 
 # --- git_modified_files ---
+
 
 def test_git_modified_files_empty_when_clean(invariants_repo: Path):
     assert vi.git_modified_files(invariants_repo) == set()
@@ -72,6 +74,7 @@ def test_git_modified_files_ignores_gitignored(invariants_repo: Path):
 
 
 # --- check_protected_paths ---
+
 
 def test_check_protected_paths_pass_when_clean(invariants_repo: Path, caplog):
     with caplog.at_level(logging.INFO, logger=vi.logger.name):
@@ -113,6 +116,7 @@ def test_check_protected_paths_ignores_non_protected(invariants_repo: Path):
 
 # --- check_hardcoded_secrets ---
 
+
 def test_check_hardcoded_secrets_clean(invariants_repo: Path):
     (invariants_repo / "app.py").write_text("API_KEY = os.environ.get('X')\n", encoding="utf-8")
     assert vi.check_hardcoded_secrets(invariants_repo) is True
@@ -137,6 +141,7 @@ def test_check_hardcoded_secrets_skips_venv(invariants_repo: Path):
 
 # --- check_size_budget ---
 
+
 def test_check_size_budget_pass(invariants_repo: Path):
     (invariants_repo / "small.py").write_text("\n".join("x = 1" for _ in range(10)) + "\n", encoding="utf-8")
     assert vi.check_size_budget(invariants_repo, budget=500) is True
@@ -155,6 +160,7 @@ def test_check_size_budget_ignores_tests(invariants_repo: Path):
 
 
 # --- main ---
+
 
 def test_main_passes_on_clean_repo(invariants_repo: Path):
     assert vi.main(workspace_dir=invariants_repo, policy_path=invariants_policy_path(invariants_repo)) == 0
@@ -184,6 +190,7 @@ def test_main_default_workspace_runs(invariants_repo: Path, monkeypatch: pytest.
 
 
 # --- size_budget_lines (MAX_FILE_LINES override) ---
+
 
 def test_size_budget_lines_defaults(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("MAX_FILE_LINES", raising=False)
@@ -223,6 +230,7 @@ def test_check_protected_paths_warns_when_attested(invariants_repo: Path, monkey
 
 def test_git_modified_files_raises_on_git_failure(invariants_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
     """INV-6: Inability to inspect git state is fatal and must fail closed (raise)."""
+
     def broken_check_output(*args, **kwargs):
         raise subprocess.CalledProcessError(1, ["git", "diff"], output="", stderr="git error")
 
@@ -238,7 +246,6 @@ def test_size_budget_lines_reads_from_policy(invariants_repo: Path, monkeypatch:
     policy.write_text(json.dumps({"limits": {"size_budget_lines": 350}}), encoding="utf-8")
     monkeypatch.delenv("MAX_FILE_LINES", raising=False)
     assert vi.size_budget_lines(policy) == 350
-
 
 
 def test_non_ascii_protected_path_is_not_hidden_by_git_quoting(invariants_repo: Path):
@@ -259,9 +266,7 @@ def test_non_ascii_protected_path_is_not_hidden_by_git_quoting(invariants_repo: 
     # while Python string literals use NFC (composed). Normalize both sides.
     normalized = {unicodedata.normalize("NFC", f) for f in modified}
     expected = unicodedata.normalize("NFC", "café-ci.yml")
-    assert any(f.endswith(expected) for f in normalized), (
-        f"non-ASCII path came back quoted or escaped: {modified}"
-    )
+    assert any(f.endswith(expected) for f in normalized), f"non-ASCII path came back quoted or escaped: {modified}"
     assert not any(f.startswith('"') for f in modified), "git output is still C-quoted"
     assert vi.check_protected_paths(invariants_repo, [".github/workflows/**"]) is False, (
         "a non-ASCII file inside a protected path evaded the gate"
@@ -491,4 +496,3 @@ def test_main_fails_on_an_oversized_test_module_from_policy(invariants_repo: Pat
     assert vi.main(invariants_repo, policy_path=policy) == 1
     _write_lines(invariants_repo / "test_over.py", 40)
     assert vi.main(invariants_repo, policy_path=policy) == 0
-

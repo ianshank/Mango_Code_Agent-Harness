@@ -65,15 +65,11 @@ _EXTRA_FIELDS = ("import_name", "deselect_env", "path_prefixes")
 
 
 def _malformed_extra(policy_path: Path, name: object, why: str) -> SystemExit:
-    logger.error(
-        "[FAIL] Governance policy %s: coverage.%s[%r] %s", policy_path, OPTIONAL_EXTRAS_KEY, name, why
-    )
+    logger.error("[FAIL] Governance policy %s: coverage.%s[%r] %s", policy_path, OPTIONAL_EXTRAS_KEY, name, why)
     return SystemExit(1)
 
 
-def optional_extra_waivers(
-    policy_path: Path, environ: dict[str, str] | None = None
-) -> dict[str, tuple[str, ...]]:
+def optional_extra_waivers(policy_path: Path, environ: dict[str, str] | None = None) -> dict[str, tuple[str, ...]]:
     """Per-file waivers for optional extras whose tests cannot run on this leg.
 
     Policy shape (``coverage.optional_extras``)::
@@ -120,13 +116,17 @@ def optional_extra_waivers(
         if _importable(import_name):
             logger.info(
                 "Coverage per-file: %s=1 but %r is importable; extra %r stays enforced",
-                deselect_env, import_name, name,
+                deselect_env,
+                import_name,
+                name,
             )
             continue
         logger.warning(
             "[WAIVED] Coverage per-file: extra %r is not installed and %s=1; files under %s "
             "are not held to the lines floor on this leg",
-            name, deselect_env, ", ".join(prefixes),
+            name,
+            deselect_env,
+            ", ".join(prefixes),
         )
         waived[name] = tuple(prefixes)
     return waived
@@ -183,9 +183,7 @@ def _waiving_extra(path: str, waived: dict[str, tuple[str, ...]]) -> str | None:
     return None
 
 
-def check_per_file(
-    coverage_json: Path, lines_floor: float, waived: dict[str, tuple[str, ...]] | None = None
-) -> bool:
+def check_per_file(coverage_json: Path, lines_floor: float, waived: dict[str, tuple[str, ...]] | None = None) -> bool:
     """Enforce the lines floor per measured file (policy coverage.per_file).
 
     Fail-closed: a report without a ``files`` block cannot prove per-file
@@ -224,14 +222,18 @@ def check_per_file(
             waived_count += 1
             logger.warning(
                 "[WAIVED] Coverage per-file: %s at %.2f%% lines (extra %r deselected on this leg)",
-                path, actual, extra,
+                path,
+                actual,
+                extra,
             )
             continue
         measured_count += 1
         if actual < lines_floor:
             logger.error(
                 "[FAIL] Coverage per-file: %s at %.2f%% lines is below the policy floor of %.2f%%",
-                path, actual, lines_floor,
+                path,
+                actual,
+                lines_floor,
             )
             ok = False
     if ok and measured_count == 0:
@@ -249,7 +251,9 @@ def check_per_file(
     if ok:
         logger.info(
             "[PASS] Coverage per-file: %d file(s) meet the lines floor of %.2f%% (%d waived)",
-            measured_count, lines_floor, waived_count,
+            measured_count,
+            lines_floor,
+            waived_count,
         )
     return ok
 

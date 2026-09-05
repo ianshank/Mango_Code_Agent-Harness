@@ -145,12 +145,14 @@ def run_ruff(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess
     """
     result = subprocess.run(
         [sys.executable, "-m", "ruff", *args],
-        cwd=str(REPO), capture_output=True, text=True, timeout=timeout,
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
     if result.returncode >= RUFF_ERROR_EXIT:
         raise AssertionError(
-            f"ruff invocation failed (exit {result.returncode}): "
-            f"{' '.join(args)}\nstderr:\n{result.stderr.strip()}"
+            f"ruff invocation failed (exit {result.returncode}): {' '.join(args)}\nstderr:\n{result.stderr.strip()}"
         )
     return result
 
@@ -162,8 +164,7 @@ def ruff_json(args: list[str], timeout: int = 300) -> list[dict]:
         parsed = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as exc:
         raise AssertionError(
-            f"ruff returned unparseable JSON for {' '.join(args)}: {exc}\n"
-            f"stdout begins: {result.stdout[:200]!r}"
+            f"ruff returned unparseable JSON for {' '.join(args)}: {exc}\nstdout begins: {result.stdout[:200]!r}"
         ) from exc
     if not isinstance(parsed, list):
         raise AssertionError(f"ruff JSON output was {type(parsed).__name__}, expected a list")

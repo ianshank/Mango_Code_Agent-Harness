@@ -33,6 +33,7 @@ from harness.shared.tests.conftest import _write_lines, invariants_policy_path
 
 # --- R-CQ-8: a present policy that has lost a key must stop the gate ---
 
+
 class TestAPresentPolicyMissingAKeyFailsClosed:
     """The gate must not report PASS against a threshold the policy stopped stating.
 
@@ -115,18 +116,14 @@ class TestTheEnvOverrideTightensOnly:
         monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "500")
         assert vi.size_budget_lines(invariants_policy_path(invariants_repo)) == 500
 
-    def test_the_test_budget_override_tightens_only_too(
-        self, invariants_repo: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_the_test_budget_override_tightens_only_too(self, invariants_repo: Path, monkeypatch: pytest.MonkeyPatch):
         policy = invariants_policy_path(invariants_repo)
         monkeypatch.setenv(vi.TEST_SIZE_BUDGET_ENV, "9999")
         assert vi.test_size_budget_lines(policy) == 700
         monkeypatch.setenv(vi.TEST_SIZE_BUDGET_ENV, "300")
         assert vi.test_size_budget_lines(policy) == 300
 
-    def test_an_ignored_override_says_so(
-        self, invariants_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog
-    ):
+    def test_an_ignored_override_says_so(self, invariants_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog):
         """Silently ignoring it is its own trap: the caller believes the budget
         moved and reads the PASS as meaning something it does not."""
         monkeypatch.setenv(vi.SIZE_BUDGET_ENV, "9999")
@@ -183,9 +180,7 @@ class TestAPolicyValueOfTheWrongTypeIsRefusedNotCoerced:
             vi.size_budget_lines(policy)
         assert exc.value.code == 1, note
 
-    def test_an_integer_budget_is_still_accepted(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_an_integer_budget_is_still_accepted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Control: the type check must not refuse the valid case."""
         monkeypatch.delenv(vi.SIZE_BUDGET_ENV, raising=False)
         policy = self._policy(tmp_path, {"protected_paths": [], "limits": {"size_budget_lines": 500}})
@@ -199,9 +194,7 @@ class TestAPolicyValueOfTheWrongTypeIsRefusedNotCoerced:
             pytest.param(["ok", 7], "a non-string member is not a pattern", id="mixed-list"),
         ],
     )
-    def test_a_malformed_protected_paths_fails_closed(
-        self, tmp_path: Path, stated: object, note: str
-    ):
+    def test_a_malformed_protected_paths_fails_closed(self, tmp_path: Path, stated: object, note: str):
         with pytest.raises(SystemExit) as exc:
             vi.load_protected_patterns(self._policy(tmp_path, {"protected_paths": stated}))
         assert exc.value.code == 1, note

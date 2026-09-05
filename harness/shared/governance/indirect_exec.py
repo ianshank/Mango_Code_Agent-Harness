@@ -58,47 +58,52 @@ ENVIRONMENT_OVERRIDE_OPTIONS = frozenset({"-e", "--environment-overrides"})
 #: usage error to make anyway, and an abbreviation is one this table must not
 #: expand on make's behalf. None of these takes a value that names a file or
 #: makefile text; the value of ``--jobs`` and friends is a number or a switch.
-HARMLESS_LONG_OPTIONS = frozenset({
-    "--always-make",
-    "--assume-new",
-    "--assume-old",
-    "--check-symlink-times",
-    "--debug",
-    "--dry-run",
-    "--help",
-    "--ignore-errors",
-    "--jobs",
-    "--just-print",
-    "--keep-going",
-    "--load-average",
-    "--max-load",
-    "--new-file",
-    "--no-builtin-rules",
-    "--no-builtin-variables",
-    "--no-keep-going",
-    "--no-print-directory",
-    "--old-file",
-    "--output-sync",
-    "--print-data-base",
-    "--print-directory",
-    "--question",
-    "--quiet",
-    "--recon",
-    "--silent",
-    "--stop",
-    "--touch",
-    "--trace",
-    "--version",
-    "--warn-undefined-variables",
-    "--what-if",
-})
+HARMLESS_LONG_OPTIONS = frozenset(
+    {
+        "--always-make",
+        "--assume-new",
+        "--assume-old",
+        "--check-symlink-times",
+        "--debug",
+        "--dry-run",
+        "--help",
+        "--ignore-errors",
+        "--jobs",
+        "--just-print",
+        "--keep-going",
+        "--load-average",
+        "--max-load",
+        "--new-file",
+        "--no-builtin-rules",
+        "--no-builtin-variables",
+        "--no-keep-going",
+        "--no-print-directory",
+        "--old-file",
+        "--output-sync",
+        "--print-data-base",
+        "--print-directory",
+        "--question",
+        "--quiet",
+        "--recon",
+        "--silent",
+        "--stop",
+        "--touch",
+        "--trace",
+        "--version",
+        "--warn-undefined-variables",
+        "--what-if",
+    }
+)
 
 #: The short letters of every refused option above, so a cluster such as
 #: ``-nf`` or ``-kC`` is caught rather than read as one harmless flag.
 _SELECTING_LETTERS = frozenset(
     opt[1]
     for opt in (
-        *MAKEFILE_OPTIONS, *DIRECTORY_OPTIONS, *EVAL_OPTIONS, *INCLUDE_DIR_OPTIONS,
+        *MAKEFILE_OPTIONS,
+        *DIRECTORY_OPTIONS,
+        *EVAL_OPTIONS,
+        *INCLUDE_DIR_OPTIONS,
         *ENVIRONMENT_OVERRIDE_OPTIONS,
     )
     if len(opt) == 2

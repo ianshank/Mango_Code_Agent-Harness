@@ -2,6 +2,7 @@
 
 Implements MCTS refinement and scoring mechanisms for planning.
 """
+
 from __future__ import annotations
 
 import math
@@ -24,7 +25,7 @@ class LATSOptimizer:
 
     def _ucb1(self, node: AblationNode, total_visits: int) -> float:
         if node.visits == 0:
-            return float('inf')
+            return float("inf")
         exploitation = float(node.score / node.visits)
         exploration = self.exploration_weight * math.sqrt(math.log(total_visits) / node.visits)
         return float(exploitation + exploration)
@@ -66,7 +67,7 @@ class LATSOptimizer:
         self,
         base_state: MangoState,
         rollout_fn: Callable[[MangoState], list[dict[str, Any]]],
-        eval_fn: Callable[[MangoState], float]
+        eval_fn: Callable[[MangoState], float],
     ) -> MangoState:
         """Refines a plan using MCTS and returns the best state."""
         channel = AblationChannel(base_state)

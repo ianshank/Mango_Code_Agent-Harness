@@ -39,7 +39,6 @@ def _run_main(monkeypatch: pytest.MonkeyPatch, script: Path, args: list) -> None
     runpy.run_path(str(script), run_name="__main__")
 
 
-
 def test_import_has_no_side_effects(capsys: pytest.CaptureFixture):
     """Importing must neither parse argv nor exit; it only defines main()."""
     module = _load(SCRIPT)
@@ -74,9 +73,7 @@ class TestVerifyRepository:
             "profiles": {
                 "python": {
                     "marker": "pyproject.toml",
-                    "protected_files": {
-                        "guarded.py": hashlib.sha256((repo / "guarded.py").read_bytes()).hexdigest()
-                    },
+                    "protected_files": {"guarded.py": hashlib.sha256((repo / "guarded.py").read_bytes()).hexdigest()},
                 }
             },
         }
@@ -116,7 +113,8 @@ class TestVerifyRepository:
         stale["profiles"]["python"]["marker"] = "does-not-exist.toml"
         bundle = self._write_bundle(tmp_path, stale)
         with pytest.raises(
-            SystemExit, match=r"DENY: cannot identify exactly one protected stack profile \(matched 0\)",
+            SystemExit,
+            match=r"DENY: cannot identify exactly one protected stack profile \(matched 0\)",
         ):
             _run_main(monkeypatch, VERIFIER, ["--repo", repo, "--bundle", bundle])
 
@@ -153,9 +151,7 @@ class TestVerifyRepository:
     def test_root_of_trust_without_external_ref_denies(self, monkeypatch, tmp_path: Path, repo: Path):
         gov = repo / ".governance"
         policy_digest = hashlib.sha256((gov / "policy.json").read_bytes()).hexdigest()
-        (gov / "root-of-trust.json").write_text(
-            json.dumps({"policy_sha256": policy_digest}), encoding="utf-8"
-        )
+        (gov / "root-of-trust.json").write_text(json.dumps({"policy_sha256": policy_digest}), encoding="utf-8")
         bundle = self._write_bundle(tmp_path, self._bundle(repo))
         with pytest.raises(SystemExit, match="DENY: project root-of-trust declaration has no external_policy_ref"):
             _run_main(monkeypatch, VERIFIER, ["--repo", repo, "--bundle", bundle])

@@ -154,7 +154,10 @@ class ExecutionBroker:
             # did, is the fail-open this change removes.
             reason = f"BLOCKED: the authority model could not be read: {exc}"
             return ExecutionResult(
-                BROKER_BLOCKED, "", reason, 1,
+                BROKER_BLOCKED,
+                "",
+                reason,
+                1,
                 reason=reason,
                 action=action,
             )
@@ -163,7 +166,8 @@ class ExecutionBroker:
             verdict = decide(agent_id, required, policy, human_approved=human_approved)
             if not verdict.allowed:
                 why = (
-                    classification.reason if required == action
+                    classification.reason
+                    if required == action
                     else "the command writes to a file, which requires the write action"
                 )
                 # The reason is logged, not only returned. It reached the *agent*
@@ -183,11 +187,16 @@ class ExecutionBroker:
                 # command, so nothing is disclosed there that it did not have.
                 logger.warning(
                     "Policy denied execution: agent=%s action=%s: %s",
-                    agent_id, required, redact_text(why),
+                    agent_id,
+                    required,
+                    redact_text(why),
                 )
                 reason = f"BLOCKED: {verdict.reason} (classified as {required}: {why})"
                 return ExecutionResult(
-                    BROKER_BLOCKED, "", reason, 1,
+                    BROKER_BLOCKED,
+                    "",
+                    reason,
+                    1,
                     reason=reason,
                     action=action,
                 )
@@ -220,7 +229,8 @@ class ExecutionBroker:
             # credential -- `git push https://user:TOKEN@host`, `curl -H "Authorization: ..."`.
             logger.warning("Backend unavailable; blocking execution of: %s", redact_text(command))
             return ExecutionResult(
-                BROKER_BLOCKED, "",
+                BROKER_BLOCKED,
+                "",
                 "BLOCKED: Sandbox unavailable; host-process execution fallback is strictly prohibited.",
                 1,
                 reason="BLOCKED: the execution backend is unavailable",
@@ -245,7 +255,10 @@ class ExecutionBroker:
             if write_denial is not None:
                 logger.warning("Denied a command writing to a governed path: %s", target)
                 return ExecutionResult(
-                    BROKER_BLOCKED, "", f"BLOCKED: {write_denial}", 1,
+                    BROKER_BLOCKED,
+                    "",
+                    f"BLOCKED: {write_denial}",
+                    1,
                     reason=f"BLOCKED: the command writes to {target}, which is denied: {write_denial}",
                     action=action,
                 )
@@ -257,8 +270,12 @@ class ExecutionBroker:
         if check_command(command, timeout=timeout) != 0:
             logger.warning("PreToolUse guard blocked command: %s", redact_text(command))
             return ExecutionResult(
-                BROKER_BLOCKED, "", "BLOCKED: Command failed pretooluse_guard policy evaluation.", 2,
-                reason="BLOCKED: the command guard denied this command", action=action,
+                BROKER_BLOCKED,
+                "",
+                "BLOCKED: Command failed pretooluse_guard policy evaluation.",
+                2,
+                reason="BLOCKED: the command guard denied this command",
+                action=action,
             )
 
         result = self._backend.run(command, cwd, timeout, self._max_output_bytes)

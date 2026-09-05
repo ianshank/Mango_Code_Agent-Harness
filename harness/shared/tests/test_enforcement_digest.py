@@ -91,14 +91,33 @@ class TestWhatIsDigested:
         """The nine dormant patterns exist for this: a `GNUmakefile` or a
         `pytest.ini` that did not exist at loop start is a new recipe input."""
         before = enforcement_digests(workspace)
-        for name in ("GNUmakefile", "makefile", "pytest.ini", "tox.ini", "setup.cfg", "setup.py",
-                     "sitecustomize.py", "usercustomize.py", "extra.pth"):
+        for name in (
+            "GNUmakefile",
+            "makefile",
+            "pytest.ini",
+            "tox.ini",
+            "setup.cfg",
+            "setup.py",
+            "sitecustomize.py",
+            "usercustomize.py",
+            "extra.pth",
+        ):
             (workspace / name).write_text("x", encoding="utf-8")
         (workspace / "src" / "nested.pth").write_text("x", encoding="utf-8")
         after = enforcement_digests(workspace)
         appeared = set(after) - set(before)
-        assert {"GNUmakefile", "makefile", "pytest.ini", "tox.ini", "setup.cfg", "setup.py",
-                "sitecustomize.py", "usercustomize.py", "extra.pth", "src/nested.pth"} <= appeared
+        assert {
+            "GNUmakefile",
+            "makefile",
+            "pytest.ini",
+            "tox.ini",
+            "setup.cfg",
+            "setup.py",
+            "sitecustomize.py",
+            "usercustomize.py",
+            "extra.pth",
+            "src/nested.pth",
+        } <= appeared
 
     def test_a_pinned_supplied_policy_widens_the_floor(
         self,
@@ -119,9 +138,7 @@ class TestWhatIsDigested:
         # gets its own temporary directory rather than a corner of ``workspace``.
         pins = tmp_path_factory.mktemp("pins") / "pins.json"
         pins.write_text(
-            json.dumps(
-                {"pinned_policies": {write_policy.pin_key(policy): write_policy.policy_digest(raw)}}
-            ),
+            json.dumps({"pinned_policies": {write_policy.pin_key(policy): write_policy.policy_digest(raw)}}),
             encoding="utf-8",
         )
         monkeypatch.setenv(write_policy.POLICY_PIN_RECORD_ENV, str(pins))

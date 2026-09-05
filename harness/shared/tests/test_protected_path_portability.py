@@ -95,9 +95,7 @@ def supplied(tmp_path: Path):
         pin_path = anchor / "supplied-policy-pins.json"
         if record:
             pinned = digest if digest is not None else policy_digest(policy_path.read_bytes())
-            pin_path.write_text(
-                json.dumps({"pinned_policies": {pin_key(policy_path): pinned}}), encoding="utf-8"
-            )
+            pin_path.write_text(json.dumps({"pinned_policies": {pin_key(policy_path): pinned}}), encoding="utf-8")
         return policy_path, pin_path
 
     return _make
@@ -149,9 +147,7 @@ def _production_modules() -> list[Path]:
 class TestMergeDirection:
     """Harness denials are a floor; a supplied policy may only add to it."""
 
-    def test_supplied_policy_cannot_remove_a_harness_denial(
-        self, supplied, harness_patterns, caplog
-    ) -> None:
+    def test_supplied_policy_cannot_remove_a_harness_denial(self, supplied, harness_patterns, caplog) -> None:
         """AC-PPP-1. Three shapes of removal, none of which takes effect, all reported."""
         attacker = {
             "protected_paths": ["!CLAUDE.md", ADDED_TARGET],
@@ -166,10 +162,9 @@ class TestMergeDirection:
                 "harness/shared/governance-policy.json",
                 ".mango/hooks/pre-nemotron-run.sh",
             ):
-                assert (
-                    write_denial_reason(target, policy_path=policy_path, pin_path=pin_path)
-                    is not None
-                ), f"{target} lost its harness denial to a supplied policy"
+                assert write_denial_reason(target, policy_path=policy_path, pin_path=pin_path) is not None, (
+                    f"{target} lost its harness denial to a supplied policy"
+                )
 
         reported = caplog.text
         for named in ("CLAUDE.md", "harness/shared/governance-policy.json", ".mango/hooks/**"):
@@ -199,13 +194,10 @@ class TestMergeDirection:
             "pass without the supplied policy doing anything"
         )
         policy_path, pin_path = supplied({"protected_paths": [ADDED_TARGET]})
-        assert (
-            write_denial_reason(ADDED_TARGET, policy_path=policy_path, pin_path=pin_path) is not None
+        assert write_denial_reason(ADDED_TARGET, policy_path=policy_path, pin_path=pin_path) is not None
+        assert write_denial_reason("config/other.yaml", policy_path=policy_path, pin_path=pin_path) is None, (
+            "the added pattern widened past what it names"
         )
-        assert (
-            write_denial_reason("config/other.yaml", policy_path=policy_path, pin_path=pin_path)
-            is None
-        ), "the added pattern widened past what it names"
 
     def test_a_narrower_twin_of_a_harness_pattern_is_reported(self, harness_patterns) -> None:
         """Narrowing is inoperative because of the union; it is reported anyway,
@@ -227,9 +219,7 @@ class TestUnconditionalDenialsAreOutsideTheMerge:
     def test_always_denied_segments_ignore_supplied_policy(self, supplied) -> None:
         """AC-PPP-3. Decided before any policy is read, so no policy can reach them."""
         assert ".git" in ALWAYS_DENIED_SEGMENTS
-        policy_path, pin_path = supplied(
-            {"protected_paths": ["!.git/**"], "protected_paths_removed": [".git/**"]}
-        )
+        policy_path, pin_path = supplied({"protected_paths": ["!.git/**"], "protected_paths_removed": [".git/**"]})
         for target in (".git/config", "sub/.git/hooks/pre-commit"):
             reason = write_denial_reason(target, policy_path=policy_path, pin_path=pin_path)
             assert reason is not None and "git directory" in reason
@@ -310,9 +300,7 @@ class TestPolicyPathResolution:
         monkeypatch.setenv(WRITE_POLICY_PATH_ENV, str(tmp_path / "supplied.json"))
         assert active_policy_path() == tmp_path / "supplied.json"
 
-    def test_pin_record_path_prefers_the_argument_then_the_env_then_the_default(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_pin_record_path_prefers_the_argument_then_the_env_then_the_default(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setenv(POLICY_PIN_RECORD_ENV, str(tmp_path / "from-env.json"))
         assert pin_record_path(tmp_path / "explicit.json") == tmp_path / "explicit.json"
         assert pin_record_path() == tmp_path / "from-env.json"
@@ -348,14 +336,14 @@ class TestNoDenialIsRelaxed:
         for relpath in CONTROL_SURFACE:
             assert write_denial_reason(relpath) is not None, relpath
             assert write_denial_reason(relpath, policy_path=DEFAULT_POLICY_PATH) is not None, relpath
-            assert (
-                write_denial_reason(relpath, policy_path=policy_path, pin_path=pin_path) is not None
-            ), f"{relpath} lost its denial once a policy was supplied"
+            assert write_denial_reason(relpath, policy_path=policy_path, pin_path=pin_path) is not None, (
+                f"{relpath} lost its denial once a policy was supplied"
+            )
         for relpath in ORDINARY_WORK:
             assert write_denial_reason(relpath, policy_path=DEFAULT_POLICY_PATH) is None, relpath
-            assert (
-                write_denial_reason(relpath, policy_path=policy_path, pin_path=pin_path) is None
-            ), f"{relpath} became denied; the merge widened past what the supplied policy names"
+            assert write_denial_reason(relpath, policy_path=policy_path, pin_path=pin_path) is None, (
+                f"{relpath} became denied; the merge widened past what the supplied policy names"
+            )
 
         merged, _ = merge_protected_patterns(harness_patterns, {"protected_paths": []})
         assert merged == harness_patterns, "an empty supplied policy changed the pattern set"
@@ -368,9 +356,7 @@ class TestNoHookDependency:
         would not run at all. Two halves: the gate names no hook, and every
         criterion above still holds with the hook layer's environment removed."""
         imported = _imported_modules(SHARED / "write_policy.py")
-        assert not [m for m in imported if "hook" in m], (
-            f"the write gate imports a hook module: {sorted(imported)}"
-        )
+        assert not [m for m in imported if "hook" in m], f"the write gate imports a hook module: {sorted(imported)}"
         assert "subprocess" not in imported and "os.system" not in imported, (
             "the write gate can spawn a process, so a control here could route through "
             f"a hook script rather than the in-process broker path: {sorted(imported)}"
@@ -379,9 +365,7 @@ class TestNoHookDependency:
         for var in ("CLAUDE_PROJECT_DIR", WRITE_POLICY_PATH_ENV, POLICY_PIN_RECORD_ENV):
             monkeypatch.delenv(var, raising=False)
 
-        policy_path, pin_path = supplied(
-            {"protected_paths": [ADDED_TARGET], "protected_paths_removed": ["CLAUDE.md"]}
-        )
+        policy_path, pin_path = supplied({"protected_paths": [ADDED_TARGET], "protected_paths_removed": ["CLAUDE.md"]})
         assert write_denial_reason("CLAUDE.md", policy_path=policy_path, pin_path=pin_path) is not None
         assert write_denial_reason(ADDED_TARGET, policy_path=policy_path, pin_path=pin_path) is not None
         assert write_denial_reason(".git/config", policy_path=policy_path, pin_path=pin_path) is not None

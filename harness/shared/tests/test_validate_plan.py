@@ -191,9 +191,7 @@ class TestNegativeProbes:
             ("`out.py` is importable and complete", "MISSING_FAILURE_PATH"),
         ],
     )
-    def test_a_seeded_defect_is_caught(
-        self, tmp_path: Path, mutation: str, expected: str
-    ) -> None:
+    def test_a_seeded_defect_is_caught(self, tmp_path: Path, mutation: str, expected: str) -> None:
         spec_dir = tmp_path / "specs"
         spec_dir.mkdir()
         (spec_dir / "probe.md").write_text(
@@ -201,9 +199,18 @@ class TestNegativeProbes:
             encoding="utf-8",
         )
         result = subprocess.run(
-            ["python3", str(REPO / "harness/shared/validate_plan.py"),
-             "--repo-root", str(tmp_path), "--spec-dir", str(spec_dir), "--all"],
-            capture_output=True, text=True, cwd=REPO,
+            [
+                "python3",
+                str(REPO / "harness/shared/validate_plan.py"),
+                "--repo-root",
+                str(tmp_path),
+                "--spec-dir",
+                str(spec_dir),
+                "--all",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO,
         )
         assert result.returncode == 1, result.stdout
         assert expected in result.stderr
@@ -215,9 +222,18 @@ class TestNegativeProbes:
         spec_dir.mkdir()
         (spec_dir / "probe.md").write_text(CONFORMING, encoding="utf-8")
         result = subprocess.run(
-            ["python3", str(REPO / "harness/shared/validate_plan.py"),
-             "--repo-root", str(tmp_path), "--spec-dir", str(spec_dir), "--all"],
-            capture_output=True, text=True, cwd=REPO,
+            [
+                "python3",
+                str(REPO / "harness/shared/validate_plan.py"),
+                "--repo-root",
+                str(tmp_path),
+                "--spec-dir",
+                str(spec_dir),
+                "--all",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO,
         )
         assert result.returncode == 0, result.stderr
 
@@ -226,7 +242,9 @@ class TestTheRepositoryPasses:
     def test_the_real_gate_is_green(self) -> None:
         result = subprocess.run(
             ["python3", str(REPO / "harness/shared/validate_plan.py"), "--repo-root", str(REPO)],
-            capture_output=True, text=True, cwd=REPO,
+            capture_output=True,
+            text=True,
+            cwd=REPO,
         )
         assert result.returncode == 0, result.stderr
 
@@ -245,9 +263,20 @@ class TestVerbosityDegradesRatherThanCrashing:
         spec_dir.mkdir(exist_ok=True)
         (spec_dir / "probe.md").write_text(CONFORMING, encoding="utf-8")
         return subprocess.run(
-            ["python3", str(REPO / "harness/shared/validate_plan.py"),
-             "--repo-root", str(tmp_path), "--spec-dir", str(spec_dir), "--all", *argv],
-            capture_output=True, text=True, cwd=REPO, env={**os.environ, **env},
+            [
+                "python3",
+                str(REPO / "harness/shared/validate_plan.py"),
+                "--repo-root",
+                str(tmp_path),
+                "--spec-dir",
+                str(spec_dir),
+                "--all",
+                *argv,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO,
+            env={**os.environ, **env},
         )
 
     def test_a_bogus_flag_value_is_not_a_crash(self, tmp_path: Path) -> None:

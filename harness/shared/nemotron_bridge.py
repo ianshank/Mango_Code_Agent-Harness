@@ -66,8 +66,7 @@ def _assert_egress_permitted(url: str) -> None:
         return
     if mode == "offline":
         raise NemotronEgressRefused(
-            "NEMOTRON_MODE=offline: refusing to open a network transport to "
-            f"{url}. Inject a transport to run offline."
+            f"NEMOTRON_MODE=offline: refusing to open a network transport to {url}. Inject a transport to run offline."
         )
     raise NemotronEgressRefused(
         f"no transport mode declared: refusing to reach {url}. Set "
@@ -220,8 +219,7 @@ def complete_chat(
     target_model = model or env_config["default_model"]
     if not target_model:
         raise ValueError(
-            "Target model is not configured. Set NEMOTRON_DEFAULT_MODEL "
-            "environment variable or pass explicitly."
+            "Target model is not configured. Set NEMOTRON_DEFAULT_MODEL environment variable or pass explicitly."
         )
 
     url = f"{endpoint.rstrip('/')}/chat/completions"
@@ -277,7 +275,10 @@ def complete_chat(
                 backoff = retry.backoff(attempt, retry_after=parse_retry_after(header))
                 logger.warning(
                     "Nemotron API HTTP %d (attempt %d/%d); retrying in %.1fs",
-                    e.code, attempt + 1, retry.max_retries + 1, backoff,
+                    e.code,
+                    attempt + 1,
+                    retry.max_retries + 1,
+                    backoff,
                 )
                 time.sleep(backoff)
                 continue
@@ -288,7 +289,10 @@ def complete_chat(
                 backoff = retry.backoff(attempt)
                 logger.warning(
                     "Nemotron connection error (attempt %d/%d): %s; retrying in %.1fs",
-                    attempt + 1, retry.max_retries + 1, sanitized, backoff,
+                    attempt + 1,
+                    retry.max_retries + 1,
+                    sanitized,
+                    backoff,
                 )
                 time.sleep(backoff)
                 continue
@@ -320,7 +324,9 @@ def main() -> None:
     )
     parser.add_argument("--model", default=None, help="Target model ID")
     parser.add_argument(
-        "--temperature", type=float, default=None,
+        "--temperature",
+        type=float,
+        default=None,
         help="Sampling temperature (default: governance-policy.json nemotron.temperature)",
     )
     parser.add_argument("--json", action="store_true", help="Output raw JSON response")

@@ -1,4 +1,5 @@
 """Tests for governance/process_backend: ProcessBackend, _cap, ExecutionResult."""
+
 from __future__ import annotations
 
 import subprocess
@@ -16,6 +17,7 @@ from harness.shared.governance.process_backend import (
 )
 
 # -- ExecutionResult ---------------------------------------------------------
+
 
 class TestExecutionResult:
     """ExecutionResult is frozen and carries the expected fields."""
@@ -38,6 +40,7 @@ class TestExecutionResult:
 
 
 # -- _cap --------------------------------------------------------------------
+
 
 class TestCap:
     """Output capping must work on bytes, not characters."""
@@ -66,6 +69,7 @@ class TestCap:
 
 # -- Constants ---------------------------------------------------------------
 
+
 class TestConstants:
     """Module constants must have governance-compatible values."""
 
@@ -77,6 +81,7 @@ class TestConstants:
 
 
 # -- ProcessBackend ----------------------------------------------------------
+
 
 class TestProcessBackend:
     """ProcessBackend wraps subprocess with timeout, cap, and credential filtering."""
@@ -96,8 +101,10 @@ class TestProcessBackend:
     def test_run_success(self) -> None:
         b = ProcessBackend()
         mock_completed = subprocess.CompletedProcess(
-            args=["bash", "-c", "echo hello"], returncode=0,
-            stdout="hello\n", stderr="",
+            args=["bash", "-c", "echo hello"],
+            returncode=0,
+            stdout="hello\n",
+            stderr="",
         )
         with patch.object(b, "_spawn", return_value=mock_completed):
             result = b.run("echo hello", cwd=None, timeout=10, max_output_bytes=1024)
@@ -107,8 +114,10 @@ class TestProcessBackend:
     def test_run_failure(self) -> None:
         b = ProcessBackend()
         mock_completed = subprocess.CompletedProcess(
-            args=["bash", "-c", "false"], returncode=1,
-            stdout="", stderr="error\n",
+            args=["bash", "-c", "false"],
+            returncode=1,
+            stdout="",
+            stderr="error\n",
         )
         with patch.object(b, "_spawn", return_value=mock_completed):
             result = b.run("false", cwd=None, timeout=10, max_output_bytes=1024)
@@ -133,7 +142,10 @@ class TestProcessBackend:
         b = ProcessBackend()
         long_output = "x" * 500
         mock_completed = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=long_output, stderr="",
+            args=[],
+            returncode=0,
+            stdout=long_output,
+            stderr="",
         )
         with patch.object(b, "_spawn", return_value=mock_completed):
             result = b.run("cmd", cwd=None, timeout=10, max_output_bytes=100)

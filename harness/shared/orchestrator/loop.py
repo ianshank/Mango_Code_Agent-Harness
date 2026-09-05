@@ -149,7 +149,9 @@ class ExecutionLoop:
         logger.log(
             logging.WARNING if error is not None else logging.DEBUG,
             "model call by %s (iteration %d)%s",
-            agent_name, iteration, f" failed: {type(error).__name__}" if error is not None else "",
+            agent_name,
+            iteration,
+            f" failed: {type(error).__name__}" if error is not None else "",
             extra={
                 "event": "model_call",
                 "run_id": run_id,
@@ -267,9 +269,7 @@ class ExecutionLoop:
         # fresh allowance, so `max_tool_calls_per_task` was enforced as three
         # times its declared value (2026 standards audit M1).
         budget = ToolBudget(self.max_tool_calls_per_task)
-        logger.debug(
-            "loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit}
-        )
+        logger.debug("loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit})
         self._record_enforcement_baseline()
         planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
         plan_started = time.monotonic()

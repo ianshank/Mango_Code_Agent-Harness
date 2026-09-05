@@ -148,16 +148,12 @@ class TestOnlyKnownHooksExecute:
         with pytest.raises(ValueError, match="unrecognised hook"):
             orch.hook_runner.run_hook("post-../../../etc/evil-run")
 
-    def test_a_planted_hook_with_an_unlisted_name_does_not_execute(
-        self, mock_workspace: Path
-    ) -> None:
+    def test_a_planted_hook_with_an_unlisted_name_does_not_execute(self, mock_workspace: Path) -> None:
         if not _POSIX:
             pytest.skip("bash hook tests require POSIX platform (DEC-026)")
         hooks = mock_workspace / ".mango" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
-        (hooks / "post-attacker-run.sh").write_text(
-            "echo pwned > planted_marker.txt\n", encoding="utf-8"
-        )
+        (hooks / "post-attacker-run.sh").write_text("echo pwned > planted_marker.txt\n", encoding="utf-8")
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
         with pytest.raises(ValueError):
             orch.hook_runner.run_hook("post-attacker-run")
@@ -272,9 +268,7 @@ class TestHookExecutionIsAlwaysBounded:
         assert runner.tool_timeout is not None
         assert runner.tool_timeout == orchestrator_defaults()["tool_timeout_sec"]
 
-    def test_the_resolved_timeout_reaches_the_subprocess(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_resolved_timeout_reaches_the_subprocess(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The attribute is not the control; what `subprocess.run` receives is."""
         hooks = tmp_path / ".mango" / "hooks"
         hooks.mkdir(parents=True)
@@ -294,9 +288,7 @@ class TestHookExecutionIsAlwaysBounded:
         (hooks / "pre-nemotron-run.sh").write_text("echo ran\n", encoding="utf-8")
         seen = self._spawn_recorder(monkeypatch)
 
-        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks, tool_timeout=7).run_hook(
-            "pre-nemotron-run", task="t"
-        )
+        HookRunner(workspace_dir=tmp_path, hooks_dir=hooks, tool_timeout=7).run_hook("pre-nemotron-run", task="t")
 
         (kwargs,) = seen
         assert kwargs["timeout"] == 7
@@ -308,7 +300,5 @@ class TestHookExecutionIsAlwaysBounded:
         policy key it claims to read."""
         import harness.shared.orchestrator.hook_runner as hook_module
 
-        monkeypatch.setattr(
-            hook_module, "orchestrator_defaults", lambda: {"tool_timeout_sec": 41}
-        )
+        monkeypatch.setattr(hook_module, "orchestrator_defaults", lambda: {"tool_timeout_sec": 41})
         assert HookRunner(workspace_dir=tmp_path, hooks_dir=tmp_path).tool_timeout == 41

@@ -86,9 +86,7 @@ class TestRegenerate:
         """Asserted on real stderr, not caplog: the gate logger deliberately does
         not propagate to root, so caplog's root handler would never see it."""
         root = _stack(tmp_path, "node", {"kept.json": "x"})
-        bundle_path = _bundle(
-            tmp_path, {"node": {"protected_files": {"kept.json": "o", "gone.json": "o"}}}
-        )
+        bundle_path = _bundle(tmp_path, {"node": {"protected_files": {"kept.json": "o", "gone.json": "o"}}})
         regen.regenerate(bundle_path, {"node": root})
         captured = capsys.readouterr()
         assert "WARNING" in captured.err
@@ -141,9 +139,7 @@ class TestMain:
         bundle_path = _bundle(tmp_path, {"node": {"protected_files": {"p.json": "stale"}}})
         assert regen.main(bundle_path, {"node": root}) == 0
         written = json.loads(bundle_path.read_text(encoding="utf-8"))
-        assert written["profiles"]["node"]["protected_files"]["p.json"] == (
-            hashlib.sha256(b"fresh").hexdigest()
-        )
+        assert written["profiles"]["node"]["protected_files"]["p.json"] == (hashlib.sha256(b"fresh").hexdigest())
 
     def test_output_is_idempotent_on_a_second_run(self, tmp_path: Path):
         """The digest-regen gate pairs this with `git diff --exit-code`, so a
@@ -165,9 +161,7 @@ class TestMain:
     def test_drops_are_surfaced_on_stderr_not_stdout(self, tmp_path: Path, capsys):
         """stdout carries the stable summary; warnings must not pollute it."""
         root = _stack(tmp_path, "node", {"kept.json": "x"})
-        bundle_path = _bundle(
-            tmp_path, {"node": {"protected_files": {"kept.json": "o", "gone.json": "o"}}}
-        )
+        bundle_path = _bundle(tmp_path, {"node": {"protected_files": {"kept.json": "o", "gone.json": "o"}}})
         regen.main(bundle_path, {"node": root})
         captured = capsys.readouterr()
         assert "gone.json" in captured.err
@@ -197,6 +191,4 @@ class TestRepositoryBundleIsCurrent:
         bundle, dropped = regen.regenerate()
         committed = json.loads(regen.BUNDLE.read_text(encoding="utf-8"))
         assert dropped == {}, f"committed bundle references missing files: {dropped}"
-        assert bundle == committed, (
-            "policy-bundle.example.json is stale; run `make digest-regen` and commit"
-        )
+        assert bundle == committed, "policy-bundle.example.json is stale; run `make digest-regen` and commit"

@@ -7,6 +7,7 @@ from policy's ``skill_max_age_days``), and decision-log completeness (every
 entry since the skill's anchor date must appear in the skill body).
 Exits non-zero with a structured failure list on any violation.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -59,6 +60,7 @@ def main(workspace: Path = Path(".")) -> None:
     if fail:
         raise SystemExit("governance-docs: FAILED\n  - " + "\n  - ".join(fail))
     print("governance-docs: passed")
+
 
 if __name__ == "__main__":
     main()

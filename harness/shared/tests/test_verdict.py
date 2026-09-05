@@ -8,6 +8,7 @@ fixed it -- a verifier running ``true`` produces SUCCESS/exit 0 -- so the verdic
 comes from a check the harness selected, and ``derive_verdict`` will not accept
 anything else.
 """
+
 from __future__ import annotations
 
 import json
@@ -248,9 +249,7 @@ class RecordingBroker:
         self.timeouts: list[int] = []
         self._answers = answers or {}
 
-    def execute_command(
-        self, command: str, _ctx: dict, cwd: Path | None = None, timeout: int = 0
-    ) -> ExecutionResult:
+    def execute_command(self, command: str, _ctx: dict, cwd: Path | None = None, timeout: int = 0) -> ExecutionResult:
         self.commands.append(command)
         self.timeouts.append(timeout)
         for fragment, answer in self._answers.items():
@@ -288,9 +287,7 @@ class TestTheRunner:
         assert "-f Makefile" in runner.command
         assert runner.command.endswith("test-python")
 
-    def test_probe_fails_gracefully_when_make_is_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_probe_fails_gracefully_when_make_is_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """On Windows dev machines without GNU Make, the probe should return a
         clear diagnostic instead of running the broker command and getting an
         opaque error. This is the `shutil.which` pre-flight gate."""
@@ -339,9 +336,7 @@ class TestTheRunner:
         ok, detail = VerificationRunner(broker, "test-eval").probe(tmp_path)
         assert (ok, detail) == (True, "")
 
-    def test_recipe_lines_that_are_comments_or_assignments_are_not_programs(
-        self, tmp_path: Path
-    ) -> None:
+    def test_recipe_lines_that_are_comments_or_assignments_are_not_programs(self, tmp_path: Path) -> None:
         broker = RecordingBroker({"-n": _ok("# a comment\nFOO=bar\n/usr/bin/env true\n")})
         ok, _ = VerificationRunner(broker, "test-eval").probe(tmp_path)
         assert ok is True
@@ -440,9 +435,7 @@ class TestTheLoopReportsIt:
         runner = VerificationRunner(broker, "test-eval")
         return MangoMASOrchestrator(workspace_dir=tmp_path, tool_timeout=5, verification=runner)
 
-    def test_a_failing_check_and_a_passing_check_differ(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_failing_check_and_a_passing_check_differ(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """AC-10 / SC-1. The two runs differ in a field no model wrote.
 
         Before this change a FAIL and a PASS were byte-identical to every
@@ -511,9 +504,7 @@ class TestTheVerificationTimeoutComesFromPolicy:
     DISTINGUISHABLE_TIMEOUT = 287
     DISTINGUISHABLE_API_TIMEOUT = 193
 
-    def _policy(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **overrides: int
-    ) -> None:
+    def _policy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **overrides: int) -> None:
         from harness.shared import policy_loader
 
         fixture = tmp_path / "governance-policy.json"
@@ -526,9 +517,7 @@ class TestTheVerificationTimeoutComesFromPolicy:
         fixture.write_text(json.dumps(real), encoding="utf-8")
         monkeypatch.setattr(policy_loader, "POLICY_PATH", fixture)
 
-    def test_the_default_is_the_policy_value(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_default_is_the_policy_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from harness.shared.governance.verification import VerificationRunner
 
         self._policy(tmp_path, monkeypatch)
@@ -591,9 +580,7 @@ class TestTheVerificationTimeoutComesFromPolicy:
         VerificationRunner(broker, "test-eval", timeout=11).probe(Path("."))
         assert broker.timeouts and set(broker.timeouts) == {11}, broker.timeouts
 
-    def test_the_policy_default_reaches_the_broker_too(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_policy_default_reaches_the_broker_too(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The path that actually ships: no explicit timeout, so the resolved
         policy value is the one that must arrive."""
         from harness.shared.governance.verification import VerificationRunner

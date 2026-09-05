@@ -189,23 +189,21 @@ class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
     precisely the advisory half; it stayed green against this.
     """
 
-    def test_the_verifier_is_refused_write_file_even_when_it_asks_by_name(
-        self, agent_workspace: Path
-    ) -> None:
+    def test_the_verifier_is_refused_write_file_even_when_it_asks_by_name(self, agent_workspace: Path) -> None:
         orch = MangoMASOrchestrator(workspace_dir=agent_workspace)
         orch.execution_loop.dispatcher.active_role = "verifier"
         messages: list[dict[str, object]] = []
         orch.execution_loop.dispatcher.dispatch(
             messages,
-            [{
-                "id": "call_1",
-                "function": {
-                    "name": "write_file",
-                    "arguments": json.dumps(
-                        {"filepath": "implementation_i_am_judging.py", "content": "PWNED"}
-                    ),
-                },
-            }],
+            [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "write_file",
+                        "arguments": json.dumps({"filepath": "implementation_i_am_judging.py", "content": "PWNED"}),
+                    },
+                }
+            ],
         )
         assert messages, "the dispatcher produced no tool message"
         assert "not available to the verifier role" in str(messages[-1]["content"])
@@ -221,12 +219,14 @@ class TestToolAuthorityIsEnforcedAtDispatchNotOnlyInTheSchema:
         messages: list[dict[str, object]] = []
         orch.dispatcher.dispatch(
             messages,
-            [{
-                "id": "call_1",
-                "function": {
-                    "name": "write_file",
-                    "arguments": json.dumps({"filepath": "feature.py", "content": "ok"}),
-                },
-            }],
+            [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "write_file",
+                        "arguments": json.dumps({"filepath": "feature.py", "content": "ok"}),
+                    },
+                }
+            ],
         )
         assert (agent_workspace / "feature.py").read_text(encoding="utf-8") == "ok"

@@ -111,7 +111,11 @@ def _import_in_subprocess(path: Path, cwd: Path) -> subprocess.CompletedProcess[
     probe, argument = _probe_for(path)
     return subprocess.run(
         [sys.executable, "-c", probe, argument],
-        cwd=str(cwd), capture_output=True, text=True, timeout=120, env=env,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
     )
 
 
@@ -238,11 +242,13 @@ class TestAGatesFailClosedExitBelongsToTheRunNotTheImport:
                 "import importlib.util, sys;"
                 "spec = importlib.util.spec_from_file_location('vzs_probe', sys.argv[1]);"
                 "m = importlib.util.module_from_spec(spec);"
-                "spec.loader.exec_module(m);"  # the import itself
-                + tail,
+                "spec.loader.exec_module(m);" + tail,  # the import itself
                 str(module),
             ],
-            capture_output=True, text=True, cwd=str(module.parent), check=False,
+            capture_output=True,
+            text=True,
+            cwd=str(module.parent),
+            check=False,
         )
 
     def test_importing_under_a_malformed_policy_does_not_exit(self, tmp_path: Path) -> None:

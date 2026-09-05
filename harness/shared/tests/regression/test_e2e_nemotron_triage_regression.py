@@ -164,9 +164,7 @@ class TestLATSNegativeRewardRegression:
 class TestMultiToolBudgetExhaustionRegression:
     """DEF-NEMO-003: Pins multi-tool turn budget rejection and hook telemetry."""
 
-    def test_multi_tool_call_exceeding_budget_halts_and_fires_hook(
-        self, tmp_path: Path
-    ) -> None:
+    def test_multi_tool_call_exceeding_budget_halts_and_fires_hook(self, tmp_path: Path) -> None:
         from harness.shared.tests._orchestrator_helpers import _resp, _tool_call
         from harness.shared.tool_budget import ToolBudget
 
@@ -236,11 +234,11 @@ class TestAutonomousHealingE2ERegression:
 
         # Planner -> Reasoner (turn 1 buggy) -> Verifier (fails) -> Reasoner (turn 2 fixed) -> Verifier (passes)
         mock_orch.execute_agent.side_effect = [
-            "# Plan: Implement fib",           # Planner
-            "def fib(n): return n",             # Reasoner (turn 1 - buggy)
-            "VERDICT: FAIL - test_fib failed",   # Verifier (turn 1)
+            "# Plan: Implement fib",  # Planner
+            "def fib(n): return n",  # Reasoner (turn 1 - buggy)
+            "VERDICT: FAIL - test_fib failed",  # Verifier (turn 1)
             "def fib(n): return n if n < 2 else fib(n-1) + fib(n-2)",  # Reasoner (turn 2 - fixed)
-            "VERDICT: PASS",                    # Verifier (turn 2)
+            "VERDICT: PASS",  # Verifier (turn 2)
         ]
 
         verdict_fail = Verdict(
@@ -269,5 +267,3 @@ class TestAutonomousHealingE2ERegression:
         assert final_state.get("verdict") == "VERIFIED"
         assert final_state.get("revision_count", 0) >= 1
         assert len(final_state.get("patches", [])) >= 2
-
-

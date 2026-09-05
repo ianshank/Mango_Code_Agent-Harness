@@ -44,8 +44,7 @@ class HookRunner:
         """Executes a pre- or post- hook script if it exists."""
         if hook_name not in PERMITTED_HOOK_NAMES:
             raise ValueError(
-                f"refusing to run unrecognised hook {hook_name!r}; "
-                f"permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
+                f"refusing to run unrecognised hook {hook_name!r}; permitted names are {sorted(PERMITTED_HOOK_NAMES)}"
             )
         hook_path = self.hooks_dir / f"{hook_name}.sh"
         if hook_path.exists():
