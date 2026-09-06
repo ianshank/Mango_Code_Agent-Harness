@@ -1,14 +1,14 @@
 # Spec: context-window budget (audit H4)
 
 > **Programme:** 2026 standards audit H4 / remediation Phase F context budget.
-> **Status:** Approved for implementation in this PR train (peer review documented below).
+> **Status:** Implemented on PR #110 (AC-CW-1…AC-CW-6 ticked; peer review documented below).
 > **Protected-path status:** touches `governance-policy.json`, `policy_loader.py`,
 > and `orchestrator/loop.py` — `infra-reviewed` attestation required.
 > **Provenance:** ensemble plan in
 > `docs/reports/PLAYLIST-ASTRA-CONTEXT-BUDGET-PLAN-2026-09-06.md` (PR #109 /
 > branch `docs/playlist-astra-context-budget-plan-2026-09-06`); peer sign-off
 > recorded in `## Peer review`.
-> **Base:** `origin/main` @ `29fb154`.
+> **Base:** `origin/main` @ `d1e13c5` (includes playlist plan #109).
 
 ## Problem statement
 
@@ -18,7 +18,7 @@ appends every turn; provider `usage.prompt_tokens` is **logged** in
 `_log_model_call` and **never** used to bound or evict context. Bounds remain
 iteration count, tool-call budget, and per-tool byte caps — not tokens.
 
-Evidence (re-verified on tip `29fb154`):
+Evidence (problem statement captured against tip `29fb154`; implementation lands on this PR):
 
 - `harness/shared/orchestrator/loop.py` — `execute_agent` passes
   `self.conversation_history` wholesale to `complete_chat_fn`.

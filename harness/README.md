@@ -6,6 +6,7 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 
 - `shared/` — byte-identical policy kernel, canonical agent policy, schemas and adversarial self-tests.
   - `shared/mango_mas_orchestrator.py` — Orchestrator for the Mango Multi-Agent System (with JSON logging).
+  - `shared/context_policy.py` — Policy-sourced context-window budgeting (group-atomic tool-call eviction) applied by `ExecutionLoop` before each `complete_chat` (audit H4; `docs/specs/context-window-budget.md`).
   - `shared/mcp_server.py` — Model Context Protocol (MCP) server for local tool execution and workspace context provisioning.
   - `shared/experimental/lats_optimizer.py` — Language Agent Tree Search (LATS) module for Monte-Carlo MCTS planning and rollout execution; parked under `experimental/` until a runtime path is specified (DEC-027, INV-15).
   - `shared/meta_tools.py` — Meta-learning and context state tools for autonomous synthesis.
