@@ -82,6 +82,9 @@ class TestContextPolicyPure:
             messages, usage={"prompt_tokens": -1}, chars_per_token=CHARS_PER_TOKEN
         ) == estimate_tokens(messages, CHARS_PER_TOKEN)
 
+    def test_estimate_tokens_rounds_up_conservatively(self) -> None:
+        assert estimate_tokens([{"role": "user", "content": "abcde"}], 4.0) == 3
+
     def test_identify_groups_keeps_multi_tool_assistant_atomic(self) -> None:
         history = [
             _assistant_tools(

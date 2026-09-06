@@ -12,6 +12,7 @@ Eviction is atomic over tool-call groups so providers never see orphaned
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from math import ceil
 from typing import Any, TypedDict
 
 
@@ -33,7 +34,7 @@ def estimate_tokens(messages: Sequence[Mapping[str, Any]], chars_per_token: floa
     if chars_per_token <= 0:
         raise ValueError(f"chars_per_token must be positive, got {chars_per_token!r}")
     total_chars = sum(_message_chars(message) for message in messages)
-    return max(0, int(total_chars / chars_per_token))
+    return max(0, ceil(total_chars / chars_per_token))
 
 
 def measure_tokens(
@@ -55,7 +56,8 @@ def identify_tool_call_groups(history: Sequence[Mapping[str, Any]]) -> list[tupl
 
     Each group is the assistant message that declares ``tool_calls`` plus every
     subsequent ``role=tool`` message whose ``tool_call_id`` matches one of those
-    ids, in encounter order. Incomplete groups stay grouped so they are never split.
+    ids, in encounter order, while scanning contiguous tool results. An incomplete
+    group includes the matching results encountered before the first interruption.
     """
     groups: list[tuple[int, ...]] = []
     n = len(history)
