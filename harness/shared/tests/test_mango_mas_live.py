@@ -82,6 +82,11 @@ class TestMangoMASLive:
             err_msg = str(e)
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
                 pytest.skip(f"Live NIM transient failure: {err_msg}")
+            # Same escape as multi_file synthesis: the model may burn its budget
+            # retrying a correctly denied action (e.g. `python -c`), which is not
+            # a harness defect.
+            if "exceeded maximum tool iterations" in err_msg or "budget" in err_msg:
+                pytest.skip(f"Live synthesis iteration limit reached: {err_msg}")
             raise
 
         # 1. The verifier prose must contain PASS or FAIL
