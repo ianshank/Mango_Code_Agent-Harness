@@ -199,7 +199,6 @@ class TestExecuteAgentBudgetWiring:
         extras = [r.__dict__ for r in caplog.records]
         assert any(e.get("event") == "context_policy" for e in extras)
 
-
     def test_stale_provider_usage_must_not_skip_eviction_of_grown_history(self) -> None:
         """Regression: prior-turn usage.prompt_tokens must not gate current eviction.
 

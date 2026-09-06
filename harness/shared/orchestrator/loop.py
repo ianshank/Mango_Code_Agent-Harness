@@ -75,8 +75,7 @@ class ExecutionLoop:
         self.model = model
         limits = orchestrator_defaults(policy_path)
         logger.debug(
-            "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s "
-            "context_budget_tokens=%s",
+            "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s context_budget_tokens=%s",
             limits["max_iterations"],
             limits["api_timeout_sec"],
             limits["context_budget_tokens"],
