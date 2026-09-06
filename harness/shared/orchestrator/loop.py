@@ -74,24 +74,26 @@ class ExecutionLoop:
         self.api_key = api_key
         self.model = model
         limits = orchestrator_defaults(policy_path)
-        logger.debug(
-            "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s context_budget_tokens=%s",
-            limits["max_iterations"],
-            limits["api_timeout_sec"],
-            limits["context_budget_tokens"],
-        )
         if max_iterations is None:
             max_iterations = limits["max_iterations"]
         if api_timeout is None:
             api_timeout = limits["api_timeout_sec"]
         if max_tool_calls_per_task is None:
             max_tool_calls_per_task = policy_max_tool_calls_per_task(policy_path)
-            logger.debug("ExecutionLoop tool-call budget resolved from policy: %s", max_tool_calls_per_task)
         self.max_iterations = max_iterations
         self.api_timeout = api_timeout
         self.max_tool_calls_per_task = max_tool_calls_per_task
         self.context_budget_tokens = limits["context_budget_tokens"]
         self.context_chars_per_token = limits["context_chars_per_token"]
+        logger.debug(
+            "ExecutionLoop budgets: max_iterations=%s api_timeout_sec=%s "
+            "max_tool_calls_per_task=%s context_budget_tokens=%s context_chars_per_token=%s",
+            self.max_iterations,
+            self.api_timeout,
+            self.max_tool_calls_per_task,
+            self.context_budget_tokens,
+            self.context_chars_per_token,
+        )
         self.conversation_history: list[dict[str, Any]] = []
         #: One identifier per `execute_loop`, carried by every structured model
         #: and tool event of that run (2026 standards audit H6). A bare

@@ -227,3 +227,33 @@ class TestExecuteAgentBudgetWiring:
         assert "apply_context_policy" in source
         assert "context_budget_tokens" in source
         assert "128000" not in source
+
+
+def test_copy_isolates_tool_calls_nested_mutation() -> None:
+    """Budgeted copy must not share nested tool_calls dicts with history."""
+    history = [
+        {"role": "system", "content": "sys"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "run", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": "ok"},
+    ]
+    kept, _ = apply_context_policy(history, budget_tokens=10_000, chars_per_token=CHARS_PER_TOKEN)
+    kept[1]["tool_calls"][0]["function"]["arguments"] = '{"mutated": true}'
+    assert history[1]["tool_calls"][0]["function"]["arguments"] == "{}"
+
+
+def test_measure_tokens_rejects_non_integer_float_usage() -> None:
+    messages = [{"role": "user", "content": "abcd"}]
+    # 3.7 must fall back to estimate, not truncate to 3
+    estimated = estimate_tokens(messages, CHARS_PER_TOKEN)
+    got = measure_tokens(messages, usage={"prompt_tokens": 3.7}, chars_per_token=CHARS_PER_TOKEN)
+    assert got == estimated

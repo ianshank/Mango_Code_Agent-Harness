@@ -46,7 +46,11 @@ def measure_tokens(
     """Prefer provider ``usage.prompt_tokens`` when present; else estimate."""
     if usage is not None:
         prompt = usage.get("prompt_tokens")
-        if isinstance(prompt, (int, float)) and not isinstance(prompt, bool) and int(prompt) >= 0:
+        if isinstance(prompt, bool):
+            pass
+        elif isinstance(prompt, int) and prompt >= 0:
+            return prompt
+        elif isinstance(prompt, float) and prompt >= 0 and prompt.is_integer():
             return int(prompt)
     return estimate_tokens(messages, chars_per_token)
 
@@ -55,9 +59,11 @@ def identify_tool_call_groups(history: Sequence[Mapping[str, Any]]) -> list[tupl
     """Return index tuples for each assistant+tool group (atomic keep/drop units).
 
     Each group is the assistant message that declares ``tool_calls`` plus every
-    subsequent ``role=tool`` message whose ``tool_call_id`` matches one of those
-    ids, in encounter order, while scanning contiguous tool results. An incomplete
-    group includes the matching results encountered before the first interruption.
+    **contiguous** following ``role=tool`` message whose ``tool_call_id`` matches
+    one of those ids. Scanning stops at the first non-matching message, so a
+    later matching tool result after an intervening turn is not pulled into the
+    group (providers emit contiguous tool batches; splitting that batch is what
+    we refuse).
     """
     groups: list[tuple[int, ...]] = []
     n = len(history)
@@ -88,6 +94,29 @@ def identify_tool_call_groups(history: Sequence[Mapping[str, Any]]) -> list[tupl
     return groups
 
 
+def _copy_message(message: Mapping[str, Any]) -> dict[str, Any]:
+    """Shallow-copy a message, deep-copying ``tool_calls`` payloads.
+
+    Keeps model-facing budgeting from leaking nested mutations back into the
+    append-only conversation history (Copilot review on PR #110).
+    """
+    out = dict(message)
+    tool_calls = out.get("tool_calls")
+    if isinstance(tool_calls, list):
+        cloned: list[Any] = []
+        for tc in tool_calls:
+            if isinstance(tc, Mapping):
+                item = dict(tc)
+                fn = item.get("function")
+                if isinstance(fn, Mapping):
+                    item["function"] = dict(fn)
+                cloned.append(item)
+            else:
+                cloned.append(tc)
+        out["tool_calls"] = cloned
+    return out
+
+
 def apply_context_policy(
     history: Sequence[Mapping[str, Any]],
     budget_tokens: int,
@@ -107,7 +136,7 @@ def apply_context_policy(
     if budget_tokens < 0:
         raise ValueError(f"budget_tokens must be non-negative, got {budget_tokens!r}")
 
-    messages: list[dict[str, Any]] = [dict(m) for m in history]
+    messages: list[dict[str, Any]] = [_copy_message(m) for m in history]
     tokens_before = estimate_tokens(messages, chars_per_token)
     evicted = 0
 
