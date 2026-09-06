@@ -204,7 +204,9 @@ offers.
   helpers stay behind deliberately (DEC-057)
 - `harness/shared/memory_view.py` — new; rendering the stores for a human
   (`load_hypotheses`, `format_hypotheses_for_review`, `successors_of`). The
-  third layer of the same split; nothing in the agent loop imports it (C-HR-2)
+  third layer of the same split; nothing in the agent loop imported it under
+  C-HR-2 (since DEC-058 the loop imports its bounded
+  `format_hypotheses_for_reasoner` and nothing else from it, C-HS-1)
 - `harness/shared/show_memory.py` — new; the `make memory-show` CLI over that
   view, so the trail DEC-057 justifies the change by is actually readable
 - `Makefile` — **protected**; adds the `memory-show` target
@@ -247,7 +249,8 @@ request description, produced by `make attestation`.
   authority, which `test_every_declared_tool_has_a_required_action` pins.
 - INV-16: unchanged. The store is memory the model writes and nothing reads on a
   control path; `confidence` and `status` select no tool and alter no exposure
-  (C-HR-2 keeps it that way).
+  (C-HR-2 kept it that way; C-HS-1 and C-HS-5 of the surfacing spec keep it so
+  now that the reasoner reads the store as prompt text).
 - INV-17: this document is subject to it; `validate_plan.py` grades these
   criteria under `make specs`.
 

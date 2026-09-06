@@ -2,8 +2,10 @@
 
 DEC-057 justifies hypothesis revision by the trail it leaves for the verifier
 and the debug dump. Nothing read that trail, so the justification was not
-checkable; these cover the reader that makes it so. The reader is deliberately
-outside every prompt (C-HR-2) -- one of these tests pins that.
+checkable; these cover the reader that makes it so. The operator reader is
+deliberately outside every prompt (C-HS-1, which narrowed the phase-1 C-HR-2
+once DEC-058 gave the reasoner its own bounded reader) -- one of these tests
+pins that.
 """
 
 from __future__ import annotations
