@@ -180,6 +180,17 @@ def append_locked(
     repetition), so it would have been maintained twice indefinitely -- and the
     revision path was the first change to make the two copies diverge.
     """
+    # Recreate the store's directory if it went away. `_read_json_safe` already
+    # treats an absent *file* as an empty store, but that recovery was
+    # unreachable when the whole directory had gone: `file_lock` opens
+    # `<store>.lock` beside it and raised `FileNotFoundError` first, and the
+    # temp-file write below would have failed for the same reason. Done here
+    # rather than inside `file_lock` because it is this function that promises
+    # store recovery -- a bare advisory lock has no business creating
+    # directories for a path its caller chose. A permission error still
+    # propagates: only the missing-directory case is recovered.
+    store_file.parent.mkdir(parents=True, exist_ok=True)
+
     with file_lock(store_file):
         entries = _read_json_safe(store_file)
         if before_append is not None:

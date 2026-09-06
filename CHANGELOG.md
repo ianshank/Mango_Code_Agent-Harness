@@ -57,6 +57,17 @@ written with and its place in the revision graph. This does not reverse the
 phase-2 deferral: that is about prompt tokens, and printing on request adds none
 to any run. A test pins that no prompt builder imports the reader (C-HR-2).
 
+### Selector gate: `unittest.TestCase` subclasses are now discovered
+
+`test_spec_selectors_collect.py` verifies that every ticked acceptance criterion
+names a `pytest -k` selector that collects something. It approximated collection
+with the `Test*` class-name prefix, but pytest collects a `unittest.TestCase`
+subclass whatever it is called — so every selector aiming at a `*Tests` case
+class was reported as collecting nothing. Twenty-three tests in
+`test_agent_harness_wiring.py` were invisible to it. The scan now also descends
+into classes whose written bases include `TestCase`. It failed closed on correct
+specs, which is the direction most likely to be worked around rather than fixed.
+
 ### Decomposition: memory_store.py, memory_view.py
 
 The revision path pushed `meta_tools.py` past `limits.size_budget_lines`, so the

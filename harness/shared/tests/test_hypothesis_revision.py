@@ -539,3 +539,40 @@ def test_a_store_that_vanishes_before_the_lock_is_treated_as_empty(tmp_path):
     from harness.shared.memory_store import _read_json_safe
 
     assert _read_json_safe(tmp_path / "never-existed.json") == []
+
+
+def test_a_store_whose_directory_vanishes_is_recreated_not_raised(tmp_path):
+    """Regression for a review-bot finding: the "vanishes before the lock"
+    recovery covered the store *file* but not its *directory*.
+
+    `_read_json_safe` treats an absent file as an empty store, but that never
+    ran when the directory had gone -- `file_lock` opens `<store>.lock` beside
+    the store and raised `FileNotFoundError` first. Confirmed against the
+    pre-fix code, which raised here.
+    """
+    import shutil
+
+    from harness.shared.memory_store import append_locked
+
+    memory = tmp_path / "memory"
+    memory.mkdir()
+    store = memory / "hypotheses.json"
+    store.write_text("[]", encoding="utf-8")
+    shutil.rmtree(memory)
+
+    kept = append_locked(store, {"id": "x"}, 10, label="probe")
+    assert kept == [{"id": "x"}]
+    assert json.loads(store.read_text(encoding="utf-8")) == [{"id": "x"}]
+
+
+def test_a_whole_workspace_removed_mid_run_does_not_break_the_tool(tmp_path):
+    """The same fault through the public door rather than the primitive."""
+    import shutil
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    hypothesis_register("first", "r", 0.5, workspace_dir=ws)
+    shutil.rmtree(ws / ".mango")
+
+    assert "registered successfully" in hypothesis_register("after", "r", 0.5, workspace_dir=ws)
+    assert [h["claim"] for h in _hypotheses(ws)] == ["after"]
