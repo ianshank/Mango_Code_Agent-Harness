@@ -169,6 +169,8 @@ class TestGraphPolicyFailClosed:
                         "max_command_bytes": 8193,
                         "max_healing_retries": 4,
                         "max_output_bytes": 65537,
+                        "context_budget_tokens": 128001,
+                        "context_chars_per_token": 4.1,
                     },
                     "coverage": {"lines": 71, "branches": 61},
                     "agent_defaults": {

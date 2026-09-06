@@ -1,7 +1,7 @@
 # Spec: context-window budget (audit H4)
 
 > **Programme:** 2026 standards audit H4 / remediation Phase F context budget.
-> **Status:** Implemented on PR #110 (AC-CW-1…AC-CW-6 ticked; peer review documented below).
+> **Status:** Implemented on PR #110 (AC-CW-1…AC-CW-7 ticked; peer review documented below).
 > **Protected-path status:** touches `governance-policy.json`, `policy_loader.py`,
 > and `orchestrator/loop.py` — `infra-reviewed` attestation required.
 > **Provenance:** ensemble plan in
@@ -98,15 +98,21 @@ risks orphaning `role:tool` messages or leaving `tool_calls` without results.
       verified by
       `pytest harness/shared/tests/test_context_policy.py -k "test_context_budget_policy_defaults or test_present_policy_missing_context_budget_fails_closed or test_present_policy_missing_chars_per_token_fails_closed"`
       · stage: `make test-python` (R-CW-1)
-- [x] AC-CW-5: DEC-003 dormancy remains green —
+- [x] AC-CW-5: DEC-003 dormancy remains green; this PR adds no GoalCard / GBrain /
+      Qdrant / playlist / ARC / HITL surfaces and no NOTES.md scratch persistence —
       verified by
       `pytest harness/shared/tests/test_agent_surface_liveness.py -k test_mango_hooks_stay_dormant`
-      · stage: `make test-python` (C-CW-1)
+      · stage: `make test-python` (C-CW-1, C-CW-2, C-CW-3)
 - [x] AC-CW-6: No hard-coded context budget literal appears in
       `harness/shared/orchestrator/loop.py` —
       verified by
       `pytest harness/shared/tests/test_context_policy.py -k test_loop_has_no_hardcoded_context_budget`
       · stage: `make test-python` (R-CW-1, C-CW-4)
+- [x] AC-CW-7: Prior-turn provider `usage.prompt_tokens` MUST NOT gate eviction of a
+      grown history; `apply_context_policy` always estimates the current list —
+      verified by
+      `pytest harness/shared/tests/test_context_policy.py -k test_stale_provider_usage_must_not_skip_eviction_of_grown_history`
+      · stage: `make test-python` (R-CW-4)
 
 At least one criterion (AC-CW-2 / AC-CW-4) names a non-success outcome:
 orphaning tool groups fails the suite; a present policy that dropped the new
@@ -149,9 +155,10 @@ keys fails closed rather than silently substituting.
 
 ## Validation matrix
 
-- `pytest harness/shared/tests/test_context_policy.py -q`
+- `pytest harness/shared/tests/test_context_policy.py -q` (R-CW-1…R-CW-6, C-CW-4)
+- `pytest harness/shared/tests/test_context_policy.py -k test_stale_provider_usage_must_not_skip_eviction_of_grown_history -q` (R-CW-4)
 - `pytest harness/shared/tests/test_policy_loader.py -q`
-- `pytest harness/shared/tests/test_agent_surface_liveness.py -k dormant -q`
+- `pytest harness/shared/tests/test_agent_surface_liveness.py -k dormant -q` (C-CW-1, C-CW-2, C-CW-3)
 - `pytest harness/shared/tests/test_policy_consistency.py -k orchestrator -q`
 - `make digest-regen` (no unexpected drift after artifact regen)
 - coverage target: from `governance-policy.json → coverage.lines`

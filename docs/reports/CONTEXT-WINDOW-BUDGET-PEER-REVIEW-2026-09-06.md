@@ -23,4 +23,4 @@ LangGraph HITL in this train — all rejected per plan Phase 4.
 ## Implementation gate
 
 Approved to implement in the same PR train as the spec, provided ACs
-AC-CW-1…AC-CW-6 collect and pass.
+AC-CW-1…AC-CW-7 collect and pass.
