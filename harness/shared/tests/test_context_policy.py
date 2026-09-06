@@ -199,7 +199,28 @@ class TestExecuteAgentBudgetWiring:
         extras = [r.__dict__ for r in caplog.records]
         assert any(e.get("event") == "context_policy" for e in extras)
 
+
+    def test_stale_provider_usage_must_not_skip_eviction_of_grown_history(self) -> None:
+        """Regression: prior-turn usage.prompt_tokens must not gate current eviction.
+
+        apply_context_policy always estimates the *current* list. measure_tokens
+        may still honour usage when the caller is measuring the same request.
+        """
+        history = _history_with_two_groups(payload="Q" * 8000)
+        low = estimate_tokens(
+            [history[0], history[1], history[4], history[5], history[6]],
+            CHARS_PER_TOKEN,
+        )
+        # If usage were wrongly applied to tokens_before/size, a tiny prior
+        # prompt_tokens would claim we are already under budget.
+        assert measure_tokens(history, usage={"prompt_tokens": 3}, chars_per_token=CHARS_PER_TOKEN) == 3
+        kept, stats = apply_context_policy(history, budget_tokens=low, chars_per_token=CHARS_PER_TOKEN)
+        assert stats["messages_evicted"] >= 2
+        assert history_tool_links_are_consistent(kept)
+        assert not any(m.get("tool_call_id") == "call_old" for m in kept)
+
     def test_loop_has_no_hardcoded_context_budget(self) -> None:
+
         source = (REPO / "harness" / "shared" / "orchestrator" / "loop.py").read_text(encoding="utf-8")
         assert "apply_context_policy" in source
         assert "context_budget_tokens" in source

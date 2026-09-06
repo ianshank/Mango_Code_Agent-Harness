@@ -47,10 +47,13 @@ risks orphaning `role:tool` messages or leaving `tool_calls` without results.
   `tool_call_id` / `id`) are kept or dropped together. Surviving history MUST
   never orphan a tool result and MUST never leave `tool_calls` without matching
   results.
-- R-CW-4: Token measurement MUST prefer `usage.prompt_tokens` when the caller
-  supplies a usage mapping containing that key; otherwise MUST estimate with
-  `context_chars_per_token` from policy (UTF-8 character length / coefficient),
-  never a magic number in `loop.py`.
+- R-CW-4: `measure_tokens` MUST prefer `usage.prompt_tokens` when the caller
+  supplies usage for **the same message list** being measured; otherwise MUST
+  estimate with a policy `context_chars_per_token` coefficient. Pre-call
+  eviction via `apply_context_policy` MUST always estimate the **current**
+  history — it MUST NOT reuse a prior turn's `usage.prompt_tokens`, which would
+  under-count a grown list and skip eviction (H4 regression class).
+
 - R-CW-5: Every apply MUST emit a structured log with `event=context_policy`
   and `run_id`, plus `tokens_before`, `tokens_after`, `groups_preserved`, and
   `messages_evicted`.

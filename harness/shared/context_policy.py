@@ -90,27 +90,27 @@ def apply_context_policy(
     history: Sequence[Mapping[str, Any]],
     budget_tokens: int,
     *,
-    usage: Mapping[str, Any] | None = None,
     chars_per_token: float,
 ) -> tuple[list[dict[str, Any]], ContextPolicyStats]:
     """Return a budgeted copy of ``history`` and eviction stats.
 
-    Oldest tool-call groups are dropped first until measured size is within
-    ``budget_tokens`` or no evictable groups remain. The input is never mutated.
-    Non-group messages (system / user / plain assistant) are retained in v1.
+    Oldest tool-call groups are dropped first until *estimated* size of the
+    current message list is within ``budget_tokens`` or no evictable groups
+    remain. Provider ``usage.prompt_tokens`` is intentionally not used here:
+    it describes a prior request and must not gate eviction of a grown
+    history (use :func:`measure_tokens` when you have usage for *this* list).
+    The input is never mutated. Non-group messages (system / user / plain
+    assistant) are retained in v1.
     """
     if budget_tokens < 0:
         raise ValueError(f"budget_tokens must be non-negative, got {budget_tokens!r}")
 
     messages: list[dict[str, Any]] = [dict(m) for m in history]
-    tokens_before = measure_tokens(messages, usage=usage, chars_per_token=chars_per_token)
+    tokens_before = estimate_tokens(messages, chars_per_token)
     evicted = 0
 
-    # First gate may honour provider usage; subsequent gates re-estimate.
-    use_usage_once = usage is not None and "prompt_tokens" in usage
     while True:
-        size = tokens_before if use_usage_once else estimate_tokens(messages, chars_per_token)
-        use_usage_once = False
+        size = estimate_tokens(messages, chars_per_token)
         if size <= budget_tokens:
             break
         groups = identify_tool_call_groups(messages)

@@ -93,7 +93,6 @@ class ExecutionLoop:
         self.max_tool_calls_per_task = max_tool_calls_per_task
         self.context_budget_tokens = limits["context_budget_tokens"]
         self.context_chars_per_token = limits["context_chars_per_token"]
-        self._last_prompt_usage: dict[str, object] | None = None
         self.conversation_history: list[dict[str, Any]] = []
         #: One identifier per `execute_loop`, carried by every structured model
         #: and tool event of that run (2026 standards audit H6). A bare
@@ -196,10 +195,13 @@ class ExecutionLoop:
         for iteration in range(self.max_iterations):
             started = time.monotonic()
             try:
+                # Budget the *current* history by estimate (or an explicit
+                # same-list usage). Never reuse the previous turn's
+                # usage.prompt_tokens — that number describes an older
+                # request and would under-count a grown history (H4).
                 budgeted_messages, ctx_stats = apply_context_policy(
                     self.conversation_history,
                     self.context_budget_tokens,
-                    usage=self._last_prompt_usage,
                     chars_per_token=self.context_chars_per_token,
                 )
                 logger.debug(
@@ -235,8 +237,6 @@ class ExecutionLoop:
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
             self._log_model_call(run_id, agent_name, iteration, started, response)
-            usage = response.get("usage") if isinstance(response, dict) else None
-            self._last_prompt_usage = usage if isinstance(usage, dict) else None
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
