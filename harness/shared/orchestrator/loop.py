@@ -17,6 +17,7 @@ from harness.shared.agent_prompts import (
     TASK_LOG_PREVIEW_CHARS,
     VERIFIER_PROMPT_TEMPLATE,
 )
+from harness.shared.context_policy import apply_context_policy
 from harness.shared.debug_dump import write_dump
 from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
 from harness.shared.governance.verification import VerificationRunner
@@ -72,23 +73,27 @@ class ExecutionLoop:
         self.verification_cwd = verification_cwd
         self.api_key = api_key
         self.model = model
-        if max_iterations is None or api_timeout is None:
-            limits = orchestrator_defaults(policy_path)
-            logger.debug(
-                "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s",
-                limits["max_iterations"],
-                limits["api_timeout_sec"],
-            )
-            if max_iterations is None:
-                max_iterations = limits["max_iterations"]
-            if api_timeout is None:
-                api_timeout = limits["api_timeout_sec"]
+        limits = orchestrator_defaults(policy_path)
+        logger.debug(
+            "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s "
+            "context_budget_tokens=%s",
+            limits["max_iterations"],
+            limits["api_timeout_sec"],
+            limits["context_budget_tokens"],
+        )
+        if max_iterations is None:
+            max_iterations = limits["max_iterations"]
+        if api_timeout is None:
+            api_timeout = limits["api_timeout_sec"]
         if max_tool_calls_per_task is None:
             max_tool_calls_per_task = policy_max_tool_calls_per_task(policy_path)
             logger.debug("ExecutionLoop tool-call budget resolved from policy: %s", max_tool_calls_per_task)
         self.max_iterations = max_iterations
         self.api_timeout = api_timeout
         self.max_tool_calls_per_task = max_tool_calls_per_task
+        self.context_budget_tokens = limits["context_budget_tokens"]
+        self.context_chars_per_token = limits["context_chars_per_token"]
+        self._last_prompt_usage: dict[str, object] | None = None
         self.conversation_history: list[dict[str, Any]] = []
         #: One identifier per `execute_loop`, carried by every structured model
         #: and tool event of that run (2026 standards audit H6). A bare
@@ -191,8 +196,29 @@ class ExecutionLoop:
         for iteration in range(self.max_iterations):
             started = time.monotonic()
             try:
+                budgeted_messages, ctx_stats = apply_context_policy(
+                    self.conversation_history,
+                    self.context_budget_tokens,
+                    usage=self._last_prompt_usage,
+                    chars_per_token=self.context_chars_per_token,
+                )
+                logger.debug(
+                    "context policy applied for %s (iteration %d)",
+                    agent_name,
+                    iteration,
+                    extra={
+                        "event": "context_policy",
+                        "run_id": run_id,
+                        "agent": agent_name,
+                        "iteration": iteration,
+                        "tokens_before": ctx_stats["tokens_before"],
+                        "tokens_after": ctx_stats["tokens_after"],
+                        "groups_preserved": ctx_stats["groups_preserved"],
+                        "messages_evicted": ctx_stats["messages_evicted"],
+                    },
+                )
                 kwargs: dict[str, Any] = {
-                    "messages": self.conversation_history,
+                    "messages": budgeted_messages,
                     "tools": active_tools,
                     "timeout_sec": self.api_timeout,
                     "api_key": self.api_key,
@@ -209,6 +235,8 @@ class ExecutionLoop:
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
             self._log_model_call(run_id, agent_name, iteration, started, response)
+            usage = response.get("usage") if isinstance(response, dict) else None
+            self._last_prompt_usage = usage if isinstance(usage, dict) else None
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
