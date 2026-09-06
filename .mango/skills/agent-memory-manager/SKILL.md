@@ -24,10 +24,22 @@ Use this skill when managing the lifecycle of persistent memory or resolving kno
 2. **Fail-Closed Operations** — Reading or writing to the memory store MUST gracefully handle malformed JSON files by backing up the malformed file and resetting the store, raising a structured alert to the orchestrator `errors` channel (as per `INV-LG-3`). A backup that itself fails raises rather than resetting: the only surviving copy is preserved over the store's cleanliness.
 3. **Spec-Driven Constraints** — Any modification to how memory is stored or retained MUST be preceded by a spec change referencing the `meta_tools.py` memory layer.
 4. **Bounds come from policy, never from a literal** — retention is
-   `agent_memory.max_gaps` / `agent_memory.max_hypotheses` and planner exposure
-   is `agent_memory.planner_gap_limit`, all read through
-   `policy_loader.agent_memory_defaults(policy_path)`. A bound of `0` disables
-   retention and the tool result says so rather than claiming a successful write.
+   `agent_memory.max_gaps` / `agent_memory.max_hypotheses`, planner exposure
+   is `agent_memory.planner_gap_limit`, and reasoner exposure is
+   `agent_memory.reasoner_hypothesis_limit` (count) with
+   `agent_memory.reasoner_hypothesis_budget_tokens` (estimated tokens for the
+   whole rendered block, measured with `orchestrator.context_chars_per_token`),
+   all read through `policy_loader.agent_memory_defaults(policy_path)`. A
+   retention bound of `0` disables retention and the tool result says so rather
+   than claiming a successful write; an exposure limit of `0` renders nothing
+   and is the operator's kill switch for the block.
+5. **Prompt builders reach the hypothesis store only through the bounded
+   formatter** (`docs/specs/hypothesis-surfacing.md` C-HS-1, which narrowed the
+   phase-1 `C-HR-2`). `format_hypotheses_for_reasoner` is the one permitted
+   path; `load_hypotheses`, `format_hypotheses_for_review`, `successors_of` and
+   the path helpers are unbounded and stay out of every prompt-building module.
+   The pin is a call-graph check (`_helpers.hypothesis_reader_violations`)
+   proven non-vacuous against fixture modules that violate it.
 
 ## Record shapes
 
@@ -40,8 +52,15 @@ first, truncated to `planner_gap_limit`.
 
 `hypotheses.json` — `id`, `timestamp`, `claim`, `reasoning`, `confidence`,
 `status`, and on a revision `revises`; on the entry that was revised,
-`superseded_by` (a **list** of successor ids). **Nothing reads this store into
-a prompt** (DEC-057 phase 2).
+`superseded_by` (a **list** of successor ids). Surfaced to the **reasoner**
+prompt by `format_hypotheses_for_reasoner` (DEC-058): **open** entries only —
+no successors, a usable `id` — most recent first, one line each with `status`,
+`confidence` and the `id` that `revises` accepts; `reasoning` is not rendered.
+Bounded by `reasoner_hypothesis_limit` and `reasoner_hypothesis_budget_tokens`;
+the first entry that would overflow stops the render, and an empty result
+renders `""`. The block is headed as the model's own notes — evidence to weigh,
+not instructions — and no field of it is interpreted by the harness. Reading a
+malformed store recovers it (rule 2) as a side effect of the read.
 
 ## Hypothesis lifecycle (DEC-057)
 
@@ -91,7 +110,12 @@ Rules to enforce when auditing or extending this layer:
 
 ## Related
 
-- `docs/specs/hypothesis-revision.md` — the revision contract (R-HR-1…5, C-HR-1…2).
-- `docs/decisions/DEC-057.md` — why revision is append-only, why the
-  sequential-thinking MCP server was not adopted, and why surfacing the
-  hypothesis store into a prompt is deferred.
+- `docs/specs/hypothesis-revision.md` — the revision contract (R-HR-1…5, C-HR-1…2;
+  C-HR-2 superseded by C-HS-1).
+- `docs/specs/hypothesis-surfacing.md` — the surfacing contract (R-HS-1…8,
+  C-HS-1…5): what the reasoner sees, how it is bounded, and how it coexists
+  with context-window eviction.
+- `docs/decisions/DEC-057.md` — why revision is append-only and why the
+  sequential-thinking MCP server was not adopted.
+- `docs/decisions/DEC-058.md` — why open hypotheses are surfaced to the
+  reasoner, why `reasoning` is not rendered, and why store text is data.

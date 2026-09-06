@@ -14,6 +14,7 @@ from harness.shared import policy_loader
 from harness.shared.policy_loader import (
     PolicyError,
     agent_defaults,
+    agent_memory_defaults,
     coverage_defaults,
     coverage_optional_extras,
     load_policy,
@@ -446,3 +447,53 @@ class TestTheErrorNamesThePolicyItIsAbout:
         section = policy_loader._section("orchestrator")
         with pytest.raises(PolicyError, match=r"governance-policy\.json"):
             section.int("a-key-no-policy-states", 1)
+
+
+class TestReasonerHypothesisKeys:
+    """DEC-058 / hypothesis-surfacing R-HS-3: the two exposure bounds follow the H4 contract.
+
+    A present policy that omits either key fails closed; an absent policy file
+    yields the built-in defaults, which equal the shipped block so the adopter
+    path and the repository path agree. `TestLimitsAreTyped` already checks the
+    `AgentMemoryLimits` annotation against the returned keys.
+    """
+
+    KEYS = ("reasoner_hypothesis_limit", "reasoner_hypothesis_budget_tokens")
+
+    @staticmethod
+    def _shipped() -> dict:
+        from harness.shared.tests._helpers import REPO
+
+        policy = json.loads((REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8"))
+        block: dict = policy["agent_memory"]
+        return block
+
+    def _without(self, tmp_path: Path, key: str) -> Path:
+        body = {k: v for k, v in self._shipped().items() if k != key}
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({"agent_memory": body}), encoding="utf-8")
+        return path
+
+    def test_present_policy_missing_reasoner_hypothesis_limit_fails_closed(self, tmp_path: Path) -> None:
+        with pytest.raises(PolicyError, match="reasoner_hypothesis_limit"):
+            agent_memory_defaults(self._without(tmp_path, "reasoner_hypothesis_limit"))
+
+    def test_present_policy_missing_reasoner_hypothesis_budget_fails_closed(self, tmp_path: Path) -> None:
+        with pytest.raises(PolicyError, match="reasoner_hypothesis_budget_tokens"):
+            agent_memory_defaults(self._without(tmp_path, "reasoner_hypothesis_budget_tokens"))
+
+    def test_agent_memory_defaults_include_reasoner_hypothesis_keys(self, tmp_path: Path) -> None:
+        # `dict(...)`: the TypedDict is indexed by a loop variable here, which
+        # mypy rightly refuses on the typed view; the runtime value is a plain dict.
+        resolved = dict(agent_memory_defaults(tmp_path / "absent.json"))
+        shipped = self._shipped()
+        for key in self.KEYS:
+            assert resolved[key] == shipped[key], f"built-in default for {key} drifted from the shipped policy"
+
+    @pytest.mark.parametrize("bad", ["10", 10.5, True, None])
+    def test_a_non_integer_bound_fails_closed(self, tmp_path: Path, bad: object) -> None:
+        body = {**self._shipped(), "reasoner_hypothesis_limit": bad}
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({"agent_memory": body}), encoding="utf-8")
+        with pytest.raises(PolicyError, match="reasoner_hypothesis_limit must be an integer"):
+            agent_memory_defaults(path)

@@ -131,15 +131,17 @@ class TestCli:
 
 
 def test_the_reader_is_not_wired_into_any_prompt_or_gate() -> None:
-    """C-HR-2 and INV-5. Reading the store for an operator must stay outside
-    the agent loop: if a prompt builder imported this, the deferred phase-2
-    prompt cost would arrive without the token bound DEC-057 requires first."""
+    """C-HS-1 (narrowed from C-HR-2) and INV-5. The *operator* reader stays
+    outside the agent loop: the CLI and the unbounded formatter must not appear
+    in a prompt builder. Phase 2 (DEC-058) wired the *bounded* formatter from
+    the same module into `loop.py`, so `memory_view` itself is no longer a
+    forbidden name here; the call-graph pin in `test_hypothesis_revision.py`
+    grades which of its functions a prompt builder may reach."""
     from harness.shared.tests._helpers import REPO
 
     for rel in ("harness/shared/agent_prompts.py", "harness/shared/orchestrator/loop.py"):
         text = (REPO / rel).read_text(encoding="utf-8")
         assert "show_memory" not in text
-        assert "memory_view" not in text
         assert "load_hypotheses" not in text
         assert "format_hypotheses_for_review" not in text
 

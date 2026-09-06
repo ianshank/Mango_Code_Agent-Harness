@@ -195,9 +195,15 @@ graph TD
             RetryPolicy[retry_policy.py<br/>Pure backoff arithmetic<br/>no I/O, no clock, no network]
             Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner<br/>+ context_policy.py budget eviction]
             DebugDump[debug_dump.py<br/>Credential redaction + debug dumps]
-            MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock<br/>+ hypothesis status/revision transitions]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools + record semantics<br/>+ hypothesis status/revision transitions]
+            MemoryStore[memory_store.py<br/>file_lock, malformed recovery, FIFO, append_locked]
+            MemoryView[memory_view.py<br/>format_hypotheses_for_review — operator, unbounded<br/>format_hypotheses_for_reasoner — prompt, policy-bounded]
             PyBridge -->|asks for a delay| RetryPolicy
             Orchestrator -->|redacts history through| DebugDump
+            MetaTools -->|store mechanics| MemoryStore
+            MemoryView -->|reads records via| MetaTools
+            Orchestrator -->|open_gaps to planner| MetaTools
+            Orchestrator -->|open_hypotheses to reasoner, DEC-058| MemoryView
             subgraph "Cognitive Boundary — INV-16 (one-directional)"
                 Signal[cognitive_signal.py<br/>CognitiveSignal envelope + JSONL sink]
                 Shadow[shadow_planner.py<br/>Shadow-mode comparison channel<br/>MANGO_SHADOW_PLANNER, off by default]

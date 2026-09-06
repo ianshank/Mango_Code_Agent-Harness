@@ -96,7 +96,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── tool_schemas.py              # OpenAI/Nemotron-compatible tool definitions
 │   │   ├── cognitive_signal.py          # Versioned CognitiveSignal envelope + JSONL sink
 │   │   ├── shadow_planner.py            # Observation-only shadow plan comparison channel
-│   │   ├── meta_tools.py                # Meta-learning, context state, and file_lock
+│   │   ├── meta_tools.py                # Meta-learning tools: what a record means, how the model writes one
+│   │   ├── memory_store.py              # Store mechanics: file_lock, malformed recovery, FIFO, append_locked
+│   │   ├── memory_view.py               # Readers: operator (unbounded) and reasoner prompt (policy-bounded, DEC-058)
+│   │   ├── show_memory.py               # `make memory-show` CLI over both stores
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
 │   │   ├── write_policy.py              # Runtime write gate: protected_paths, .git, credentials
 │   │   ├── agent_authority.py           # Per-role tool exposure derived from agent-policy.json

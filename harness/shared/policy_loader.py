@@ -82,6 +82,8 @@ class AgentMemoryLimits(TypedDict):
     max_gaps: int
     max_hypotheses: int
     planner_gap_limit: int
+    reasoner_hypothesis_limit: int
+    reasoner_hypothesis_budget_tokens: int
 
 
 def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
@@ -408,6 +410,15 @@ def agent_memory_defaults(policy_path: Path | None = None) -> AgentMemoryLimits:
         "max_gaps": section.int("max_gaps", 100),
         "max_hypotheses": section.int("max_hypotheses", 100),
         "planner_gap_limit": section.int("planner_gap_limit", 10),
+        # Phase 2 of DEC-057 (DEC-058, `docs/specs/hypothesis-surfacing.md`):
+        # how many *open* hypotheses the reasoner prompt may carry, and the
+        # estimated-token ceiling on the whole rendered block, measured with
+        # `orchestrator.context_chars_per_token`. A limit of 0 renders nothing
+        # and is the operator's kill switch. The block is a non-group message,
+        # so `context_policy` never evicts it: these two keys are the only bound
+        # on what it costs every model call after the reasoner's first.
+        "reasoner_hypothesis_limit": section.int("reasoner_hypothesis_limit", 10),
+        "reasoner_hypothesis_budget_tokens": section.int("reasoner_hypothesis_budget_tokens", 1500),
     }
     _log_resolution("agent_memory", resolved, policy_path)
     return resolved

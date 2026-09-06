@@ -73,6 +73,12 @@ offers.
 - C-HR-2: No new prompt text. The store MUST NOT be surfaced into any role's
   prompt by this change; that is phase 2, gated on the context-window budget
   spec (`docs/reports/PLAYLIST-ASTRA-CONTEXT-BUDGET-PLAN-2026-09-06.md`).
+  **Superseded, not deleted, by `C-HS-1` of `docs/specs/hypothesis-surfacing.md`
+  (DEC-058):** the invariant narrowed from "no prompt builder reads the store"
+  to "no prompt builder reads the store through anything but the bounded
+  reasoner formatter". The property it protected -- no unbounded prompt text
+  from the store -- survives in that narrower, still-enforced form; the two
+  pins below were rewritten rather than removed.
 
 ## Acceptance criteria
 
@@ -167,10 +173,11 @@ offers.
       declaration, action map and registry remain equal sets —
       `pytest -k test_every_declared_tool_has_a_handler`
       · stage: `make coverage` (C-HR-1)
-- [x] AC-9: neither `harness/shared/agent_prompts.py` nor
-      `harness/shared/orchestrator/loop.py` references the hypothesis store —
-      `pytest -k test_no_prompt_builder_calls_a_hypothesis_reader`
-      · stage: `make coverage` (C-HR-2)
+- [x] AC-9: no prompt-building module reaches the hypothesis store through an
+      unbounded reader (narrowed by DEC-058 from "references the store at all";
+      the bounded `format_hypotheses_for_reasoner` is the one permitted path) —
+      `pytest -k test_prompt_builders_read_hypotheses_only_through_the_bounded_formatter`
+      · stage: `make coverage` (C-HR-2, as superseded by C-HS-1)
 
 ## Steps
 
@@ -286,3 +293,7 @@ carry and how that interacts with `context_policy`'s tool-call group eviction,
 which is a decision and a spec of its own. `C-HR-2` and
 `test_the_reader_is_not_wired_into_any_prompt_or_gate` keep the store out of
 every prompt until then. DEC-057 records the deferral and this correction.
+
+That decision and spec have since been made: `docs/specs/hypothesis-surfacing.md`
+and DEC-058 surface the open hypotheses to the reasoner prompt under two
+`agent_memory` bounds, and `C-HR-2` is superseded by `C-HS-1` as noted above.

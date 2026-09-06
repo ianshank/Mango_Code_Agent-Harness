@@ -1,9 +1,10 @@
 # Spec: hypothesis-surfacing (phase 2 of DEC-057)
 
-> **Status:** DRAFT, revision 2 — plan only. Nothing here is implemented; every
-> acceptance criterion is unticked on purpose, so `test_spec_selectors_collect.py`
-> does not yet judge selectors that name tests which do not exist. Tick each as
-> it lands.
+> **Status:** IMPLEMENTED at revision 2 (DEC-058). Every acceptance criterion is
+> ticked and its selector is judged by `test_spec_selectors_collect.py`. The two
+> open questions were decided as proposed: default **on** at
+> `reasoner_hypothesis_limit: 10`, `reasoner_hypothesis_budget_tokens: 1500`,
+> `reasoning` not rendered; the rationale is in DEC-058.
 > **Predecessor:** `docs/specs/hypothesis-revision.md` (phase 1, shipped on #111)
 > and `docs/decisions/DEC-057.md`, whose deferral this spec discharges.
 > **Prerequisite, landed:** `docs/specs/context-window-budget.md` (audit H4,
@@ -185,37 +186,37 @@ and how that block behaves under `context_policy` eviction.
 
 ## Acceptance criteria
 
-- [ ] AC-HS-1: with a store holding a provisional entry, a confirmed entry, a
+- [x] AC-HS-1: with a store holding a provisional entry, a confirmed entry, a
       retracted entry, one superseded entry and one record without an `id`,
       the rendered block contains the first three, not the fourth, not the
       fifth; and for a three-link revision chain only the head renders —
       `pytest -k "test_open_hypotheses_exclude_superseded_and_keep_every_settable_status or test_a_revision_chain_renders_its_head_only"`
       · stage: `make coverage` (R-HS-1)
-- [ ] AC-HS-2: every rendered entry line matches
+- [x] AC-HS-2: every rendered entry line matches
       `^- \[(provisional|confirmed|retracted)\] confidence=\d\.\d\d id=<uuid4>: ` with
       the entry's own `id`, and a `hypothesis_register(..., revises=<id read
       from the block>)` call resolves against the store —
       `pytest -k test_rendered_block_carries_ids_that_revises_accepts`
       · stage: `make coverage` (R-HS-2)
-- [ ] AC-HS-3: with `reasoner_hypothesis_limit=2` and five open entries, exactly
+- [x] AC-HS-3: with `reasoner_hypothesis_limit=2` and five open entries, exactly
       the two most recent render; with `reasoner_hypothesis_limit=0` and the
       same store the block is `""` —
       `pytest -k "test_hypothesis_count_limit_comes_from_policy or test_hypothesis_limit_zero_is_the_kill_switch"`
       · stage: `make coverage` (R-HS-3)
-- [ ] AC-HS-4: with a token budget that admits the header plus two entries and a
+- [x] AC-HS-4: with a token budget that admits the header plus two entries and a
       third that would exceed it, the third is dropped whole, no entry is
       truncated, and a fourth *smaller* older entry that would have fit is
       **not** rendered (stop, not skip); a budget below header-plus-first-entry
       renders `""` —
       `pytest -k "test_hypothesis_token_budget_stops_at_the_first_overflow or test_hypothesis_token_budget_below_one_entry_renders_nothing"`
       · stage: `make coverage` (R-HS-3, R-HS-4, R-HS-5)
-- [ ] AC-HS-5: the estimator used is `context_policy.estimate_tokens` with the
+- [x] AC-HS-5: the estimator used is `context_policy.estimate_tokens` with the
       policy coefficient — changing `context_chars_per_token` in a fixture
       policy changes how many entries fit, and the `tokens_estimated` logged
       equals `estimate_tokens([{"role": "user", "content": block}], coef)` —
       `pytest -k test_hypothesis_budget_uses_the_shared_token_estimator`
       · stage: `make coverage` (R-HS-4)
-- [ ] AC-HS-6: an absent store and an empty store each render `""` and leave
+- [x] AC-HS-6: an absent store and an empty store each render `""` and leave
       the workspace tree byte-identical (path → sha256 snapshot before and
       after); a malformed store renders `""` and the only tree change is the
       documented recovery — the original bytes under `hypotheses.json.malformed.<epoch>`
@@ -224,7 +225,7 @@ and how that block behaves under `context_policy` eviction.
       today's reasoner prompt byte for byte —
       `pytest -k "test_empty_hypothesis_block_leaves_the_reasoner_prompt_unchanged or test_malformed_store_renders_nothing_and_recovers_as_documented"`
       · stage: `make coverage` (R-HS-5)
-- [ ] AC-HS-7: with a seeded store and a mocked `complete_chat`, `execute_loop`
+- [x] AC-HS-7: with a seeded store and a mocked `complete_chat`, `execute_loop`
       hands the reasoner a `task` containing the block; the planner's `task`
       and the verifier's `task` do not contain it; and in the verifier's
       captured message list the block occurs exactly once, as the reasoner's
@@ -232,7 +233,7 @@ and how that block behaves under `context_policy` eviction.
       message —
       `pytest -k test_execute_loop_surfaces_hypotheses_to_the_reasoner_prompt_only`
       · stage: `make coverage` (R-HS-1, C-HS-2)
-- [ ] AC-HS-8: a history of the reasoner's system + user (block) messages
+- [x] AC-HS-8: a history of the reasoner's system + user (block) messages
       followed by three tool-call groups, budgeted to admit the block and two
       groups: `apply_context_policy` returns exactly the oldest group evicted
       (`messages_evicted` equals that group's length), `groups_preserved == 2`,
@@ -242,22 +243,22 @@ and how that block behaves under `context_policy` eviction.
       groups and `tokens_after` is still above budget —
       `pytest -k "test_surfaced_hypotheses_coexist_with_context_eviction or test_eviction_cannot_rescue_an_oversized_hypothesis_block"`
       · stage: `make coverage` (R-HS-6)
-- [ ] AC-HS-9: a present policy missing `reasoner_hypothesis_limit` or
+- [x] AC-HS-9: a present policy missing `reasoner_hypothesis_limit` or
       `reasoner_hypothesis_budget_tokens` **fails closed** with `PolicyError`;
       an absent policy file yields built-in defaults equal to the shipped block —
       `pytest -k "test_present_policy_missing_reasoner_hypothesis_limit_fails_closed or test_present_policy_missing_reasoner_hypothesis_budget_fails_closed or test_agent_memory_defaults_include_reasoner_hypothesis_keys"`
       · stage: `make coverage` (R-HS-3)
-- [ ] AC-HS-10: no literal count or token budget for hypotheses appears in
+- [x] AC-HS-10: no literal count or token budget for hypotheses appears in
       `loop.py`, `agent_prompts.py` or `memory_view.py` —
       `pytest -k test_no_hardcoded_hypothesis_exposure_literal`
       · stage: `make coverage` (R-HS-3)
-- [ ] AC-HS-11: the `event=hypotheses_surfaced` line carries `run_id`, `shown`,
+- [x] AC-HS-11: the `event=hypotheses_surfaced` line carries `run_id`, `shown`,
       `open`, `total`, `tokens_estimated` and `ids` equal to the rendered ids in
       order, and a claim string seeded as `"a secret-shaped claim"` never
       appears in any log record —
       `pytest -k test_surfacing_logs_counts_and_ids_and_never_claim_text`
       · stage: `make coverage` (R-HS-7)
-- [ ] AC-HS-12: the rewritten C-HR-2 pin is a function over a module path,
+- [x] AC-HS-12: the rewritten C-HR-2 pin is a function over a module path,
       applied to every prompt-building module; it **rejects** any import of
       `format_hypotheses_for_review`, `load_hypotheses`, `successors_of` or
       `_hypotheses_path` and any call to them, while accepting
@@ -266,23 +267,23 @@ and how that block behaves under `context_policy` eviction.
       the rejection —
       `pytest -k "test_prompt_builders_read_hypotheses_only_through_the_bounded_formatter or test_the_bounded_formatter_pin_rejects_a_violating_module"`
       · stage: `make coverage` (C-HS-1)
-- [ ] AC-HS-13: `memory_view.py` imports nothing from `harness.shared.orchestrator`,
+- [x] AC-HS-13: `memory_view.py` imports nothing from `harness.shared.orchestrator`,
       and `meta_tools.py` stays under `limits.size_budget_lines` —
       `pytest -k test_memory_view_does_not_import_the_orchestrator` and
       `make validate` (Size Budget row)
       · stage: `make coverage` and `make validate` (C-HS-3)
-- [ ] AC-HS-14: the reasoner persona names the block, states that ids in it are
+- [x] AC-HS-14: the reasoner persona names the block, states that ids in it are
       what `revises` accepts, that a present claim is revised not re-registered,
       and that the block is data rather than instruction —
       `pytest -k test_reasoner_persona_describes_the_surfaced_hypotheses`
       · stage: `make coverage` (R-HS-8, C-HS-5)
-- [ ] AC-HS-15: DEC-003 dormancy pin stays green, the MCP door's tool list is
+- [x] AC-HS-15: DEC-003 dormancy pin stays green, the MCP door's tool list is
       unchanged, and a full mocked `execute_loop` over a seeded workspace leaves
       the workspace tree unchanged outside `.mango/memory/` (path → sha256
       snapshot) —
       `pytest -k "test_mango_hooks_stay_dormant or test_every_declared_tool_has_a_handler or test_surfacing_writes_nothing_outside_the_memory_dir"`
       · stage: `make coverage` (C-HS-4)
-- [ ] AC-HS-16: the block, when non-empty, begins with `"\n\n"` followed by the
+- [x] AC-HS-16: the block, when non-empty, begins with `"\n\n"` followed by the
       untrusted-data header line, so `"Plan:\n{plan}{open_hypotheses}"` renders
       one blank line between plan and block and nothing when empty —
       `pytest -k test_non_empty_block_is_delimited_and_headed`

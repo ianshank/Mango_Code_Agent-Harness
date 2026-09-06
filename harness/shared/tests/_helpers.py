@@ -19,8 +19,10 @@ module while it still imports normally as ``harness.shared.tests._helpers``.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -248,3 +250,72 @@ def agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
     path = tmp_path / "governance-policy.json"
     path.write_text(json.dumps(policy), encoding="utf-8")
     return path
+
+
+#: The readers of the hypothesis store that carry no bound. A prompt-building
+#: module may reach the store only through `format_hypotheses_for_reasoner`
+#: (`docs/specs/hypothesis-surfacing.md`, C-HS-1, which narrowed the phase-1
+#: `C-HR-2` from "no reader at all"). Shared so the pin and the test that proves
+#: the pin is not vacuous grade the same set.
+UNBOUNDED_HYPOTHESIS_READERS: frozenset[str] = frozenset(
+    {"load_hypotheses", "format_hypotheses_for_review", "successors_of", "_hypotheses_path", "_read_json_safe"}
+)
+BOUNDED_HYPOTHESIS_FORMATTER = "format_hypotheses_for_reasoner"
+
+
+def prompt_building_modules() -> list[Path]:
+    """Every source module under ``harness/shared`` that builds a prompt.
+
+    Discovered rather than listed: a third prompt builder added later is graded
+    without anyone remembering to extend a hand-written tuple. Tests are
+    excluded -- ``test_agent_prompts.py`` matches the name rule and is not a
+    prompt builder.
+    """
+    return sorted(
+        path
+        for path in SHARED.rglob("*.py")
+        if "tests" not in path.parts and ("prompt" in path.name or path.name == "loop.py")
+    )
+
+
+def hypothesis_reader_violations(path: Path) -> list[str]:
+    """Ways ``path`` reaches the hypothesis store other than through the bounded formatter.
+
+    A call-graph check over the module's AST, not a substring scan: it looks for
+    an import of, or a call to, any name in `UNBOUNDED_HYPOTHESIS_READERS`, and
+    accepts `BOUNDED_HYPOTHESIS_FORMATTER`. A comment that mentions the readers
+    passes; a call through a module alias (``memory_view.load_hypotheses()``)
+    does not. Returns the violations so the caller can assert on the empty list
+    and the negative test can assert on a non-empty one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in UNBOUNDED_HYPOTHESIS_READERS:
+                    violations.append(f"{path.name} imports {alias.name}")
+        elif isinstance(node, ast.Call):
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if name in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} calls {name}()")
+    return violations
+
+
+def snapshot_tree(root: Path, *, exclude: tuple[str, ...] = ()) -> dict[str, str]:
+    """Relative POSIX path -> sha256 for every file under ``root``.
+
+    The shape a "nothing else changed" assertion needs: two snapshots compared
+    with ``==`` name exactly which files appeared, vanished or changed. Paths
+    whose relative form starts with an entry of ``exclude`` are left out, for
+    the case where one directory is *expected* to change.
+    """
+    out: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if any(rel == prefix or rel.startswith(prefix.rstrip("/") + "/") for prefix in exclude):
+            continue
+        out[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return out
