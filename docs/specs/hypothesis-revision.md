@@ -2,7 +2,9 @@
 
 > `hypothesis_register` gains an append-only revision path, so a belief the
 > reasoner recorded can later be confirmed or retracted without editing the
-> record. Surfacing the store back into a prompt is deferred (phase 2, below).
+> record. Surfacing the store back into a prompt was deferred (phase 2, below)
+> and has since been discharged by DEC-058 / `docs/specs/hypothesis-surfacing.md`;
+> `C-HR-2` is superseded by `C-HS-1` there.
 
 ## Problem statement
 

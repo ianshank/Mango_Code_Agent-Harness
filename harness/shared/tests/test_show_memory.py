@@ -18,10 +18,7 @@ import pytest
 from harness.shared.memory_view import format_hypotheses_for_review, load_hypotheses, successors_of
 from harness.shared.meta_tools import hypothesis_register, knowledge_gap_log
 from harness.shared.show_memory import build_parser, main
-
-
-def _entry_id(result: str) -> str:
-    return result.split("ID: ", 1)[1].split(".", 1)[0]
+from harness.shared.tests._helpers import hypothesis_id_from_result as _entry_id
 
 
 @pytest.fixture

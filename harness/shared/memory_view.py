@@ -170,8 +170,13 @@ def _reasoner_line(entry: dict) -> str:
     to carry long or injected text, and the one that made the token arithmetic
     tight).
     """
-    status = " ".join(str(entry.get("status", "?")).split()) or "?"
-    claim = " ".join(str(entry.get("claim", "")).split())
+    # A non-string status or claim can only come from a hand-edited store (the
+    # writer validates both); `?` and `""` keep the line inside the shape the
+    # model is told to expect rather than rendering `None` or `3` as a verdict.
+    status_raw = entry.get("status")
+    status = " ".join(status_raw.split()) if isinstance(status_raw, str) and status_raw.strip() else "?"
+    claim_raw = entry.get("claim")
+    claim = " ".join(claim_raw.split()) if isinstance(claim_raw, str) else ""
     return f"- [{status}] confidence={_render_confidence(entry.get('confidence'))} id={entry['id']}: {claim}"
 
 
@@ -246,14 +251,18 @@ def format_hypotheses_for_reasoner(
 
     block = _block_text(lines) if shown_ids else ""
     tokens_estimated = tokens if shown_ids else 0
+    # `chars_per_token` rides along so "why did N fit?" is answerable from this
+    # one line at INFO, without turning on the loader's DEBUG resolution log.
     logger.info(
-        "hypotheses surfaced to the reasoner: shown=%d open=%d total=%d tokens=%d limit=%d budget=%d",
+        "hypotheses surfaced to the reasoner: shown=%d open=%d total=%d tokens=%d "
+        "limit=%d budget=%d chars_per_token=%s",
         len(shown_ids),
         len(open_entries),
         len(entries),
         tokens_estimated,
         limit,
         budget_tokens,
+        chars_per_token,
         extra={
             "event": "hypotheses_surfaced",
             "run_id": run_id,
@@ -261,6 +270,7 @@ def format_hypotheses_for_reasoner(
             "open": len(open_entries),
             "total": len(entries),
             "tokens_estimated": tokens_estimated,
+            "chars_per_token": chars_per_token,
             "ids": list(shown_ids),
         },
     )

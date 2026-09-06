@@ -176,7 +176,7 @@ graph TD
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
             AgentMetaTools["Continuous Learning: knowledge_gap_log, hypothesis_register (shipped) · MCPs: query_docs (Context7) — Planned"]
-            Memory[(Workspace JSON Memory &lt;workspace&gt;/.mango/memory: gaps.json, hypotheses.json — append-only, FIFO-bounded)]
+            Memory[(Workspace JSON Memory &lt;workspace&gt;/.mango/memory: gaps.json, hypotheses.json — append-only, FIFO-bounded; read back into prompts under policy bounds: open gaps → planner, open hypotheses → reasoner)]
             MA --> SubAgents
             SubAgents --> Personas
             MA --> Hooks

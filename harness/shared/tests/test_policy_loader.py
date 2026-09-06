@@ -449,6 +449,29 @@ class TestTheErrorNamesThePolicyItIsAbout:
             section.int("a-key-no-policy-states", 1)
 
 
+class TestContextCoefficientFailsClosed:
+    """A non-positive `orchestrator.context_chars_per_token` fails at load, not mid-run.
+
+    `_Section.float` checks type only, so `0` or `-4` used to pass the loader and
+    surface later as a `ValueError` from `estimate_tokens` -- inside
+    `execute_loop`, after the planner had spent a model call, re-raised as a
+    `RuntimeError` naming no policy. Every other malformed value fails at load
+    with the key and the file (DEC-058 review, finding L1); this one now does too.
+    """
+
+    @pytest.mark.parametrize("bad", [0, -4, 0.0])
+    def test_non_positive_chars_per_token_fails_closed_at_load(self, tmp_path: Path, bad: object) -> None:
+        from harness.shared.tests._helpers import REPO
+
+        shipped = json.loads((REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8"))
+        body = {**shipped["orchestrator"], "context_chars_per_token": bad}
+        path = tmp_path / "policy.json"
+        path.write_text(json.dumps({"orchestrator": body}), encoding="utf-8")
+        with pytest.raises(PolicyError, match="context_chars_per_token must be positive") as excinfo:
+            orchestrator_defaults(path)
+        assert str(path) in str(excinfo.value), "the error names the policy it is about"
+
+
 class TestReasonerHypothesisKeys:
     """DEC-058 / hypothesis-surfacing R-HS-3: the two exposure bounds follow the H4 contract.
 

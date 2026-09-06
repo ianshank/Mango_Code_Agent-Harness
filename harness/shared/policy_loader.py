@@ -288,6 +288,17 @@ def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits
         "context_budget_tokens": section.int("context_budget_tokens", 128000),
         "context_chars_per_token": section.float("context_chars_per_token", 4.0),
     }
+    if resolved["context_chars_per_token"] <= 0:
+        # `estimate_tokens` refuses a non-positive coefficient with ValueError.
+        # Left to it, a bad policy value surfaced mid-run inside `execute_loop`
+        # -- after the planner had spent a model call -- as a RuntimeError that
+        # named no policy. Every other malformed value fails here, at load, with
+        # the key and the file; this one now does too (DEC-058 review).
+        path = POLICY_PATH if policy_path is None else policy_path
+        raise PolicyError(
+            f"policy orchestrator.context_chars_per_token must be positive, got "
+            f"{resolved['context_chars_per_token']!r} (policy at {path})"
+        )
     _log_resolution("orchestrator", resolved, policy_path)
     return resolved
 

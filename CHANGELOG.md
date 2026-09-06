@@ -37,8 +37,17 @@ carries `run_id`, `shown`, `open`, `total`, `tokens_estimated` and `ids` —
 never claim text.
 
 **Migration:** an adopter with a customised `agent_memory` block must add the
-two keys (same shape as H4's `orchestrator` migration). `policy-artifact.json`
-is rebuilt. `C-HR-2` is superseded by `C-HS-1`: prompt builders may reach the
+two keys (same shape as H4's `orchestrator` migration), and any out-of-tree
+caller of `REASONER_PROMPT_TEMPLATE.format(...)` must pass `open_hypotheses=""`
+(the slot is required by `str.format`; the two in-tree builders do). Also from
+the post-implementation review: `orchestrator.context_chars_per_token <= 0` now
+fails closed at load with `PolicyError` instead of surfacing mid-run as a
+`ValueError` from the estimator; the `hypotheses_surfaced` event carries
+`chars_per_token`; a non-string `status`/`claim` in a hand-edited store renders
+as `?`/empty rather than verbatim; and the two defect-class pins (oversized
+block survives eviction; empty block leaves the prompt byte-identical) live in
+the regression tier (`test_hypothesis_surfacing_regression.py`, registered in
+`test_regression_tier_pin.py`). `policy-artifact.json` is rebuilt. `C-HR-2` is superseded by `C-HS-1`: prompt builders may reach the
 store only through the bounded formatter; the two pins are rewritten, not
 removed, and proven non-vacuous. The LangGraph node renders the slot empty
 (DEC-053 park). Spec: `docs/specs/hypothesis-surfacing.md`, peer-reviewed at

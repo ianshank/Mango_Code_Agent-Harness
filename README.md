@@ -158,6 +158,14 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **`planner` Subagent:** Decomposes non-trivial tasks into sequentially verifiable steps before code changes begin.
 - **`verifier` Subagent:** Executes deterministic tests, linters, and typecheckers before marking tasks complete.
 - **Fail-Closed Hooks:** Intercepts dangerous bash commands (`rm -rf /`, raw disk writes), detects edit loops, and enforces test verification on stop.
+- **Agent Memory (`<workspace>/.mango/memory/`):** the reasoner records what it could not determine (`knowledge_gap_log`) and what it believes on what evidence (`hypothesis_register`, revisable append-only per DEC-057). Both stores are read back into the next run's prompts under policy bounds — open gaps to the planner, open hypotheses (with the ids `revises` accepts) to the reasoner (DEC-058) — and an operator can read them with `make memory-show`. Every bound lives in `governance-policy.json` → `agent_memory`, read through `policy_loader.agent_memory_defaults` (a present policy missing a key fails closed; an absent policy yields the built-in default):
+
+  | Key | Shipped | Bounds |
+  |---|---|---|
+  | `max_gaps` / `max_hypotheses` | 100 / 100 | retention per store (FIFO) |
+  | `planner_gap_limit` | 10 | open gaps rendered into the planner prompt |
+  | `reasoner_hypothesis_limit` | 10 | open hypotheses rendered into the reasoner prompt; `0` disables the block |
+  | `reasoner_hypothesis_budget_tokens` | 1500 | estimated tokens for that whole block, measured with `orchestrator.context_chars_per_token`; the first entry that would overflow stops the render |
 
 ### 2.2 NVIDIA Nemotron Ultra AI Adapter (`harness/node/src/ai/nemotron/`)
 

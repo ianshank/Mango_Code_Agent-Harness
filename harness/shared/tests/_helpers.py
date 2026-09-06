@@ -25,6 +25,7 @@ import datetime as dt
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -250,6 +251,22 @@ def agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
     path = tmp_path / "governance-policy.json"
     path.write_text(json.dumps(policy), encoding="utf-8")
     return path
+
+
+#: uuid4 as `hypothesis_register` renders it in its result string. Matched
+#: rather than split on punctuation so a `failed(...)` result -- which carries no
+#: ID -- fails with a readable assertion instead of a bare IndexError.
+_HYPOTHESIS_ID_IN_RESULT = re.compile(r"ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+
+
+def hypothesis_id_from_result(result: str) -> str:
+    """The entry id a `hypothesis_register` result names; asserts when it names none.
+
+    Three suites parsed the result string their own way before this lived here.
+    """
+    match = _HYPOTHESIS_ID_IN_RESULT.search(result)
+    assert match, f"no entry ID in result (was the call refused?): {result!r}"
+    return match.group(1)
 
 
 #: The readers of the hypothesis store that carry no bound. A prompt-building

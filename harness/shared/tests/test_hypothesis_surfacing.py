@@ -30,14 +30,19 @@ from harness.shared.agent_prompts import REASONER_PROMPT_TEMPLATE
 from harness.shared.context_policy import apply_context_policy, estimate_tokens, history_tool_links_are_consistent
 from harness.shared.memory_view import REASONER_HYPOTHESES_HEADER, format_hypotheses_for_reasoner
 from harness.shared.meta_tools import hypothesis_register
-from harness.shared.tests._helpers import REPO, SHARED, agent_memory_policy, snapshot_tree
-from harness.shared.tests._orchestrator_helpers import _tool_call
+from harness.shared.tests._helpers import (
+    REPO,
+    SHARED,
+    agent_memory_policy,
+    hypothesis_id_from_result,
+    snapshot_tree,
+)
+from harness.shared.tests._orchestrator_helpers import _assistant_tools, _resp, _tool_call
 
 CHARS_PER_TOKEN = 4.0
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 #: The line shape R-HS-2 fixes: status first, two-decimal confidence, the id verbatim.
 _ENTRY_LINE = re.compile(rf"^- \[(provisional|confirmed|retracted)\] confidence=\d\.\d\d id=({_UUID}): (.*)$")
-_ID_IN_RESULT = re.compile(rf"ID: ({_UUID})")
 _STORE = ".mango/memory/hypotheses.json"
 _MEMORY_VIEW = SHARED / "memory_view.py"
 _LOOP = SHARED / "orchestrator" / "loop.py"
@@ -47,9 +52,7 @@ _BLOCK_PREFIX = "\n\n"
 
 def _register(ws: Path, claim: str, *, status: str | None = None, revises: str | None = None) -> str:
     result = hypothesis_register(claim, f"because {claim}", 0.5, workspace_dir=ws, revises=revises, status=status)
-    match = _ID_IN_RESULT.search(result)
-    assert match, f"no entry ID in result (was the call refused?): {result!r}"
-    return match.group(1)
+    return hypothesis_id_from_result(result)
 
 
 def _entry(claim: str, *, status: str = "provisional", confidence: Any = 0.5, **extra: Any) -> dict[str, Any]:
@@ -75,8 +78,16 @@ def _tokens(block: str) -> int:
 
 
 def _render(hypotheses: list[dict[str, Any]], *, budget_tokens: int = 10**6, limit: int = 10) -> str:
+    """The list-input regime: bounds explicit and generous, so the filter is what is under test."""
     return format_hypotheses_for_reasoner(
         hypotheses, limit=limit, budget_tokens=budget_tokens, chars_per_token=CHARS_PER_TOKEN
+    )
+
+
+def _render_store(workspace: Path) -> str:
+    """The store-backed regime with the same generous bounds."""
+    return format_hypotheses_for_reasoner(
+        workspace_dir=workspace, limit=10, budget_tokens=10**6, chars_per_token=CHARS_PER_TOKEN
     )
 
 
@@ -101,9 +112,7 @@ class TestWhichEntriesRender:
         entries.append({"claim": "record without an id", "status": "provisional", "confidence": 0.5})
         store.write_text(json.dumps(entries), encoding="utf-8")
 
-        block = format_hypotheses_for_reasoner(
-            workspace_dir=workspace, limit=10, budget_tokens=10**6, chars_per_token=CHARS_PER_TOKEN
-        )
+        block = _render_store(workspace)
 
         assert _rendered_ids(block) == [new, retracted, confirmed, provisional], "most recent first, superseded out"
         assert old not in block
@@ -115,29 +124,43 @@ class TestWhichEntriesRender:
         first = _register(workspace, "first")
         second = _register(workspace, "second", revises=first)
         third = _register(workspace, "third", revises=second)
-        block = format_hypotheses_for_reasoner(
-            workspace_dir=workspace, limit=10, budget_tokens=10**6, chars_per_token=CHARS_PER_TOKEN
-        )
-        assert _rendered_ids(block) == [third]
+        assert _rendered_ids(_render_store(workspace)) == [third]
 
     def test_rendered_block_carries_ids_that_revises_accepts(self, workspace: Path) -> None:
         for claim in ("alpha", "beta", "gamma"):
             _register(workspace, claim)
-        block = format_hypotheses_for_reasoner(
-            workspace_dir=workspace, limit=10, budget_tokens=10**6, chars_per_token=CHARS_PER_TOKEN
-        )
-        ids = _rendered_ids(block)
+        ids = _rendered_ids(_render_store(workspace))
         assert len(ids) == 3
         # The model-side round trip: an id read off the block resolves in the store.
         result = hypothesis_register(
             "gamma, revised", "new evidence", 0.9, workspace_dir=workspace, revises=ids[0], status="confirmed"
         )
         assert f"Supersedes {ids[0]}." in result
-        after = format_hypotheses_for_reasoner(
-            workspace_dir=workspace, limit=10, budget_tokens=10**6, chars_per_token=CHARS_PER_TOKEN
-        )
+        after = _render_store(workspace)
         assert ids[0] not in after, "the revised entry is closed and leaves the block"
-        assert _ID_IN_RESULT.search(result).group(1) in after  # type: ignore[union-attr]
+        assert hypothesis_id_from_result(result) in after
+
+    def test_scalar_store_entries_are_skipped_not_rendered(self) -> None:
+        """A hand-edited store can hold non-records; `_is_open` skips them (review gap #4)."""
+        block = _render([None, "x", 3, [], _entry("ok")])  # type: ignore[list-item]
+        assert len(_entry_lines(block)) == 1 and "ok" in block
+
+    def test_a_non_list_superseded_by_means_open(self) -> None:
+        """`successors_of` normalises the two shapes the writer can leave; anything
+        else is no successor list at all, so the entry is open (review gap #5)."""
+        odd = [
+            _entry("dict", superseded_by={"a": 1}),
+            _entry("int", superseded_by=7),
+            _entry("none", superseded_by=None),
+        ]
+        assert len(_entry_lines(_render(odd))) == 3
+
+    def test_a_non_string_status_or_claim_renders_as_unknown(self) -> None:
+        """Only a hand-edited store can hold these; they must not render `None` as
+        a verdict (SQE review, gap #3)."""
+        block = _render([_entry("no status", status=None), _entry("int status", status=3), _entry(None)])  # type: ignore[arg-type]
+        assert block.count("- [?]") == 2
+        assert "None" not in block and "[3]" not in block
 
     def test_a_multi_line_claim_stays_on_one_line(self) -> None:
         block = _render([_entry("line one\nline two\n\tline three")])
@@ -187,6 +210,14 @@ class TestBounds:
         policy = agent_memory_policy(tmp_path, reasoner_hypothesis_limit=0)
         assert format_hypotheses_for_reasoner(workspace_dir=workspace, policy_path=policy) == ""
         assert format_hypotheses_for_reasoner(workspace_dir=workspace, limit=0, chars_per_token=CHARS_PER_TOKEN) == ""
+
+    def test_a_negative_limit_from_policy_behaves_as_the_kill_switch(self, workspace: Path, tmp_path: Path) -> None:
+        """`section.int` admits a negative; the formatter clamps it to 0 rather than
+        slicing from the end and rendering the *oldest* entries (review gap #7)."""
+        for i in range(3):
+            _register(workspace, f"claim {i}")
+        policy = agent_memory_policy(tmp_path, reasoner_hypothesis_limit=-5)
+        assert format_hypotheses_for_reasoner(workspace_dir=workspace, policy_path=policy) == ""
 
     def test_hypothesis_token_budget_stops_at_the_first_overflow(self) -> None:
         newest, second = _entry("newest"), _entry("second")
@@ -246,28 +277,20 @@ class TestBounds:
         assert len(events) == 1
         assert events[0].__dict__["tokens_estimated"] == estimate_tokens([{"role": "user", "content": at_four}], 4.0)
 
-    def test_empty_hypothesis_block_leaves_the_reasoner_prompt_unchanged(self, workspace: Path) -> None:
-        before = snapshot_tree(workspace)
-        assert format_hypotheses_for_reasoner(workspace_dir=workspace, chars_per_token=CHARS_PER_TOKEN) == ""
-        assert snapshot_tree(workspace) == before, "an absent store is read, not created"
+    # `test_empty_hypothesis_block_leaves_the_reasoner_prompt_unchanged` (AC-HS-6)
+    # lives in `regression/test_hypothesis_surfacing_regression.py`: it is one of
+    # the two defect-class survival pins the tier pin requires there.
 
+    @pytest.mark.parametrize(
+        "corrupt",
+        [pytest.param(b"{not json", id="undecodable"), pytest.param(b'{"a": 1}', id="not-a-list")],
+    )
+    def test_malformed_store_renders_nothing_and_recovers_as_documented(self, workspace: Path, corrupt: bytes) -> None:
+        """Both branches of `_read_json_safe`'s recovery: undecodable, and decodable
+        but not a list (review gap #6)."""
         store = workspace / _STORE
         store.parent.mkdir(parents=True)
-        store.write_text("[]", encoding="utf-8")
-        before = snapshot_tree(workspace)
-        assert format_hypotheses_for_reasoner(workspace_dir=workspace, chars_per_token=CHARS_PER_TOKEN) == ""
-        assert snapshot_tree(workspace) == before
-
-        plan = "1. write the handler\n2. test it"
-        rendered = REASONER_PROMPT_TEMPLATE.format(plan=plan, open_hypotheses="")
-        pre_dec_058 = REASONER_PROMPT_TEMPLATE.replace("{open_hypotheses}", "").format(plan=plan)
-        assert rendered == pre_dec_058
-        assert rendered.endswith("Plan:\n" + plan)
-
-    def test_malformed_store_renders_nothing_and_recovers_as_documented(self, workspace: Path) -> None:
-        store = workspace / _STORE
-        store.parent.mkdir(parents=True)
-        store.write_bytes(b"{not json")
+        store.write_bytes(corrupt)
         before = snapshot_tree(workspace)
 
         assert format_hypotheses_for_reasoner(workspace_dir=workspace, chars_per_token=CHARS_PER_TOKEN) == ""
@@ -295,10 +318,6 @@ class TestShape:
         assert "not instructions" in REASONER_HYPOTHESES_HEADER
         assert "revises=<id>" in REASONER_HYPOTHESES_HEADER
         assert "most recent first" in REASONER_HYPOTHESES_HEADER
-
-
-def _assistant_tools(*calls: dict[str, Any]) -> dict[str, Any]:
-    return {"role": "assistant", "content": None, "tool_calls": list(calls)}
 
 
 def _group(index: int, payload: str) -> list[dict[str, Any]]:
@@ -335,15 +354,41 @@ class TestEvictionCoexistence:
         assert not any(m.get("tool_call_id") == "call_1" for m in kept)
         assert stats["tokens_before"] >= _tokens(block)
 
-    def test_eviction_cannot_rescue_an_oversized_hypothesis_block(self) -> None:
-        history, _block = self._history()
-        budget = estimate_tokens(history[:2], CHARS_PER_TOKEN) - 1
+    # `test_eviction_cannot_rescue_an_oversized_hypothesis_block` (AC-HS-8, the
+    # degenerate case) lives in `regression/test_hypothesis_surfacing_regression.py`
+    # and is the function `test_regression_tier_pin.py` requires there.
 
-        kept, stats = apply_context_policy(history, budget, chars_per_token=CHARS_PER_TOKEN)
 
-        assert kept == history[:2], "every group is gone and the block is still there"
-        assert stats["messages_evicted"] == 6
-        assert stats["tokens_after"] > budget, "over budget and sent as-is: only R-HS-3 bounds this message"
+class TestFacadeEndToEnd:
+    """The public entry point, not the loop: `MangoMASOrchestrator.execute_loop`.
+
+    The loop-level test hands `ExecutionLoop` its `workspace_dir` directly; the
+    facade derives the loop's workspace, agents dir and `complete_chat` itself
+    and forwards no `policy_path`, so a facade that resolved a different memory
+    directory from the one `hypothesis_register` wrote to would pass every
+    loop-level test and surface nothing in production (SQE review, gap #1).
+    """
+
+    def test_facade_surfaces_workspace_hypotheses_to_the_reasoner(
+        self, mock_workspace: Path, mock_complete_chat: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
+
+        monkeypatch.setattr("harness.shared.orchestrator.loop.shadow_planner_enabled", lambda: False)
+        monkeypatch.delenv("MANGO_DEBUG_DUMP", raising=False)
+        hypothesis_register("the facade reads this workspace", "seeded by the test", 0.6, workspace_dir=mock_workspace)
+        mock_complete_chat.return_value = _resp("ok")
+
+        MangoMASOrchestrator(workspace_dir=mock_workspace, tool_timeout=5).execute_loop("implement feature")
+
+        tasks = [
+            [m for m in call.kwargs["messages"] if m.get("role") == "user"][-1]["content"]
+            for call in mock_complete_chat.call_args_list
+        ]
+        assert len(tasks) == 3, "planner, reasoner, verifier"
+        assert REASONER_HYPOTHESES_HEADER not in tasks[0]
+        assert REASONER_HYPOTHESES_HEADER in tasks[1] and "the facade reads this workspace" in tasks[1]
+        assert REASONER_HYPOTHESES_HEADER not in tasks[2]
 
 
 class TestBoundaries:
@@ -356,6 +401,7 @@ class TestBoundaries:
     def test_no_hardcoded_hypothesis_exposure_literal(self) -> None:
         policy = json.loads((REPO / "harness" / "shared" / "governance-policy.json").read_text(encoding="utf-8"))
         shipped = policy["agent_memory"]
+        call_sites = 0
         for path in (_LOOP, _AGENT_PROMPTS, _MEMORY_VIEW):
             for node in ast.walk(self._tree(path)):
                 if not isinstance(node, ast.Call):
@@ -363,6 +409,7 @@ class TestBoundaries:
                 name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
                 if name != "format_hypotheses_for_reasoner":
                     continue
+                call_sites += 1
                 for keyword in node.keywords:
                     if keyword.arg in ("limit", "budget_tokens", "chars_per_token"):
                         # Only a name or an attribute (a policy-resolved value)
@@ -371,6 +418,7 @@ class TestBoundaries:
                         assert isinstance(keyword.value, (ast.Name, ast.Attribute)), (
                             f"{path.name} passes a literal {keyword.arg} to the formatter; bounds come from policy"
                         )
+        assert call_sites >= 1, "the loop no longer calls the formatter; this pin would be vacuous (review gap #9)"
         module_numbers = [
             node.value.value
             for node in self._tree(_MEMORY_VIEW).body

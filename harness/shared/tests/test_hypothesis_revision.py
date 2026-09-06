@@ -12,13 +12,13 @@ Contract: ``docs/specs/hypothesis-revision.md`` (R-HR-1…5, C-HR-1…2).
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 
 from harness.shared.meta_tools import hypothesis_register
 from harness.shared.tests._helpers import REPO, agent_memory_policy
+from harness.shared.tests._helpers import hypothesis_id_from_result as _entry_id
 
 _agent_memory_policy = agent_memory_policy
 
@@ -26,18 +26,6 @@ _agent_memory_policy = agent_memory_policy
 def _hypotheses(ws: Path) -> list:
     entries: list = json.loads((ws / ".mango" / "memory" / "hypotheses.json").read_text(encoding="utf-8"))
     return entries
-
-
-#: uuid4 as `hypothesis_register` renders it. Matched rather than split on
-#: punctuation so a `failed(...)` result -- which carries no ID -- fails with a
-#: readable assertion instead of a bare IndexError from the split.
-_UUID_IN_RESULT = re.compile(r"ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
-
-
-def _entry_id(result: str) -> str:
-    match = _UUID_IN_RESULT.search(result)
-    assert match, f"no entry ID in result (was the call refused?): {result!r}"
-    return match.group(1)
 
 
 def test_hypothesis_revision_supersedes_prior_entry(tmp_path):

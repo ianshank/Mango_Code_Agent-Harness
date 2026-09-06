@@ -82,6 +82,8 @@ Node thresholds are read from this same policy rather than restated as literals,
 
 The `synthesis` section of `governance-policy.json` carries additional config-driven parameters (`max_repair_cycles`, `lats_enabled`, `critique_schema_version`) that must not be hardcoded in any implementation. They are currently schema-shape guards for an unimplemented feature: no production code path consults them.
 
+The `agent_memory` section bounds the meta-tool stores and what of them re-enters a prompt: `max_gaps` / `max_hypotheses` (retention), `planner_gap_limit` (open gaps in the planner prompt), and `reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens` (open hypotheses in the reasoner prompt, by count and by estimated tokens under `orchestrator.context_chars_per_token`; DEC-058). All are read through `policy_loader.agent_memory_defaults`: a present policy missing any of them fails closed with `PolicyError`, an absent policy file yields the built-in defaults, and an exposure limit of `0` disables that block. Nothing else may bound or read the stores into a prompt (`docs/specs/hypothesis-surfacing.md`, C-HS-1).
+
 `decision_id_pattern` in `governance-policy.json` governs the identifiers in
 `docs/decisions/` (and the thin ID index at `harness/node/.governance/decision-log.md`) and nothing else. `check_projections.py` and
 `governance/verify_zero_skips.py` rewrite it from `^(...)$` into `\b(...)\b` and use it
