@@ -231,24 +231,20 @@ class TestExecuteAgentBudgetWiring:
 
 def test_copy_isolates_tool_calls_nested_mutation() -> None:
     """Budgeted copy must not share nested tool_calls dicts with history."""
-    history = [
+    history: list[dict[str, Any]] = [
         {"role": "system", "content": "sys"},
-        {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": "c1",
-                    "type": "function",
-                    "function": {"name": "run", "arguments": "{}"},
-                }
-            ],
-        },
+        _assistant_tools(_tool_call("run", "{}", "c1")),
         {"role": "tool", "tool_call_id": "c1", "content": "ok"},
     ]
     kept, _ = apply_context_policy(history, budget_tokens=10_000, chars_per_token=CHARS_PER_TOKEN)
-    kept[1]["tool_calls"][0]["function"]["arguments"] = '{"mutated": true}'
-    assert history[1]["tool_calls"][0]["function"]["arguments"] == "{}"
+    kept_calls = kept[1]["tool_calls"]
+    assert isinstance(kept_calls, list)
+    kept_fn = kept_calls[0]["function"]
+    assert isinstance(kept_fn, dict)
+    kept_fn["arguments"] = '{"mutated": true}'
+    original_fn = history[1]["tool_calls"][0]["function"]
+    assert isinstance(original_fn, dict)
+    assert original_fn["arguments"] == "{}"
 
 
 def test_measure_tokens_rejects_non_integer_float_usage() -> None:
