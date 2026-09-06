@@ -229,6 +229,61 @@ class TestExecuteAgentBudgetWiring:
         assert "128000" not in source
 
 
+class TestContextPolicyEdgeCases:
+    def test_empty_history_is_noop(self) -> None:
+        history: list[dict[str, Any]] = []
+        kept, stats = apply_context_policy(history, budget_tokens=0, chars_per_token=CHARS_PER_TOKEN)
+        assert kept == []
+        assert stats["tokens_before"] == 0
+        assert stats["tokens_after"] == 0
+        assert stats["messages_evicted"] == 0
+        assert stats["groups_preserved"] == 0
+        assert history_tool_links_are_consistent(kept)
+
+    def test_budget_zero_evicts_groups_retains_non_group(self) -> None:
+        history: list[dict[str, Any]] = _history_with_two_groups(payload="Z" * 2000)
+        kept, stats = apply_context_policy(history, budget_tokens=0, chars_per_token=CHARS_PER_TOKEN)
+        assert stats["messages_evicted"] >= 4
+        assert stats["groups_preserved"] == 0
+        assert identify_tool_call_groups(kept) == []
+        # Non-group messages (system / user / trailing user) retained in v1.
+        assert any(m.get("role") == "system" for m in kept)
+        assert any(m.get("role") == "user" for m in kept)
+        assert not any(m.get("role") == "tool" for m in kept)
+        assert not any(isinstance(m.get("tool_calls"), list) and m.get("tool_calls") for m in kept)
+        assert history_tool_links_are_consistent(kept)
+
+    def test_incomplete_tool_group_stays_atomic_under_budget(self) -> None:
+        """Partial contiguous group: assistant with two calls, only one result, then interrupt.
+
+        identify_tool_call_groups must return the partial contiguous span; apply
+        under a tight budget must not split the matched tool from its assistant.
+        """
+        history: list[dict[str, Any]] = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "go"},
+            _assistant_tools(
+                _tool_call("read_file", {"filepath": "a"}, call_id="c1"),
+                _tool_call("read_file", {"filepath": "b"}, call_id="c2"),
+            ),
+            _tool_result("c1", "A" * 4000),
+            # c2 result missing — interrupted before second tool returned
+            {"role": "user", "content": "interrupted"},
+        ]
+        groups = identify_tool_call_groups(history)
+        assert groups == [(2, 3)]
+        # Tight budget forces eviction of the only (partial) group.
+        non_group = [history[0], history[1], history[4]]
+        budget = estimate_tokens(non_group, CHARS_PER_TOKEN)
+        kept, stats = apply_context_policy(history, budget_tokens=budget, chars_per_token=CHARS_PER_TOKEN)
+        assert stats["messages_evicted"] == 2
+        assert identify_tool_call_groups(kept) == []
+        # Matched tool was not left without its assistant (and vice versa).
+        assert not any(m.get("tool_call_id") == "c1" for m in kept)
+        assert not any(isinstance(m.get("tool_calls"), list) and m.get("tool_calls") for m in kept)
+        assert history_tool_links_are_consistent(kept)
+
+
 def test_copy_isolates_tool_calls_nested_mutation() -> None:
     """Budgeted copy must not share nested tool_calls dicts with history."""
     history: list[dict[str, Any]] = [

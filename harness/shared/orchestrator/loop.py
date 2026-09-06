@@ -17,7 +17,7 @@ from harness.shared.agent_prompts import (
     TASK_LOG_PREVIEW_CHARS,
     VERIFIER_PROMPT_TEMPLATE,
 )
-from harness.shared.context_policy import apply_context_policy
+from harness.shared.context_policy import ContextPolicyStats, apply_context_policy
 from harness.shared.debug_dump import write_dump
 from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
 from harness.shared.governance.verification import VerificationRunner
@@ -172,6 +172,44 @@ class ExecutionLoop:
             },
         )
 
+    @staticmethod
+    def _log_context_policy(
+        run_id: str,
+        agent_name: str,
+        iteration: int,
+        ctx_stats: ContextPolicyStats,
+    ) -> None:
+        """Emit structured ``event=context_policy`` logs for one budget apply.
+
+        Always logs at DEBUG. When messages were evicted, also logs at INFO
+        with the same structured fields so operators can see trimming without
+        enabling debug. Fields come from ``ContextPolicyStats`` / policy
+        resolution — never hard-coded budget literals.
+        """
+        extra = {
+            "event": "context_policy",
+            "run_id": run_id,
+            "agent": agent_name,
+            "iteration": iteration,
+            "tokens_before": ctx_stats["tokens_before"],
+            "tokens_after": ctx_stats["tokens_after"],
+            "groups_preserved": ctx_stats["groups_preserved"],
+            "messages_evicted": ctx_stats["messages_evicted"],
+        }
+        logger.debug(
+            "context policy applied for %s (iteration %d)",
+            agent_name,
+            iteration,
+            extra=extra,
+        )
+        if ctx_stats["messages_evicted"] > 0:
+            logger.info(
+                "context policy evicted messages for %s (iteration %d)",
+                agent_name,
+                iteration,
+                extra=extra,
+            )
+
     def execute_agent(
         self,
         agent_name: str,
@@ -205,21 +243,7 @@ class ExecutionLoop:
                     self.context_budget_tokens,
                     chars_per_token=self.context_chars_per_token,
                 )
-                logger.debug(
-                    "context policy applied for %s (iteration %d)",
-                    agent_name,
-                    iteration,
-                    extra={
-                        "event": "context_policy",
-                        "run_id": run_id,
-                        "agent": agent_name,
-                        "iteration": iteration,
-                        "tokens_before": ctx_stats["tokens_before"],
-                        "tokens_after": ctx_stats["tokens_after"],
-                        "groups_preserved": ctx_stats["groups_preserved"],
-                        "messages_evicted": ctx_stats["messages_evicted"],
-                    },
-                )
+                self._log_context_policy(run_id, agent_name, iteration, ctx_stats)
                 kwargs: dict[str, Any] = {
                     "messages": budgeted_messages,
                     "tools": active_tools,

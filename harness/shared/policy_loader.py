@@ -279,8 +279,10 @@ def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits
         # (tech-debt-hardening-plan R-TDH-16).
         "max_output_bytes": section.int("max_output_bytes", 65536),
         # Context-window budget for model-facing history (audit H4). Generous
-        # default so short runs / existing unit tests do not evict; coefficient
-        # used only when provider usage.prompt_tokens is absent.
+        # default so short runs / existing unit tests do not evict.
+        # apply_context_policy always estimates the *current* list with
+        # context_chars_per_token; measure_tokens prefers same-list
+        # usage.prompt_tokens when present, else falls back to this coefficient.
         "context_budget_tokens": section.int("context_budget_tokens", 128000),
         "context_chars_per_token": section.float("context_chars_per_token", 4.0),
     }
