@@ -10,6 +10,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
+
+Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
+Eleven root causes triaged; three governance decisions registered as DEC-059
+(AF_UNIX), DEC-061 (Make/POSIX stubs), and DEC-062 (asyncio self-pipe). IDs
+were renumbered on merge so DEC-057/058 remain the hypothesis revision and
+surfacing records on `origin/main`.
+
+| RCA | Root cause | Fix |
+|-----|-----------|-----|
+| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-059 waiver |
+| RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
+| RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
+| RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |
+| RCA-5 | `make` absent on Windows in timeout test | `_ensure_make_on_path` autouse fixture |
+| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-061 waiver |
+| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-061 |
+| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-062 |
+| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-061 |
+| RCA-10 | `_sole_decision_id()` breaks with >1 DEC in registry | `_dec_for_posix_only_probes()` asserts DEC-026 |
+| RCA-11 | NTFS same-inode overwrite in tamper test | Case-insensitive assertion on `win32` |
+
+New regression tests: `test_windows_portability_regression.py`. `pyrightconfig.json`
+for IDE parity.
+
+### NS-17/NS-21 temporary rollback regressions retired (DEC-060)
+
+`test_ns17_rollback_regression.py` and `test_ns21_rollback_regression.py`
+asserted the *absence* of workspace-scoped memory and post-turn hooks after a
+temporary CI rollback. `origin/main` re-landed the forward implementation under
+DEC-057/058; those inverted pins are retired with DEC-060.
+
 ### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
 
 Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing

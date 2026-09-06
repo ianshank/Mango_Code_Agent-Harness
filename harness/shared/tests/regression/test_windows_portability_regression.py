@@ -96,7 +96,7 @@ class TestIsProtectedCaseSensitivity:
 
 
 # ---------------------------------------------------------------------------
-# RCA-8/DEC-059: asyncio self-pipe guard
+# RCA-8/DEC-062: asyncio self-pipe guard
 # ---------------------------------------------------------------------------
 
 
@@ -108,7 +108,7 @@ class TestWindowsAsyncioSelfPipeGuard:
 
         mark = getattr(mod, "pytestmark", None)
         if sys.platform == "win32":
-            assert mark is not None, "pytestmark not set on Windows (DEC-059 guard missing)"
+            assert mark is not None, "pytestmark not set on Windows (DEC-062 guard missing)"
             assert mark.name == "enable_socket", f"Expected enable_socket, got {mark.name!r}"
         else:
             assert mark is None, f"enable_socket should be absent on non-Windows, got {mark!r}"
@@ -118,7 +118,7 @@ class TestWindowsAsyncioSelfPipeGuard:
 
         mark = getattr(mod, "pytestmark", None)
         if sys.platform == "win32":
-            assert mark is not None, "pytestmark not set on Windows (DEC-059 guard missing)"
+            assert mark is not None, "pytestmark not set on Windows (DEC-062 guard missing)"
             assert mark.name == "enable_socket", f"Expected enable_socket, got {mark.name!r}"
         else:
             assert mark is None, f"enable_socket should be absent on non-Windows, got {mark!r}"
@@ -134,7 +134,7 @@ class TestWindowsAsyncioSelfPipeGuard:
 
 
 # ---------------------------------------------------------------------------
-# RCA-1/DEC-057: AF_UNIX hasattr guard
+# RCA-1/DEC-059: AF_UNIX hasattr guard
 # ---------------------------------------------------------------------------
 
 
@@ -145,13 +145,13 @@ class TestAFUnixGuard:
         src = (REPO / "harness" / "shared" / "tests" / "test_egress_floor.py").read_text(encoding="utf-8")
         has_guard = 'hasattr(socket, "AF_UNIX")' in src or "hasattr(socket, 'AF_UNIX')" in src
         assert has_guard, (
-            "test_egress_floor.py has no hasattr(socket, 'AF_UNIX') guard (DEC-057). "
+            "test_egress_floor.py has no hasattr(socket, 'AF_UNIX') guard (DEC-059). "
             "Required for Windows compatibility."
         )
 
 
 # ---------------------------------------------------------------------------
-# RCA-7/DEC-058: make-availability guards
+# RCA-7/DEC-061: make-availability guards
 # ---------------------------------------------------------------------------
 
 
@@ -171,7 +171,7 @@ class TestMakeAvailabilityGuards:
         has_guard = 'shutil.which("make")' in src or "shutil.which('make')" in src
         assert has_guard, (
             f"{rel_path} has no shutil.which('make') guard. "
-            "This test invokes GNU Make and must skip when it is unavailable (DEC-058)."
+            "This test invokes GNU Make and must skip when it is unavailable (DEC-061)."
         )
 
 
@@ -236,3 +236,4 @@ class TestCaseInsensitiveBypassCannotEludeGovernance:
             "Case-variant filename bypassed governance -- security regression. "
             "Ensure fnmatchcase is used, not fnmatch."
         )
+

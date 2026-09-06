@@ -33,8 +33,8 @@ REGRESSION_DIR = REPO / "harness" / "shared" / "tests" / "regression"
 pytestmark = pytest.mark.governance
 
 #: Applied to test classes whose methods invoke ``make`` as a subprocess.
-#: Skip on platforms where GNU Make is absent (Windows dev machines). (DEC-058)
-_MAKE_SKIP = pytest.mark.skipif(not shutil.which("make"), reason="GNU Make not found on this system (DEC-058)")
+#: Skip on platforms where GNU Make is absent (Windows dev machines). (DEC-061)
+_MAKE_SKIP = pytest.mark.skipif(not shutil.which("make"), reason="GNU Make not found on this system (DEC-061)")
 
 
 def _text() -> str:
@@ -515,3 +515,4 @@ class TestAuditToolIsInstalledFromTheHashedLock:
         recipe = _targets().get("audit-python", "")
         assert "$(PIP_AUDIT)" in recipe
         assert re.search(r"^PIP_AUDIT\s*\?=\s*\$\(PYTHON\) -m pip_audit", _text(), re.M)
+

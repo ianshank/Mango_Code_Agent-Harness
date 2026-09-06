@@ -47,7 +47,7 @@ def test_the_guard_blocks_a_loopback_connection(unused_tcp_port: int = 9) -> Non
 
 @pytest.mark.skipif(
     not hasattr(socket, "AF_UNIX"),
-    reason="AF_UNIX not available on this Windows Python build; the proof runs on Linux CI [DEC-057]",
+    reason="AF_UNIX not available on this Windows Python build; the proof runs on Linux CI [DEC-059]",
 )
 def test_a_unix_socketpair_is_permitted_while_tcp_still_raises() -> None:
     """`--allow-unix-socket` is not a hole in the floor; this is the proof.
@@ -59,7 +59,7 @@ def test_a_unix_socketpair_is_permitted_while_tcp_still_raises() -> None:
     neither can be satisfied by the other: the socketpair is created, and in the
     same guard state a TCP socket is still refused.
 
-    Skip on Windows Python builds where AF_UNIX is absent (DEC-057): the
+    Skip on Windows Python builds where AF_UNIX is absent (DEC-059): the
     egress floor's proof is meaningful on Linux CI where AF_UNIX is always
     present. A skip here does NOT weaken the floor -- the socket guard still
     blocks TCP (test_the_socket_guard_is_actually_active) on every platform.
@@ -178,3 +178,4 @@ def test_a_typo_in_the_mode_is_not_a_declaration(monkeypatch: pytest.MonkeyPatch
     assert nb.resolve_nemotron_mode() is None
     with pytest.raises(nb.NemotronEgressRefused):
         nb._assert_egress_permitted("https://integrate.api.nvidia.com/v1")
+

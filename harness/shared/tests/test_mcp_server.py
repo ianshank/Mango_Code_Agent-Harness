@@ -27,7 +27,7 @@ from harness.shared.tool_schemas import NEMOTRON_TOOLS
 # addopts permits; the module-wide `enable_socket` that stood here re-opened
 # TCP for every test in the file for a need that was never TCP (audit M12).
 #
-# Windows portability note (DEC-059): on Windows Python builds without AF_UNIX,
+# Windows portability note (DEC-062): on Windows Python builds without AF_UNIX,
 # Python's asyncio self-pipe falls back to a loopback TCP socketpair. The
 # SelectorEventLoop uses the same fallback. `enable_socket` is enabled below
 # *only on win32* so the self-pipe can be established; it does not affect
@@ -693,3 +693,4 @@ def test_a_schema_rejection_is_logged_as_denied(
     records = _tool_call_records(caplog)
     assert len(records) == 1 and records[0].levelno == logging.WARNING
     assert "permitted=False" in records[0].getMessage()
+

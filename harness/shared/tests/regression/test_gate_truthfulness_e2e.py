@@ -49,9 +49,9 @@ pytestmark: pytest.MarkDecorator | list[pytest.MarkDecorator] = pytest.mark.gove
 
 # Every test in this file invokes GNU Make as a subprocess. Skip the whole
 # module on platforms where Make is absent (Windows dev machines). All tests
-# run on Linux CI where Make is always present. (DEC-058)
+# run on Linux CI where Make is always present. (DEC-061)
 if not shutil.which("make"):
-    pytestmark = [pytest.mark.governance, pytest.mark.skip(reason="GNU Make not found on this system (DEC-058)")]
+    pytestmark = [pytest.mark.governance, pytest.mark.skip(reason="GNU Make not found on this system (DEC-061)")]
 
 WORKFLOW = REPO / ".github" / "workflows" / "python-package.yml"
 ATTESTATION_STEP = "Verify the protected-path attestation table"
@@ -268,3 +268,4 @@ class TestSecretsAllowlistCheckFailsClosed:
         assert res.returncode != 0
         assert "gitleaks missing; failing closed" in res.stdout + res.stderr
         assert "[PASS]" not in res.stdout + res.stderr
+

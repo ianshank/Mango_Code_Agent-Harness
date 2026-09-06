@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from harness.api_server.main import app
 
-# Windows portability (DEC-059): TestClient uses anyio's BlockingPortal, whose
+# Windows portability (DEC-062): TestClient uses anyio's BlockingPortal, whose
 # self-pipe falls back to a loopback TCP socketpair on Windows Python builds
 # without AF_UNIX. enable_socket is applied only on win32 so pytest-socket does
 # not block the event loop's self-pipe. On Linux CI the TCP floor is unaffected.
@@ -422,3 +422,4 @@ def test_readyz_is_503_when_a_block_the_orchestrator_needs_is_missing(
     assert response.status_code == 503
     assert response.json()["checks"]["policy"] is False
     assert str(tmp_path) not in response.text
+

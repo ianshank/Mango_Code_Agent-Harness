@@ -65,7 +65,7 @@ Known decision IDs:
 - DEC-056
 - DEC-057
 - DEC-058
-
-## Retirement Decisions
-
-- **Superseded by DEC-057/058**: `test_ns17_rollback_regression.py` and `test_ns21_rollback_regression.py` are retired. These tests assert that the agent memory feature was absent; origin/main (DEC-057/058) re-introduces the feature as forward-only. The tests are no longer valid and have been removed from the repository.
+- DEC-059
+- DEC-060
+- DEC-061
+- DEC-062

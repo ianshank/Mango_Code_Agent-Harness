@@ -121,7 +121,7 @@ def _runner() -> VerificationRunner:
 
 @pytest.mark.skipif(
     not __import__("shutil").which("make"),
-    reason="GNU Make not installed; forgery proof runs on Linux CI where make is always present [DEC-058]",
+    reason="GNU Make not installed; forgery proof runs on Linux CI where make is always present [DEC-061]",
 )
 class TestThePremiseIsReal:
     """Executed, not asserted. Without these the refusals below could be
@@ -150,7 +150,7 @@ class TestThePremiseIsReal:
 
 @pytest.mark.skipif(
     not __import__("shutil").which("make"),
-    reason="GNU Make not installed; forge-refusal tests run on Linux CI where make is always present [DEC-058]",
+    reason="GNU Make not installed; forge-refusal tests run on Linux CI where make is always present [DEC-061]",
 )
 class TestTheForgedVerdictIsRefused:
     def test_the_audits_recipe_now_yields_blocked_enforcement_tampered(self, workspace: Path) -> None:
@@ -220,7 +220,7 @@ class TestTheForgedVerdictIsRefused:
 
 @pytest.mark.skipif(
     not __import__("shutil").which("make"),
-    reason="GNU Make not installed; control tests run on Linux CI where make is always present [DEC-058]",
+    reason="GNU Make not installed; control tests run on Linux CI where make is always present [DEC-061]",
 )
 class TestTheControlsThatKeepTheRefusalHonest:
     def test_an_untampered_passing_workspace_is_verified(self, workspace: Path) -> None:
@@ -255,7 +255,7 @@ class TestTheControlsThatKeepTheRefusalHonest:
 
 @pytest.mark.skipif(
     not __import__("shutil").which("make"),
-    reason="GNU Make not installed; grader isolation proof runs on Linux CI where make is always present [DEC-058]",
+    reason="GNU Make not installed; grader isolation proof runs on Linux CI where make is always present [DEC-061]",
 )
 class TestTheGraderIsImportedFromTheToolchainNotTheWorkspace:
     """A `pytest.py` in the workspace is not a protected path, and `python -m
@@ -391,7 +391,7 @@ class TestTheDirectDoorIsShut:
 
     @pytest.mark.skipif(
         not __import__("shutil").which("make"),
-        reason="GNU Make not installed; canonical gate-run control test requires make [DEC-058]",
+        reason="GNU Make not installed; canonical gate-run control test requires make [DEC-061]",
     )
     def test_the_canonical_gate_run_still_reaches_the_backend(self, workspace: Path) -> None:
         """Control: `make -f Makefile test-python` runs (and here, fails, which
@@ -400,3 +400,4 @@ class TestTheDirectDoorIsShut:
         assert not output.startswith("Error"), output
         # make reports the failing recipe on stderr, which the backend captured.
         assert "[STDERR]" in output and "test-python" in output
+

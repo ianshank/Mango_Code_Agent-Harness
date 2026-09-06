@@ -48,7 +48,7 @@ from harness.api_server.main import app, verify_api_key  # noqa: E402
 
 MAIN_PY = REPO / "harness" / "api_server" / "main.py"
 
-# Windows portability (DEC-059): asyncio self-pipe falls back to a loopback TCP
+# Windows portability (DEC-062): asyncio self-pipe falls back to a loopback TCP
 # socketpair on Windows Python builds without AF_UNIX. enable_socket is applied
 # only on win32 so pytest-socket does not block the event loop's self-pipe.
 # On Linux CI the TCP floor is unaffected.
@@ -388,3 +388,4 @@ class TestToolUsingRunsReachTheClient:
         response = self._post(client, server_key, history)
         assert response.status_code == 200, response.text
         assert response.json()["history"][0]["tool_calls"] == [tool_call]
+
