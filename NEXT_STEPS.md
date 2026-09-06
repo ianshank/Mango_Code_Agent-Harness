@@ -250,7 +250,6 @@ gated on R-SR-2).
 | **Phase E** (R-SR-26 … R-SR-29) | **NS-2 / R-SR-2 before any destructive slice.** DEC-053…056 (NS-31 / R-SR-5 / AC-5) are logged on #93 - PARK order stands: **JVM → LangGraph → openspec → mirroring**. Do not start Phase E code while the DEC-014 credential branch remains. Premature Phase E inverts DEC-024 (claimed readiness without the hard gate). |
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
 | **HITL interrupts** | Needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). Context-window budget (audit H4) is no longer parked — see §6 / PR #110. |
-| **Phase 2 · Surface open hypotheses to the reasoner** | An `agent_memory` exposure limit and its own spec. No longer blocked on the token bound: `orchestrator.context_budget_tokens` landed with audit H4 (PR #110), which is what DEC-057 said this was waiting for. What remains is deciding how many hypotheses a prompt may carry and proving the eviction interaction, not guessing a budget. Revision itself shipped (DEC-057, `docs/specs/hypothesis-revision.md`); `C-HR-2` pins that no prompt builder reads the store until then. |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with DEC-053 park / revival. |
 | **`AC-CE-1` ProcessBackend capability profiles** | OS isolation is the permanent B4 fix; Phase B digest is containment only. |
 | **Eval harness / nightly live smoke** | Scoped `NVIDIA_API_KEY` in scheduled workflow (owner) + fixtures after openspec fold. |
@@ -273,6 +272,12 @@ gated on R-SR-2).
 ---
 
 ## 6. Delivered, and removed from the open list
+
+**Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
+
+| Was | Now |
+|---|---|
+| **Phase 2 · Surface open hypotheses to the reasoner** (parked on an exposure limit and the eviction proof) | **Landing on PR #114** (spec landed first on #113). `REASONER_PROMPT_TEMPLATE` gains `{open_hypotheses}`, filled by `memory_view.format_hypotheses_for_reasoner`; bounded by `agent_memory.reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens` (fail-closed, `0` = kill switch); coexistence with `context_policy` eviction and the oversized-block degenerate case pinned; `C-HR-2` narrowed to `C-HS-1`. Spec `docs/specs/hypothesis-surfacing.md` (peer-reviewed rev 2), record DEC-058. Audit M4 fully remediated. |
 
 **Closed 2026-09-06 (audit H4 / context-window budget):**
 

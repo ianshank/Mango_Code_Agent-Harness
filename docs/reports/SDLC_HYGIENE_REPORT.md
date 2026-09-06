@@ -102,7 +102,7 @@ The `.mango/` harness already defines 3 agents (`planner`, `nemotron-reasoner`, 
 - **`check-dedup` as a `pre-push` hook** — currently a Makefile target; wiring it into `.mango/hooks/` or a git `pre-push` would catch cross-stack drift before it reaches CI.
 - **Coverage regression loop** — the `Stop` hook (`pre_completion_checklist.sh`) could assert coverage didn't drop vs. a baseline, closing a loop where a refactor silently reduces coverage below the 80% gate.
 - **`validate_invariants` on `PreToolUse` for `Edit|Write`** — the existing `loop_detection.sh` fires on edits; a companion could run the protected-path check live so a forbidden edit is blocked at edit time, not at `make ci`.
-- **`knowledge_gap_log` / `hypothesis_register` meta-tools** — already defined in `meta_tools.py`; not wired into any agent's tool list in `.mango/agents/*.md`. Consider exposing them to the `nemotron-reasoner` agent (its SKILL.md references them but the agent `tools:` line only lists `Bash, Read, Grep, Glob`).
+- **`knowledge_gap_log` / `hypothesis_register` meta-tools** — already defined in `meta_tools.py`; not wired into any agent's tool list in `.mango/agents/*.md`. Consider exposing them to the `nemotron-reasoner` agent (its SKILL.md references them but the agent `tools:` line only lists `Bash, Read, Grep, Glob`). **Remediated:** the reasoner persona's `tools:` line declares both (`docs/specs/reasoner-bridge-tool-parity.md`), a hypothesis can be revised (DEC-057), and the open hypotheses are surfaced back into the reasoner prompt under policy bounds (DEC-058).
 
 ---
 

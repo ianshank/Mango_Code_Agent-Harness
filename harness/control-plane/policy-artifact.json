@@ -2,12 +2,12 @@
   "schema_version": "1.0.0",
   "artifact_id": "governance-policy",
   "policy_id": "agentic-ssd-governance",
-  "policy_version": "acd3ddd7a7a78536",
-  "created_at": "2026-09-06T15:51:51.937771+00:00",
+  "policy_version": "e9117f5e0dae3b87",
+  "created_at": "2026-09-06T19:49:04.168804+00:00",
   "files": {
     "harness/shared/governance-policy.json": {
-      "sha256": "acd3ddd7a7a785368b05a864d740544386877acbed8d0d283f18432057d94571",
-      "bytes": 6646
+      "sha256": "e9117f5e0dae3b875e059aa07688673e047df449eed7fedabd87df07a16927f9",
+      "bytes": 6730
     },
     "harness/shared/agent-policy.json": {
       "sha256": "e7b84b674aeb107d722d67de7aef311620667705f661bed7266d0b98fc3c5d24",

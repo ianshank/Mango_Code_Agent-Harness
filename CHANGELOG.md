@@ -10,6 +10,49 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
+
+Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing
+`{open_hypotheses}` slot, filled in `ExecutionLoop.execute_loop` by
+`memory_view.format_hypotheses_for_reasoner`: the workspace's **open**
+hypotheses (no `superseded_by` successors; a chain renders its head only),
+most recent first, one line each — status first, `confidence`, and the entry
+`id` verbatim, which is what `revises` accepts. A `retracted` line is shown on
+purpose: it is what stops the same claim being registered again. `reasoning`
+is not rendered (measured: it made the two bounds fight at 10–16 entries).
+
+Two new policy keys bound the block and follow the H4 loader contract (present
+policy missing a key → `PolicyError`; absent policy → built-in default):
+`agent_memory.reasoner_hypothesis_limit` (`10`) and
+`agent_memory.reasoner_hypothesis_budget_tokens` (`1500`, header included,
+measured with `context_policy.estimate_tokens` and
+`orchestrator.context_chars_per_token`). The first entry that would overflow
+stops the render — dropped whole, nothing older considered. `limit: 0` is the
+kill switch. The block is a non-group message, so eviction never touches it and
+cannot rescue an oversized one; the bound is what makes it affordable in the
+context of every call after the reasoner's first, the verifier's included.
+Empty renders `""`, so a workspace without hypotheses sends the pre-DEC-058
+prompt byte for byte. One `event=hypotheses_surfaced` log line per render
+carries `run_id`, `shown`, `open`, `total`, `tokens_estimated` and `ids` —
+never claim text.
+
+**Migration:** an adopter with a customised `agent_memory` block must add the
+two keys (same shape as H4's `orchestrator` migration), and any out-of-tree
+caller of `REASONER_PROMPT_TEMPLATE.format(...)` must pass `open_hypotheses=""`
+(the slot is required by `str.format`; the two in-tree builders do). Also from
+the post-implementation review: `orchestrator.context_chars_per_token <= 0` now
+fails closed at load with `PolicyError` instead of surfacing mid-run as a
+`ValueError` from the estimator; the `hypotheses_surfaced` event carries
+`chars_per_token`; a non-string `status`/`claim` in a hand-edited store renders
+as `?`/empty rather than verbatim; and the two defect-class pins (oversized
+block survives eviction; empty block leaves the prompt byte-identical) live in
+the regression tier (`test_hypothesis_surfacing_regression.py`, registered in
+`test_regression_tier_pin.py`). `policy-artifact.json` is rebuilt. `C-HR-2` is superseded by `C-HS-1`: prompt builders may reach the
+store only through the bounded formatter; the two pins are rewritten, not
+removed, and proven non-vacuous. The LangGraph node renders the slot empty
+(DEC-053 park). Spec: `docs/specs/hypothesis-surfacing.md`, peer-reviewed at
+revision 2 before implementation.
+
 ### Feat: context-window budget on ExecutionLoop (audit H4)
 
 Policy-keyed `orchestrator.context_budget_tokens` /

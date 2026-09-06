@@ -19,10 +19,13 @@ module while it still imports normally as ``harness.shared.tests._helpers``.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import datetime as dt
+import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -248,3 +251,126 @@ def agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
     path = tmp_path / "governance-policy.json"
     path.write_text(json.dumps(policy), encoding="utf-8")
     return path
+
+
+#: uuid4 as `hypothesis_register` renders it in its result string. Matched
+#: rather than split on punctuation so a `failed(...)` result -- which carries no
+#: ID -- fails with a readable assertion instead of a bare IndexError.
+_HYPOTHESIS_ID_IN_RESULT = re.compile(r"ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+
+
+def hypothesis_id_from_result(result: str) -> str:
+    """The entry id a `hypothesis_register` result names; asserts when it names none.
+
+    Three suites parsed the result string their own way before this lived here.
+    """
+    match = _HYPOTHESIS_ID_IN_RESULT.search(result)
+    assert match, f"no entry ID in result (was the call refused?): {result!r}"
+    return match.group(1)
+
+
+#: The readers of the hypothesis store that carry no bound. A prompt-building
+#: module may reach the store only through `format_hypotheses_for_reasoner`
+#: (`docs/specs/hypothesis-surfacing.md`, C-HS-1, which narrowed the phase-1
+#: `C-HR-2` from "no reader at all"). Shared so the pin and the test that proves
+#: the pin is not vacuous grade the same set.
+UNBOUNDED_HYPOTHESIS_READERS: frozenset[str] = frozenset(
+    {"load_hypotheses", "format_hypotheses_for_review", "successors_of", "_hypotheses_path", "_read_json_safe"}
+)
+BOUNDED_HYPOTHESIS_FORMATTER = "format_hypotheses_for_reasoner"
+
+
+_PROMPT_TEMPLATE_SUFFIX = "PROMPT_TEMPLATE"
+
+
+def _names_a_prompt_template(path: Path) -> bool:
+    """True when the module defines, imports or formats a ``*_PROMPT_TEMPLATE``."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        name: str | None = None
+        if isinstance(node, ast.Name):
+            name = node.id
+        elif isinstance(node, ast.Attribute):
+            name = node.attr
+        elif isinstance(node, ast.alias):
+            name = node.name
+        if name is not None and name.endswith(_PROMPT_TEMPLATE_SUFFIX):
+            return True
+    return False
+
+
+def prompt_building_modules() -> list[Path]:
+    """Every source module under ``harness/shared`` that builds a prompt.
+
+    Discovered by *content*, not by filename: any non-test module that names a
+    ``*_PROMPT_TEMPLATE`` (defines one, imports one, or formats one), plus the
+    orchestrator loop. The first version matched ``"prompt" in path.name``,
+    which found ``agent_prompts.py`` and ``loop.py`` and missed
+    ``langgraph/nodes.py`` -- a module that formats all three templates and
+    is a prompt builder by the spec's own definition (adversarial review of
+    DEC-058, finding M1). A third builder added later is graded without anyone
+    extending a list. Tests are excluded: ``test_agent_prompts.py`` names the
+    templates and is not a builder.
+    """
+    return sorted(
+        path
+        for path in SHARED.rglob("*.py")
+        if "tests" not in path.parts and (path.name == "loop.py" or _names_a_prompt_template(path))
+    )
+
+
+def hypothesis_reader_violations(path: Path) -> list[str]:
+    """Ways ``path`` reaches the hypothesis store other than through the bounded formatter.
+
+    A call-graph check over the module's AST, not a substring scan: it looks for
+    an import of, a call to, a bare reference to, or a string naming any name in
+    `UNBOUNDED_HYPOTHESIS_READERS`, and accepts `BOUNDED_HYPOTHESIS_FORMATTER`.
+    A comment that mentions the readers passes. A call through a module alias
+    (``memory_view.load_hypotheses()``), an aliased reference
+    (``r = memory_view.load_hypotheses; r()``) and a ``getattr(mv,
+    "load_hypotheses")`` lookup do not -- the last two were bypasses the first
+    version missed (adversarial review of DEC-058, finding L3). This is a drift
+    pin over the repository's own modules, not a sandbox: a module determined to
+    read the file by path can still do so, and the tree-diff and prompt tests
+    are what catch the effect. Returns the violations so the caller can assert
+    on the empty list and the negative test can assert on a non-empty one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    call_targets = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in UNBOUNDED_HYPOTHESIS_READERS:
+                    violations.append(f"{path.name} imports {alias.name}")
+        elif isinstance(node, ast.Call):
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if name in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} calls {name}()")
+        elif isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in call_targets:
+            referenced = node.id if isinstance(node, ast.Name) else node.attr
+            if referenced in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} references {referenced}")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} names {node.value} in a string")
+    return violations
+
+
+def snapshot_tree(root: Path, *, exclude: tuple[str, ...] = ()) -> dict[str, str]:
+    """Relative POSIX path -> sha256 for every file under ``root``.
+
+    The shape a "nothing else changed" assertion needs: two snapshots compared
+    with ``==`` name exactly which files appeared, vanished or changed. Paths
+    whose relative form starts with an entry of ``exclude`` are left out, for
+    the case where one directory is *expected* to change.
+    """
+    out: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if any(rel == prefix or rel.startswith(prefix.rstrip("/") + "/") for prefix in exclude):
+            continue
+        out[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return out

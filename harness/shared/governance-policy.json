@@ -233,6 +233,8 @@
   "agent_memory": {
     "max_gaps": 100,
     "max_hypotheses": 100,
-    "planner_gap_limit": 10
+    "planner_gap_limit": 10,
+    "reasoner_hypothesis_limit": 10,
+    "reasoner_hypothesis_budget_tokens": 1500
   }
 }

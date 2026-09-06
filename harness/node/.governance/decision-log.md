@@ -64,3 +64,4 @@ Known decision IDs:
 - DEC-055
 - DEC-056
 - DEC-057
+- DEC-058

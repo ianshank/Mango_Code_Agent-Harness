@@ -160,7 +160,11 @@ def implementer_node(state: MangoState, config=None, **_kwargs: Any) -> dict[str
         orchestrator: MangoMASOrchestrator | None = configurable.get("orchestrator")
 
         if orchestrator:
-            reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+            # The LangGraph variant is parked (DEC-053); surfacing the hypothesis
+            # store into this prompt is part of a revival decision, not of
+            # DEC-058, so the slot renders empty here and the prompt is the one
+            # this node has always sent.
+            reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan, open_hypotheses="")
             test_results = state.get("test_results", [])
             last_result = test_results[-1] if test_results else {}
             prior_failed = _nonneg_int_count(last_result.get("failed")) if isinstance(last_result, dict) else None

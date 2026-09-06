@@ -26,16 +26,12 @@ from harness.shared.context_policy import (
 )
 from harness.shared.orchestrator.loop import ExecutionLoop
 from harness.shared.tests._helpers import REPO
-from harness.shared.tests._orchestrator_helpers import _resp, _tool_call
+from harness.shared.tests._orchestrator_helpers import _assistant_tools, _resp, _tool_call
 
 pytestmark = pytest.mark.governance
 
 SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
 CHARS_PER_TOKEN = 4.0
-
-
-def _assistant_tools(*calls: dict[str, Any]) -> dict[str, Any]:
-    return {"role": "assistant", "content": None, "tool_calls": list(calls)}
 
 
 def _tool_result(call_id: str, content: str) -> dict[str, Any]:

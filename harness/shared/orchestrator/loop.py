@@ -21,6 +21,7 @@ from harness.shared.context_policy import ContextPolicyStats, apply_context_poli
 from harness.shared.debug_dump import write_dump
 from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
 from harness.shared.governance.verification import VerificationRunner
+from harness.shared.memory_view import format_hypotheses_for_reasoner
 from harness.shared.meta_tools import format_gaps_for_planner
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.orchestrator.dispatcher import ToolDispatcher
@@ -374,7 +375,18 @@ class ExecutionLoop:
             except Exception:
                 logger.exception("Orchestrator-level guard caught a shadow planner failure")
 
-        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+        # The reasoner's own open hypotheses, bounded by policy and measured with
+        # the same coefficient `apply_context_policy` uses below (DEC-058). This
+        # lands in the reasoner's user message, which eviction never targets, and
+        # is therefore in the context of every later call this run -- the bound
+        # is what keeps that affordable. Gaps go to the planner; beliefs come here.
+        open_hypotheses = format_hypotheses_for_reasoner(
+            workspace_dir=self.workspace_dir,
+            policy_path=self.policy_path,
+            chars_per_token=self.context_chars_per_token,
+            run_id=self.run_id,
+        )
+        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan, open_hypotheses=open_hypotheses)
         code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt, budget=budget)
         logger.info("Code generation completed via tools: %d bytes", len(code_output))
 

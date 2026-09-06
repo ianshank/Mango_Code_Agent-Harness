@@ -12,13 +12,13 @@ Contract: ``docs/specs/hypothesis-revision.md`` (R-HR-1…5, C-HR-1…2).
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 
 from harness.shared.meta_tools import hypothesis_register
 from harness.shared.tests._helpers import REPO, agent_memory_policy
+from harness.shared.tests._helpers import hypothesis_id_from_result as _entry_id
 
 _agent_memory_policy = agent_memory_policy
 
@@ -26,18 +26,6 @@ _agent_memory_policy = agent_memory_policy
 def _hypotheses(ws: Path) -> list:
     entries: list = json.loads((ws / ".mango" / "memory" / "hypotheses.json").read_text(encoding="utf-8"))
     return entries
-
-
-#: uuid4 as `hypothesis_register` renders it. Matched rather than split on
-#: punctuation so a `failed(...)` result -- which carries no ID -- fails with a
-#: readable assertion instead of a bare IndexError from the split.
-_UUID_IN_RESULT = re.compile(r"ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
-
-
-def _entry_id(result: str) -> str:
-    match = _UUID_IN_RESULT.search(result)
-    assert match, f"no entry ID in result (was the call refused?): {result!r}"
-    return match.group(1)
 
 
 def test_hypothesis_revision_supersedes_prior_entry(tmp_path):
@@ -351,30 +339,84 @@ def test_schema_rejects_a_non_string_revises_at_the_tool_boundary():
     assert invalid_arguments_reason(schema, {**good, "branchId": "x"}) == "unexpected argument 'branchId'"
 
 
-def test_no_prompt_builder_calls_a_hypothesis_reader():
-    """C-HR-2, as a call-graph check rather than a substring scan.
+def test_prompt_builders_read_hypotheses_only_through_the_bounded_formatter():
+    """C-HS-1 (`docs/specs/hypothesis-surfacing.md`), which supersedes C-HR-2.
 
-    The first version asserted the word "hypothes" was absent from two files.
-    That was both too broad -- a future *comment* mentioning hypotheses would
-    fail CI -- and too narrow, since it named two files by hand and would not
-    have noticed a third prompt builder. This parses each module and looks for
-    the thing that would actually cost prompt tokens: a call to, or import of,
-    a function that reads the store.
+    Phase 1 pinned that no prompt builder read the store at all. Phase 2
+    (DEC-058) surfaces open hypotheses to the reasoner, so the invariant
+    narrows: a prompt builder may reach the store through
+    `format_hypotheses_for_reasoner` -- bounded by policy in count and in
+    estimated tokens -- and through nothing else. The unbounded readers stay
+    out because an unbounded read is exactly the prompt cost DEC-057 deferred.
+
+    A call-graph check rather than a substring scan, for the reasons the
+    phase-1 version gave: a comment mentioning a reader must pass, and a third
+    prompt builder must be graded without being named here. The check itself is
+    `hypothesis_reader_violations`, shared with the negative test below so the
+    fixture that proves it non-vacuous trips the *same* function.
     """
-    import ast
+    from harness.shared.tests._helpers import (
+        BOUNDED_HYPOTHESIS_FORMATTER,
+        hypothesis_reader_violations,
+        prompt_building_modules,
+    )
 
-    readers = {"load_hypotheses", "format_hypotheses_for_review", "successors_of", "_hypotheses_path"}
-    builders = [p for p in (REPO / "harness" / "shared").rglob("*.py") if "prompt" in p.name or p.name == "loop.py"]
-    assert builders, "no prompt-building modules found; this pin would be vacuous"
+    builders = prompt_building_modules()
+    assert {path.name for path in builders} >= {"agent_prompts.py", "loop.py", "nodes.py"}, (
+        f"discovery must find every known prompt builder, found {sorted(p.name for p in builders)}"
+    )
+    violations = [violation for path in builders for violation in hypothesis_reader_violations(path)]
+    assert not violations, f"unbounded hypothesis readers in prompt builders: {violations}"
+    # Control: the one permitted path is actually taken, so the pin is not
+    # passing on a loop that reads nothing.
+    loop_source = (REPO / "harness" / "shared" / "orchestrator" / "loop.py").read_text(encoding="utf-8")
+    assert BOUNDED_HYPOTHESIS_FORMATTER in loop_source
 
-    for path in builders:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module and "memory_view" in node.module:
-                raise AssertionError(f"{path.name} imports the hypothesis reader; that is phase 2 (DEC-057)")
-            if isinstance(node, ast.Call):
-                name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-                assert name not in readers, f"{path.name} calls {name}(); that is phase 2 (DEC-057)"
+
+def test_the_bounded_formatter_pin_rejects_a_violating_module(tmp_path):
+    """AC-HS-12's non-vacuity proof: the same function, over a module that violates it."""
+    from harness.shared.tests._helpers import UNBOUNDED_HYPOTHESIS_READERS, hypothesis_reader_violations
+
+    importer = tmp_path / "importing_prompt.py"
+    importer.write_text(
+        "from harness.shared.memory_view import format_hypotheses_for_review\n"
+        "def build(): return format_hypotheses_for_review()\n",
+        encoding="utf-8",
+    )
+    aliased_caller = tmp_path / "aliased_prompt.py"
+    aliased_caller.write_text(
+        "from harness.shared import memory_view\ndef build(): return memory_view.load_hypotheses()\n",
+        encoding="utf-8",
+    )
+    compliant = tmp_path / "compliant_prompt.py"
+    compliant.write_text(
+        "from harness.shared.memory_view import format_hypotheses_for_reasoner\n"
+        "# a comment naming load_hypotheses must not trip the pin\n"
+        "def build(): return format_hypotheses_for_reasoner()\n",
+        encoding="utf-8",
+    )
+
+    # The two bypasses the first version of the pin missed (review finding L3).
+    getattr_caller = tmp_path / "getattr_prompt.py"
+    getattr_caller.write_text(
+        'from harness.shared import memory_view as mv\ndef build(): return getattr(mv, "load_hypotheses")()\n',
+        encoding="utf-8",
+    )
+    reference_holder = tmp_path / "reference_prompt.py"
+    reference_holder.write_text(
+        "from harness.shared import memory_view\nreader = memory_view.successors_of\ndef build(): return reader({})\n",
+        encoding="utf-8",
+    )
+
+    assert hypothesis_reader_violations(importer) == [
+        "importing_prompt.py imports format_hypotheses_for_review",
+        "importing_prompt.py calls format_hypotheses_for_review()",
+    ]
+    assert hypothesis_reader_violations(aliased_caller) == ["aliased_prompt.py calls load_hypotheses()"]
+    assert hypothesis_reader_violations(getattr_caller) == ["getattr_prompt.py names load_hypotheses in a string"]
+    assert hypothesis_reader_violations(reference_holder) == ["reference_prompt.py references successors_of"]
+    assert hypothesis_reader_violations(compliant) == []
+    assert "format_hypotheses_for_reasoner" not in UNBOUNDED_HYPOTHESIS_READERS
 
 
 def test_no_field_of_a_prior_entry_changes_except_its_successor_list(tmp_path):

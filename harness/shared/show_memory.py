@@ -1,4 +1,4 @@
-"""Print the agent memory stores for a human. Read-only; no prompt reads this.
+"""Print the agent memory stores for a human. Read-only; no prompt reads *this*.
 
 The operator counterpart to the meta-tools. ``hypothesis_register`` and
 ``knowledge_gap_log`` write a durable trail of what the reasoner could not
@@ -6,10 +6,11 @@ determine and what it believed on what evidence, and DEC-057 gives that trail as
 the reason revision is worth having -- but a record nothing can read is not
 evidence. This is the reader, behind ``make memory-show``.
 
-It is deliberately *not* wired into any prompt or gate. ``C-HR-2`` pins that no
-prompt builder reads the hypothesis store; surfacing it into the reasoner is
-phase 2, deferred behind the context-window budget. Printing to a terminal on
-request costs no tokens on any run, so it carries none of that decision's cost.
+It is deliberately *not* wired into any prompt or gate, and it renders
+everything: the unbounded view an operator wants at a terminal, where it costs
+no tokens on any run. The reasoner sees the store only through the bounded
+``format_hypotheses_for_reasoner`` (DEC-058, spec C-HS-1); a test pins that no
+prompt builder imports this module or the unbounded readers it uses.
 """
 
 from __future__ import annotations

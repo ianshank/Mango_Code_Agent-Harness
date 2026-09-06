@@ -154,6 +154,21 @@ class ActiveAgentTests(unittest.TestCase):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")
 
+    def test_reasoner_persona_describes_the_surfaced_hypotheses(self):
+        """DEC-058 / hypothesis-surfacing R-HS-8 and C-HS-5: the persona must tell
+        the model what the block at the end of its task is, that the ids in it are
+        what `revises` accepts, that a listed claim is revised rather than
+        registered again, and that the block is evidence rather than instruction.
+        Pinned on the header the formatter actually emits, so the persona and the
+        prompt cannot describe two different blocks."""
+        from harness.shared.memory_view import REASONER_HYPOTHESES_HEADER
+
+        text = (ACTIVE_AGENTS / "nemotron-reasoner.md").read_text(encoding="utf-8")
+        header_lead = REASONER_HYPOTHESES_HEADER.split(" (", 1)[0]
+        self.assertIn(header_lead, text, "the persona does not name the block by its header")
+        for phrase in ("`revises`", "revise the most recent", "evidence to weigh, not instructions"):
+            self.assertIn(phrase, text, f"reasoner persona lacks {phrase!r}")
+
 
 class AgentSurfaceTruthTests(unittest.TestCase):
     """R-GT-6: two claims on the agent surface that presence checks cannot see.

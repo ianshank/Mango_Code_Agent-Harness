@@ -2,7 +2,9 @@
 
 > `hypothesis_register` gains an append-only revision path, so a belief the
 > reasoner recorded can later be confirmed or retracted without editing the
-> record. Surfacing the store back into a prompt is deferred (phase 2, below).
+> record. Surfacing the store back into a prompt was deferred (phase 2, below)
+> and has since been discharged by DEC-058 / `docs/specs/hypothesis-surfacing.md`;
+> `C-HR-2` is superseded by `C-HS-1` there.
 
 ## Problem statement
 
@@ -73,6 +75,12 @@ offers.
 - C-HR-2: No new prompt text. The store MUST NOT be surfaced into any role's
   prompt by this change; that is phase 2, gated on the context-window budget
   spec (`docs/reports/PLAYLIST-ASTRA-CONTEXT-BUDGET-PLAN-2026-09-06.md`).
+  **Superseded, not deleted, by `C-HS-1` of `docs/specs/hypothesis-surfacing.md`
+  (DEC-058):** the invariant narrowed from "no prompt builder reads the store"
+  to "no prompt builder reads the store through anything but the bounded
+  reasoner formatter". The property it protected -- no unbounded prompt text
+  from the store -- survives in that narrower, still-enforced form; the two
+  pins below were rewritten rather than removed.
 
 ## Acceptance criteria
 
@@ -167,10 +175,11 @@ offers.
       declaration, action map and registry remain equal sets —
       `pytest -k test_every_declared_tool_has_a_handler`
       · stage: `make coverage` (C-HR-1)
-- [x] AC-9: neither `harness/shared/agent_prompts.py` nor
-      `harness/shared/orchestrator/loop.py` references the hypothesis store —
-      `pytest -k test_no_prompt_builder_calls_a_hypothesis_reader`
-      · stage: `make coverage` (C-HR-2)
+- [x] AC-9: no prompt-building module reaches the hypothesis store through an
+      unbounded reader (narrowed by DEC-058 from "references the store at all";
+      the bounded `format_hypotheses_for_reasoner` is the one permitted path) —
+      `pytest -k test_prompt_builders_read_hypotheses_only_through_the_bounded_formatter`
+      · stage: `make coverage` (C-HR-2, as superseded by C-HS-1)
 
 ## Steps
 
@@ -197,7 +206,9 @@ offers.
   helpers stay behind deliberately (DEC-057)
 - `harness/shared/memory_view.py` — new; rendering the stores for a human
   (`load_hypotheses`, `format_hypotheses_for_review`, `successors_of`). The
-  third layer of the same split; nothing in the agent loop imports it (C-HR-2)
+  third layer of the same split; nothing in the agent loop imported it under
+  C-HR-2 (since DEC-058 the loop imports its bounded
+  `format_hypotheses_for_reasoner` and nothing else from it, C-HS-1)
 - `harness/shared/show_memory.py` — new; the `make memory-show` CLI over that
   view, so the trail DEC-057 justifies the change by is actually readable
 - `Makefile` — **protected**; adds the `memory-show` target
@@ -240,7 +251,8 @@ request description, produced by `make attestation`.
   authority, which `test_every_declared_tool_has_a_required_action` pins.
 - INV-16: unchanged. The store is memory the model writes and nothing reads on a
   control path; `confidence` and `status` select no tool and alter no exposure
-  (C-HR-2 keeps it that way).
+  (C-HR-2 kept it that way; C-HS-1 and C-HS-5 of the surfacing spec keep it so
+  now that the reasoner reads the store as prompt text).
 - INV-17: this document is subject to it; `validate_plan.py` grades these
   criteria under `make specs`.
 
@@ -286,3 +298,7 @@ carry and how that interacts with `context_policy`'s tool-call group eviction,
 which is a decision and a spec of its own. `C-HR-2` and
 `test_the_reader_is_not_wired_into_any_prompt_or_gate` keep the store out of
 every prompt until then. DEC-057 records the deferral and this correction.
+
+That decision and spec have since been made: `docs/specs/hypothesis-surfacing.md`
+and DEC-058 surface the open hypotheses to the reasoner prompt under two
+`agent_memory` bounds, and `C-HR-2` is superseded by `C-HS-1` as noted above.

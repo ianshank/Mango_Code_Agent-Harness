@@ -46,8 +46,15 @@ class TestPromptTemplatesFormatCleanly:
         assert "Open knowledge gaps" not in rendered
 
     def test_reasoner_template_formats(self) -> None:
-        rendered = REASONER_PROMPT_TEMPLATE.format(plan="1. write the handler")
+        rendered = REASONER_PROMPT_TEMPLATE.format(plan="1. write the handler", open_hypotheses="")
         assert "1. write the handler" in rendered
+
+    def test_reasoner_template_open_hypotheses_slot_is_last_and_empty_is_ok(self) -> None:
+        """DEC-058: the slot follows the plan and adds nothing when the store is empty,
+        so every caller that passes `""` sends the pre-DEC-058 prompt byte for byte."""
+        assert REASONER_PROMPT_TEMPLATE.endswith("Plan:\n{plan}{open_hypotheses}")
+        rendered = REASONER_PROMPT_TEMPLATE.format(plan="p", open_hypotheses="")
+        assert rendered.endswith("Plan:\np")
 
     def test_verifier_template_formats(self) -> None:
         rendered = VERIFIER_PROMPT_TEMPLATE.format(code_output="def f(): pass")
