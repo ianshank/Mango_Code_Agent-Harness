@@ -230,3 +230,21 @@ def ruff_json(args: list[str], timeout: int = 300) -> list[dict]:
     if not isinstance(parsed, list):
         raise AssertionError(f"ruff JSON output was {type(parsed).__name__}, expected a list")
     return parsed
+
+
+def agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
+    """Copy the shipped governance policy, mutating only ``agent_memory`` keys.
+
+    Shared because the gap suite and the hypothesis-revision suite both need it
+    and were carrying byte-identical copies. `check_dedup.py` polices per-stack
+    script shims, not intra-suite duplication, so this would have drifted
+    silently -- the two copies already had to be edited together once.
+    """
+    shared_policy = REPO / "harness" / "shared" / "governance-policy.json"
+    policy = json.loads(shared_policy.read_text(encoding="utf-8"))
+    block = dict(policy.get("agent_memory") or {})
+    block.update(agent_memory_overrides)
+    policy["agent_memory"] = block
+    path = tmp_path / "governance-policy.json"
+    path.write_text(json.dumps(policy), encoding="utf-8")
+    return path

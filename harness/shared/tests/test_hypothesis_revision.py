@@ -12,25 +12,15 @@ Contract: ``docs/specs/hypothesis-revision.md`` (R-HR-1…5, C-HR-1…2).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
 from harness.shared.meta_tools import hypothesis_register
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._helpers import REPO, agent_memory_policy
 
-SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
-
-
-def _agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
-    """Copy the shipped governance policy and mutate only ``agent_memory`` keys."""
-    policy = json.loads(SHARED_POLICY.read_text(encoding="utf-8"))
-    block = dict(policy.get("agent_memory") or {})
-    block.update(agent_memory_overrides)
-    policy["agent_memory"] = block
-    path = tmp_path / "governance-policy.json"
-    path.write_text(json.dumps(policy), encoding="utf-8")
-    return path
+_agent_memory_policy = agent_memory_policy
 
 
 def _hypotheses(ws: Path) -> list:
@@ -38,8 +28,16 @@ def _hypotheses(ws: Path) -> list:
     return entries
 
 
+#: uuid4 as `hypothesis_register` renders it. Matched rather than split on
+#: punctuation so a `failed(...)` result -- which carries no ID -- fails with a
+#: readable assertion instead of a bare IndexError from the split.
+_UUID_IN_RESULT = re.compile(r"ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+
+
 def _entry_id(result: str) -> str:
-    return result.split("ID: ", 1)[1].split(".", 1)[0]
+    match = _UUID_IN_RESULT.search(result)
+    assert match, f"no entry ID in result (was the call refused?): {result!r}"
+    return match.group(1)
 
 
 def test_hypothesis_revision_supersedes_prior_entry(tmp_path):
@@ -353,13 +351,30 @@ def test_schema_rejects_a_non_string_revises_at_the_tool_boundary():
     assert invalid_arguments_reason(schema, {**good, "branchId": "x"}) == "unexpected argument 'branchId'"
 
 
-def test_hypothesis_store_is_not_surfaced_in_prompts():
-    """C-HR-2: revision ships without a reader. Surfacing the store into a prompt
-    is phase 2, gated on the context-window budget (DEC-057); until then no
-    prompt builder may mention it, so the loop's prompt size is unchanged."""
-    for rel in ("harness/shared/agent_prompts.py", "harness/shared/orchestrator/loop.py"):
-        text = (REPO / rel).read_text(encoding="utf-8")
-        assert "hypothes" not in text.lower(), f"{rel} reads the hypothesis store; that is phase 2 (DEC-057)"
+def test_no_prompt_builder_calls_a_hypothesis_reader():
+    """C-HR-2, as a call-graph check rather than a substring scan.
+
+    The first version asserted the word "hypothes" was absent from two files.
+    That was both too broad -- a future *comment* mentioning hypotheses would
+    fail CI -- and too narrow, since it named two files by hand and would not
+    have noticed a third prompt builder. This parses each module and looks for
+    the thing that would actually cost prompt tokens: a call to, or import of,
+    a function that reads the store.
+    """
+    import ast
+
+    readers = {"load_hypotheses", "format_hypotheses_for_review", "successors_of", "_hypotheses_path"}
+    builders = [p for p in (REPO / "harness" / "shared").rglob("*.py") if "prompt" in p.name or p.name == "loop.py"]
+    assert builders, "no prompt-building modules found; this pin would be vacuous"
+
+    for path in builders:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and "memory_view" in node.module:
+                raise AssertionError(f"{path.name} imports the hypothesis reader; that is phase 2 (DEC-057)")
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+                assert name not in readers, f"{path.name} calls {name}(); that is phase 2 (DEC-057)"
 
 
 def test_no_field_of_a_prior_entry_changes_except_its_successor_list(tmp_path):
