@@ -220,16 +220,46 @@ def knowledge_gap_log(
     return f"Knowledge gap logged successfully. ID: {entry['id']}. Total gaps logged: {len(gaps)}"
 
 
+#: The status a model may assert on a hypothesis entry. ``provisional`` is the
+#: default and what every entry carried before revision existed; ``confirmed``
+#: and ``retracted`` are the two ways evidence can settle a belief.
+HYPOTHESIS_STATUS_PROVISIONAL = "provisional"
+HYPOTHESIS_STATUS_CONFIRMED = "confirmed"
+HYPOTHESIS_STATUS_RETRACTED = "retracted"
+HYPOTHESIS_STATUSES: tuple[str, ...] = (
+    HYPOTHESIS_STATUS_PROVISIONAL,
+    HYPOTHESIS_STATUS_CONFIRMED,
+    HYPOTHESIS_STATUS_RETRACTED,
+)
+#: Set on the *prior* entry when a later one revises it. Never model-settable:
+#: it records a transition the store made, not a belief the model asserted, and
+#: mirrors the ``superseded`` / ``superseded_by`` pair on decision records.
+HYPOTHESIS_STATUS_SUPERSEDED = "superseded"
+
+
 def hypothesis_register(
     claim: str,
     reasoning: str,
     confidence: float,
     workspace_dir: Path | None = None,
     policy_path: Path | None = None,
+    *,
+    revises: str | None = None,
+    status: str | None = None,
 ) -> str:
     """
     Record a provisional belief: 'I think X is true because Y.'
     Hypotheses can be updated or falsified later as evidence arrives.
+
+    Revision is append-only. A call carrying ``revises=<id>`` records a *new*
+    entry pointing at the prior one and marks the prior entry ``superseded``
+    with ``superseded_by`` set to the new id; the prior text is never edited,
+    so the trail of what was believed and when survives. A ``revises`` id the
+    store no longer holds (FIFO-trimmed, or mistyped) is still recorded, and
+    the result says the prior entry was not found. ``status`` defaults to
+    ``provisional``; ``confirmed`` and ``retracted`` are the settled states. A
+    status outside ``HYPOTHESIS_STATUSES`` is refused before anything is
+    written, as a ``failed`` result the model can correct.
 
     When ``workspace_dir`` is set the entry is scoped under that workspace's
     ``.mango/memory/``; otherwise the legacy install-root store is used.
@@ -238,20 +268,35 @@ def hypothesis_register(
     (``None`` keeps the loader default).
     """
     from harness.shared.policy_loader import agent_memory_defaults
+    from harness.shared.tool_result_format import failed
+
+    resolved_status = status or HYPOTHESIS_STATUS_PROVISIONAL
+    if resolved_status not in HYPOTHESIS_STATUSES:
+        allowed = ", ".join(HYPOTHESIS_STATUSES)
+        return failed(f"Hypothesis not recorded: status {resolved_status!r} is not one of {allowed}.")
 
     _, hypotheses_file = _ensure_memory_files(workspace_dir)
-    entry = {
+    entry: dict[str, typing.Any] = {
         "id": str(uuid.uuid4()),
         "timestamp": time.time(),
         "claim": claim,
         "reasoning": reasoning,
         "confidence": confidence,
-        "status": "provisional",
+        "status": resolved_status,
     }
+    if revises:
+        entry["revises"] = revises
 
     max_hypotheses = agent_memory_defaults(policy_path)["max_hypotheses"]
+    prior_found = False
     with _file_lock(hypotheses_file):
         hypotheses = _read_json_safe(hypotheses_file)
+        if revises:
+            for prior in hypotheses:
+                if isinstance(prior, dict) and prior.get("id") == revises:
+                    prior["status"] = HYPOTHESIS_STATUS_SUPERSEDED
+                    prior["superseded_by"] = entry["id"]
+                    prior_found = True
         hypotheses.append(entry)
         hypotheses = _fifo_trim(hypotheses, max_hypotheses, label="hypotheses")
 
@@ -261,7 +306,17 @@ def hypothesis_register(
 
     if max_hypotheses == 0:
         return f"Hypothesis entry not retained: retention disabled (agent_memory.max_hypotheses=0). ID: {entry['id']}."
-    return f"Hypothesis registered successfully. ID: {entry['id']}. Total hypotheses: {len(hypotheses)}"
+    revision_note = ""
+    if revises:
+        revision_note = (
+            f" Supersedes {revises}."
+            if prior_found
+            else f" Prior entry {revises} not found (trimmed or unknown); recorded with the pointer anyway."
+        )
+    return (
+        f"Hypothesis registered successfully. ID: {entry['id']}. Status: {resolved_status}."
+        f"{revision_note} Total hypotheses: {len(hypotheses)}"
+    )
 
 
 def load_open_gaps(workspace_dir: Path | None = None) -> list:
@@ -339,7 +394,9 @@ META_TOOLS_SCHEMA = [
             "name": "hypothesis_register",
             "description": (
                 "Record a provisional belief: 'I think X is true because Y.' "
-                "Hypotheses can be updated or falsified later as evidence arrives."
+                "To revise an earlier belief once evidence arrives, call again with 'revises' set to "
+                "that entry's ID and 'status' set to 'confirmed' or 'retracted'; the earlier entry is "
+                "kept and marked superseded."
             ),
             "parameters": {
                 "type": "object",
@@ -347,6 +404,14 @@ META_TOOLS_SCHEMA = [
                     "claim": {"type": "string", "description": "The provisional belief or claim."},
                     "reasoning": {"type": "string", "description": "The logic or evidence supporting the claim."},
                     "confidence": {"type": "number", "description": "Confidence level between 0.0 and 1.0"},
+                    "revises": {
+                        "type": "string",
+                        "description": "ID of an earlier hypothesis this entry revises. Optional.",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "One of 'provisional' (default), 'confirmed', or 'retracted'. Optional.",
+                    },
                 },
                 "required": ["claim", "reasoning", "confidence"],
                 "additionalProperties": False,

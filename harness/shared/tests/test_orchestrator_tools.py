@@ -208,6 +208,23 @@ class TestToolRegistry:
             f"declared-but-unhandled: {declared - registered}; handled-but-undeclared: {registered - declared}"
         )
 
+    def test_hypothesis_register_forwards_revision_fields(self, mock_workspace: Path, mocker) -> None:
+        """R-HR-5: the dispatcher hands `revises` and `status` through, and an
+        absent or empty field reaches the store as `None`, never as `""`."""
+        from harness.shared.orchestrator import dispatcher
+
+        spy = mocker.patch.object(dispatcher, "hypothesis_register", return_value="ok")
+        orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
+        handler = orch.execution_loop.dispatcher.tool_handlers["hypothesis_register"]
+
+        handler({"claim": "c", "reasoning": "r", "confidence": 0.7, "revises": "abc", "status": "retracted"})
+        assert spy.call_args.kwargs["revises"] == "abc"
+        assert spy.call_args.kwargs["status"] == "retracted"
+
+        handler({"claim": "c", "reasoning": "r", "confidence": 0.7, "revises": "", "status": ""})
+        assert spy.call_args.kwargs["revises"] is None
+        assert spy.call_args.kwargs["status"] is None
+
     def test_handlers_return_strings(self, mock_workspace: Path, mocker) -> None:
         """Every handler returns a str for the tool message content (empty args)."""
         from harness.shared.orchestrator import dispatcher

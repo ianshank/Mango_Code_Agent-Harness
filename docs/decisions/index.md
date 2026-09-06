@@ -62,3 +62,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-054](DEC-054.md) | 2026-09-05 | accepted | `harness/jvm/` is relocated to `docs/adopters/jvm-template/` (Memo 2 option B / R-SR-26 / NS-31) |
 | [DEC-055](DEC-055.md) | 2026-09-05 | accepted | The `openspec/` tree is folded into `docs/specs/` and deleted (Memo 3 option Y / R-SR-28 / NS-31) |
 | [DEC-056](DEC-056.md) | 2026-09-05 | accepted | Per-stack governance mirroring collapses to a root `.governance/` plus `--workspace` on shared gates |
+| [DEC-057](DEC-057.md) | 2026-09-06 | accepted | `hypothesis_register` gains append-only revision; the sequential-thinking MCP server is not adopted and surfacing hypotheses is deferred |

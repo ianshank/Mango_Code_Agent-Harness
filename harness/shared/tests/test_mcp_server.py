@@ -231,6 +231,13 @@ def test_mcp_server_role_unauthorized_tool_denied(tmp_path: Path, broker: Execut
         ("run_command", {"command": "echo test"}, "test stdout"),
         ("knowledge_gap_log", {"question": "q", "what_needed": "w", "proposed_approach": "p"}, "Knowledge gap logged"),
         ("hypothesis_register", {"claim": "c", "reasoning": "r", "confidence": 0.9}, "Hypothesis registered"),
+        # Revision reaches the MCP door through the same registry (R-HR-5): the
+        # optional fields pass schema validation and the dangling pointer is reported.
+        (
+            "hypothesis_register",
+            {"claim": "c", "reasoning": "r", "confidence": 0.9, "revises": "prior-id", "status": "retracted"},
+            "Prior entry prior-id not found",
+        ),
     ],
 )
 def test_mcp_server_execute_tool_success(

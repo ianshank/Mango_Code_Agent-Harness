@@ -10,6 +10,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hypothesis_register gains append-only revision (DEC-057)
+
+`hypothesis_register` accepts optional `revises` (a prior entry's id) and
+`status` (`provisional` default, `confirmed`, `retracted`). A revision is a new
+entry carrying the pointer; the prior entry is kept verbatim and marked
+`superseded` / `superseded_by`. A dangling pointer is recorded and reported; an
+unknown status is refused with a `failed` outcome before writing. Both the
+orchestrator dispatcher and the MCP door forward the fields through the shared
+registry. Spec: `docs/specs/hypothesis-revision.md`. The sequential-thinking
+MCP server was evaluated and not adopted; surfacing hypotheses into a prompt is
+deferred behind the context-window budget (DEC-057).
+
 ### NS-34: decision records under docs/decisions/
 
 Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`
