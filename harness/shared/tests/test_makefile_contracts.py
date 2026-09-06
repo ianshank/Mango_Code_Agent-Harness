@@ -515,4 +515,3 @@ class TestAuditToolIsInstalledFromTheHashedLock:
         recipe = _targets().get("audit-python", "")
         assert "$(PIP_AUDIT)" in recipe
         assert re.search(r"^PIP_AUDIT\s*\?=\s*\$\(PYTHON\) -m pip_audit", _text(), re.M)
-

@@ -422,4 +422,3 @@ def test_readyz_is_503_when_a_block_the_orchestrator_needs_is_missing(
     assert response.status_code == 503
     assert response.json()["checks"]["policy"] is False
     assert str(tmp_path) not in response.text
-

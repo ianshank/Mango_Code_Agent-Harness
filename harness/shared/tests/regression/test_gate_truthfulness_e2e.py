@@ -268,4 +268,3 @@ class TestSecretsAllowlistCheckFailsClosed:
         assert res.returncode != 0
         assert "gitleaks missing; failing closed" in res.stdout + res.stderr
         assert "[PASS]" not in res.stdout + res.stderr
-

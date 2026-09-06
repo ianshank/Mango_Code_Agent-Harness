@@ -178,4 +178,3 @@ def test_a_typo_in_the_mode_is_not_a_declaration(monkeypatch: pytest.MonkeyPatch
     assert nb.resolve_nemotron_mode() is None
     with pytest.raises(nb.NemotronEgressRefused):
         nb._assert_egress_permitted("https://integrate.api.nvidia.com/v1")
-

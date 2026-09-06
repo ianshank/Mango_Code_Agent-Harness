@@ -236,4 +236,3 @@ class TestCaseInsensitiveBypassCannotEludeGovernance:
             "Case-variant filename bypassed governance -- security regression. "
             "Ensure fnmatchcase is used, not fnmatch."
         )
-

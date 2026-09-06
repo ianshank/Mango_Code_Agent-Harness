@@ -26,6 +26,30 @@ from harness.shared.tests import _session_hooks as hooks
 # session against a copy of this file. Only a rootdir conftest may declare it.
 pytest_plugins = ["pytester"]
 
+# Numpy's MT19937 accepts only seeds in ``[0, 2**32)``. pytest-randomly clamps
+# its *own* ``np.random.seed`` call, but third-party
+# ``pytest_randomly.random_seeder`` entry points (notably ``thinc.util.fix_random_seed``
+# when thinc is installed in the environment) forward the hashed per-test seed
+# unchanged. Seeds such as ``5917428844`` then raise at every fixture setup under
+# ``-p randomly`` without a pinned seed. Clamp here so the suite stays green on
+# developer machines that happen to have thinc installed.
+_NUMPY_SEED_MOD = 2**32
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    try:
+        import numpy.random as npr
+    except ImportError:  # pragma: no cover - numpy is optional for the harness
+        return
+    original = npr.seed
+
+    def seed(seed: int | None = None) -> None:
+        if isinstance(seed, int) and not (0 <= seed < _NUMPY_SEED_MOD):
+            seed = seed % _NUMPY_SEED_MOD
+        original(seed)
+
+    npr.seed = seed  # type: ignore[assignment]
+
 
 @pytest.fixture(autouse=True)
 def _isolate_main_logger() -> Iterator[None]:

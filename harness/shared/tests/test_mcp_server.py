@@ -693,4 +693,3 @@ def test_a_schema_rejection_is_logged_as_denied(
     records = _tool_call_records(caplog)
     assert len(records) == 1 and records[0].levelno == logging.WARNING
     assert "permitted=False" in records[0].getMessage()
-

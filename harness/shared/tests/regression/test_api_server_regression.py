@@ -388,4 +388,3 @@ class TestToolUsingRunsReachTheClient:
         response = self._post(client, server_key, history)
         assert response.status_code == 200, response.text
         assert response.json()["history"][0]["tool_calls"] == [tool_call]
-

@@ -400,4 +400,3 @@ class TestTheDirectDoorIsShut:
         assert not output.startswith("Error"), output
         # make reports the failing recipe on stderr, which the backend captured.
         assert "[STDERR]" in output and "test-python" in output
-

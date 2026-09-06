@@ -603,4 +603,3 @@ class TestTheVerificationTimeoutComesFromPolicy:
         VerificationRunner(broker, "test-eval").probe(Path("."))
         assert set(broker.timeouts) == {self.DISTINGUISHABLE_TIMEOUT}
         assert self.DISTINGUISHABLE_API_TIMEOUT not in broker.timeouts
-
