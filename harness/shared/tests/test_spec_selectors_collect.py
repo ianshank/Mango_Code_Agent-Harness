@@ -150,6 +150,29 @@ def _test_files(paths: Iterable[str]) -> list[Path]:
     return files
 
 
+def _is_unittest_case(node: ast.ClassDef) -> bool:
+    """Whether ``node`` subclasses ``unittest.TestCase`` by its written bases.
+
+    pytest collects a ``unittest.TestCase`` subclass whatever it is called --
+    the ``python_classes`` pattern does not apply to it. This gate approximated
+    collection with the ``Test*`` prefix alone, so every ticked selector aiming
+    at a case class named by the ``*Tests`` suffix was reported as collecting
+    nothing. `test_agent_harness_wiring.py` is entirely such classes, and its
+    five were invisible here while `pytest -k` finds them.
+
+    A gate that judges a narrower set than the one that exists is the shape
+    DEC-032, DEC-038 and DEC-039 each found elsewhere; this is the same fault in
+    the selector inventory, and it fails *closed on correct specs*, which is the
+    direction most likely to be worked around rather than fixed.
+    """
+    for base in node.bases:
+        if isinstance(base, ast.Name) and base.id == "TestCase":
+            return True
+        if isinstance(base, ast.Attribute) and base.attr == "TestCase":
+            return True
+    return False
+
+
 def discover_items(paths: Iterable[str]) -> list[Item]:
     """Test functions declared in the named files, with class context."""
     items: list[Item] = []
@@ -158,7 +181,7 @@ def discover_items(paths: Iterable[str]) -> list[Item]:
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
                 items.append(Item(path, "", node.name))
-            elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            elif isinstance(node, ast.ClassDef) and (node.name.startswith("Test") or _is_unittest_case(node)):
                 for member in node.body:
                     if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) and member.name.startswith("test"):
                         items.append(Item(path, node.name, member.name))
@@ -290,3 +313,47 @@ class TestTheMatcherItself:
         )
         found = ticked_selectors(tmp_path)
         assert [s.criterion for s in found] == ["AC-2"]
+
+
+class TestUnittestCaseClassesAreDiscovered:
+    """pytest collects a `unittest.TestCase` subclass whatever it is named, so
+    this gate must too. It matched the `Test*` prefix alone, which made every
+    ticked selector aiming at a `*Tests` case class look vacuous -- failing
+    closed on correct specs, the direction most likely to get worked around."""
+
+    def test_a_suffix_named_case_class_is_found(self) -> None:
+        items = discover_items(("harness/shared/tests/test_agent_harness_wiring.py",))
+        assert items, "a module of unittest.TestCase classes yielded nothing"
+        assert {i.class_name for i in items} == {
+            "ActiveAgentTests",
+            "AgentSurfaceTruthTests",
+            "SkillTests",
+            "SpecWorkflowTests",
+            "InstructionWiringTests",
+        }
+
+    def test_a_selector_naming_such_a_test_now_matches(self) -> None:
+        sel = _selector(
+            paths=("harness/shared/tests/test_agent_harness_wiring.py",),
+            keyword="test_reasoner_frontmatter_tools_list_includes_meta_tools",
+        )
+        assert matches(sel) == 1
+
+    @pytest.mark.parametrize(
+        "source, expected",
+        [
+            ("class C(unittest.TestCase): pass", True),
+            ("class C(TestCase): pass", True),
+            ("class C(SomeBase, unittest.TestCase): pass", True),
+            ("class C: pass", False),
+            ("class C(Helper): pass", False),
+            ("class C(NotATestCaseSubclass): pass", False),
+        ],
+    )
+    def test_only_unittest_cases_widen_the_scan(self, source: str, expected: bool) -> None:
+        """The widening is to `unittest.TestCase`, not to every class: a helper
+        class holding a `test_`-prefixed method is not collected by pytest and
+        must not be counted as evidence here."""
+        node = ast.parse(source).body[0]
+        assert isinstance(node, ast.ClassDef)
+        assert _is_unittest_case(node) is expected

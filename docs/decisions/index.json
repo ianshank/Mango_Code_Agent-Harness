@@ -686,6 +686,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-057",
+      "status": "accepted",
+      "date": "2026-09-06",
+      "title": "`hypothesis_register` gains append-only revision; supersession is structural, not a status; the sequential-thinking MCP server is not adopted",
+      "path": "docs/decisions/DEC-057.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }

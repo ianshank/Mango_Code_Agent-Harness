@@ -24,3 +24,17 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # The root `Dockerfile`'s base image. Unlike `pip` above, this is not covered
+  # by `requirements-lock.txt`: the lock pins Python distributions, not the
+  # image they run on, and the weekly `lock-upgrade-check` DEC-031 named as the
+  # Python upgrade signal reads the lock alone. So a base image with a published
+  # CVE had no signal in this repository at all -- not the lock job, not the
+  # `dependency-audit` job (osv-scanner runs against the lock file, not the
+  # image). Adding the ecosystem here is additive to DEC-031 rather than a
+  # re-litigation of it: DEC-031 is about per-package pins proposed against a
+  # locked set, and a base-image digest is neither.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -91,6 +91,9 @@ class TestExecuteAgent:
             confidence: float,
             workspace_dir=None,
             policy_path=None,
+            *,
+            revises=None,
+            status=None,
         ) -> str:
             calls.append("hyp")
             return "hyp-logged"

@@ -20,6 +20,90 @@ atomically before each `complete_chat` while retaining full
 logs include `run_id`. DEC-003 mango hooks stay dormant. Spec:
 `docs/specs/context-window-budget.md`.
 
+### hypothesis_register gains append-only revision (DEC-057)
+
+`hypothesis_register` accepts optional `revises` (a prior entry's id) and
+`status` (`provisional` default, `confirmed`, `retracted`). A revision is a new
+entry carrying the pointer; the prior entry keeps **every** field it was written
+with — claim, reasoning, confidence and status — and gains only its successor's
+id in a `superseded_by` list.
+
+Supersession is structural rather than a status. Adversarial review of the first
+implementation found that writing `status: "superseded"` onto the prior entry
+destroyed the verdict its own evidence had produced (a `confirmed` hypothesis
+read back as `superseded` once revised), and that a scalar `superseded_by` lost
+the first of two revisions of one entry. Both were silent data loss in the
+artifact the change exists to create, and both are now regression-pinned. A
+scalar left by an earlier build is migrated into the list, not discarded.
+
+Also: `confidence` is held to the 0.0–1.0 range the schema advertises (the same
+gap that makes `status` hand-checked — `tool_arg_validation` models neither
+`enum` nor `minimum`/`maximum`); refusals and supersessions log ids and statuses
+but never claim text; a dangling pointer is recorded and reported; and
+cross-record updates run inside the store lock, with the first concurrency test
+in this suite covering two writers revising one entry.
+
+Both the orchestrator dispatcher and the MCP door forward the fields through the
+shared registry. Spec: `docs/specs/hypothesis-revision.md` (R-HR-1…7). The
+sequential-thinking MCP server was evaluated and not adopted; surfacing
+hypotheses into a prompt is deferred behind the context-window budget.
+
+### Operator read path: `make memory-show`
+
+DEC-057 justifies revision by the trail it leaves for the verifier and the debug
+dump, but nothing could read that trail, so the justification was unverifiable.
+`make memory-show` prints both stores — each hypothesis with the verdict it was
+written with and its place in the revision graph. This does not reverse the
+phase-2 deferral: that is about prompt tokens, and printing on request adds none
+to any run. A test pins that no prompt builder imports the reader (C-HR-2).
+
+### Selector gate: `unittest.TestCase` subclasses are now discovered
+
+`test_spec_selectors_collect.py` verifies that every ticked acceptance criterion
+names a `pytest -k` selector that collects something. It approximated collection
+with the `Test*` class-name prefix, but pytest collects a `unittest.TestCase`
+subclass whatever it is called — so every selector aiming at a `*Tests` case
+class was reported as collecting nothing. Twenty-three tests in
+`test_agent_harness_wiring.py` were invisible to it. The scan now also descends
+into classes whose written bases include `TestCase`. It failed closed on correct
+specs, which is the direction most likely to be worked around rather than fixed.
+
+### Decomposition: memory_store.py, memory_view.py
+
+The revision path pushed `meta_tools.py` past `limits.size_budget_lines`, so the
+module now divides in three by what each layer knows: `memory_store` is how a
+store behaves (lock, malformed-file recovery, FIFO retention, and a single
+`append_locked` both writers share instead of carrying near-identical copies of
+the read-modify-write), `meta_tools` is what a record means and how the model
+writes one, and `memory_view` is how a person reads them back. The dependency
+runs one way. `MEMORY_DIR` and the path helpers stay in
+`meta_tools`: they are this repository's layout, not store mechanics, and
+relocating that constant would silently break every test that monkeypatches it.
+Every moved name is re-exported, so `meta_tools.file_lock`,
+`meta_tools._read_json_safe` and the rest resolve unchanged. The revision suite
+splits to `test_hypothesis_revision.py` at `limits.test_size_budget_lines`, and
+the three lock-timing constant-inventory rows follow the code to `memory_store`.
+
+### Docs, config and gates caught by the same review
+
+- `docs/architecture/c4_architecture.md` — the meta-tools node named only
+  `knowledge_gap_log` and was marked "Planned" although both tools have shipped
+  and are wired to all three roles; the memory store was described as "Local"
+  after NS-17 made it workspace-scoped.
+- `.mango/skills/agent-memory-manager/SKILL.md` — claimed the store resolves
+  from `__file__` (the M4 defect NS-17 fixed) and documented no record shape at
+  all; now carries both stores' shapes and the hypothesis lifecycle.
+- `docs/reports/2026-STANDARDS-AUDIT.md` — M4 marked remediated-in-part.
+- `NEXT_STEPS.md` — phase 2 recorded in §4 Parked against its real blocker.
+- `.github/dependabot.yml` — adds the `docker` ecosystem. The root `Dockerfile`'s
+  base image had no upgrade signal from any job: DEC-031 routes Python through
+  `lock-upgrade-check`, which reads the lock file, and `dependency-audit` scans
+  the lock rather than the image.
+- `test_migration_completeness_every_legacy_id_present` asserted the decision
+  index equals exactly DEC-000…056, so it failed on the first record added after
+  the NS-34 migration. It now asserts the legacy set is a subset, with the
+  reproduction in the regression tier per `harness/CONTRACT.md`.
+
 ### NS-34: decision records under docs/decisions/
 
 Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`

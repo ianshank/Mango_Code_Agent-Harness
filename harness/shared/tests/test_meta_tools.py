@@ -12,20 +12,9 @@ from harness.shared.meta_tools import (
     load_open_gaps,
     resolve_memory_dir,
 )
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._helpers import agent_memory_policy
 
-SHARED_POLICY = REPO / "harness" / "shared" / "governance-policy.json"
-
-
-def _agent_memory_policy(tmp_path: Path, **agent_memory_overrides) -> Path:
-    """Copy the shipped governance policy and mutate only ``agent_memory`` keys."""
-    policy = json.loads(SHARED_POLICY.read_text(encoding="utf-8"))
-    block = dict(policy.get("agent_memory") or {})
-    block.update(agent_memory_overrides)
-    policy["agent_memory"] = block
-    path = tmp_path / "governance-policy.json"
-    path.write_text(json.dumps(policy), encoding="utf-8")
-    return path
+_agent_memory_policy = agent_memory_policy
 
 
 def test_knowledge_gap_log(tmp_path, monkeypatch):
@@ -433,3 +422,16 @@ def test_hypothesis_register_max_hypotheses_zero_messaging(tmp_path):
     assert "not retained" in lowered or "retention disabled" in lowered
     hyp_file = ws / ".mango" / "memory" / "hypotheses.json"
     assert json.loads(hyp_file.read_text(encoding="utf-8")) == []
+
+
+def test_the_moved_store_primitives_are_still_reachable_from_meta_tools() -> None:
+    """The split moved the lock timings to `memory_store` and re-pointed their
+    constant-inventory rows there. `test_every_python_symbol_exists` now pins
+    them at the new home only, so nothing checked that the documented
+    backward-compatible re-export actually resolves. This does."""
+    from harness.shared import memory_store, meta_tools
+
+    for name in ("DEFAULT_LOCK_TIMEOUT_S", "DEFAULT_LOCK_POLL_S", "MIN_LOCK_POLL_S"):
+        assert getattr(meta_tools, name) is getattr(memory_store, name), f"{name} is no longer re-exported"
+    for name in ("file_lock", "_file_lock", "_read_json_safe", "_fifo_trim"):
+        assert getattr(meta_tools, name) is getattr(memory_store, name), f"{name} is no longer re-exported"

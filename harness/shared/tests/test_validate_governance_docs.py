@@ -253,6 +253,9 @@ class TestValidateGovernanceDocs:
         payload = json.loads(legacy.read_text(encoding="utf-8"))
         ids = {row["id"] for row in payload["decisions"]}
         expected = {f"DEC-{n:03d}" for n in range(57)}
-        assert ids == expected, f"missing {sorted(expected - ids)} extra {sorted(ids - expected)}"
+        # A superset, not equality: the legacy set is fixed, but records keep
+        # being added after the migration (DEC-057 was the first), and a pin
+        # that fails on every new decision would be dropped rather than kept.
+        assert expected <= ids, f"missing {sorted(expected - ids)}"
         for dec_id in expected:
             assert (REPO / "docs" / "decisions" / f"{dec_id}.md").is_file()

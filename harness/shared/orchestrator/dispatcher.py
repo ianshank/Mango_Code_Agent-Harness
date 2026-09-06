@@ -82,6 +82,8 @@ class ToolDispatcher:
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
                 workspace_dir=self.workspace_dir,
                 policy_path=self.policy_path,
+                revises=args.get("revises") or None,
+                status=args.get("status") or None,
             ),
         }
 

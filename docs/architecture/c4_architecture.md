@@ -175,8 +175,8 @@ graph TD
             Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
-            AgentMetaTools["Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) — Planned"]
-            Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
+            AgentMetaTools["Continuous Learning: knowledge_gap_log, hypothesis_register (shipped) · MCPs: query_docs (Context7) — Planned"]
+            Memory[(Workspace JSON Memory &lt;workspace&gt;/.mango/memory: gaps.json, hypotheses.json — append-only, FIFO-bounded)]
             MA --> SubAgents
             SubAgents --> Personas
             MA --> Hooks
@@ -195,7 +195,7 @@ graph TD
             RetryPolicy[retry_policy.py<br/>Pure backoff arithmetic<br/>no I/O, no clock, no network]
             Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner<br/>+ context_policy.py budget eviction]
             DebugDump[debug_dump.py<br/>Credential redaction + debug dumps]
-            MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock<br/>+ hypothesis status/revision transitions]
             PyBridge -->|asks for a delay| RetryPolicy
             Orchestrator -->|redacts history through| DebugDump
             subgraph "Cognitive Boundary — INV-16 (one-directional)"

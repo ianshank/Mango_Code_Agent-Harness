@@ -101,9 +101,15 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness/node/src/ai/nemotron/retry.ts", "JITTER_CEILING_MS", decision="DEC-037"),
     # Found by TestTheInventoryIsComplete below, which is the point of it: every
     # one of these satisfied the old suite by being absent from it (DEC-039).
-    Row("harness.shared.meta_tools", "DEFAULT_LOCK_TIMEOUT_S", decision="DEC-039"),
-    Row("harness.shared.meta_tools", "DEFAULT_LOCK_POLL_S", decision="DEC-039"),
-    Row("harness.shared.meta_tools", "MIN_LOCK_POLL_S", decision="DEC-039"),
+    # DEC-039 accepted these three as true constants while they lived in
+    # `meta_tools`; DEC-057 moved them to `memory_store` with the advisory lock
+    # itself and restates the acceptance for the new home. The rows cite the
+    # decision that names them where they now are -- a row pointing at DEC-039
+    # would name a module that record never mentions, which is the drift this
+    # inventory exists to catch.
+    Row("harness.shared.memory_store", "DEFAULT_LOCK_TIMEOUT_S", decision="DEC-057"),
+    Row("harness.shared.memory_store", "DEFAULT_LOCK_POLL_S", decision="DEC-057"),
+    Row("harness.shared.memory_store", "MIN_LOCK_POLL_S", decision="DEC-057"),
     Row("harness.shared.debug_dump", "DUMP_DIR_MODE", decision="DEC-039"),
     Row("harness.shared.debug_dump", "MIN_ENV_CREDENTIAL_LENGTH", decision="DEC-039"),
     Row("harness.shared.tool_dispatch", "DEFAULT_HYPOTHESIS_CONFIDENCE", decision="DEC-039"),
