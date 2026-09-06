@@ -374,7 +374,9 @@ def test_prompt_builders_read_hypotheses_only_through_the_bounded_formatter():
     )
 
     builders = prompt_building_modules()
-    assert builders, "no prompt-building modules found; this pin would be vacuous"
+    assert {path.name for path in builders} >= {"agent_prompts.py", "loop.py", "nodes.py"}, (
+        f"discovery must find every known prompt builder, found {sorted(p.name for p in builders)}"
+    )
     violations = [violation for path in builders for violation in hypothesis_reader_violations(path)]
     assert not violations, f"unbounded hypothesis readers in prompt builders: {violations}"
     # Control: the one permitted path is actually taken, so the pin is not
@@ -406,11 +408,25 @@ def test_the_bounded_formatter_pin_rejects_a_violating_module(tmp_path):
         encoding="utf-8",
     )
 
+    # The two bypasses the first version of the pin missed (review finding L3).
+    getattr_caller = tmp_path / "getattr_prompt.py"
+    getattr_caller.write_text(
+        'from harness.shared import memory_view as mv\ndef build(): return getattr(mv, "load_hypotheses")()\n',
+        encoding="utf-8",
+    )
+    reference_holder = tmp_path / "reference_prompt.py"
+    reference_holder.write_text(
+        "from harness.shared import memory_view\nreader = memory_view.successors_of\ndef build(): return reader({})\n",
+        encoding="utf-8",
+    )
+
     assert hypothesis_reader_violations(importer) == [
         "importing_prompt.py imports format_hypotheses_for_review",
         "importing_prompt.py calls format_hypotheses_for_review()",
     ]
     assert hypothesis_reader_violations(aliased_caller) == ["aliased_prompt.py calls load_hypotheses()"]
+    assert hypothesis_reader_violations(getattr_caller) == ["getattr_prompt.py names load_hypotheses in a string"]
+    assert hypothesis_reader_violations(reference_holder) == ["reference_prompt.py references successors_of"]
     assert hypothesis_reader_violations(compliant) == []
     assert "format_hypotheses_for_reasoner" not in UNBOUNDED_HYPOTHESIS_READERS
 

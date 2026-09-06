@@ -24,6 +24,7 @@ that. This module imports nothing from the orchestrator.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
 from harness.shared.context_policy import estimate_tokens
@@ -127,14 +128,37 @@ def _is_open(entry: object) -> bool:
 
     A record without an id is skipped rather than rendered -- a line the model
     cannot name in ``revises`` is noise -- and a record with successors is
-    excluded because its successor carries the current belief.
+    excluded because its successor carries the current belief. An id containing
+    whitespace is treated as no id: the writer only ever mints uuid4s, so one
+    can only come from a hand-edited store, and rendering it verbatim would let
+    a newline inside the one field the model copies back break the
+    one-entry-one-line shape (R-HS-2).
     """
     if not isinstance(entry, dict):
         return False
     entry_id = entry.get("id")
-    if not isinstance(entry_id, str) or not entry_id:
+    if not isinstance(entry_id, str) or not entry_id or entry_id.split() != [entry_id]:
         return False
     return not successors_of(entry)
+
+
+def _render_confidence(value: object) -> str:
+    """``0.00``-style text for a real number in range; ``?`` for anything else.
+
+    The writer holds ``confidence`` to a finite 0.0-1.0, so a bool, a string, an
+    integer too large for a float or a non-finite value can only come from a
+    hand-edited store. None of them may take the reasoner prompt down with an
+    exception, and none may render as text the R-HS-2 line shape does not admit.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "?"
+    try:
+        number = float(value)
+    except OverflowError:
+        return "?"
+    if not math.isfinite(number):
+        return "?"
+    return f"{number:.2f}"
 
 
 def _reasoner_line(entry: dict) -> str:
@@ -147,13 +171,8 @@ def _reasoner_line(entry: dict) -> str:
     tight).
     """
     status = " ".join(str(entry.get("status", "?")).split()) or "?"
-    confidence = entry.get("confidence")
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-        rendered_confidence = "?"
-    else:
-        rendered_confidence = f"{float(confidence):.2f}"
     claim = " ".join(str(entry.get("claim", "")).split())
-    return f"- [{status}] confidence={rendered_confidence} id={entry['id']}: {claim}"
+    return f"- [{status}] confidence={_render_confidence(entry.get('confidence'))} id={entry['id']}: {claim}"
 
 
 def _block_text(lines: list[str]) -> str:

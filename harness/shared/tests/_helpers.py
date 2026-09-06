@@ -263,18 +263,42 @@ UNBOUNDED_HYPOTHESIS_READERS: frozenset[str] = frozenset(
 BOUNDED_HYPOTHESIS_FORMATTER = "format_hypotheses_for_reasoner"
 
 
+_PROMPT_TEMPLATE_SUFFIX = "PROMPT_TEMPLATE"
+
+
+def _names_a_prompt_template(path: Path) -> bool:
+    """True when the module defines, imports or formats a ``*_PROMPT_TEMPLATE``."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        name: str | None = None
+        if isinstance(node, ast.Name):
+            name = node.id
+        elif isinstance(node, ast.Attribute):
+            name = node.attr
+        elif isinstance(node, ast.alias):
+            name = node.name
+        if name is not None and name.endswith(_PROMPT_TEMPLATE_SUFFIX):
+            return True
+    return False
+
+
 def prompt_building_modules() -> list[Path]:
     """Every source module under ``harness/shared`` that builds a prompt.
 
-    Discovered rather than listed: a third prompt builder added later is graded
-    without anyone remembering to extend a hand-written tuple. Tests are
-    excluded -- ``test_agent_prompts.py`` matches the name rule and is not a
-    prompt builder.
+    Discovered by *content*, not by filename: any non-test module that names a
+    ``*_PROMPT_TEMPLATE`` (defines one, imports one, or formats one), plus the
+    orchestrator loop. The first version matched ``"prompt" in path.name``,
+    which found ``agent_prompts.py`` and ``loop.py`` and missed
+    ``langgraph/nodes.py`` -- a module that formats all three templates and
+    is a prompt builder by the spec's own definition (adversarial review of
+    DEC-058, finding M1). A third builder added later is graded without anyone
+    extending a list. Tests are excluded: ``test_agent_prompts.py`` names the
+    templates and is not a builder.
     """
     return sorted(
         path
         for path in SHARED.rglob("*.py")
-        if "tests" not in path.parts and ("prompt" in path.name or path.name == "loop.py")
+        if "tests" not in path.parts and (path.name == "loop.py" or _names_a_prompt_template(path))
     )
 
 
@@ -282,13 +306,20 @@ def hypothesis_reader_violations(path: Path) -> list[str]:
     """Ways ``path`` reaches the hypothesis store other than through the bounded formatter.
 
     A call-graph check over the module's AST, not a substring scan: it looks for
-    an import of, or a call to, any name in `UNBOUNDED_HYPOTHESIS_READERS`, and
-    accepts `BOUNDED_HYPOTHESIS_FORMATTER`. A comment that mentions the readers
-    passes; a call through a module alias (``memory_view.load_hypotheses()``)
-    does not. Returns the violations so the caller can assert on the empty list
-    and the negative test can assert on a non-empty one.
+    an import of, a call to, a bare reference to, or a string naming any name in
+    `UNBOUNDED_HYPOTHESIS_READERS`, and accepts `BOUNDED_HYPOTHESIS_FORMATTER`.
+    A comment that mentions the readers passes. A call through a module alias
+    (``memory_view.load_hypotheses()``), an aliased reference
+    (``r = memory_view.load_hypotheses; r()``) and a ``getattr(mv,
+    "load_hypotheses")`` lookup do not -- the last two were bypasses the first
+    version missed (adversarial review of DEC-058, finding L3). This is a drift
+    pin over the repository's own modules, not a sandbox: a module determined to
+    read the file by path can still do so, and the tree-diff and prompt tests
+    are what catch the effect. Returns the violations so the caller can assert
+    on the empty list and the negative test can assert on a non-empty one.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
+    call_targets = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -299,6 +330,13 @@ def hypothesis_reader_violations(path: Path) -> list[str]:
             name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
             if name in UNBOUNDED_HYPOTHESIS_READERS:
                 violations.append(f"{path.name} calls {name}()")
+        elif isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in call_targets:
+            referenced = node.id if isinstance(node, ast.Name) else node.attr
+            if referenced in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} references {referenced}")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value in UNBOUNDED_HYPOTHESIS_READERS:
+                violations.append(f"{path.name} names {node.value} in a string")
     return violations
 
 
