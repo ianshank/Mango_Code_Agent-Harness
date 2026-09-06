@@ -2,7 +2,7 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-05 · second peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
+**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
 
 ---
 
@@ -249,8 +249,8 @@ gated on R-SR-2).
 |---|---|
 | **Phase E** (R-SR-26 … R-SR-29) | **NS-2 / R-SR-2 before any destructive slice.** DEC-053…056 (NS-31 / R-SR-5 / AC-5) are logged on #93 - PARK order stands: **JVM → LangGraph → openspec → mirroring**. Do not start Phase E code while the DEC-014 credential branch remains. Premature Phase E inverts DEC-024 (claimed readiness without the hard gate). |
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
-| **Context-window budget / HITL interrupts** | Budget needs policy key + spec (Phase B events exist). HITL needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). |
-| **Phase 2 · Surface open hypotheses to the reasoner** | The context-window budget row above. Revision shipped (DEC-057, `docs/specs/hypothesis-revision.md`); reading the store into a prompt is new prompt text on every run and needs an `agent_memory` exposure limit written against a real token bound, not a guessed one. `C-HR-2` pins that no prompt builder reads it until then. |
+| **HITL interrupts** | Needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). Context-window budget (audit H4) is no longer parked — see §6 / PR #110. |
+| **Phase 2 · Surface open hypotheses to the reasoner** | An `agent_memory` exposure limit and its own spec. No longer blocked on the token bound: `orchestrator.context_budget_tokens` landed with audit H4 (PR #110), which is what DEC-057 said this was waiting for. What remains is deciding how many hypotheses a prompt may carry and proving the eviction interaction, not guessing a budget. Revision itself shipped (DEC-057, `docs/specs/hypothesis-revision.md`); `C-HR-2` pins that no prompt builder reads the store until then. |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with DEC-053 park / revival. |
 | **`AC-CE-1` ProcessBackend capability profiles** | OS isolation is the permanent B4 fix; Phase B digest is containment only. |
 | **Eval harness / nightly live smoke** | Scoped `NVIDIA_API_KEY` in scheduled workflow (owner) + fixtures after openspec fold. |
@@ -273,6 +273,12 @@ gated on R-SR-2).
 ---
 
 ## 6. Delivered, and removed from the open list
+
+**Closed 2026-09-06 (audit H4 / context-window budget):**
+
+| Was | Now |
+|---|---|
+| **Context-window budget** (parked with HITL) | **Landing on PR #110.** Policy keys `orchestrator.context_budget_tokens` / `context_chars_per_token`; pure `harness/shared/context_policy.py` group-atomic eviction; `ExecutionLoop` applies on a copy before `complete_chat` and logs `event=context_policy`. Spec: `docs/specs/context-window-budget.md`. HITL remains parked above. |
 
 **Closed 2026-09-05b (this rewrite's evidence pass):**
 

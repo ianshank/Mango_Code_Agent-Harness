@@ -78,6 +78,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │
 │   ├── shared/                          # Shared Policy Kernel & Governance Tools
 │   │   ├── orchestrator/                # Decomposed MAS Orchestrator (loop, dispatch, hooks)
+│   │   ├── context_policy.py            # Policy-sourced context-window budget / tool-group eviction (H4)
 │   │   ├── mango_mas_orchestrator.py    # Backwards-compatible ReAct loop facade
 │   │   ├── experimental/                # Parked, unwired capabilities (DEC-027): autonomous_healing.py, lats_optimizer.py
 │   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server

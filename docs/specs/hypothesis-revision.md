@@ -271,6 +271,13 @@ that never sends the new fields sees the same tool.
 
 None blocking. Phase 2 (surface open hypotheses to the reasoner the way gaps
 reach the planner) is deliberately not scheduled here: it is new prompt text on
-every run and needs a policy limit under `agent_memory`, and the context-window
-budget program merged on 2026-09-06 has not yet landed the token bound it
-should be written against. DEC-057 records the deferral.
+every run and needs its own exposure limit under `agent_memory`.
+
+One premise of that deferral changed while this branch was open and is recorded
+rather than quietly left stale: `orchestrator.context_budget_tokens` landed with
+audit H4 (PR #110), so the token bound phase 2 was waiting for now exists. What
+remains is not a number to guess here -- it is how many hypotheses a prompt may
+carry and how that interacts with `context_policy`'s tool-call group eviction,
+which is a decision and a spec of its own. `C-HR-2` and
+`test_the_reader_is_not_wired_into_any_prompt_or_gate` keep the store out of
+every prompt until then. DEC-057 records the deferral and this correction.

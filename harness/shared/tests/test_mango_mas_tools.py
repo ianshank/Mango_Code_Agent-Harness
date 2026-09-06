@@ -83,13 +83,19 @@ def test_tool_run_command_success(mock_workspace):
         second_call_kwargs = mock_complete.call_args_list[1].kwargs
         messages = second_call_kwargs["messages"]
 
-        # The messages array sent on the second call should have:
-        # system, user, assistant (with tool_calls), tool (with result)
-        # However, since messages is a mutable list and the loop continues, the orchestrator
-        # appends the final assistant message at the end. So the tool message is at -2.
-        assert messages[-2]["role"] == "tool"
-        assert messages[-2]["name"] == "run_command"
-        assert "test command" in messages[-2]["content"]
+        # Model-facing messages are a budgeted *copy* of conversation_history
+        # (H4 / R-CW-2). Assert against the call-time list: system, user,
+        # assistant(tool_calls), tool(result) — the final assistant reply is
+        # appended to conversation_history after this call returns, not into
+        # the copy passed here.
+        tool_msgs = [m for m in messages if m.get("role") == "tool"]
+        assert tool_msgs, (
+            f"expected a tool result in model-facing messages, got roles={[m.get('role') for m in messages]}"
+        )
+        tool_msg = tool_msgs[-1]
+        assert tool_msg["name"] == "run_command"
+        assert "test command" in tool_msg["content"]
+        assert messages[-1]["role"] == "tool"
 
 
 def test_tool_max_iterations(mock_workspace):

@@ -98,7 +98,9 @@
     "tool_timeout_sec": 30,
     "max_command_bytes": 8192,
     "max_healing_retries": 3,
-    "max_output_bytes": 65536
+    "max_output_bytes": 65536,
+    "context_budget_tokens": 128000,
+    "context_chars_per_token": 4
   },
   "nemotron": {
     "temperature": 0.2,

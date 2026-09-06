@@ -10,6 +10,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Feat: context-window budget on ExecutionLoop (audit H4)
+
+Policy-keyed `orchestrator.context_budget_tokens` /
+`context_chars_per_token` via `policy_loader`; pure
+`harness/shared/context_policy.py` evicts oldest tool-call groups
+atomically before each `complete_chat` while retaining full
+`conversation_history` for dumps/API. Structured `event=context_policy`
+logs include `run_id`. DEC-003 mango hooks stay dormant. Spec:
+`docs/specs/context-window-budget.md`.
+
 ### hypothesis_register gains append-only revision (DEC-057)
 
 `hypothesis_register` accepts optional `revises` (a prior entry's id) and
