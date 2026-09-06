@@ -277,7 +277,7 @@ gated on R-SR-2).
 
 | Was | Now |
 |---|---|
-| **Phase 2 · Surface open hypotheses to the reasoner** (parked on an exposure limit and the eviction proof) | **Landing on PR #113.** `REASONER_PROMPT_TEMPLATE` gains `{open_hypotheses}`, filled by `memory_view.format_hypotheses_for_reasoner`; bounded by `agent_memory.reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens` (fail-closed, `0` = kill switch); coexistence with `context_policy` eviction and the oversized-block degenerate case pinned; `C-HR-2` narrowed to `C-HS-1`. Spec `docs/specs/hypothesis-surfacing.md` (peer-reviewed rev 2), record DEC-058. Audit M4 fully remediated. |
+| **Phase 2 · Surface open hypotheses to the reasoner** (parked on an exposure limit and the eviction proof) | **Landing on PR #114** (spec landed first on #113). `REASONER_PROMPT_TEMPLATE` gains `{open_hypotheses}`, filled by `memory_view.format_hypotheses_for_reasoner`; bounded by `agent_memory.reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens` (fail-closed, `0` = kill switch); coexistence with `context_policy` eviction and the oversized-block degenerate case pinned; `C-HR-2` narrowed to `C-HS-1`. Spec `docs/specs/hypothesis-surfacing.md` (peer-reviewed rev 2), record DEC-058. Audit M4 fully remediated. |
 
 **Closed 2026-09-06 (audit H4 / context-window budget):**
 

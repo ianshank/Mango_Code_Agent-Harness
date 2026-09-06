@@ -449,12 +449,17 @@ Additive on every axis a caller can observe today:
 
 ## Open questions
 
+> **All resolved at implementation (DEC-058).** Kept as written for the record
+> of what was argued and why; nothing below is pending. The decisions: ship
+> **on** at `reasoner_hypothesis_limit: 10`; `reasoner_hypothesis_budget_tokens:
+> 1500`; `reasoning` not rendered. Reopen any of them in a new decision record,
+> not by editing this section.
+
 - **Default on or off.** The kill switch is `reasoner_hypothesis_limit: 0`
   (R-HS-3). The proposal ships **on** at `10`: shipping off would land the
   phase dead and leave DEC-057's deferral formally discharged but practically
   not, and the fail-closed key contract already forces every adopter with a
-  customised block to make a choice. The review should confirm or overturn
-  this. Blocking for step 2.
+  customised block to make a choice. **Decided as proposed** (DEC-058).
 - **The token default, with the arithmetic.** Measured on the base commit with
   the R-HS-2 line shape (no `reasoning`): the fixed overhead per line is
   ~60 chars (`- [provisional] confidence=0.70 id=<36-char uuid>: `), so a terse
@@ -468,14 +473,15 @@ Additive on every axis a caller can observe today:
   (measured 354 chars typical, 90 tokens; 584 verbose, 147 tokens) the token
   bound would have governed at 10–16 entries and the two bounds would have
   fought; that measurement is the reason v1 drops `reasoning`. `1500` is a
-  policy value so an operator can tune it without a code change; the review
-  should argue the number, not accept it. Blocking for step 2.
+  policy value so an operator can tune it without a code change. **Decided as
+  proposed** (DEC-058) after the arithmetic above was checked against the
+  measured line shape.
 - **`reasoning` text.** Excluded in v1 (R-HS-2). It is what lets the model
   judge whether new evidence bears on a claim, and it is also the field most
   likely to carry long, injected or stale text, and the one that made the
   arithmetic above tight. If a later phase wants it, the honest path is a
   bounded `hypothesis_read` tool with its own authority row, not a wider block.
-  Decided, recorded in DEC-058; reopen there, not here.
+  **Decided as proposed**, recorded in DEC-058.
 - **Not in scope, recorded so it is not re-derived:** surfacing to the planner
   or verifier prompts (C-HS-2); a `hypothesis_read` tool; age- or
   relevance-based filtering and any per-task scoping (C-HS-5); content-level
