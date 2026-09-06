@@ -29,6 +29,8 @@ from pathlib import Path
 
 from harness.shared.context_policy import estimate_tokens
 from harness.shared.meta_tools import (
+    _CONFIDENCE_MAX,
+    _CONFIDENCE_MIN,
     HYPOTHESIS_SUPERSEDED_BY,
     _hypotheses_path,
     _read_json_safe,
@@ -145,10 +147,14 @@ def _is_open(entry: object) -> bool:
 def _render_confidence(value: object) -> str:
     """``0.00``-style text for a real number in range; ``?`` for anything else.
 
-    The writer holds ``confidence`` to a finite 0.0-1.0, so a bool, a string, an
-    integer too large for a float or a non-finite value can only come from a
-    hand-edited store. None of them may take the reasoner prompt down with an
-    exception, and none may render as text the R-HS-2 line shape does not admit.
+    The writer holds ``confidence`` to a finite value in the range it advertises
+    (``_CONFIDENCE_MIN``..``_CONFIDENCE_MAX``, the same constants
+    ``hypothesis_register`` checks against), so a bool, a string, an integer too
+    large for a float, a non-finite value or a number outside that range can only
+    come from a hand-edited store. None of them may take the reasoner prompt down
+    with an exception, and none may render as text the R-HS-2 line shape does not
+    admit: ``10`` would print ``confidence=10.00``, which the documented
+    ``\\d\\.\\d\\d`` shape does not match (review finding on #114).
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return "?"
@@ -156,7 +162,7 @@ def _render_confidence(value: object) -> str:
         number = float(value)
     except OverflowError:
         return "?"
-    if not math.isfinite(number):
+    if not math.isfinite(number) or not _CONFIDENCE_MIN <= number <= _CONFIDENCE_MAX:
         return "?"
     return f"{number:.2f}"
 

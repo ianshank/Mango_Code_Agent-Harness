@@ -180,10 +180,23 @@ class TestWhichEntriesRender:
             _entry("overflow", confidence=10**400),
             _entry("nan", confidence=float("nan")),
             _entry("inf", confidence=float("inf")),
+            # Finite but outside the range the writer enforces: `10` would print
+            # `confidence=10.00`, which the R-HS-2 shape does not match
+            # (Copilot review on #114).
+            _entry("too large", confidence=10),
+            _entry("negative", confidence=-0.5),
+            _entry("just over", confidence=1.0000001),
         ]
         block = _render(corrupt)
         assert block.count("confidence=?") == len(corrupt)
         assert "confidence=nan" not in block and "confidence=inf" not in block
+        assert "confidence=10.00" not in block and "confidence=-0.50" not in block
+        # Control: the range's own ends are in range and render in shape.
+        bounds = _render(
+            [_entry("floor", confidence=0.0), _entry("ceiling", confidence=1.0), _entry("int", confidence=1)]
+        )
+        assert bounds.count("confidence=0.00") == 1 and bounds.count("confidence=1.00") == 2
+        assert all(_ENTRY_LINE.match(line) for line in _entry_lines(bounds))
 
     def test_an_id_with_whitespace_is_treated_as_no_id(self) -> None:
         """The id is the one field the model copies back; a newline inside it
