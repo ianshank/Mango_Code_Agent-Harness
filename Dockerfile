@@ -1,5 +1,5 @@
 # Production Multi-Stage Dockerfile for the Nemotron AI Runner (Node stack)
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
 

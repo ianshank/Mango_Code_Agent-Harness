@@ -59,7 +59,9 @@
       "langgraph": {
         "import_name": "langgraph.graph",
         "deselect_env": "MANGO_CI_DESELECT_LANGGRAPH",
-        "path_prefixes": ["harness/shared/langgraph/"]
+        "path_prefixes": [
+          "harness/shared/langgraph/"
+        ]
       }
     }
   },
@@ -96,7 +98,9 @@
     "tool_timeout_sec": 30,
     "max_command_bytes": 8192,
     "max_healing_retries": 3,
-    "max_output_bytes": 65536
+    "max_output_bytes": 65536,
+    "context_budget_tokens": 128000,
+    "context_chars_per_token": 4
   },
   "nemotron": {
     "temperature": 0.2,
@@ -225,5 +229,13 @@
   "lats": {
     "max_budget": 10,
     "exploration_weight": 1.414
+  },
+  "agent_memory": {
+    "max_gaps": 100,
+    "max_hypotheses": 100,
+    "planner_gap_limit": 10,
+    "reasoner_hypothesis_limit": 10,
+    "reasoner_hypothesis_budget_tokens": 1500
   }
 }
+

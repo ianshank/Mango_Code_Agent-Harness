@@ -111,6 +111,7 @@ graph TD
     subgraph Agentic_Orchestration ["MAS Orchestration Core (harness/shared)"]
         MAS["MangoMASOrchestrator (Facade)<br/>(mango_mas_orchestrator.py)"]
         Loop["ExecutionLoop<br/>(orchestrator/loop.py)"]
+        ContextPolicy["Context Policy<br/>(context_policy.py)<br/>policy-sourced token budget / group-atomic eviction"]
         Dispatch["ToolDispatcher<br/>(orchestrator/dispatcher.py)"]
         ArgCheck["Tool Argument Validation<br/>(tool_arg_validation.py)"]
         HookRunner["HookRunner<br/>(orchestrator/hook_runner.py)"]
@@ -138,6 +139,7 @@ graph TD
     APIServer -->|execute_loop| MAS
     MAS --> Loop
     LangGraph_Engine -.->|nodes wrap execute_agent, orchestrator passed via config| MAS
+    Loop -->|apply_context_policy on copy before complete_chat| ContextPolicy
     Loop --> Bridge
     Loop --> Dispatch
     Loop --> HookRunner
@@ -160,7 +162,11 @@ StateGraph's agent nodes (`langgraph/nodes.py`) wrap
 `MangoMASOrchestrator.execute_agent`, receiving the orchestrator through the
 graph's `configurable` config. Neither the facade nor `orchestrator/loop.py`
 imports LangGraph, and `build_graph` is reached only from the parked
-`experimental/autonomous_healing.py` (DEC-027). An earlier revision drew
+`experimental/autonomous_healing.py` (DEC-027). Before each `complete_chat`,
+`ExecutionLoop` shapes a **model-facing** copy of `conversation_history` through
+`context_policy.apply_context_policy` using `orchestrator.context_budget_tokens`
+/ `context_chars_per_token` from policy (audit H4); the full append-only history
+is retained for dumps and API responses. An earlier revision drew
 `Loop → LangGraph_Engine`, which reversed that dependency.
 
 ### 2.1 Detailed container view of `harness/shared` (from the v2.1.9 snapshot)
@@ -181,8 +187,8 @@ graph TD
             Personas[Persona Topology: Web Presenter, Node Bridge]
             Hooks[Lifecycle Hooks: PreToolUse, Stop, SessionStart, PreNemotron]
             Skills[Skills: repo-invariant-review, openspec-peer-review, nemotron-reasoner]
-            AgentMetaTools["Continuous Learning & MCPs: knowledge_gap_log, query_docs (Context7) — Planned"]
-            Memory[(Local JSON Memory: gaps.json, hypotheses.json)]
+            AgentMetaTools["Continuous Learning: knowledge_gap_log, hypothesis_register (shipped) · MCPs: query_docs (Context7) — Planned"]
+            Memory[(Workspace JSON Memory &lt;workspace&gt;/.mango/memory: gaps.json, hypotheses.json — append-only, FIFO-bounded; read back into prompts under policy bounds: open gaps → planner, open hypotheses → reasoner)]
             MA --> SubAgents
             SubAgents --> Personas
             MA --> Hooks
@@ -199,11 +205,17 @@ graph TD
         subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter — HTTP, auth, response shape]
             RetryPolicy[retry_policy.py<br/>Pure backoff arithmetic<br/>no I/O, no clock, no network]
-            Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner]
+            Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner<br/>+ context_policy.py budget eviction]
             DebugDump[debug_dump.py<br/>Credential redaction + debug dumps]
-            MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock]
+            MetaTools[meta_tools.py<br/>Meta-Learning Tools + record semantics<br/>+ hypothesis status/revision transitions]
+            MemoryStore[memory_store.py<br/>file_lock, malformed recovery, FIFO, append_locked]
+            MemoryView[memory_view.py<br/>format_hypotheses_for_review — operator, unbounded<br/>format_hypotheses_for_reasoner — prompt, policy-bounded]
             PyBridge -->|asks for a delay| RetryPolicy
             Orchestrator -->|redacts history through| DebugDump
+            MetaTools -->|store mechanics| MemoryStore
+            MemoryView -->|reads records via| MetaTools
+            Orchestrator -->|open_gaps to planner| MetaTools
+            Orchestrator -->|open_hypotheses to reasoner, DEC-058| MemoryView
             subgraph "Cognitive Boundary — INV-16 (one-directional)"
                 Signal[cognitive_signal.py<br/>CognitiveSignal envelope + JSONL sink]
                 Shadow[shadow_planner.py<br/>Shadow-mode comparison channel<br/>MANGO_SHADOW_PLANNER, off by default]

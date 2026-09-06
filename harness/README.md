@@ -6,6 +6,7 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 
 - `shared/` — byte-identical policy kernel, canonical agent policy, schemas and adversarial self-tests.
   - `shared/mango_mas_orchestrator.py` — Orchestrator for the Mango Multi-Agent System (with JSON logging).
+  - `shared/context_policy.py` — Policy-sourced context-window budgeting (group-atomic tool-call eviction) applied by `ExecutionLoop` before each `complete_chat` (audit H4; `docs/specs/context-window-budget.md`).
   - `shared/mcp_server.py` — Model Context Protocol (MCP) server for local tool execution and workspace context provisioning.
   - `shared/experimental/lats_optimizer.py` — Language Agent Tree Search (LATS) module for Monte-Carlo MCTS planning and rollout execution; parked under `experimental/` until a runtime path is specified (DEC-027, INV-15).
   - `shared/meta_tools.py` — Meta-learning and context state tools for autonomous synthesis.
@@ -14,7 +15,7 @@ This package is a resynthesis of the original Node/JVM governance harness after 
 - `node/` — Node/TypeScript adapter and full 7-tier test matrix.
 - `jvm/` — JVM/Gradle/Kotlin adapter.
 - `control-plane/` — verifier, policy bundle, required-workflow example and reference PDP intended for an independently protected governance repository/service.
-- `docs/` — **`BENCHMARK_REPORT.md`**, `AGENT_GOVERNANCE.md`, `ROOT_OF_TRUST.md` and `PRE_PR_VERIFICATION_REFERENCE.md`. The C4 model lives at the repository's `docs/architecture/c4_architecture.md`. Reports are under `docs/reports/`: `2026-STANDARDS-AUDIT.md` (the current coding-standards audit and its remediation roadmap), `PEER-REVIEW-REMEDIATION.md`, `ROADMAP-PEER-REVIEW.md`, `ROADMAP-PEER-REVIEW-2026-09-05.md`, `SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, `SDLC_HYGIENE_REPORT.md` and `TEST-REPORT.md`; this list is checked against the directory by `test_documentation_claims.py`.
+- `docs/` — **`BENCHMARK_REPORT.md`**, `AGENT_GOVERNANCE.md`, `ROOT_OF_TRUST.md` and `PRE_PR_VERIFICATION_REFERENCE.md`. The C4 model lives at the repository's `docs/architecture/c4_architecture.md`. Reports are under `docs/reports/`: `2026-STANDARDS-AUDIT.md` (the current coding-standards audit and its remediation roadmap), `PEER-REVIEW-REMEDIATION.md`, `ROADMAP-PEER-REVIEW.md`, `ROADMAP-PEER-REVIEW-2026-09-05.md`, `PLAYLIST-ASTRA-CONTEXT-BUDGET-PLAN-2026-09-06.md`, `CONTEXT-WINDOW-BUDGET-PEER-REVIEW-2026-09-06.md`, `CONTEXT-WINDOW-BUDGET-GAP-PEER-REVIEW-2026-09-06.md`, `SDLC_HYGIENE_AND_GAP_ANALYSIS.md`, `SDLC_HYGIENE_REPORT.md` and `TEST-REPORT.md`; this list is checked against the directory by `test_documentation_claims.py`.
 
 ## Trust boundary
 

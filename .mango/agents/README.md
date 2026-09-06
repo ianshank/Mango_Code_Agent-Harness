@@ -14,8 +14,8 @@ here (and its test) in the same change.
 
 | Active Mango role | Canonical contract(s) | Responsibility in the loop |
 |---|---|---|
-| `planner` | `spec-analyst.md`, `orchestrator.md` | Requirements + acceptance criteria; plans and delegates only, never edits code. |
-| `nemotron-reasoner` | `implementer.md` | Scoped code/config edits and local tests via the tool bridge; uses `knowledge_gap_log` / `hypothesis_register` meta-tools instead of hallucinating. |
+| `planner` | `spec-analyst.md`, `orchestrator.md` | Requirements + acceptance criteria; plans and delegates only, never edits code. Its prompt ends with the workspace's open knowledge gaps (`format_gaps_for_planner`, bounded by `agent_memory.planner_gap_limit`). |
+| `nemotron-reasoner` | `implementer.md` | Scoped code/config edits and local tests via the tool bridge; uses `knowledge_gap_log` / `hypothesis_register` meta-tools instead of hallucinating, and revises a hypothesis (`revises` + `confirmed`/`retracted`) when evidence settles it. Its prompt ends with the workspace's open hypotheses and their ids (`format_hypotheses_for_reasoner`, bounded by `agent_memory.reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens`, DEC-058). |
 | `verifier` | `test-eval.md`, `peer-reviewer.md`, `security-reviewer.md`, `release-auditor.md` | Test/eval execution + evidence; independent correctness/conformance review; blocks releases failing gates. |
 
 All seven canonical roles are bound by the table above. The mapping is

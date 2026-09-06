@@ -49,7 +49,12 @@ REASONER_PROMPT_TEMPLATE = (
     "(do not chain with '&&', ';', '|', or redirect with '>'). "
     "Commands that install packages or reach the network are classified as external actions and will be denied; "
     "if you need one, record the need with knowledge_gap_log rather than retrying.\n\n"
-    "Plan:\n{plan}"
+    # `{open_hypotheses}` is the reasoner's bounded view of its own hypothesis
+    # store (`memory_view.format_hypotheses_for_reasoner`, DEC-058). It renders
+    # `""` when nothing is open, so the prompt is byte-identical to the
+    # pre-DEC-058 one for every workspace without hypotheses; when non-empty
+    # it begins with "\n\n", so there is no separator to keep in sync here.
+    "Plan:\n{plan}{open_hypotheses}"
 )
 
 VERIFIER_PROMPT_TEMPLATE = (

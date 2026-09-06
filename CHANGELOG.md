@@ -10,49 +10,175 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
+### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
 
-Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
-Eleven root causes triaged against `origin/main`; three governance decisions
-registered (DEC-057, DEC-058, DEC-059).
+Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing
+`{open_hypotheses}` slot, filled in `ExecutionLoop.execute_loop` by
+`memory_view.format_hypotheses_for_reasoner`: the workspace's **open**
+hypotheses (no `superseded_by` successors; a chain renders its head only),
+most recent first, one line each — status first, `confidence`, and the entry
+`id` verbatim, which is what `revises` accepts. A `retracted` line is shown on
+purpose: it is what stops the same claim being registered again. `reasoning`
+is not rendered (measured: it made the two bounds fight at 10–16 entries).
 
-| RCA | Root cause | Fix |
-|-----|-----------|-----|
-| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-057 waiver |
-| RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
-| RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
-| RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |
-| RCA-5 | `make` absent on Windows in timeout test | `_ensure_make_on_path` autouse fixture |
-| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-058 waiver |
-| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-058 |
-| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-059 |
-| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-058 |
-| RCA-10 | `_sole_decision_id()` breaks with >1 DEC in registry | `_dec_for_posix_only_probes()` asserts DEC-026 |
-| RCA-11 | NTFS same-inode overwrite in tamper test | Case-insensitive assertion on `win32` |
+Two new policy keys bound the block and follow the H4 loader contract (present
+policy missing a key → `PolicyError`; absent policy → built-in default):
+`agent_memory.reasoner_hypothesis_limit` (`10`) and
+`agent_memory.reasoner_hypothesis_budget_tokens` (`1500`, header included,
+measured with `context_policy.estimate_tokens` and
+`orchestrator.context_chars_per_token`). The first entry that would overflow
+stops the render — dropped whole, nothing older considered. `limit: 0` is the
+kill switch. The block is a non-group message, so eviction never touches it and
+cannot rescue an oversized one; the bound is what makes it affordable in the
+context of every call after the reasoner's first, the verifier's included.
+Empty renders `""`, so a workspace without hypotheses sends the pre-DEC-058
+prompt byte for byte. One `event=hypotheses_surfaced` log line per render
+carries `run_id`, `shown`, `open`, `total`, `tokens_estimated` and `ids` —
+never claim text.
 
-New regression tests: `test_windows_portability_regression.py` (expanded to
-enterprise AQA — anti-pattern guard, parametrized case-sensitivity, make-guard
-audit, asyncio-mark audit, security bypass regression).
+**Migration:** an adopter with a customised `agent_memory` block must add the
+two keys (same shape as H4's `orchestrator` migration), and any out-of-tree
+caller of `REASONER_PROMPT_TEMPLATE.format(...)` must pass `open_hypotheses=""`
+(the slot is required by `str.format`; the two in-tree builders do). Also from
+the post-implementation review: `orchestrator.context_chars_per_token <= 0` now
+fails closed at load with `PolicyError` instead of surfacing mid-run as a
+`ValueError` from the estimator; the `hypotheses_surfaced` event carries
+`chars_per_token`; a non-string `status`/`claim` in a hand-edited store renders
+as `?`/empty rather than verbatim; and the two defect-class pins (oversized
+block survives eviction; empty block leaves the prompt byte-identical) live in
+the regression tier (`test_hypothesis_surfacing_regression.py`, registered in
+`test_regression_tier_pin.py`). `policy-artifact.json` is rebuilt. `C-HR-2` is superseded by `C-HS-1`: prompt builders may reach the
+store only through the bounded formatter; the two pins are rewritten, not
+removed, and proven non-vacuous. The LangGraph node renders the slot empty
+(DEC-053 park). Spec: `docs/specs/hypothesis-surfacing.md`, peer-reviewed at
+revision 2 before implementation.
 
-Added `pyrightconfig.json` so Pylance resolves `harness.*` imports without a
-`pip install -e .`; mirrors pytest's `pythonpath = ["."]` setting.
+### Feat: context-window budget on ExecutionLoop (audit H4)
 
-### NS-21 rollback clarification (2026-09-05)
+Policy-keyed `orchestrator.context_budget_tokens` /
+`context_chars_per_token` via `policy_loader`; pure
+`harness/shared/context_policy.py` evicts oldest tool-call groups
+atomically before each `complete_chat` while retaining full
+`conversation_history` for dumps/API. Structured `event=context_policy`
+logs include `run_id`. DEC-003 mango hooks stay dormant. Spec:
+`docs/specs/context-window-budget.md`.
 
-The three `post-*-run` shell scripts and `lib/record_post_run.sh` introduced by
-NS-21 are absent from this branch. The *invocation infrastructure* in `loop.py`
-(`hook_runner.run_hook(f"post-{agent_name}-run", ...)`) and `PERMITTED_HOOK_NAMES`
-derivation are **retained intact** — re-enabling NS-21 only requires adding the
-scripts back. `test_ns21_rollback_regression.py` pins this state. NS-21 is
-re-opened in `NEXT_STEPS.md` as undelivered.
+### hypothesis_register gains append-only revision (DEC-057)
 
-### NS-17 rollback clarification (2026-09-05)
+`hypothesis_register` accepts optional `revises` (a prior entry's id) and
+`status` (`provisional` default, `confirmed`, `retracted`). A revision is a new
+entry carrying the pointer; the prior entry keeps **every** field it was written
+with — claim, reasoning, confidence and status — and gains only its successor's
+id in a `superseded_by` list.
 
-`resolve_memory_dir`, `_fifo_trim`, `format_gaps_for_planner`, the `{open_gaps}`
-slot in `PLANNER_PROMPT_TEMPLATE`, `policy_path` in `ToolDispatcher.__init__`, and
-the `agent_memory` block in `governance-policy.json` are absent from this branch
-(simplified back to fixed `MEMORY_DIR` from `__file__`). `test_ns17_rollback_regression.py`
-pins this state and documents what must be added when NS-17 is re-implemented.
+Supersession is structural rather than a status. Adversarial review of the first
+implementation found that writing `status: "superseded"` onto the prior entry
+destroyed the verdict its own evidence had produced (a `confirmed` hypothesis
+read back as `superseded` once revised), and that a scalar `superseded_by` lost
+the first of two revisions of one entry. Both were silent data loss in the
+artifact the change exists to create, and both are now regression-pinned. A
+scalar left by an earlier build is migrated into the list, not discarded.
+
+Also: `confidence` is held to the 0.0–1.0 range the schema advertises (the same
+gap that makes `status` hand-checked — `tool_arg_validation` models neither
+`enum` nor `minimum`/`maximum`); refusals and supersessions log ids and statuses
+but never claim text; a dangling pointer is recorded and reported; and
+cross-record updates run inside the store lock, with the first concurrency test
+in this suite covering two writers revising one entry.
+
+Both the orchestrator dispatcher and the MCP door forward the fields through the
+shared registry. Spec: `docs/specs/hypothesis-revision.md` (R-HR-1…7). The
+sequential-thinking MCP server was evaluated and not adopted; surfacing
+hypotheses into a prompt is deferred behind the context-window budget.
+
+### Operator read path: `make memory-show`
+
+DEC-057 justifies revision by the trail it leaves for the verifier and the debug
+dump, but nothing could read that trail, so the justification was unverifiable.
+`make memory-show` prints both stores — each hypothesis with the verdict it was
+written with and its place in the revision graph. This does not reverse the
+phase-2 deferral: that is about prompt tokens, and printing on request adds none
+to any run. A test pins that no prompt builder imports the reader (C-HR-2).
+
+### Selector gate: `unittest.TestCase` subclasses are now discovered
+
+`test_spec_selectors_collect.py` verifies that every ticked acceptance criterion
+names a `pytest -k` selector that collects something. It approximated collection
+with the `Test*` class-name prefix, but pytest collects a `unittest.TestCase`
+subclass whatever it is called — so every selector aiming at a `*Tests` case
+class was reported as collecting nothing. Twenty-three tests in
+`test_agent_harness_wiring.py` were invisible to it. The scan now also descends
+into classes whose written bases include `TestCase`. It failed closed on correct
+specs, which is the direction most likely to be worked around rather than fixed.
+
+### Decomposition: memory_store.py, memory_view.py
+
+The revision path pushed `meta_tools.py` past `limits.size_budget_lines`, so the
+module now divides in three by what each layer knows: `memory_store` is how a
+store behaves (lock, malformed-file recovery, FIFO retention, and a single
+`append_locked` both writers share instead of carrying near-identical copies of
+the read-modify-write), `meta_tools` is what a record means and how the model
+writes one, and `memory_view` is how a person reads them back. The dependency
+runs one way. `MEMORY_DIR` and the path helpers stay in
+`meta_tools`: they are this repository's layout, not store mechanics, and
+relocating that constant would silently break every test that monkeypatches it.
+Every moved name is re-exported, so `meta_tools.file_lock`,
+`meta_tools._read_json_safe` and the rest resolve unchanged. The revision suite
+splits to `test_hypothesis_revision.py` at `limits.test_size_budget_lines`, and
+the three lock-timing constant-inventory rows follow the code to `memory_store`.
+
+### Docs, config and gates caught by the same review
+
+- `docs/architecture/c4_architecture.md` — the meta-tools node named only
+  `knowledge_gap_log` and was marked "Planned" although both tools have shipped
+  and are wired to all three roles; the memory store was described as "Local"
+  after NS-17 made it workspace-scoped.
+- `.mango/skills/agent-memory-manager/SKILL.md` — claimed the store resolves
+  from `__file__` (the M4 defect NS-17 fixed) and documented no record shape at
+  all; now carries both stores' shapes and the hypothesis lifecycle.
+- `docs/reports/2026-STANDARDS-AUDIT.md` — M4 marked remediated-in-part.
+- `NEXT_STEPS.md` — phase 2 recorded in §4 Parked against its real blocker.
+- `.github/dependabot.yml` — adds the `docker` ecosystem. The root `Dockerfile`'s
+  base image had no upgrade signal from any job: DEC-031 routes Python through
+  `lock-upgrade-check`, which reads the lock file, and `dependency-audit` scans
+  the lock rather than the image.
+- `test_migration_completeness_every_legacy_id_present` asserted the decision
+  index equals exactly DEC-000…056, so it failed on the first record added after
+  the NS-34 migration. It now asserts the legacy set is a subset, with the
+  reproduction in the regression tier per `harness/CONTRACT.md`.
+
+### NS-34: decision records under docs/decisions/
+
+Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`
+with YAML frontmatter (`id`, `status`, `date`, `supersedes`, `superseded_by`,
+`owners`) and Context / Decision / Consequences sections. Generated
+`index.md` / `index.json` are the machine SoT for validators; the node
+`.governance/decision-log.md` becomes a thin ID index for `--decision-log`
+consumers; the jvm log is a pointer only (no divergent SoT).
+`validate_governance_docs.py` fails closed on missing status, unparseable
+`supersedes`, index drift, or a governance skill that restates decision
+bodies. `GOVERNANCE_SKILL.md` (node + jvm) points at `docs/decisions/`.
+`generate_decision_index.py` regenerates the index and thin log.
+Constant-triage reads record files instead of the pipe log. Roadmap: NS-34
+and NS-17 move to Delivered (NS-17 landed on #97).
+
+### Docs: NS-18 reasoner-bridge-tool-parity spec scaffold
+
+Add `docs/specs/reasoner-bridge-tool-parity.md` as the NS-18 contract
+(persona/bridge tool-inventory parity, `prompt_sha` logging, falsifying tests).
+Point `NEXT_STEPS.md` NS-18 Evidence at the spec. Docs only; no runtime change.
+
+### NS-21: post-turn hooks record status and tool-call spend
+
+Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
+surface. `ExecutionLoop.execute_agent` passes `status`, `run_id`, `agent`,
+`tool_calls_used`, and `tool_calls_limit` into each post-run hook. Three thin
+scripts plus shared `.mango/hooks/lib/record_post_run.sh` append JSONL under
+`.mango/.state/post-run.jsonl` (presence = enablement; not registered in
+`.mango/settings.json`). HookRunner DEBUG-logs when a permitted script is
+missing. Tests cover disk liveness for every permitted post name, success /
+budget_exceeded / timeout record contracts, allowlist parsing of `loop.py`,
+and settings-namespace partition. DEC-003 Claude hooks stay dormant.
 
 ### Docs: roadmap peer rewrite after #89-#95 / #93 (2026-09-05b)
 
@@ -77,6 +203,20 @@ logging on the new module names path *counts*, never command text. Same commit
 regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
 that NS-33 reformatted without refreshing the bundle (the related digest gate
 failure on `main`).
+
+### NS-17: agent memory retention and workspace scoping
+
+Bound `knowledge_gap_log` / `hypothesis_register` stores via policy
+`agent_memory` (FIFO trim), scope memory under `<workspace>/.mango/memory`
+when a workspace is supplied (legacy install-root path when not), and surface
+open gaps into the planner prompt (`{open_gaps}`).
+
+Plumb optional `policy_path` into agent-memory call sites
+(`knowledge_gap_log`, `hypothesis_register`, `format_gaps_for_planner`,
+`ExecutionLoop`, `ToolDispatcher`) so retention and planner-gap limits follow
+the same governance file as other budgets. Zero-bound policies now report that
+retention is disabled instead of claiming a successful log. Mutation tests pin
+`policy_path` honouring and zero-bound messaging.
 
 ### NS-11: reconcile the regression tier with CONTRACT.md
 

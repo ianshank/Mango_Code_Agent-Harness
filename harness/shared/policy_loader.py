@@ -47,6 +47,8 @@ class OrchestratorLimits(TypedDict):
     max_command_bytes: int
     max_healing_retries: int
     max_output_bytes: int
+    context_budget_tokens: int
+    context_chars_per_token: float
 
 
 class NemotronDefaults(TypedDict):
@@ -72,6 +74,16 @@ class CoverageThresholds(TypedDict):
 
     lines: int
     branches: int
+
+
+class AgentMemoryLimits(TypedDict):
+    """The `agent_memory` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    max_gaps: int
+    max_hypotheses: int
+    planner_gap_limit: int
+    reasoner_hypothesis_limit: int
+    reasoner_hypothesis_budget_tokens: int
 
 
 def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
@@ -268,7 +280,25 @@ def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits
         # body). Was an unlinked 64 KiB literal in process_backend.py
         # (tech-debt-hardening-plan R-TDH-16).
         "max_output_bytes": section.int("max_output_bytes", 65536),
+        # Context-window budget for model-facing history (audit H4). Generous
+        # default so short runs / existing unit tests do not evict.
+        # apply_context_policy always estimates the *current* list with
+        # context_chars_per_token; measure_tokens prefers same-list
+        # usage.prompt_tokens when present, else falls back to this coefficient.
+        "context_budget_tokens": section.int("context_budget_tokens", 128000),
+        "context_chars_per_token": section.float("context_chars_per_token", 4.0),
     }
+    if resolved["context_chars_per_token"] <= 0:
+        # `estimate_tokens` refuses a non-positive coefficient with ValueError.
+        # Left to it, a bad policy value surfaced mid-run inside `execute_loop`
+        # -- after the planner had spent a model call -- as a RuntimeError that
+        # named no policy. Every other malformed value fails here, at load, with
+        # the key and the file; this one now does too (DEC-058 review).
+        path = POLICY_PATH if policy_path is None else policy_path
+        raise PolicyError(
+            f"policy orchestrator.context_chars_per_token must be positive, got "
+            f"{resolved['context_chars_per_token']!r} (policy at {path})"
+        )
     _log_resolution("orchestrator", resolved, policy_path)
     return resolved
 
@@ -382,3 +412,24 @@ def lats_defaults(policy_path: Path | None = None) -> dict:
         "max_budget": section.int("max_budget", 10),
         "exploration_weight": section.float("exploration_weight", 1.414),
     }
+
+
+def agent_memory_defaults(policy_path: Path | None = None) -> AgentMemoryLimits:
+    """Retention / planner-surface limits for agent memory; policy `agent_memory` block."""
+    section = _section("agent_memory", policy_path)
+    resolved: AgentMemoryLimits = {
+        "max_gaps": section.int("max_gaps", 100),
+        "max_hypotheses": section.int("max_hypotheses", 100),
+        "planner_gap_limit": section.int("planner_gap_limit", 10),
+        # Phase 2 of DEC-057 (DEC-058, `docs/specs/hypothesis-surfacing.md`):
+        # how many *open* hypotheses the reasoner prompt may carry, and the
+        # estimated-token ceiling on the whole rendered block, measured with
+        # `orchestrator.context_chars_per_token`. A limit of 0 renders nothing
+        # and is the operator's kill switch. The block is a non-group message,
+        # so `context_policy` never evicts it: these two keys are the only bound
+        # on what it costs every model call after the reasoner's first.
+        "reasoner_hypothesis_limit": section.int("reasoner_hypothesis_limit", 10),
+        "reasoner_hypothesis_budget_tokens": section.int("reasoner_hypothesis_budget_tokens", 1500),
+    }
+    _log_resolution("agent_memory", resolved, policy_path)
+    return resolved

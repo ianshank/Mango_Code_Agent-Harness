@@ -40,7 +40,7 @@ from harness.shared.shadow_planner import (
     run_shadow_comparison,
     shadow_planner_enabled,
 )
-from harness.shared.tests._helpers import REPO
+from harness.shared.tests._helpers import REPO, snapshot_tree
 from harness.shared.tests.conftest import POSIX_ONLY
 
 DISABLED_VALUES = [None, "0", "true", "yes", "", " 1", "TRUE"]
@@ -64,15 +64,6 @@ def _content_resp(text: str, usage: dict | None = None) -> dict[str, Any]:
     if usage is not None:
         resp["usage"] = usage
     return resp
-
-
-def _snapshot(workspace: Path) -> dict[str, str]:
-    """Relative path -> content hash for every file under the workspace."""
-    out: dict[str, str] = {}
-    for p in sorted(workspace.rglob("*")):
-        if p.is_file():
-            out[str(p.relative_to(workspace))] = hashlib.sha256(p.read_bytes()).hexdigest()
-    return out
 
 
 def _run_loop(
@@ -164,10 +155,11 @@ class TestDisabledByteIdentity:
         self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ws = _mk_workspace(tmp_path)
-        before = _snapshot(ws)
+        # The recording hook itself writes hook.log, so that one file is excluded
+        # on both sides (`snapshot_tree` replaced a body-for-body local copy).
+        before = snapshot_tree(ws, exclude=("hook.log",))
         out = _run_loop(ws, mocker, monkeypatch, flag="0")
-        after = _snapshot(ws)
-        after.pop("hook.log", None)  # the recording hook itself writes one file
+        after = snapshot_tree(ws, exclude=("hook.log",))
         assert after == before
         assert not out["signals_path"].exists()
         assert not out["signals_path"].parent.exists()

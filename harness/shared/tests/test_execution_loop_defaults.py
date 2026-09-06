@@ -87,8 +87,31 @@ class TestExecutionLoopDefaults:
         with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator.loop"):
             _loop(tmp_path, policy_path=temp_policy)
         messages = [r.getMessage() for r in caplog.records]
-        assert any("resolved from policy" in m and "77" in m for m in messages)
-        assert any("tool-call budget resolved from policy: 99" in m for m in messages)
+        # Effective values (not "policy-only" wording) — constructor overrides must
+        # not be mislabeled as policy-resolved (Copilot review on PR #110).
+        assert any(
+            "ExecutionLoop budgets:" in m
+            and "max_iterations=77" in m
+            and "api_timeout_sec=88" in m
+            and "max_tool_calls_per_task=99" in m
+            and "context_budget_tokens=" in m
+            and "context_chars_per_token=" in m
+            for m in messages
+        )
+
+    def test_debug_log_shows_effective_overrides(
+        self, tmp_path: Path, temp_policy: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.DEBUG, logger="harness.shared.orchestrator.loop"):
+            _loop(tmp_path, max_iterations=3, api_timeout=4, max_tool_calls_per_task=5, policy_path=temp_policy)
+        messages = [r.getMessage() for r in caplog.records]
+        assert any(
+            "ExecutionLoop budgets:" in m
+            and "max_iterations=3" in m
+            and "api_timeout_sec=4" in m
+            and "max_tool_calls_per_task=5" in m
+            for m in messages
+        )
 
     def test_no_literal_budget_defaults_remain(self) -> None:
         source = (REPO / "harness" / "shared" / "orchestrator" / "loop.py").read_text(encoding="utf-8")

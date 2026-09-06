@@ -90,8 +90,8 @@ scanned) and `pip-audit`/`osv-scanner` (dependency vulnerabilities) on every
 PR — see `.github/workflows/python-package.yml`. A report that reproduces
 something these gates should have caught, but didn't, is especially useful: it
 usually points at a real gap in the gate itself (see
-`harness/node/.governance/decision-log.md` for examples of exactly this class
-of finding, e.g. DEC-014).
+`docs/decisions/` (e.g. `DEC-014.md`) for examples of exactly this class
+of finding).
 
 ## Supported versions
 

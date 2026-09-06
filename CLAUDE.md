@@ -13,7 +13,10 @@ output trustworthy. Mechanical enforcement lives in the root `Makefile` and
    plan with the tool bridge. Uses `knowledge_gap_log` / `hypothesis_register`
    (defined as `META_TOOLS_SCHEMA` in `harness/shared/meta_tools.py` and composed
    into `NEMOTRON_TOOLS` by `harness/shared/tool_schemas.py`) instead of
-   hallucinating when blocked or uncertain.
+   hallucinating when blocked or uncertain. Both stores are read back into the
+   next run's prompts under `agent_memory` policy bounds: open gaps to the
+   planner (`format_gaps_for_planner`), open hypotheses to the reasoner
+   (`format_hypotheses_for_reasoner`, DEC-058).
 3. **verifier** (`.mango/agents/verifier.md`) — executes the validation matrix
    and reports PASS/FAIL against the acceptance criteria. Never marks PASS on
    inspection alone.

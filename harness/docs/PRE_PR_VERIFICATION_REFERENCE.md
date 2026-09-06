@@ -69,7 +69,8 @@ Those are the real numbers. This example previously read `3 file(s)` and
 `15 requirement ID(s)`, which no run produces — and the sentence above says this
 output is the fastest way to spot a glob silently checking nothing outside one
 stack. That is exactly what it is doing: `check_traceability` runs with
-`cd harness/node`, so the nine specs under the repository-root `docs/specs/` are
+`cd harness/node`, so the specs under the repository-root `docs/specs/` (thirty
+and counting; the number is whatever `ls docs/specs/*.md | wc -l` says today) are
 traced by nothing. Invented numbers hid the finding the example exists to
 surface.
 
