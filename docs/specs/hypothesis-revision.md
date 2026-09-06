@@ -34,10 +34,14 @@ offers.
 
 - R-HR-1: `hypothesis_register` MUST accept an optional `revises` argument
   naming a prior entry's id, and MUST record the revision as a *new* entry
-  carrying that pointer; the prior entry's text MUST NOT be edited.
-- R-HR-2: When `revises` names an entry present in the store, that entry MUST be
-  marked `status: superseded` with `superseded_by` set to the new entry's id.
-  `superseded` MUST NOT be a status the model can assert directly.
+  carrying that pointer; **no field of the prior entry may be edited**, its
+  `status` included.
+- R-HR-2: When `revises` names an entry present in the store, that entry MUST
+  gain the new entry's id in a `superseded_by` **list**, appended in order.
+  Supersession is structural: the key's presence records it. `superseded` MUST
+  NOT be a status a caller can assert, and MUST NOT appear in
+  `HYPOTHESIS_STATUSES`. A scalar `superseded_by` written by an earlier build
+  MUST be migrated into the list rather than discarded.
 - R-HR-3: When `revises` names an entry the store does not hold (FIFO-trimmed
   under `agent_memory.max_hypotheses`, or mistyped), the new entry MUST still
   be recorded with its pointer and the result MUST say the prior entry was not
@@ -48,7 +52,15 @@ offers.
   `tool_arg_validation` does not model `enum`.
 - R-HR-5: Both transports MUST forward the new fields: the orchestrator
   dispatcher's registry and, through it, the MCP server. An absent or empty
-  field MUST reach the store as `None`.
+  field MUST reach the store as `None`, and a whitespace-only `revises` MUST be
+  normalised in the store itself so the contract holds for every caller.
+- R-HR-6: `confidence` MUST be held to the 0.0-1.0 range the schema advertises,
+  refused with a `failed` outcome before any write, on the same grounds as
+  R-HR-4: `tool_arg_validation` models neither `enum` nor `minimum`/`maximum`.
+- R-HR-7: Each refusal and each supersession MUST emit a log line carrying ids,
+  statuses and counts only -- never `claim` or `reasoning` (2026 standards audit
+  H6). Refusals MUST log at WARNING, because the dispatcher grades a `failed`
+  outcome at DEBUG and the refusal would otherwise be invisible on both doors.
 - C-HR-1: The change MUST be additive. The three required arguments, the
   `additionalProperties: false` closure, the `read` action in
   `TOOL_REQUIRED_ACTION`, the retention bound, and every existing result string
@@ -60,9 +72,34 @@ offers.
 ## Acceptance criteria
 
 - [ ] AC-1: a revision appends a new entry with `revises`, and the prior entry
-      keeps its claim and gains `status: superseded` and `superseded_by` —
+      keeps claim, reasoning, confidence **and status**, gaining only
+      `superseded_by: [<new id>]` —
       `pytest -k test_hypothesis_revision_supersedes_prior_entry`
       · stage: `make test-python` (R-HR-1, R-HR-2)
+- [ ] AC-10: an entry registered `confirmed` still reads `confirmed` after being
+      revised — `pytest -k test_a_revised_entry_keeps_the_status_its_own_evidence_produced`
+      · stage: `make test-python` (R-HR-1)
+- [ ] AC-11: two revisions of one entry both appear in its `superseded_by`, and
+      the forward and backward views of the graph agree —
+      `pytest -k test_two_revisions_of_one_entry_both_stay_linked`
+      · stage: `make test-python` (R-HR-2)
+- [ ] AC-12: `status="superseded"` is refused and `superseded` is absent from
+      `HYPOTHESIS_STATUSES` — `pytest -k test_superseded_is_not_a_model_settable_status`
+      · stage: `make test-python` (R-HR-2)
+- [ ] AC-13: a confidence of -0.1, 1.1 or 42.0 is refused and nothing is written,
+      while 0.0 and 1.0 are accepted —
+      `pytest -k test_confidence_outside_the_advertised_range_is_refused` and
+      `pytest -k test_confidence_at_the_range_boundaries_is_accepted`
+      · stage: `make test-python` (R-HR-6)
+- [ ] AC-14: a supersession logs the ids but never the claim text, and a dangling
+      pointer logs at INFO rather than WARNING —
+      `pytest -k test_revision_logs_the_supersede_without_leaking_claim_text` and
+      `pytest -k test_dangling_pointer_is_logged_as_retention_not_as_a_fault`
+      · stage: `make test-python` (R-HR-7)
+- [ ] AC-15: two threads revising one entry simultaneously both appear in its
+      `superseded_by` and the forward/backward views agree —
+      `pytest -k test_concurrent_revisions_of_one_entry_do_not_lose_a_link`
+      · stage: `make test-python` (R-HR-2)
 - [ ] AC-2: a `revises` id absent from the store is recorded with the pointer and
       the result reports `not found` —
       `pytest -k test_hypothesis_revision_with_unknown_prior_is_recorded_and_reported`
@@ -84,7 +121,11 @@ offers.
       · stage: `make test-python` (R-HR-5)
 - [ ] AC-7: the MCP door accepts the two optional fields and returns the
       not-found note — `pytest -k test_mcp_server_execute_tool_success`
-      · stage: `make test-mcp` (R-HR-5)
+      · stage: `make test-python` (R-HR-5). The stage is deliberately not
+      `make test-mcp`: that target exists but is reachable from neither `ci`
+      nor `ci-python`, so citing it would name a gate CI never invokes — the
+      INV-5 gate-truthfulness shape. `coverage-python` sweeps `$(SHARED_TESTS)/`,
+      which is how this module actually runs on every PR.
 - [ ] AC-8: the pre-existing pins pass unmodified: `required` still names three
       properties and `additionalProperties` is still `False` —
       `pytest -k TestSchemaInternalConsistency`; the persona still lists the tool
@@ -115,12 +156,35 @@ offers.
 
 ## Files touched
 
-- `harness/shared/meta_tools.py` (R-HR-1, R-HR-2, R-HR-3, R-HR-4, R-HR-5)
+- `harness/shared/meta_tools.py` (R-HR-1 … R-HR-7)
+- `harness/shared/memory_store.py` — new; the generic store mechanics (lock,
+  recovery, retention, `append_locked`) split out when the revision path pushed
+  `meta_tools.py` past `limits.size_budget_lines`. `MEMORY_DIR` and the path
+  helpers stay behind deliberately (DEC-057)
+- `harness/shared/tests/test_hypothesis_revision.py` — new; the revision suite,
+  split from `test_meta_tools.py` at `limits.test_size_budget_lines`
+- `harness/shared/tests/test_constant_triage.py` — the three lock-timing rows
+  follow the constants to `memory_store` and cite DEC-057, which names them there
 - `harness/shared/orchestrator/dispatcher.py` — **protected** (R-HR-5)
 - `.mango/agents/nemotron-reasoner.md` — **protected** (R-HR-1, R-HR-4)
-- `harness/shared/tests/test_meta_tools.py` (AC-1 … AC-5)
+- `harness/shared/tests/test_meta_tools.py` (AC-1 … AC-5, AC-10 … AC-13)
 - `harness/shared/tests/test_orchestrator_tools.py` (AC-6)
 - `harness/shared/tests/test_mcp_server.py` (AC-7)
+- `harness/shared/tests/test_orchestrator_agent_loop.py` — the loop's
+  `hypothesis_register` fake gains the keyword-only parameters (C-HR-1)
+- `harness/shared/tests/test_validate_governance_docs.py` — the equality pin
+  that blocked every new decision record becomes a subset check
+- `harness/shared/tests/regression/test_decision_index_completeness_regression.py`
+  — new; the reproduction for that defect, per `harness/CONTRACT.md`'s
+  Regression / AQA tier
+- `.mango/skills/agent-memory-manager/SKILL.md` — the memory-layer skill gains
+  the record shapes and the hypothesis lifecycle, and drops a stale claim that
+  the store is resolved from `__file__` (superseded by NS-17)
+- `.mango/skills/harness-engineering/SKILL.md`, `.mango/agents/README.md`,
+  `docs/architecture/c4_architecture.md`, `docs/reports/2026-STANDARDS-AUDIT.md`
+  (M4 marked remediated-in-part), `NEXT_STEPS.md` (phase 2 parked row)
+- `.github/dependabot.yml` — adds the `docker` ecosystem; the root `Dockerfile`'s
+  base image had no upgrade signal from any job
 - `docs/decisions/DEC-057.md`, `docs/decisions/index.md`,
   `docs/decisions/index.json`, `harness/node/.governance/decision-log.md` (C-HR-2)
 - `docs/specs/hypothesis-revision.md` — this document
@@ -141,7 +205,7 @@ request description, produced by `make attestation`.
 
 ## Validation matrix
 
-- `make test-python` — AC-1 … AC-6, AC-8, AC-9
+- `make test-python` — AC-1 … AC-6, AC-8 … AC-15
 - `make test-mcp` — AC-7
 - `make specs` — the plan gate over this document (INV-17)
 - `make coverage` — per-file floor from `governance-policy.json → coverage.lines`
@@ -150,10 +214,19 @@ request description, produced by `make attestation`.
 
 ## Backward compatibility
 
-Additive. Positional callers of `hypothesis_register(claim, reasoning,
-confidence, workspace_dir, policy_path)` are unchanged; the new arguments are
-keyword-only. Entries written before this change carry no `revises` key and
-read back unchanged. The success string gains a `Status:` clause; the
+Additive, with two deliberate exceptions stated rather than hidden. Positional
+callers of `hypothesis_register(claim, reasoning, confidence, workspace_dir,
+policy_path)` are unchanged; the new arguments are keyword-only. Entries written
+before this change carry no `revises` key and read back unchanged, and an entry
+carrying a scalar `superseded_by` from an earlier build of this branch is
+migrated into a list rather than dropped.
+
+The exceptions: a `confidence` outside 0.0-1.0 was previously written verbatim
+and is now refused (R-HR-6) — no legitimate caller sends one, and the schema
+always advertised the range; and `meta_tools`' store mechanics now live in
+`memory_store`, re-exported under their original names so
+`meta_tools.file_lock`, `meta_tools._read_json_safe`, `meta_tools.MEMORY_DIR`
+and the rest resolve exactly as before for callers and monkeypatches alike. The success string gains a `Status:` clause; the
 retention-disabled and lock-timeout strings are untouched. The schema's
 `required` list and `additionalProperties: false` are unchanged, so a model
 that never sends the new fields sees the same tool.

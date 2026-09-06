@@ -1,25 +1,74 @@
-"""
-Meta-tools: in-process memory and hypothesis tracking for the Mango MAS agent loop.
+"""Meta-tools: in-process memory and hypothesis tracking for the Mango MAS agent loop.
 
-Provides file-locked JSON stores for gap tracking (``gaps.json``) and hypothesis
-logging (``hypotheses.json``). When ``workspace_dir`` is supplied the store lives
-under ``<workspace>/.mango/memory/``; otherwise the legacy install-root
-``MEMORY_DIR`` is used for backward compatibility. Retention bounds come from
+The tool surface over the two JSON stores: where this harness keeps them
+(``gaps.json``, ``hypotheses.json``), the record shapes, the hypothesis
+lifecycle, and the ``META_TOOLS_SCHEMA`` the model is shown. When
+``workspace_dir`` is supplied the store lives under
+``<workspace>/.mango/memory/``; otherwise the legacy install-root ``MEMORY_DIR``
+is used for backward compatibility. Retention bounds come from
 ``policy_loader.agent_memory_defaults`` (NS-17).
+
+The generic store mechanics -- the advisory file lock, malformed-file recovery,
+FIFO retention and the atomic append -- live in ``harness.shared.memory_store``
+and are re-exported here unchanged, so ``meta_tools.file_lock``,
+``meta_tools._read_json_safe`` and the rest keep resolving for every existing
+caller. ``MEMORY_DIR`` and the path helpers that read it stay here on purpose:
+they are this repository's layout rather than store mechanics, and moving the
+constant would have silently broken every test that monkeypatches it.
+
+Revision semantics are specified in ``docs/specs/hypothesis-revision.md`` and
+decided in ``docs/decisions/DEC-057.md``.
 """
 
 from __future__ import annotations
 
-import contextlib
-import json
 import logging
-import os
 import time
 import typing
 import uuid
 from pathlib import Path
 
+from harness.shared.memory_store import (
+    DEFAULT_LOCK_POLL_S,
+    DEFAULT_LOCK_TIMEOUT_S,
+    MIN_LOCK_POLL_S,
+    append_locked,
+)
+
+# Re-exported under their own names (the redundant-alias form marks them as a
+# deliberate re-export, so `ruff` does not strip them as unused). Callers and
+# tests reach these as `meta_tools.<name>`; the split must not move them.
+from harness.shared.memory_store import _fifo_trim as _fifo_trim
+from harness.shared.memory_store import _file_lock as _file_lock
+from harness.shared.memory_store import _read_json_safe as _read_json_safe
+from harness.shared.memory_store import file_lock as file_lock
+from harness.shared.tool_result_format import failed
+
 logger = logging.getLogger(__name__)
+
+#: Re-exported from ``memory_store`` so this module's long-standing surface is
+#: unchanged by the split. Named explicitly rather than star-imported so the
+#: promise is auditable and `vulture` does not read them as dead.
+__all__ = [
+    "DEFAULT_LOCK_POLL_S",
+    "DEFAULT_LOCK_TIMEOUT_S",
+    "GAPS_FILE",
+    "HYPOTHESES_FILE",
+    "HYPOTHESIS_STATUSES",
+    "HYPOTHESIS_STATUS_CONFIRMED",
+    "HYPOTHESIS_STATUS_PROVISIONAL",
+    "HYPOTHESIS_STATUS_RETRACTED",
+    "HYPOTHESIS_SUPERSEDED_BY",
+    "MEMORY_DIR",
+    "META_TOOLS_SCHEMA",
+    "MIN_LOCK_POLL_S",
+    "file_lock",
+    "format_gaps_for_planner",
+    "hypothesis_register",
+    "knowledge_gap_log",
+    "load_open_gaps",
+    "resolve_memory_dir",
+]
 
 # Legacy install-root store. Prefer resolve_memory_dir(workspace_dir) for new callers.
 MEMORY_DIR = Path(__file__).resolve().parent.parent.parent / ".mango" / "memory"
@@ -63,119 +112,6 @@ def _ensure_memory_files(workspace_dir: Path | None = None) -> tuple[Path, Path]
     return gaps_file, hypotheses_file
 
 
-def _fifo_trim(entries: list, max_entries: int, *, label: str) -> list:
-    """Keep the newest ``max_entries`` items (FIFO drop from the front).
-
-    ``max_entries == 0`` means retention is disabled: return an empty list.
-    Python's ``entries[-0:]`` is ``entries[0:]`` (the full list), so the zero
-    case must be handled explicitly rather than falling through to a slice.
-    """
-    if max_entries < 0:
-        raise ValueError(f"max_entries must be non-negative, got {max_entries}")
-    if max_entries == 0:
-        if entries:
-            logger.info("trimmed %d oldest %s (retained=0; policy disabled)", len(entries), label)
-        return []
-    if len(entries) <= max_entries:
-        return entries
-    trimmed = len(entries) - max_entries
-    logger.info(
-        "trimmed %d oldest %s (retained=%d)",
-        trimmed,
-        label,
-        max_entries,
-    )
-    return entries[-max_entries:]
-
-
-def _read_json_safe(file_path: Path) -> list:
-    """Read a JSON file safely, backing it up and resetting if malformed."""
-    try:
-        data = json.loads(file_path.read_text(encoding="utf-8"))
-        if not isinstance(data, list):
-            raise ValueError("Expected JSON list")
-        return data
-    except (json.JSONDecodeError, ValueError) as exc:
-        backup_path = file_path.with_name(f"{file_path.name}.malformed.{int(time.time())}")
-        try:
-            file_path.rename(backup_path)
-        except OSError as backup_err:
-            # The only surviving copy cannot be backed up; preserve it rather
-            # than destroying the malformed store, and propagate the failure so
-            # callers can route a structured alert into the errors channel.
-            logger.error(
-                "Malformed JSON in %s could not be backed up to %s (backup error: %s; parse error: %s)."
-                " Store NOT reset to prevent data loss.",
-                file_path,
-                backup_path,
-                backup_err,
-                exc,
-            )
-            raise RuntimeError(
-                f"Memory store {file_path} is malformed and the backup attempt failed: {backup_err}"
-            ) from exc
-        file_path.write_text("[]", encoding="utf-8")
-        logger.error(
-            "Malformed JSON in %s backed up to %s (Error: %s). Resetting store.",
-            file_path,
-            backup_path,
-            exc,
-        )
-        return []
-
-
-DEFAULT_LOCK_TIMEOUT_S = 10.0
-DEFAULT_LOCK_POLL_S = 0.1
-#: Floor for the poll interval: keeps the poll budget finite and prevents a
-#: zero/negative interval from becoming a busy-spin.
-MIN_LOCK_POLL_S = 0.001
-
-
-@contextlib.contextmanager
-def file_lock(
-    filepath: Path,
-    timeout_s: float = DEFAULT_LOCK_TIMEOUT_S,
-    poll_s: float = DEFAULT_LOCK_POLL_S,
-) -> typing.Iterator[None]:
-    """Best-effort single-host advisory lock via an O_CREAT|O_EXCL lockfile.
-
-    Only contention (the lockfile already existing) is retried; any other
-    OSError (permissions, disk full) propagates immediately rather than
-    spinning until the timeout.
-
-    The retry loop is bounded by a poll budget as well as by the deadline, so
-    "this never spins forever" is a structural property of the loop rather than
-    a consequence of the clock behaving. A clock regression then degrades to an
-    early ``TimeoutError`` instead of hanging the caller — and, in CI, the job.
-    """
-    lockfile = filepath.with_suffix(".lock")
-    effective_poll_s = max(poll_s, MIN_LOCK_POLL_S)
-    deadline = time.monotonic() + timeout_s
-    max_polls = max(1, int(timeout_s / effective_poll_s) + 2)
-    acquired = False
-    for _ in range(max_polls):
-        try:
-            fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.close(fd)
-            acquired = True
-            break
-        except FileExistsError:
-            if time.monotonic() >= deadline:
-                break
-            time.sleep(effective_poll_s)
-    if not acquired:
-        raise TimeoutError(f"Could not acquire lock for {filepath}")
-    try:
-        yield
-    finally:
-        with contextlib.suppress(OSError):
-            lockfile.unlink(missing_ok=True)
-
-
-# Backward-compatible alias for existing internal callers.
-_file_lock = file_lock
-
-
 def knowledge_gap_log(
     question: str,
     what_needed: str,
@@ -205,15 +141,7 @@ def knowledge_gap_log(
     }
 
     max_gaps = agent_memory_defaults(policy_path)["max_gaps"]
-    with _file_lock(gaps_file):
-        gaps = _read_json_safe(gaps_file)
-        gaps.append(entry)
-        gaps = _fifo_trim(gaps, max_gaps, label="knowledge gaps")
-
-        # Write to a temp file first for atomic replacement
-        temp_file = gaps_file.with_suffix(".tmp")
-        temp_file.write_text(json.dumps(gaps, indent=2), encoding="utf-8")
-        temp_file.replace(gaps_file)
+    gaps = append_locked(gaps_file, entry, max_gaps, label="knowledge gaps")
 
     if max_gaps == 0:
         return f"Knowledge gap entry not retained: retention disabled (agent_memory.max_gaps=0). ID: {entry['id']}."
@@ -231,10 +159,34 @@ HYPOTHESIS_STATUSES: tuple[str, ...] = (
     HYPOTHESIS_STATUS_CONFIRMED,
     HYPOTHESIS_STATUS_RETRACTED,
 )
-#: Set on the *prior* entry when a later one revises it. Never model-settable:
-#: it records a transition the store made, not a belief the model asserted, and
-#: mirrors the ``superseded`` / ``superseded_by`` pair on decision records.
-HYPOTHESIS_STATUS_SUPERSEDED = "superseded"
+#: The range the tool schema advertises for ``confidence``. Facts about a
+#: probability, not operational limits: 0.0 and 1.0 are the ends of the interval
+#: the field is defined on, and a policy able to widen them would be a policy
+#: able to accept a confidence of 42 -- which this store did until these
+#: existed. ``tool_arg_validation`` models ``type`` but not ``minimum`` /
+#: ``maximum``, so an advertised range is only kept if the function keeps it.
+_CONFIDENCE_MIN = 0.0
+_CONFIDENCE_MAX = 1.0
+
+#: The key that records supersession, on the entry that was revised: the list of
+#: ids that revised it, oldest first.
+#:
+#: Supersession is deliberately **structural, not a status**. Marking the prior
+#: entry ``status: "superseded"`` -- the shape this started with, mirroring a
+#: decision record's ``supersedes`` / ``superseded_by`` pair -- destroyed the
+#: very thing the store exists to keep: a hypothesis registered ``confirmed`` on
+#: evidence, then later revised, read back as ``superseded`` and the verdict the
+#: evidence produced was gone. A decision record can afford that because its
+#: status *is* a lifecycle state; a hypothesis's status is an epistemic verdict,
+#: and the two do not belong on one field. So ``status`` keeps what the model
+#: asserted for the life of the entry, and the presence of this key is what says
+#: the entry was later revised.
+#:
+#: It is a list because revision fans out: A revised by B, and A revised again
+#: by C on further evidence, are both real. A scalar recorded only the last and
+#: silently dropped the first, leaving the store holding two contradictory views
+#: of one graph -- ``revises`` naming both, ``superseded_by`` naming one.
+HYPOTHESIS_SUPERSEDED_BY = "superseded_by"
 
 
 def hypothesis_register(
@@ -251,15 +203,27 @@ def hypothesis_register(
     Record a provisional belief: 'I think X is true because Y.'
     Hypotheses can be updated or falsified later as evidence arrives.
 
-    Revision is append-only. A call carrying ``revises=<id>`` records a *new*
-    entry pointing at the prior one and marks the prior entry ``superseded``
-    with ``superseded_by`` set to the new id; the prior text is never edited,
-    so the trail of what was believed and when survives. A ``revises`` id the
-    store no longer holds (FIFO-trimmed, or mistyped) is still recorded, and
-    the result says the prior entry was not found. ``status`` defaults to
-    ``provisional``; ``confirmed`` and ``retracted`` are the settled states. A
-    status outside ``HYPOTHESIS_STATUSES`` is refused before anything is
-    written, as a ``failed`` result the model can correct.
+    Revision is append-only in the strong sense: a call carrying ``revises=<id>``
+    records a *new* entry pointing at the prior one, and the prior entry keeps
+    every field it was written with -- ``claim``, ``reasoning``, ``confidence``
+    and, importantly, the ``status`` its own evidence produced. It gains one
+    key, ``superseded_by``: the list of ids that revised it, oldest first. The
+    presence of that key is what says "later revised"; nothing is overwritten,
+    so the trail of what was believed, on what evidence, and in what order
+    survives intact. Revising one entry twice appends to that list rather than
+    replacing it, because two revisions of a belief are both real.
+
+    A ``revises`` id the store no longer holds (FIFO-trimmed, or mistyped) is
+    still recorded, and the result says the prior entry was not found.
+
+    ``status`` is the model's own verdict: ``provisional`` (default),
+    ``confirmed`` or ``retracted``. A value outside ``HYPOTHESIS_STATUSES`` --
+    ``superseded`` included, which is not a status at all -- is refused before
+    anything is written, as a ``failed`` result the model can correct.
+    ``confidence`` is held to the range the schema advertises for the same
+    reason: ``tool_arg_validation`` models ``type`` but neither ``enum`` nor
+    ``minimum`` / ``maximum``, so a promise made in the schema has to be kept
+    here or it is kept nowhere.
 
     When ``workspace_dir`` is set the entry is scoped under that workspace's
     ``.mango/memory/``; otherwise the legacy install-root store is used.
@@ -268,13 +232,35 @@ def hypothesis_register(
     (``None`` keeps the loader default).
     """
     from harness.shared.policy_loader import agent_memory_defaults
-    from harness.shared.tool_result_format import failed
 
     resolved_status = status or HYPOTHESIS_STATUS_PROVISIONAL
     if resolved_status not in HYPOTHESIS_STATUSES:
         allowed = ", ".join(HYPOTHESIS_STATUSES)
+        # WARNING, not DEBUG: the model asserted a state the store does not
+        # offer and nothing was written. `superseded` lands here too -- it is a
+        # structural fact the store records, never a verdict a caller may claim
+        # -- so this is also the audit line for an attempt to forge one. The
+        # dispatcher grades a `failed` outcome at DEBUG (FAILED is not in
+        # `DENIALS`), so without this a model looping on a bad status would be
+        # invisible at normal levels on both doors.
+        logger.warning(
+            "hypothesis rejected: status %r is not one of %s (nothing written)",
+            resolved_status,
+            allowed,
+        )
         return failed(f"Hypothesis not recorded: status {resolved_status!r} is not one of {allowed}.")
 
+    if not _CONFIDENCE_MIN <= confidence <= _CONFIDENCE_MAX:
+        logger.warning("hypothesis rejected: confidence outside the advertised range (nothing written)")
+        return failed(
+            f"Hypothesis not recorded: confidence {confidence!r} is outside "
+            f"the advertised range {_CONFIDENCE_MIN}-{_CONFIDENCE_MAX}."
+        )
+
+    # Normalised here rather than at the door so the store's contract holds for
+    # every caller. The dispatcher maps "" -> None, but a direct call can still
+    # pass whitespace, and " " is truthy.
+    revises_id = revises.strip() if isinstance(revises, str) else revises
     _, hypotheses_file = _ensure_memory_files(workspace_dir)
     entry: dict[str, typing.Any] = {
         "id": str(uuid.uuid4()),
@@ -284,34 +270,79 @@ def hypothesis_register(
         "confidence": confidence,
         "status": resolved_status,
     }
-    if revises:
-        entry["revises"] = revises
+    if revises_id:
+        entry["revises"] = revises_id
 
     max_hypotheses = agent_memory_defaults(policy_path)["max_hypotheses"]
     prior_found = False
-    with _file_lock(hypotheses_file):
-        hypotheses = _read_json_safe(hypotheses_file)
-        if revises:
-            for prior in hypotheses:
-                if isinstance(prior, dict) and prior.get("id") == revises:
-                    prior["status"] = HYPOTHESIS_STATUS_SUPERSEDED
-                    prior["superseded_by"] = entry["id"]
-                    prior_found = True
-        hypotheses.append(entry)
-        hypotheses = _fifo_trim(hypotheses, max_hypotheses, label="hypotheses")
 
-        temp_file = hypotheses_file.with_suffix(".tmp")
-        temp_file.write_text(json.dumps(hypotheses, indent=2), encoding="utf-8")
-        temp_file.replace(hypotheses_file)
+    def _mark_superseded(entries: list) -> None:
+        """Append this entry's id to every matching prior's successor list.
+
+        Runs inside the store lock (see ``append_locked``), so the read of the
+        prior and the write of its pointer cannot straddle a concurrent
+        revision and lose one of them.
+        """
+        nonlocal prior_found
+        for prior in entries:
+            if isinstance(prior, dict) and prior.get("id") == revises_id:
+                successors = prior.get(HYPOTHESIS_SUPERSEDED_BY)
+                # Tolerate a scalar written by an older build of this module
+                # rather than discarding it: the store outlives the code.
+                if isinstance(successors, str):
+                    successors = [successors]
+                elif not isinstance(successors, list):
+                    successors = []
+                if entry["id"] not in successors:
+                    successors.append(entry["id"])
+                prior[HYPOTHESIS_SUPERSEDED_BY] = successors
+                prior_found = True
+
+    hypotheses = append_locked(
+        hypotheses_file,
+        entry,
+        max_hypotheses,
+        label="hypotheses",
+        before_append=_mark_superseded if revises_id else None,
+    )
+
+    if revises_id:
+        # Ids, statuses and counts only -- never `claim` or `reasoning`, which
+        # are model-authored free text and follow the same no-content rule the
+        # dispatcher's tool events do (2026 standards audit H6).
+        if prior_found:
+            logger.info("hypothesis %s supersedes %s (status=%s)", entry["id"], revises_id, resolved_status)
+        else:
+            # INFO rather than WARNING: a pointer whose target aged out under
+            # `agent_memory.max_hypotheses` is retention working as configured,
+            # not a fault. Logged because a chain that silently loses its
+            # ancestor is otherwise indistinguishable from one that never had one.
+            logger.info(
+                "hypothesis %s names prior %s, which the store does not hold (trimmed or unknown)",
+                entry["id"],
+                revises_id,
+            )
+
+    # Built before the retention check so a revision under a disabled or
+    # exhausted bound still reports whether its pointer resolved. `prior_found`
+    # is what the store saw *inside the lock*; the trim that follows may then
+    # have dropped that very entry, and the message says so rather than claiming
+    # a supersession the reader cannot find on disk.
+    revision_note = ""
+    if revises_id:
+        if not prior_found:
+            revision_note = (
+                f" Prior entry {revises_id} not found (trimmed or unknown); recorded with the pointer anyway."
+            )
+        elif any(isinstance(h, dict) and h.get("id") == revises_id for h in hypotheses):
+            revision_note = f" Supersedes {revises_id}."
+        else:
+            revision_note = f" Supersedes {revises_id}, which retention then trimmed; the pointer is kept."
 
     if max_hypotheses == 0:
-        return f"Hypothesis entry not retained: retention disabled (agent_memory.max_hypotheses=0). ID: {entry['id']}."
-    revision_note = ""
-    if revises:
-        revision_note = (
-            f" Supersedes {revises}."
-            if prior_found
-            else f" Prior entry {revises} not found (trimmed or unknown); recorded with the pointer anyway."
+        return (
+            f"Hypothesis entry not retained: retention disabled "
+            f"(agent_memory.max_hypotheses=0). ID: {entry['id']}.{revision_note}"
         )
     return (
         f"Hypothesis registered successfully. ID: {entry['id']}. Status: {resolved_status}."

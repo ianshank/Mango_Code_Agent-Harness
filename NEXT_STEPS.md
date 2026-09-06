@@ -250,6 +250,7 @@ gated on R-SR-2).
 | **Phase E** (R-SR-26 … R-SR-29) | **NS-2 / R-SR-2 before any destructive slice.** DEC-053…056 (NS-31 / R-SR-5 / AC-5) are logged on #93 - PARK order stands: **JVM → LangGraph → openspec → mirroring**. Do not start Phase E code while the DEC-014 credential branch remains. Premature Phase E inverts DEC-024 (claimed readiness without the hard gate). |
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
 | **Context-window budget / HITL interrupts** | Budget needs policy key + spec (Phase B events exist). HITL needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). |
+| **Phase 2 · Surface open hypotheses to the reasoner** | The context-window budget row above. Revision shipped (DEC-057, `docs/specs/hypothesis-revision.md`); reading the store into a prompt is new prompt text on every run and needs an `agent_memory` exposure limit written against a real token bound, not a guessed one. `C-HR-2` pins that no prompt builder reads it until then. |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with DEC-053 park / revival. |
 | **`AC-CE-1` ProcessBackend capability profiles** | OS isolation is the permanent B4 fix; Phase B digest is containment only. |
 | **Eval harness / nightly live smoke** | Scoped `NVIDIA_API_KEY` in scheduled workflow (owner) + fixtures after openspec fold. |

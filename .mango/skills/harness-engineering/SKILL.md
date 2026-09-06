@@ -41,7 +41,9 @@ Harness = Instructions + Constraints + Feedback + Memory + Evaluation + Governan
   adding orchestration complexity unless task genuinely needs sub-agent delegation.
 - Context management: cheap-first. Never rely on conversation history for correctness --
   durable state lives outside the conversation. In this repository that means the
-  meta-tools (`knowledge_gap_log`, `hypothesis_register`, writing to `.mango/memory/`)
+  meta-tools (`knowledge_gap_log`, `hypothesis_register`, writing to `.mango/memory/`,
+  where a belief is corrected by appending a revision and the superseded one stays on
+  the record — DEC-057)
   and the `CognitiveSignal` sink — not `PLAN.md`/`NOTES.md`/`FAILURE_MEMORY.md`, none
   of which exist.
 - Verification: deterministic checks (tests, linters, type-checkers) always outrank
