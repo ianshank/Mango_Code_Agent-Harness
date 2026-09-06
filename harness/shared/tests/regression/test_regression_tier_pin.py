@@ -28,6 +28,7 @@ UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 REQUIRED_REGRESSION_MODULES = {
     "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
     "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
+    "test_context_window_budget_regression.py": "test_tool_group_survival_under_context_budget",
 }
 
 

@@ -99,6 +99,7 @@ graph TD
     subgraph Agentic_Orchestration ["MAS Orchestration Core (harness/shared)"]
         MAS["MangoMASOrchestrator (Facade)<br/>(mango_mas_orchestrator.py)"]
         Loop["ExecutionLoop<br/>(orchestrator/loop.py)"]
+        ContextPolicy["Context Policy<br/>(context_policy.py)<br/>policy-sourced token budget / group-atomic eviction"]
         Dispatch["ToolDispatcher<br/>(orchestrator/dispatcher.py)"]
         ArgCheck["Tool Argument Validation<br/>(tool_arg_validation.py)"]
         HookRunner["HookRunner<br/>(orchestrator/hook_runner.py)"]
@@ -126,6 +127,7 @@ graph TD
     APIServer -->|execute_loop| MAS
     MAS --> Loop
     LangGraph_Engine -.->|nodes wrap execute_agent, orchestrator passed via config| MAS
+    Loop -->|apply_context_policy on copy before complete_chat| ContextPolicy
     Loop --> Bridge
     Loop --> Dispatch
     Loop --> HookRunner
@@ -148,7 +150,11 @@ StateGraph's agent nodes (`langgraph/nodes.py`) wrap
 `MangoMASOrchestrator.execute_agent`, receiving the orchestrator through the
 graph's `configurable` config. Neither the facade nor `orchestrator/loop.py`
 imports LangGraph, and `build_graph` is reached only from the parked
-`experimental/autonomous_healing.py` (DEC-027). An earlier revision drew
+`experimental/autonomous_healing.py` (DEC-027). Before each `complete_chat`,
+`ExecutionLoop` shapes a **model-facing** copy of `conversation_history` through
+`context_policy.apply_context_policy` using `orchestrator.context_budget_tokens`
+/ `context_chars_per_token` from policy (audit H4); the full append-only history
+is retained for dumps and API responses. An earlier revision drew
 `Loop → LangGraph_Engine`, which reversed that dependency.
 
 ### 2.1 Detailed container view of `harness/shared` (from the v2.1.9 snapshot)
@@ -187,7 +193,7 @@ graph TD
         subgraph "Python Shared Runtime - harness/shared"
             PyBridge[nemotron_bridge.py<br/>Python Adapter — HTTP, auth, response shape]
             RetryPolicy[retry_policy.py<br/>Pure backoff arithmetic<br/>no I/O, no clock, no network]
-            Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner]
+            Orchestrator[mango_mas_orchestrator.py facade<br/>+ orchestrator/ loop, dispatcher, hook_runner<br/>+ context_policy.py budget eviction]
             DebugDump[debug_dump.py<br/>Credential redaction + debug dumps]
             MetaTools[meta_tools.py<br/>Meta-Learning Tools + file_lock]
             PyBridge -->|asks for a delay| RetryPolicy

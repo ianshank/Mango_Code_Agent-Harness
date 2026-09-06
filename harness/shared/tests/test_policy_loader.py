@@ -58,6 +58,8 @@ class TestSectionAccessors:
             "max_command_bytes": 4096,
             "max_healing_retries": 3,
             "max_output_bytes": 1234,
+            "context_budget_tokens": 9999,
+            "context_chars_per_token": 3.5,
         }
         p.write_text(json.dumps({"orchestrator": declared}), encoding="utf-8")
         assert orchestrator_defaults(p) == declared

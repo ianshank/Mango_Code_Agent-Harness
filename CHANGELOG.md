@@ -10,6 +10,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Feat: context-window budget on ExecutionLoop (audit H4)
+
+Policy-keyed `orchestrator.context_budget_tokens` /
+`context_chars_per_token` via `policy_loader`; pure
+`harness/shared/context_policy.py` evicts oldest tool-call groups
+atomically before each `complete_chat` while retaining full
+`conversation_history` for dumps/API. Structured `event=context_policy`
+logs include `run_id`. DEC-003 mango hooks stay dormant. Spec:
+`docs/specs/context-window-budget.md`.
+
 ### NS-34: decision records under docs/decisions/
 
 Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`
