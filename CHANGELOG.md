@@ -38,13 +38,24 @@ shared registry. Spec: `docs/specs/hypothesis-revision.md` (R-HR-1…7). The
 sequential-thinking MCP server was evaluated and not adopted; surfacing
 hypotheses into a prompt is deferred behind the context-window budget.
 
-### Decomposition: harness/shared/memory_store.py
+### Operator read path: `make memory-show`
+
+DEC-057 justifies revision by the trail it leaves for the verifier and the debug
+dump, but nothing could read that trail, so the justification was unverifiable.
+`make memory-show` prints both stores — each hypothesis with the verdict it was
+written with and its place in the revision graph. This does not reverse the
+phase-2 deferral: that is about prompt tokens, and printing on request adds none
+to any run. A test pins that no prompt builder imports the reader (C-HR-2).
+
+### Decomposition: memory_store.py, memory_view.py
 
 The revision path pushed `meta_tools.py` past `limits.size_budget_lines`, so the
-generic store mechanics — advisory file lock, malformed-file recovery, FIFO
-retention, and a single `append_locked` both writers now share instead of
-carrying near-identical copies of the read-modify-write — move to
-`harness/shared/memory_store.py`. `MEMORY_DIR` and the path helpers stay in
+module now divides in three by what each layer knows: `memory_store` is how a
+store behaves (lock, malformed-file recovery, FIFO retention, and a single
+`append_locked` both writers share instead of carrying near-identical copies of
+the read-modify-write), `meta_tools` is what a record means and how the model
+writes one, and `memory_view` is how a person reads them back. The dependency
+runs one way. `MEMORY_DIR` and the path helpers stay in
 `meta_tools`: they are this repository's layout, not store mechanics, and
 relocating that constant would silently break every test that monkeypatches it.
 Every moved name is re-exported, so `meta_tools.file_lock`,

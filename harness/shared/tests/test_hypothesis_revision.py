@@ -362,47 +362,165 @@ def test_hypothesis_store_is_not_surfaced_in_prompts():
         assert "hypothes" not in text.lower(), f"{rel} reads the hypothesis store; that is phase 2 (DEC-057)"
 
 
-def test_concurrent_revisions_of_one_entry_do_not_lose_a_link(tmp_path):
-    """Two writers revising the same prior entry at once must both be recorded.
+def test_no_field_of_a_prior_entry_changes_except_its_successor_list(tmp_path):
+    """The invariant both shipped defects violated, stated once.
 
-    The first concurrency test in this suite, and the revision path is what
-    earned it: every earlier store operation was a pure append, where a lost
-    update costs one new record. Revision is the first read-modify-*other
-    record*-write, so a writer that read the prior list outside the lock would
-    silently drop the other's supersession link -- the same data loss the
-    scalar `superseded_by` caused, arriving by a different route.
+    An append-only store may add to a prior record and may never alter what it
+    already said. The status overwrite and the scalar `superseded_by` were two
+    symptoms of breaking that; enumerating symptoms catches the two we thought
+    of, so this asserts the property instead and catches the next one too.
 
-    This is why `append_locked` takes `before_append` and runs it *inside* the
-    lock rather than letting callers mutate a list they read beforehand.
+    Deliberately snapshots the *whole* record and compares byte-for-byte with a
+    single key excused, rather than checking named fields -- a field added later
+    is then covered without anyone remembering to extend this test.
     """
-    import threading
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    for claim, status in (("A", "confirmed"), ("B", "retracted"), ("C", "provisional")):
+        hypothesis_register(claim, f"why {claim}", 0.75, workspace_dir=ws, status=status)
+    before = {e["id"]: json.dumps(e, sort_keys=True) for e in _hypotheses(ws)}
+    target = next(iter(before))
+
+    hypothesis_register("D", "new evidence", 0.1, workspace_dir=ws, revises=target, status="retracted")
+
+    for entry in _hypotheses(ws):
+        if entry["id"] not in before:
+            continue  # the revision itself
+        without_successors = {k: v for k, v in entry.items() if k != "superseded_by"}
+        assert json.dumps(without_successors, sort_keys=True) == before[entry["id"]], (
+            f"revision altered prior entry {entry['id']} beyond its successor list"
+        )
+    revised = next(e for e in _hypotheses(ws) if e["id"] == target)
+    assert revised["superseded_by"], "the one permitted change did not happen"
+
+
+def test_the_cross_record_update_runs_while_the_store_lock_is_held(tmp_path):
+    """The deterministic guard for concurrent revision.
+
+    A threading test cannot pin this: `threading.Barrier` only synchronises
+    entry into the writer, so after release either thread may run to completion
+    before the other is scheduled and the assertions pass on a serial execution.
+    Measured, that shape caught a deliberately lock-less implementation in
+    roughly two runs out of three -- a coin flip, not a guard.
+
+    What actually makes concurrent revision safe is that the read of the prior
+    record and the write of its pointer happen inside the same lock. That is
+    checkable directly and without a race: the callback asserts the lockfile
+    exists while it runs, so an implementation that moved the mutation outside
+    the lock fails this every time.
+    """
+    from harness.shared.memory_store import append_locked
+
+    store = tmp_path / "store.json"
+    store.write_text("[]", encoding="utf-8")
+    observed: list[bool] = []
+
+    def _before(entries: list) -> None:
+        observed.append(store.with_suffix(".lock").exists())
+
+    append_locked(store, {"id": "x"}, 10, label="probe", before_append=_before)
+
+    assert observed == [True], "before_append ran outside the store lock"
+    assert not store.with_suffix(".lock").exists(), "the lock outlived the write"
+
+
+def test_the_cross_record_update_sees_writes_from_earlier_calls(tmp_path):
+    """The other half of the same property: the callback is handed the store as
+    it currently is, not a list read before the lock was taken. A revision that
+    saw stale entries would fail to find a prior written moments earlier."""
+    from harness.shared.memory_store import append_locked
+
+    store = tmp_path / "store.json"
+    store.write_text("[]", encoding="utf-8")
+    append_locked(store, {"id": "first"}, 10, label="probe")
+
+    seen: list[list] = []
+    append_locked(store, {"id": "second"}, 10, label="probe", before_append=lambda e: seen.append([x["id"] for x in e]))
+    assert seen == [["first"]]
+
+
+def test_a_raising_before_append_writes_nothing_and_frees_the_lock(tmp_path):
+    """A callback is caller code and may raise. The store must be unchanged and
+    the lock released, or one bad revision would wedge every later writer."""
+    from harness.shared.memory_store import append_locked
+
+    store = tmp_path / "store.json"
+    store.write_text('[{"id": "keep"}]', encoding="utf-8")
+
+    def _boom(entries: list) -> None:
+        entries.clear()  # prove even a mutation before the raise is not persisted
+        raise RuntimeError("callback failed")
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        append_locked(store, {"id": "new"}, 10, label="probe", before_append=_boom)
+
+    assert json.loads(store.read_text(encoding="utf-8")) == [{"id": "keep"}]
+    assert not store.with_suffix(".lock").exists(), "a raising callback stranded the lock"
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_confidence_is_refused(tmp_path, bad):
+    """R-HR-6 for the values that reach the tool by an accident of JSON.
+
+    ``NaN`` and ``Infinity`` are not valid JSON, but ``json.loads`` accepts the
+    literals by default -- and ``_normalize_tool_arguments`` uses the default.
+    They then pass ``tool_arg_validation`` (both are genuine ``float``s, and the
+    validator models ``type`` only), so a model emitting
+    ``{"confidence": NaN}`` reaches this function with a non-finite value.
+
+    The guard refuses them because it is written as the chained comparison
+    ``not _CONFIDENCE_MIN <= confidence <= _CONFIDENCE_MAX``: every comparison
+    against NaN is False, so the chain is False and the negation refuses. The
+    obvious-looking rewrite ``if confidence < MIN or confidence > MAX`` would
+    **accept** NaN for exactly the same reason. That is why this is pinned
+    rather than left to the range test above.
+    """
+    from harness.shared.tool_result_format import FAILED, tool_outcome
 
     ws = tmp_path / "ws"
     ws.mkdir()
-    target = _entry_id(hypothesis_register("A", "r", 0.5, workspace_dir=ws))
+    result = hypothesis_register("c", "r", bad, workspace_dir=ws)
+    assert tool_outcome(result) == FAILED
+    assert "confidence" in result
+    assert not (ws / ".mango" / "memory" / "hypotheses.json").exists()
 
-    barrier = threading.Barrier(2)
-    errors: list[BaseException] = []
 
-    def _revise(claim: str) -> None:
-        try:
-            barrier.wait(timeout=10)
-            hypothesis_register(claim, "r", 0.5, workspace_dir=ws, revises=target, status="retracted")
-        except BaseException as exc:  # noqa: BLE001 - surfaced by the assertion below
-            errors.append(exc)
+def test_a_revision_under_disabled_retention_still_reports_its_pointer(tmp_path):
+    """R-HR-3 at the retention floor. The result is built before the
+    retention-disabled early return, so a revision made when nothing can be
+    kept still tells the model whether its pointer resolved -- previously that
+    branch returned first and dropped the note entirely."""
+    policy = _agent_memory_policy(tmp_path, max_gaps=100, max_hypotheses=0, planner_gap_limit=10)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = hypothesis_register("c", "r", 0.5, workspace_dir=ws, policy_path=policy, revises="some-id")
+    assert "not retained" in result.lower() or "retention disabled" in result.lower()
+    assert "some-id" in result, "a revision must report its pointer even when nothing is kept"
+    assert "nothing was kept" in result, "the result must not claim a pointer is kept when the bound is zero"
+    assert "the pointer is kept" not in result
+    assert json.loads((ws / ".mango" / "memory" / "hypotheses.json").read_text(encoding="utf-8")) == []
 
-    threads = [threading.Thread(target=_revise, args=(name,)) for name in ("B", "C")]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=30)
 
-    assert not errors, f"a concurrent revision raised: {errors}"
-    entries = _hypotheses(ws)
-    assert len(entries) == 3, "both revisions must be appended"
+def test_a_boolean_confidence_is_refused_like_the_schema_door_refuses_it(tmp_path):
+    """`True` equals 1 and so satisfies the range check, and would be stored as
+    JSON `true`. `tool_arg_validation` already refuses a boolean for a `number`
+    field, so accepting one here would leave the store's contract weaker than
+    the door's for any direct caller."""
+    from harness.shared.tool_result_format import FAILED, tool_outcome
 
-    prior = next(e for e in entries if e["id"] == target)
-    successors = prior["superseded_by"]
-    revisers = {e["id"] for e in entries if e.get("revises") == target}
-    assert len(successors) == 2, f"a supersession link was lost under contention: {successors}"
-    assert set(successors) == revisers, "the forward and backward views disagree after concurrent revision"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = hypothesis_register("c", "r", True, workspace_dir=ws)
+    assert tool_outcome(result) == FAILED
+    assert not (ws / ".mango" / "memory" / "hypotheses.json").exists()
+
+
+def test_a_store_that_vanishes_before_the_lock_is_treated_as_empty(tmp_path):
+    """`_ensure_memory_files` creates the store, but a cleaned workspace or a
+    concurrent removal can delete it before the lock is taken. An absent store
+    is an empty one; raising would surface as a `RAISED` outcome on one door and
+    an exception to library callers, where every other failure is a readable
+    string."""
+    from harness.shared.memory_store import _read_json_safe
+
+    assert _read_json_safe(tmp_path / "never-existed.json") == []

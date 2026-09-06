@@ -72,6 +72,14 @@ def _read_json_safe(file_path: Path) -> list:
         if not isinstance(data, list):
             raise ValueError("Expected JSON list")
         return data
+    except FileNotFoundError:
+        # The store can vanish between `_ensure_memory_files` and the lock (a
+        # cleaned workspace, a concurrent `rm -rf`). An absent store is an empty
+        # one; raising here would surface as a `RAISED` tool outcome on one door
+        # and an exception to library callers, where every other failure mode is
+        # a `failed` string the model can read.
+        logger.info("Memory store %s is absent; treating as empty", file_path)
+        return []
     except (json.JSONDecodeError, ValueError) as exc:
         backup_path = file_path.with_name(f"{file_path.name}.malformed.{int(time.time())}")
         try:

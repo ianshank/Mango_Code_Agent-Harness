@@ -10,11 +10,17 @@ is used for backward compatibility. Retention bounds come from
 
 The generic store mechanics -- the advisory file lock, malformed-file recovery,
 FIFO retention and the atomic append -- live in ``harness.shared.memory_store``
-and are re-exported here unchanged, so ``meta_tools.file_lock``,
-``meta_tools._read_json_safe`` and the rest keep resolving for every existing
-caller. ``MEMORY_DIR`` and the path helpers that read it stay here on purpose:
-they are this repository's layout rather than store mechanics, and moving the
-constant would have silently broken every test that monkeypatches it.
+and are re-exported here under their original names, so every caller that reads
+``meta_tools.file_lock`` or ``meta_tools._read_json_safe`` still resolves them.
+
+That re-export is for *reading* the names. It is deliberately not a claim that
+they can be monkeypatched here: ``append_locked`` resolves its collaborators
+from ``memory_store``'s own namespace, so patching ``meta_tools._read_json_safe``
+would rebind a name the write path never consults. Patch them on
+``memory_store``. ``MEMORY_DIR`` and the path helpers that read it are the
+exception and stay in this module on purpose -- they are this repository's
+layout rather than store mechanics, and relocating that constant would have
+silently broken every existing test that patches it.
 
 Revision semantics are specified in ``docs/specs/hypothesis-revision.md`` and
 decided in ``docs/decisions/DEC-057.md``.
@@ -250,7 +256,11 @@ def hypothesis_register(
         )
         return failed(f"Hypothesis not recorded: status {resolved_status!r} is not one of {allowed}.")
 
-    if not _CONFIDENCE_MIN <= confidence <= _CONFIDENCE_MAX:
+    # `isinstance(confidence, bool)` first: `True` satisfies the range check
+    # (it equals 1) and would be stored as JSON `true`. The schema door already
+    # refuses a boolean for a `number` field, so accepting one here would make
+    # the store's contract weaker than the door's for direct callers.
+    if isinstance(confidence, bool) or not _CONFIDENCE_MIN <= confidence <= _CONFIDENCE_MAX:
         logger.warning("hypothesis rejected: confidence outside the advertised range (nothing written)")
         return failed(
             f"Hypothesis not recorded: confidence {confidence!r} is outside "
@@ -340,9 +350,18 @@ def hypothesis_register(
             revision_note = f" Supersedes {revises_id}, which retention then trimmed; the pointer is kept."
 
     if max_hypotheses == 0:
+        # The revision note above describes a store that still holds something.
+        # Under a zero bound nothing does -- not the prior entry, not this one --
+        # so the pointer is reported as observed-then-discarded rather than kept.
+        zero_note = ""
+        if revises_id:
+            zero_note = (
+                f" Prior entry {revises_id} was {'found' if prior_found else 'not found'}, "
+                "but retention is disabled so nothing was kept."
+            )
         return (
             f"Hypothesis entry not retained: retention disabled "
-            f"(agent_memory.max_hypotheses=0). ID: {entry['id']}.{revision_note}"
+            f"(agent_memory.max_hypotheses=0). ID: {entry['id']}.{zero_note}"
         )
     return (
         f"Hypothesis registered successfully. ID: {entry['id']}. Status: {resolved_status}."
@@ -424,10 +443,15 @@ META_TOOLS_SCHEMA = [
         "function": {
             "name": "hypothesis_register",
             "description": (
-                "Record a provisional belief: 'I think X is true because Y.' "
-                "To revise an earlier belief once evidence arrives, call again with 'revises' set to "
-                "that entry's ID and 'status' set to 'confirmed' or 'retracted'; the earlier entry is "
-                "kept and marked superseded."
+                "Record a belief: 'I think X is true because Y.' Set 'status' on any call: "
+                "'provisional' (the default) when the claim is unsettled, or 'confirmed'/'retracted' "
+                "when evidence already settles it. "
+                "When later evidence bears on a claim you already registered, revise it: call again "
+                "with 'revises' set to that entry's ID. That ID is returned in this tool's result and "
+                "is the only place you will see it, so keep it. Revise when the new evidence concerns "
+                "the SAME claim; register a fresh hypothesis for a different claim. The earlier entry "
+                "is kept exactly as written -- including the status its own evidence produced -- and "
+                "records this new entry as one that superseded it."
             ),
             "parameters": {
                 "type": "object",

@@ -57,6 +57,11 @@ offers.
 - R-HR-6: `confidence` MUST be held to the 0.0-1.0 range the schema advertises,
   refused with a `failed` outcome before any write, on the same grounds as
   R-HR-4: `tool_arg_validation` models neither `enum` nor `minimum`/`maximum`.
+  The bound MUST reject non-finite values. `json.loads` accepts the `NaN` and
+  `Infinity` literals by default, and both satisfy the schema's `number` type,
+  so they reach the store through the ordinary tool path; the guard is written
+  as a chained comparison because the equivalent-looking
+  `confidence < MIN or confidence > MAX` accepts `NaN`.
 - R-HR-7: Each refusal and each supersession MUST emit a log line carrying ids,
   statuses and counts only -- never `claim` or `reasoning` (2026 standards audit
   H6). Refusals MUST log at WARNING, because the dispatcher grades a `failed`
@@ -75,68 +80,92 @@ offers.
       keeps claim, reasoning, confidence **and status**, gaining only
       `superseded_by: [<new id>]` —
       `pytest -k test_hypothesis_revision_supersedes_prior_entry`
-      · stage: `make test-python` (R-HR-1, R-HR-2)
+      · stage: `make coverage` (R-HR-1, R-HR-2)
 - [ ] AC-10: an entry registered `confirmed` still reads `confirmed` after being
       revised — `pytest -k test_a_revised_entry_keeps_the_status_its_own_evidence_produced`
-      · stage: `make test-python` (R-HR-1)
+      · stage: `make coverage` (R-HR-1)
 - [ ] AC-11: two revisions of one entry both appear in its `superseded_by`, and
       the forward and backward views of the graph agree —
       `pytest -k test_two_revisions_of_one_entry_both_stay_linked`
-      · stage: `make test-python` (R-HR-2)
+      · stage: `make coverage` (R-HR-2)
 - [ ] AC-12: `status="superseded"` is refused and `superseded` is absent from
       `HYPOTHESIS_STATUSES` — `pytest -k test_superseded_is_not_a_model_settable_status`
-      · stage: `make test-python` (R-HR-2)
+      · stage: `make coverage` (R-HR-2)
 - [ ] AC-13: a confidence of -0.1, 1.1 or 42.0 is refused and nothing is written,
       while 0.0 and 1.0 are accepted —
       `pytest -k test_confidence_outside_the_advertised_range_is_refused` and
       `pytest -k test_confidence_at_the_range_boundaries_is_accepted`
-      · stage: `make test-python` (R-HR-6)
+      · stage: `make coverage` (R-HR-6)
 - [ ] AC-14: a supersession logs the ids but never the claim text, and a dangling
       pointer logs at INFO rather than WARNING —
       `pytest -k test_revision_logs_the_supersede_without_leaking_claim_text` and
       `pytest -k test_dangling_pointer_is_logged_as_retention_not_as_a_fault`
-      · stage: `make test-python` (R-HR-7)
+      · stage: `make coverage` (R-HR-7)
 - [ ] AC-15: two threads revising one entry simultaneously both appear in its
       `superseded_by` and the forward/backward views agree —
       `pytest -k test_concurrent_revisions_of_one_entry_do_not_lose_a_link`
-      · stage: `make test-python` (R-HR-2)
+      · stage: `make coverage` (R-HR-2)
+- [ ] AC-16: `NaN` and `±Infinity` confidences are refused and nothing is
+      written — `pytest -k test_non_finite_confidence_is_refused`
+      · stage: `make coverage` (R-HR-6)
+- [ ] AC-17: a revision made under `max_hypotheses=0` reports its pointer and
+      does **not** claim anything was kept —
+      `pytest -k test_a_revision_under_disabled_retention_still_reports_its_pointer`
+      · stage: `make coverage` (R-HR-3)
+- [ ] AC-18: `make memory-show` renders a revised entry with its own status and
+      both ends of the revision graph, and no prompt builder imports the reader —
+      `pytest -k test_the_revision_graph_is_legible_from_both_ends` and
+      `pytest -k test_the_reader_is_not_wired_into_any_prompt_or_gate`
+      · stage: `make coverage` (R-HR-1, C-HR-2)
+- [ ] AC-19: no field of a prior entry changes except its successor list, over a
+      whole-record byte comparison —
+      `pytest -k test_no_field_of_a_prior_entry_changes_except_its_successor_list`
+      · stage: `make coverage` (R-HR-1, R-HR-2)
+- [ ] AC-20: the cross-record update runs with the store lock held, and a
+      raising callback writes nothing and frees the lock —
+      `pytest -k test_the_cross_record_update_runs_while_the_store_lock_is_held` and
+      `pytest -k test_a_raising_before_append_writes_nothing_and_frees_the_lock`
+      · stage: `make coverage` (R-HR-2)
 - [ ] AC-2: a `revises` id absent from the store is recorded with the pointer and
       the result reports `not found` —
       `pytest -k test_hypothesis_revision_with_unknown_prior_is_recorded_and_reported`
-      · stage: `make test-python` (R-HR-3)
+      · stage: `make coverage` (R-HR-3)
 - [ ] AC-3: an unknown `status` is refused with `tool_outcome(result) == FAILED`
       and the store on disk is still `[]` —
       `pytest -k test_hypothesis_register_refuses_unknown_status_and_writes_nothing`
-      · stage: `make test-python` (R-HR-4)
+      · stage: `make coverage` (R-HR-4)
 - [ ] AC-4: no `status` writes `provisional`; `confirmed` and `retracted` are
       stored; an unrevised entry carries no `revises` key —
       `pytest -k test_hypothesis_status_defaults_to_provisional_and_accepts_settled_states`
-      · stage: `make test-python` (R-HR-4, C-HR-1)
+      · stage: `make coverage` (R-HR-4, C-HR-1)
 - [ ] AC-5: with `max_hypotheses=2` the prior entry is trimmed after the revision
       and the revision keeps its pointer —
       `pytest -k test_hypothesis_revision_survives_fifo_trim`
-      · stage: `make test-python` (R-HR-3, C-HR-1)
+      · stage: `make coverage` (R-HR-3, C-HR-1)
 - [ ] AC-6: the dispatcher forwards `revises` and `status`, and maps `""` to
       `None` — `pytest -k test_hypothesis_register_forwards_revision_fields`
-      · stage: `make test-python` (R-HR-5)
+      · stage: `make coverage` (R-HR-5)
 - [ ] AC-7: the MCP door accepts the two optional fields and returns the
       not-found note — `pytest -k test_mcp_server_execute_tool_success`
-      · stage: `make test-python` (R-HR-5). The stage is deliberately not
-      `make test-mcp`: that target exists but is reachable from neither `ci`
-      nor `ci-python`, so citing it would name a gate CI never invokes — the
-      INV-5 gate-truthfulness shape. `coverage-python` sweeps `$(SHARED_TESTS)/`,
-      which is how this module actually runs on every PR.
+      · stage: `make coverage` (R-HR-5). Every stage in this document is
+      `make coverage` for one reason, worth stating because two other targets
+      look like the obvious citation and neither is honest. `make test-mcp` and
+      `make test-python` both exist and both run these tests, but `ci` and
+      `ci-python` invoke *neither* — they reach `coverage`, whose
+      `coverage-python` recipe sweeps the same `$(SHARED_TESTS)/` path list.
+      Citing a target CI never invokes is the INV-5 gate-truthfulness shape,
+      so the criteria name the gate that actually runs on every PR.
 - [ ] AC-8: the pre-existing pins pass unmodified: `required` still names three
       properties and `additionalProperties` is still `False` —
       `pytest -k TestSchemaInternalConsistency`; the persona still lists the tool
       — `pytest -k test_reasoner_frontmatter_tools_list_includes_meta_tools`;
       declaration, action map and registry remain equal sets —
       `pytest -k test_every_declared_tool_has_a_handler`
-      · stage: `make test-python` (C-HR-1)
+      · stage: `make coverage` (C-HR-1)
 - [ ] AC-9: neither `harness/shared/agent_prompts.py` nor
       `harness/shared/orchestrator/loop.py` references the hypothesis store —
       `pytest -k test_hypothesis_store_is_not_surfaced_in_prompts`
-      · stage: `make test-python` (C-HR-2)
+      · stage: `make coverage` (C-HR-2)
 
 ## Steps
 
@@ -161,6 +190,13 @@ offers.
   recovery, retention, `append_locked`) split out when the revision path pushed
   `meta_tools.py` past `limits.size_budget_lines`. `MEMORY_DIR` and the path
   helpers stay behind deliberately (DEC-057)
+- `harness/shared/memory_view.py` — new; rendering the stores for a human
+  (`load_hypotheses`, `format_hypotheses_for_review`, `successors_of`). The
+  third layer of the same split; nothing in the agent loop imports it (C-HR-2)
+- `harness/shared/show_memory.py` — new; the `make memory-show` CLI over that
+  view, so the trail DEC-057 justifies the change by is actually readable
+- `Makefile` — **protected**; adds the `memory-show` target
+- `harness/shared/tests/test_show_memory.py` — new (AC-18)
 - `harness/shared/tests/test_hypothesis_revision.py` — new; the revision suite,
   split from `test_meta_tools.py` at `limits.test_size_budget_lines`
 - `harness/shared/tests/test_constant_triage.py` — the three lock-timing rows
@@ -205,8 +241,8 @@ request description, produced by `make attestation`.
 
 ## Validation matrix
 
-- `make test-python` — AC-1 … AC-6, AC-8 … AC-15
-- `make test-mcp` — AC-7
+- `make coverage` — AC-1 … AC-6, AC-8 … AC-20 (the suite plus the coverage floors)
+- `make coverage` — AC-7 (the MCP suite runs in the same sweep)
 - `make specs` — the plan gate over this document (INV-17)
 - `make coverage` — per-file floor from `governance-policy.json → coverage.lines`
 - `ALLOW_GITHUB_CHANGES=1 make validate` — protected paths, with the attestation

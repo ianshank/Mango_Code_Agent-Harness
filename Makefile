@@ -203,6 +203,10 @@ verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last c
 		--waivers $(SHARED_TESTS)/skip-waivers.json
 
 # --- Governance Validators ---
+.PHONY: memory-show
+memory-show: ## Print the agent memory stores (WORKSPACE=<dir> LIMIT=<n> STORE=gaps|hypotheses)
+	$(PYTHON) -m harness.shared.show_memory $(if $(WORKSPACE),--workspace $(WORKSPACE),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(STORE),--store $(STORE),)
+
 .PHONY: decision-index
 decision-index: ## Regenerate docs/decisions/index.{md,json} and the thin node decision-log
 	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root .
