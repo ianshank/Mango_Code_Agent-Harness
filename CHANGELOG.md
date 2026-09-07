@@ -129,6 +129,33 @@ attestations each time — and the report that proposed one priced none of it.
   correctly — a file inside the policy threshold is not a violation — but the next
   change to each was a security fix that arrived with no room, which is the
   argument for treating headroom as something a module owes the next change.
+- **A supplied policy could disarm both write-door checks.** `load_python_write_suffixes`
+  and `load_prohibited_symbols` substituted a supplied policy's lists for the
+  harness ones, so a digest-pinned policy could drop four of the five prohibited
+  symbols and, by dropping `.py` from the suffix list, switch the
+  prohibited-symbol check off for Python output entirely. Pinning establishes
+  provenance, not benignity. `write_policy` had already settled this in the other
+  direction — a supplied policy "is unioned with the harness policy rather than
+  substituted for it" (R-PPP-1) — and these two accessors, one section over in the
+  same policy file, had not applied it. Both now union onto the harness floor, and
+  a dropped entry is reported rather than obeyed. One of the tests defending the
+  old behaviour asserted the vulnerability *as a feature*: it required the supplied
+  list to be the whole answer and cited that as proof the set came from policy
+  rather than a literal — a property tested in the wrong direction, which is worse
+  than an untested one because a reader has no reason to look again.
+- **Three more resolvers answered a narrower question than they were asked.**
+  `getattr(broker, "execute_command")(cmd, ctx)` produced no call *and* no
+  reference, so it was invisible while the five direct sites kept the emptiness
+  guard green; a literal handed to an unanalysed helper
+  (`add_approval(context, caller_value)`) stayed classified clean though the helper
+  can add the flag; and `add_edge(START, 'typo')` with no `typo` node returned an
+  internally inconsistent topology. Each is closed, each reproduced first.
+  DEC-065's own prose had the same defect — it recorded a method fetched by a
+  *computed* name as out of scope, which is true, and was read as covering the
+  statically-decidable literal, which it is not. Corrected in place rather than
+  deleted, because the deletion would lose the fact that the boundary was drawn in
+  the wrong place once. Prose is as capable of that gap as code, with less to catch
+  it: no gate runs over a decision record.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide
