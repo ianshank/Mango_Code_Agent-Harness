@@ -155,7 +155,7 @@ test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, 
 
 .PHONY: test-mcp
 test-mcp: ## Run Model Context Protocol (MCP) server tests
-	$(PYTEST) $(SHARED_TESTS)/test_mcp_server.py -m "not live" -v
+	$(PYTEST) $(SHARED_TESTS)/test_mcp_server*.py -m "not live" -v
 
 .PHONY: test-lats
 test-lats: ## Run LATS Optimizer and Ablation state forking tests

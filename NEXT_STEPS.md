@@ -55,7 +55,14 @@ skill, then `make pre-pr`.
 | PR-9 | Major | §4 Phase E still blocked on NS-31; DEC-053…056 exist on #93. | Phase E retargeted to **NS-2** before destructive slices. |
 | PR-10 | Major | NS-9 / NS-34 still treated NS-31 undecided; PARK decided (DEC-053). | NS-9 moves with park; NS-34 Depends on nothing mechanical (DECs logged). |
 | PR-11 | Product | NS-17 open on #97; Copilot: `policy_path` not plumbed into `agent_memory_defaults` / gap injection. | **Closed:** #97 landed `policy_path` + mutation + zero-bound messaging; moved to §6 with NS-34. |
-| PR-12 | Unchanged P0 | Re-queried: ruleset `[]`; tip `58490c1`; branch `5970249…`; 0 tags; `license: null`. | NS-1 / NS-2 / NS-3 / NS-30 stay P0. |
+
+### 2026-09-07 third peer-rewrite findings (verified)
+
+| ID | Severity | Finding | Effect on this file |
+|---|---|---|---|
+| PR-13 | **Blocker (architecture)** | `harness/shared/tests/test_mcp_server.py` reached 696 lines against 700 limit (4 lines headroom); `harness/shared/langgraph/nodes.py` reached 482 lines against 500 limit (18 lines headroom). | Decomposed `test_mcp_server.py` into lifecycle and dispatch modules with `_mcp_helpers.py` doubles; decomposed `nodes.py` into `node_reasons.py`, `node_executors.py`, and `nodes.py` facade. All modules now < 300 lines with > 65 lines headroom repository-wide. |
+| PR-14 | Major | Regression test pins (`test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, `test_scan_findings_windows_waiver.py`) carried silent `pytest.skip()` calls when target files were missing, violating zero-skip policy. | Replaced skips with strict assertions; added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for IDE execution. |
+| PR-15 | Minor | Agent skills for god-file decomposition and regression pin authoring lacked codification in `.mango/skills/` and `.agents/skills/`. | Authored, validated, and registered `god-file-decomposer` and `regression-pin-author` skills. |
 
 ---
 

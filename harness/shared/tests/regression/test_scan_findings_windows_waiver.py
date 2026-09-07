@@ -8,28 +8,34 @@ is present, schema-valid, and not expired.
 from __future__ import annotations
 
 import json
+import logging
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+# Ensure repository root is on sys.path so direct execution or test runners without cwd on path succeed
 REPO = Path(__file__).resolve().parents[4]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+logger = logging.getLogger(__name__)
+
 WAIVERS_PATH = REPO / "harness" / "shared" / "tests" / "skip-waivers.json"
 TARGET_GLOB = "harness/shared/tests/test_check_secret_allowlist.py::TestScanFindings::*"
 TARGET_DEC = "DEC-061"
 
 
 def _load_waivers() -> list[dict[str, Any]]:
-    if not WAIVERS_PATH.exists():
-        pytest.fail(f"skip-waivers.json not found at {WAIVERS_PATH}")
+    assert WAIVERS_PATH.is_file(), f"skip-waivers.json not found at {WAIVERS_PATH}"
     raw = json.loads(WAIVERS_PATH.read_text(encoding="utf-8"))
     if isinstance(raw, list):
         return raw
     # Standard schema: {"schema_version": ..., "waivers": [...]}
     waivers = raw.get("waivers", [])
-    if not isinstance(waivers, list):
-        pytest.fail(f"skip-waivers.json 'waivers' key is not a list, got {type(waivers).__name__}")
+    assert isinstance(waivers, list), f"skip-waivers.json 'waivers' key is not a list, got {type(waivers).__name__}"
     return waivers
 
 
@@ -58,8 +64,7 @@ def test_scan_findings_waiver_has_required_fields() -> None:
     """The DEC-061 waiver must contain all required schema fields."""
     waivers = _load_waivers()
     waiver = _find_scan_findings_waiver(waivers)
-    if waiver is None:
-        pytest.skip("No DEC-061 waiver found (test_scan_findings_waiver_exists will catch this)")
+    assert waiver is not None, f"DEC-061 waiver missing in {WAIVERS_PATH}"
 
     required_fields = {"framework", "unique_id_glob", "decision_id", "reason", "owner", "expires"}
     missing = required_fields - set(waiver.keys())
@@ -70,8 +75,7 @@ def test_scan_findings_waiver_not_expired() -> None:
     """The DEC-061 waiver expiry must be in the future."""
     waivers = _load_waivers()
     waiver = _find_scan_findings_waiver(waivers)
-    if waiver is None:
-        pytest.skip("No DEC-061 waiver found (test_scan_findings_waiver_exists will catch this)")
+    assert waiver is not None, f"DEC-061 waiver missing in {WAIVERS_PATH}"
 
     expires_str = waiver.get("expires", "")
     try:
@@ -90,9 +94,12 @@ def test_scan_findings_waiver_glob_covers_class() -> None:
     """The waiver glob must cover all TestScanFindings test methods."""
     waivers = _load_waivers()
     waiver = _find_scan_findings_waiver(waivers)
-    if waiver is None:
-        pytest.skip("No DEC-061 waiver found (test_scan_findings_waiver_exists will catch this)")
+    assert waiver is not None, f"DEC-061 waiver missing in {WAIVERS_PATH}"
 
     glob = waiver.get("unique_id_glob", "")
     assert "TestScanFindings" in glob, f"Waiver glob {glob!r} does not cover TestScanFindings class"
     assert glob.endswith(("::*", "*")), f"Waiver glob {glob!r} should use a wildcard suffix to cover all test methods"
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))

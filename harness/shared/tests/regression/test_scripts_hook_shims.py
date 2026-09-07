@@ -1,20 +1,29 @@
 """AQA-001: Regression pin for scripts/ hook shims introduced in HOOK-1 fix.
 
 Verifies:
-- scripts/verify-tier-a.sh exists
-- scripts/guard-forbidden-paths.sh exists
+- scripts/verify-tier-a.sh exists and is executable
+- scripts/guard-forbidden-paths.sh exists and is executable
 - Neither file contains any hard-coded paths (Windows drive letters, home dirs, CI env paths)
 - Both files reference the Makefile / validate_invariants.py dynamically
 """
 
 from __future__ import annotations
 
+import logging
 import re
+import sys
 from pathlib import Path
 
 import pytest
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[4] / "scripts"
+# Ensure repository root is on sys.path so direct execution or test runners without cwd on path succeed
+REPO = Path(__file__).resolve().parents[4]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+logger = logging.getLogger(__name__)
+
+SCRIPTS_DIR = REPO / "scripts"
 VERIFY_SHIM = SCRIPTS_DIR / "verify-tier-a.sh"
 GUARD_SHIM = SCRIPTS_DIR / "guard-forbidden-paths.sh"
 
@@ -41,9 +50,8 @@ def test_hook_shim_exists(shim: Path) -> None:
 
 @pytest.mark.parametrize("shim", [VERIFY_SHIM, GUARD_SHIM])
 def test_hook_shim_has_bash_shebang(shim: Path) -> None:
-    """Shims must have a valid bash shebang — bare sh is not reliable cross-distro."""
-    if not shim.exists():
-        pytest.skip(f"{shim.name} does not exist (HOOK-1 not yet fixed)")
+    """Shims must have a valid bash shebang -- bare sh is not reliable cross-distro."""
+    assert shim.is_file(), f"{shim.name} does not exist at {shim} (HOOK-1 regression)"
     first_line = shim.read_text(encoding="utf-8").splitlines()[0]
     assert first_line.startswith("#!/"), f"{shim.name}: first line must be a shebang, got {first_line!r}"
     assert "bash" in first_line or "env" in first_line, (
@@ -54,8 +62,7 @@ def test_hook_shim_has_bash_shebang(shim: Path) -> None:
 @pytest.mark.parametrize("shim", [VERIFY_SHIM, GUARD_SHIM])
 def test_hook_shim_has_no_hardcoded_paths(shim: Path) -> None:
     """Shims must not contain any hard-coded absolute paths (DRY / portability)."""
-    if not shim.exists():
-        pytest.skip(f"{shim.name} does not exist (HOOK-1 not yet fixed)")
+    assert shim.is_file(), f"{shim.name} does not exist at {shim} (HOOK-1 regression)"
     content = shim.read_text(encoding="utf-8")
     for pattern in _HARDCODED_PATTERNS:
         match = pattern.search(content)
@@ -67,8 +74,7 @@ def test_hook_shim_has_no_hardcoded_paths(shim: Path) -> None:
 
 def test_verify_tier_a_delegates_to_makefile() -> None:
     """verify-tier-a.sh must invoke `make` (delegates to Makefile, not ad-hoc commands)."""
-    if not VERIFY_SHIM.exists():
-        pytest.skip("verify-tier-a.sh does not exist (HOOK-1 not yet fixed)")
+    assert VERIFY_SHIM.is_file(), f"verify-tier-a.sh does not exist at {VERIFY_SHIM} (HOOK-1 regression)"
     content = VERIFY_SHIM.read_text(encoding="utf-8")
     assert "make" in content, (
         "verify-tier-a.sh must delegate to the Makefile (contains `make`). "
@@ -78,8 +84,7 @@ def test_verify_tier_a_delegates_to_makefile() -> None:
 
 def test_guard_shim_uses_validate_invariants() -> None:
     """guard-forbidden-paths.sh must reference validate_invariants (uses canonical API)."""
-    if not GUARD_SHIM.exists():
-        pytest.skip("guard-forbidden-paths.sh does not exist (HOOK-1 not yet fixed)")
+    assert GUARD_SHIM.is_file(), f"guard-forbidden-paths.sh does not exist at {GUARD_SHIM} (HOOK-1 regression)"
     content = GUARD_SHIM.read_text(encoding="utf-8")
     assert "validate_invariants" in content, (
         "guard-forbidden-paths.sh must use validate_invariants for protected-path checking. "
@@ -90,9 +95,12 @@ def test_guard_shim_uses_validate_invariants() -> None:
 
 def test_guard_shim_uses_dynamic_repo_root() -> None:
     """guard-forbidden-paths.sh must resolve REPO_ROOT dynamically, not hardcoded."""
-    if not GUARD_SHIM.exists():
-        pytest.skip("guard-forbidden-paths.sh does not exist (HOOK-1 not yet fixed)")
+    assert GUARD_SHIM.is_file(), f"guard-forbidden-paths.sh does not exist at {GUARD_SHIM} (HOOK-1 regression)"
     content = GUARD_SHIM.read_text(encoding="utf-8")
     assert "git rev-parse --show-toplevel" in content or "REPO_ROOT" in content, (
         "guard-forbidden-paths.sh must resolve the repo root dynamically via `git rev-parse`."
     )
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))

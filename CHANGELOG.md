@@ -10,6 +10,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Architecture hardening: god-file decomposition & regression suite hardening (2026-09-07)
+
+- **Test Suite Budget Relief (`test_mcp_server.py`)**: Decomposed monolithic `test_mcp_server.py` (696/700 lines) into `test_mcp_server.py` (199 lines; lifecycle, server run, concurrency, Windows loopback TCP guard) and `test_mcp_server_dispatch.py` (270 lines; role authorization, PDP enforcement, dispatcher registry parity, parameter schema gating, structured logging). Shared doubles and setup factories extracted to `_mcp_helpers.py`. Makefile `test-mcp` updated to run `test_mcp_server*.py`.
+- **LangGraph Nodes Modularization (`nodes.py`)**: Decomposed `harness/shared/langgraph/nodes.py` (482/500 lines) into `node_reasons.py` (115 lines; quality gate reasons, conclusive result grading, count validations), `node_executors.py` (225 lines; agent execution wrappers, budget enforcement, configurable resolution), and `nodes.py` (178 lines; gate and routing nodes with 100% backwards-compatible symbol re-exports).
+- **Regression Suite Hardening**: Removed silent skips on missing files in `test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, and `test_scan_findings_windows_waiver.py`, replacing them with strict assertions. Added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for single-click IDE test execution.
+- **Enterprise Skills Codification**: Created and registered `god-file-decomposer` and `regression-pin-author` skills under `.mango/skills/` and `.agents/skills/` with strict markdown formatting and invariant enforcement workflows.
+
 ### Agent memory write-denial (NS-37) & code generation writing tool (NS-38, DEC-059)
 
 - **Agent Memory Integrity**: `write_policy.write_denial_reason` now denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. The denial directs callers to the sanctioned meta-tools (`hypothesis_register`, `knowledge_gap_log`), closing memory poisoning (OWASP ASI06 / MAST FM-2.6) while keeping memory stores excluded from `protected_paths` to preserve digest baseline validity.
