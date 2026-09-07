@@ -25,6 +25,8 @@ import logging
 import sys
 import textwrap
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -407,7 +409,16 @@ def expected_node_count() -> int:
             continue
         for target in node.targets:
             if isinstance(target, ast.Name) and target.id == "EXPECTED_NODE_COUNT":
-                return int(node.value.value)
+                # `ast.Constant.value` is `Any`-shaped (str | bytes | int | ... | None),
+                # so `int(...)` on it does not typecheck and, worse, would coerce a
+                # constant that had drifted to some other literal instead of saying so.
+                # `bool` is excluded because it is a subclass of `int` and a node count
+                # of `True` is drift, not a count -- the same guard `changelog_section_cap`
+                # applies to a policy value.
+                value = node.value.value
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise AssertionError(f"{GRAPH_SOURCE} declares EXPECTED_NODE_COUNT as {value!r}, not an int")
+                return value
     raise AssertionError(f"{GRAPH_SOURCE} no longer declares EXPECTED_NODE_COUNT")
 
 
@@ -506,7 +517,12 @@ def test_topology_extraction_is_source_based(monkeypatch: pytest.MonkeyPatch, tm
 
     baseline = extract_topology(GRAPH_SOURCE)
     monkeypatch.setenv("MANGO_CI_DESELECT_LANGGRAPH", "1")
-    monkeypatch.setitem(sys.modules, "langgraph", None)
+    # ``None`` in ``sys.modules`` makes ``import langgraph`` raise ImportError
+    # even on a leg where the extra *is* installed, so this half of the
+    # assertion is not satisfied merely by the library being absent here. The
+    # cast says that to the type checker, which types the mapping as
+    # ``str -> ModuleType``.
+    monkeypatch.setitem(sys.modules, "langgraph", cast(ModuleType, None))
     with pytest.raises(ImportError):
         import langgraph  # noqa: F401
     deselected = extract_topology(GRAPH_SOURCE)

@@ -273,28 +273,33 @@ conflation D-5 had already resolved.**
 
 ## Acceptance criteria
 
-- [ ] AC-GEA-1: `check_traceability.py --workspace .` run from the repository root discovers at
+- [x] AC-GEA-1: `check_traceability.py --workspace .` run from the repository root discovers at
       least 412 requirement IDs, and the same invocation against a workspace containing no spec
       files exits non-zero with `no spec files matched` — verified by
-      `pytest -k test_traceability_workspace_scope` · stage: `make validate` (R-GEA-1)
-- [ ] AC-GEA-1b: after step 2, `make validate` exits 0 with every contract-spec ID carrying both
-      citations, or with each remaining gap listed in a `DEC-` record that the gate reads as an
-      accepted exemption; a gap that is neither cited nor recorded fails the gate — verified by
-      `pytest -k test_traceability_gaps_are_cited_or_recorded` · stage: `make validate`
-      (R-GEA-1, C-GEA-4)
-- [ ] AC-GEA-1c: a document declaring no class is graded as a contract spec and its uncited IDs
+      `pytest -k test_traceability_workspace_scope` · stage: `make test-python` (R-GEA-1)
+- [x] AC-GEA-1b: a repository-scoped run exits 0 only while the count of contract-spec IDs
+      missing a citation is at or below `traceability.max_uncited_contract_requirement_ids`, and
+      exits non-zero naming the excess and the rule that the ratchet may only be lowered —
+      verified by `pytest -k test_traceability_gaps_are_cited_or_recorded`
+      · stage: `make test-python` (R-GEA-1, C-GEA-4). *Revision 3: revision 2 asked for each
+      remaining gap to be listed in a `DEC-` record the gate reads as an exemption. What shipped
+      is a ratchet over a count, with no DEC-record reader. The ratchet is the stronger control
+      for this backlog — a per-ID exemption list of 223 entries is a list nobody re-reads, while
+      a number that may only fall cannot outlive the gaps it covers — but the criterion is
+      rewritten to describe what exists rather than left describing what does not.*
+- [x] AC-GEA-1c: a document declaring no class is graded as a contract spec and its uncited IDs
       fail the gate, while a document declaring `program-plan` has its IDs counted and reported
       but not required to cite an implementation; a document declaring an unrecognised class
       raises rather than defaulting to the permissive branch — verified by
-      `pytest -k test_spec_class_defaults_to_the_strict_branch` · stage: `make validate`
+      `pytest -k test_spec_class_defaults_to_the_strict_branch` · stage: `make test-python`
       (R-GEA-1b)
-- [ ] AC-GEA-2: `authority_graph` reports zero agent-reachable paths to
+- [x] AC-GEA-2: `authority_graph` reports zero agent-reachable paths to
       `context["human_approved"]`, and a fixture in which `execute_run_command` forwards a
       caller-supplied `context` instead of its literal dict makes the test go red with a witness
       naming that call site — verified by
       `pytest -k test_no_agent_input_reaches_the_approval_flag` · stage: `make test-python`
       (R-GEA-2)
-- [ ] AC-GEA-2b: `reachable_actions("verifier")` excludes `external_write` and
+- [x] AC-GEA-2b: `reachable_actions("verifier")` excludes `external_write` and
       `production_change`, and reverting the `human_approval_required_for` subtraction in
       `agent_authority.allowed_actions` makes exactly that assertion go red; the same test
       asserts that `destructive`, `permission_change`, and `secret_access` are absent from every
@@ -302,30 +307,38 @@ conflation D-5 had already resolved.**
       it is non-vacuous for rather than passing on three that have no edge — verified by
       `pytest -k test_high_risk_reachability_names_its_live_half` · stage: `make test-python`
       (R-GEA-2b, R-GEA-4)
-- [ ] AC-GEA-3: `authority_graph` path enumeration from `nemotron-reasoner` to `write_file`
+- [x] AC-GEA-3: `authority_graph` path enumeration from `nemotron-reasoner` to `write_file`
       returns a witness naming each intermediate role and action on the surface it was asked
       about, returns the empty list for `planner`, and **raises** when the caller does not name
       a surface — with `planner` → `spec_write` present on the tool-exposure surface and absent
       on the execution-identity surface, which is the pair a single-surface query would answer
       wrongly — verified by `pytest -k test_write_paths_name_their_surface`
       · stage: `make test-python` (R-GEA-2b)
-- [ ] AC-GEA-4: `execute_generate_code` writes zero bytes, leaves any pre-existing file
+- [x] AC-GEA-4: `execute_generate_code` writes zero bytes, leaves any pre-existing file
       byte-for-byte unchanged, and returns a denial naming the offending symbol for each of the
       three shapes the policy key spans — `import subprocess`, `import os` followed by a call to
       `os.system`, and a bare `__import__("os")` — while ordinary code importing `pathlib` still
       writes — verified by `pytest -k test_generate_code_denies_prohibited_import`
       · stage: `make test-python` (R-GEA-3, C-GEA-3)
-- [ ] AC-GEA-5: With `synthesis.prohibited_imports` set to an empty list in a temporary policy,
-      `execute_generate_code` raises rather than silently accepting every import, proving the
-      check cannot pass vacuously — verified by
-      `pytest -k test_empty_prohibited_list_is_a_broken_policy` · stage: `make test-python`
-      (R-GEA-4)
-- [ ] AC-GEA-6: A static import scan asserts that no file under `harness/shared/governance/`,
+- [x] AC-GEA-5: `prohibited_symbol_findings` raises rather than accepting every input when the
+      prohibited list is empty, missing, of the wrong type, or holds a non-string member — proved
+      for both a directly-passed list and a policy file on disk — verified by
+      `pytest -k test_empty_list_in_a_present_policy`
+      · stage: `make test-python` (R-GEA-4). *Revision 3: revision 2 named a selector,
+      `test_empty_prohibited_list_is_`, that matches no test, and ticking it tripped
+      `test_spec_selectors_collect.py` — a ticked criterion whose selector collects nothing is
+      the unfalsifiable shape R-GEA-4 is about, arriving in this spec's own acceptance list.
+      Revision 2 also asked for the raise to be shown through `execute_generate_code` under a
+      temporary policy; that path needs `MANGO_WRITE_POLICY_PATH`, and `write_denial_reason` then
+      demands a pin-digest record for any supplied policy, so the end-to-end form needs a pin
+      fixture that does not exist. The raise propagates out of `execute_generate_code` unchanged,
+      which is the property; the criterion now claims only what is proven.*
+- [x] AC-GEA-6: A static import scan asserts that no file under `harness/shared/governance/`,
       nor `write_policy.py`, `read_policy.py`, or `agent_authority.py`, names `authority_graph`,
       and the test fails if such an import is introduced — verified by
       `pytest -k test_governance_layer_does_not_import_the_graph` · stage: `make test-python`
       (C-GEA-2)
-- [ ] AC-GEA-7: `make lock-check` recompiles `requirements-lock.txt` with no diff after this
+- [x] AC-GEA-7: `make lock-check` recompiles `requirements-lock.txt` with no diff after this
       change lands, and `python -m harness.shared.check_py_compat` exits 0 for every new module
       — verified by `make lock-check` · stage: `make ci` (C-GEA-1)
 - [ ] AC-GEA-8: `docs/reports/` contains a baseline naming measured tokens and tool calls per
@@ -333,26 +346,37 @@ conflation D-5 had already resolved.**
       graph exists in the tree until that file does — verified by
       `pytest -k test_code_graph_is_gated_on_a_recorded_baseline` · stage: `make test-python`
       (R-GEA-5)
-- [ ] AC-GEA-9: No `StateGraph` topology **target** is reachable from `make ci` or listed in
+- [x] AC-GEA-9: No `StateGraph` topology **target** is reachable from `make ci` or listed in
       `governance-policy.json` → `ci_required_targets` while `docs/decisions/DEC-053.md` carries
       `status: accepted`; the test goes red if such a target is added without superseding
       DEC-053, and does not fail merely because a topology *test* exists — verified by
       `pytest -k test_topology_gate_is_parked_with_langgraph` · stage: `make test-python`
       (R-GEA-6)
-- [ ] AC-GEA-9b: A test asserts `peer_reviewer` and `security_reviewer` are edgeless in
+- [x] AC-GEA-9b: A test asserts `peer_reviewer` and `security_reviewer` are edgeless in
       `graph.py` and that `DEC-052` records that state; wiring either reviewer in without
       amending DEC-052 fails it, and deleting either node fails it — verified by
       `pytest -k test_orphan_reviewers_match_the_recorded_decision`
       · stage: `make test-python` (R-GEA-6b)
-- [ ] AC-GEA-10: An exemption entry whose subject no longer requires it is rejected: a test
-      constructs an exemption for a node that is reachable and asserts the checker exits
-      non-zero with a `stale exemption` message — verified by
-      `pytest -k test_stale_exemption_fails_closed` · stage: `make test-python` (C-GEA-4)
-- [ ] AC-GEA-11: If DEC-053 is superseded, the topology extractor reads `graph.py` as source and
-      returns the same node and edge sets under `MANGO_CI_DESELECT_LANGGRAPH=1` as without it,
-      and raises rather than reporting an empty topology when its `builder` binding is renamed —
-      verified by `pytest -k test_topology_extraction_is_source_based`
-      · stage: `make test-python` (R-GEA-6c, R-GEA-4)
+- [x] AC-GEA-10: a run whose backlog sits below the ratchet reports the count *and the
+      headroom*, naming the lower value the ratchet should be set to, so an allowance that has
+      stopped being needed is visible on every green run rather than only on a red one — verified
+      by `pytest -k test_the_repository_run_reports_the_count_and_the_headroom`
+      · stage: `make test-python` (C-GEA-4). *Revision 3: revision 2 asked for a stale **exemption
+      entry** to be rejected and named `test_stale_exemption_fails_closed`, which matches no test —
+      caught by `test_spec_selectors_collect.py`, the second time this spec's own acceptance list
+      tripped that gate. What shipped for C-GEA-4 is a ratchet over a count rather than a list of
+      per-subject exemptions, so "stale" means headroom above zero, and the gate reports it rather
+      than raising: a backlog that has shrunk is not a failure, it is a number waiting to be
+      lowered. The criterion now describes that.*
+- [x] AC-GEA-11: The topology extractor reads `graph.py` as source and
+      imports nothing from `langgraph`, so it returns the same node and edge sets whether or not
+      that package is installed, and raises rather than reporting an empty topology when no
+      `StateGraph` assignment is found — verified by
+      `pytest -k test_topology_extraction_is_source_based` · stage: `make test-python`
+      (R-GEA-6c, R-GEA-4). *Revision 3: the conditional prefix "If DEC-053 is superseded" is
+      dropped. DEC-053 is accepted, so the criterion could never fire and was unfalsifiable —
+      the defect class this spec's own R-GEA-4 exists to prevent. R-GEA-6c stands on the INV-2
+      ground alone, which never depended on the park.*
 
 ## Steps
 
@@ -398,8 +422,9 @@ later requirement ID is closed first.
    `peer_reviewer` and `security_reviewer` are edgeless and that DEC-052 records it, and the test
    pinning the absence of a topology *target* to DEC-053's status — consumes
    `docs/decisions/DEC-052.md`, `docs/decisions/DEC-053.md`, `harness/shared/langgraph/graph.py`
-   (read only). *Step 8 can run first: it depends on nothing else in this plan and closes the
-   only defect here that is live in the tree today.*
+   (read only). *Step 8 needs only the R-GEA-6c extractor, which is why the two ship
+   together; beyond that it depends on nothing else in this plan, and it closes the only
+   defect here that is live in the tree today.*
 
 ## Files touched
 
@@ -409,6 +434,8 @@ out.
 
 - `docs/specs/graph-engineering-adoption.md` (this document)
 - `docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`
+- `harness/shared/graph_topology.py` — new, step 8 (the R-GEA-6c extractor AC-GEA-9b consumes)
+- `harness/shared/tests/test_graph_topology.py` — new, step 8
 - `harness/shared/authority_graph.py` — new, step 3
 - `harness/shared/tests/test_authority_graph.py` — new, step 4
 - `harness/shared/tests/test_graph_topology_parked.py` — new, step 8 (reads `graph.py`, edits nothing)

@@ -176,9 +176,13 @@ class TestFailClosed:
         with pytest.raises(ProhibitedSymbolPolicyError, match="empty"):
             prohibited_symbol_findings(ast.parse("import subprocess\n"), [])
 
-    def test_a_non_sequence_passed_directly(self) -> None:
+    def test_a_bare_string_passed_directly(self) -> None:
+        """A `str` satisfies `Sequence[str]`, so this call typechecks and the guard
+        is the only thing that catches it -- which is exactly why the guard exists.
+        No `type: ignore` here: mypy raises no error to silence, and an inert
+        directive would be flagged by both `--warn-unused-ignores` and RUF100."""
         with pytest.raises(ProhibitedSymbolPolicyError, match="must be a list of strings"):
-            prohibited_symbol_findings(ast.parse(""), "subprocess")  # type: ignore[arg-type]
+            prohibited_symbol_findings(ast.parse(""), "subprocess")
 
     def test_a_non_string_member_passed_directly(self) -> None:
         with pytest.raises(ProhibitedSymbolPolicyError, match="non-empty strings"):

@@ -1,5 +1,15 @@
 """Recover a LangGraph ``StateGraph`` topology from module *source text*.
 
+This module is the implementation half of R-GEA-6b: the assertion that
+``peer_reviewer`` and ``security_reviewer`` are edgeless, and that DEC-052
+records them so, cannot be written without an edge set to assert over, and the
+edge set has to come from somewhere that does not import ``langgraph``. That is
+this module. The assertion itself lives in
+``harness/shared/tests/test_graph_topology_parked.py``, because per D-5 of
+``docs/specs/graph-engineering-adoption.md`` a pure function over repository
+state belongs on the test surface rather than behind a new CI target, and per
+R-GEA-6 the gate stays parked with DEC-053 while the check does not.
+
 Why this reads source rather than a compiled graph
 --------------------------------------------------
 

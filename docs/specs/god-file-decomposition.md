@@ -1,5 +1,9 @@
 # Spec: God File Decomposition & Modularization
 
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+
 ## Problem statement
 
 Static analysis and architecture review identified multiple "god files" in `harness/shared/` and `harness/shared/tests/`. The largest production offender, `harness/shared/mango_mas_orchestrator.py` (501 lines), couples 7 distinct responsibilities into a single monolithic class. The corresponding test file `test_mango_mas_orchestrator.py` (629 lines, 50 test functions across 13 classes) suffers from dense coupling and monolithic test fixture management. Other modules (`governance/broker.py` and `check_py_compat.py`) contain embedded helper classes/visitors that reduce maintainability and test isolation.
