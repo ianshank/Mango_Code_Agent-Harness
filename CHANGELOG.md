@@ -168,6 +168,22 @@ attestations each time — and the report that proposed one priced none of it.
   not resolve (right for a write door, fail-*open* for a reachability scan), while
   the authority scan reads the **leaf** and never resolves the receiver. They share
   a shape, not a contract.
+- **An edge could name a node that did not exist.** `extract_topology` checked
+  only that `nodes` and `edges` were each non-empty, so a graph whose two halves
+  were individually non-empty and mutually inconsistent passed *both* emptiness
+  guards and returned a plausible topology the source does not describe —
+  `reachable_from` reporting a node no `add_node` call registers. One mistyped
+  endpoint rewired the graph instead of failing it. The check now compares the
+  collected endpoint set against the collected node set once, after the whole
+  module is read, and names the file, every offending endpoint, the edge it came
+  from and the line that declared it. Validating after collection rather than per
+  call is what makes declaration order free *and* catches `set_entry_point` /
+  `set_finish_point`, which declare edges under names containing no "edge" and
+  would have slipped a rule attached to `add_edge`. Conditional-edge *labels* are
+  deliberately excluded — a `path_map` key is a router return value, not a node,
+  and refusing those would have rejected the real graph's dominant edge form.
+  `START`/`END` stay legal and the DEC-052 orphan reviewers are the converse case:
+  a node with no edge names no endpoint, so it cannot dangle.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide
