@@ -226,6 +226,14 @@
     ],
     "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
   },
+  "traceability": {
+    "min_discovered_requirement_ids": 350,
+    "max_uncited_contract_requirement_ids": 222,
+    "default_spec_class": "contract",
+    "program_plan_class": "program-plan",
+    "spec_class_marker": "Spec class:",
+    "rationale": "Scope and ratchet for harness/shared/governance/check_traceability.py (DEC-065, docs/specs/graph-engineering-adoption.md R-GEA-1/R-GEA-1b). The gate resolved its config and globs against the process CWD and ran from harness/node, so it read 6 requirement IDs while docs/specs held 412 sharing none of them, and printed 'traceability: passed'. min_discovered_requirement_ids is the anti-vacuity floor a repository-scoped run must clear, so 'the gate is pointed at the wrong corpus' fails instead of passing; it applies only where a traceability config declares scope 'repository', leaving per-stack configs unchanged. max_uncited_contract_requirement_ids is a ratchet over contract-spec IDs missing an implementation or test citation: it may be lowered as citations land and never raised, so the backlog is visible and cannot grow. program_plan_class names the class a document declares via spec_class_marker when its requirement IDs are scheduled work with nothing yet to cite; default_spec_class is the strict branch a document with no declaration falls into."
+  },
   "lats": {
     "max_budget": 10,
     "exploration_weight": 1.414
