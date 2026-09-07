@@ -23,10 +23,28 @@ coverage/
 
 # Python Testing & Tooling
 .coverage
+# The per-worker halves of the line above. `coverage-python` runs pytest under
+# `-n auto` (PYTEST_PARALLEL_FLAGS), and pytest-cov hands each xdist worker its
+# own `.coverage.<host>.pid<n>.<rand>` data file in the invocation directory --
+# the repository root -- before combining them into `.coverage` and deleting
+# them. A run that is interrupted, killed, or ends with a crashed worker leaves
+# them behind. Observed directly: watching the tree through one
+# `pytest -n 2 --cov` run showed five such files appear and disappear. Ignoring
+# `.coverage` and not its siblings meant the tidy half was invisible to
+# `git status` and the leftovers were not.
+.coverage.*
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+# Wheels land in whatever directory `pip download` / `pip wheel` ran from, which
+# for this repository is the root. Six appeared there during the DEC-065 work --
+# mypy and its dependency closure (librt, ast_serialize, mypy_extensions,
+# pathspec, typing_extensions) -- as untracked files, one `git add -A` from
+# being committed. `dist/` above covers only wheels this project builds *of
+# itself*, which is a different thing and was not what landed. No tracked file
+# carries this extension.
+*.whl
 htmlcov/
 .benchmarks/
 scratch/
