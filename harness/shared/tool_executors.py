@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import ast
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from harness.shared.agent_authority import execution_identity
+from harness.shared.code_safety import (
+    POLICY_KEY,
+    POLICY_SECTION,
+    load_python_write_suffixes,
+    prohibited_symbol_denial,
+)
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.read_policy import read_denial_reason
@@ -117,29 +124,32 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         return failed(f"Error writing file {filepath}: {str(e)}")
 
 
-def _validate_code_syntax(filepath: str, code: str, language: str) -> str | None:
+def _validate_code_syntax(filepath: str, code: str, language: str) -> tuple[str | None, ast.Module | None]:
     """Validate syntax for known languages before writing to disk (R-CGT-4).
 
-    Returns an error message if invalid, or None if valid or unsupported.
+    Returns ``(error, tree)``: an error message if invalid, else None; and the
+    parsed module for valid Python, else None. The tree is handed back instead
+    of discarded because the caller has a second question for it -- the parse
+    that answers "does this compile" also answers "does this name a prohibited
+    symbol", and a second ``ast.parse`` would ask the same question twice with
+    two chances to answer it differently (R-GEA-3).
     """
     lang = language.lower()
     if lang == "python":
-        import ast
-
         try:
-            ast.parse(code, filename=filepath)
+            return None, ast.parse(code, filename=filepath)
         except SyntaxError as e:
             lineno = e.lineno or 1
             offset = e.offset or 0
-            return f"SyntaxError in generated code for {filepath} (line {lineno}, offset {offset}): {e.msg}"
+            return f"SyntaxError in generated code for {filepath} (line {lineno}, offset {offset}): {e.msg}", None
     elif lang == "json":
         import json
 
         try:
             json.loads(code)
         except json.JSONDecodeError as e:
-            return f"JSONDecodeError in generated code for {filepath} (line {e.lineno}, col {e.colno}): {e.msg}"
-    return None
+            return f"JSONDecodeError in generated code for {filepath} (line {e.lineno}, col {e.colno}): {e.msg}", None
+    return None, None
 
 
 def execute_generate_code(
@@ -156,9 +166,20 @@ def execute_generate_code(
     1. Workspace confinement (_resolve_in_workspace);
     2. Write policy & agent memory integrity (write_denial_reason);
     3. Overwrite guard (when overwrite=False and file exists);
-    4. Syntax validation (AST parse for Python, JSON decode for JSON) when validate_syntax=True;
-    5. Length bound check against DEFAULT_MAX_OUTPUT_BYTES;
-    6. Atomic write preserving newlines.
+    4. Syntax validation (AST parse for Python, JSON decode for JSON) when validate_syntax=True,
+       and unconditionally for a Python target -- see 5;
+    5. Prohibited-symbol check over that same parse tree (R-GEA-3), so code naming
+       `synthesis.prohibited_imports` is refused before any byte reaches disk;
+    6. Length bound check against DEFAULT_MAX_OUTPUT_BYTES;
+    7. Atomic write preserving newlines.
+
+    Whether the file is Python is decided by the resolved target suffix, and
+    step 5 runs on every Python write regardless of `validate_syntax`. Both that
+    flag and `language` are model-supplied arguments, so deriving step 5's
+    applicability from either let the agent this check constrains turn it off
+    (R-GEA-3; DEC-065 recorded the `validate_syntax` half as a residual).
+    `validate_syntax` still governs syntax *reporting*, which is all it ever
+    claimed to govern.
     """
     workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
     if denial is not None:
@@ -174,12 +195,23 @@ def execute_generate_code(
         logger.warning("Refused generate_code: file %s exists and overwrite=False", filepath)
         return failed(f"Error generating code for {filepath}: File exists and overwrite is False.")
 
+    # A Python target is Python whatever `language` says, because the suffix is
+    # where the bytes land and `language` is a model-supplied argument.
+    ext = target_path.suffix.lower()
+    # The active policy, not the default: `prohibited_symbol_denial` below is
+    # already given it, and arming one check from a supplied policy while the
+    # other reads the harness default is how the two drift apart.
+    is_python = ext in load_python_write_suffixes(active_policy_path())
+
     # Infer language from file extension if not explicitly specified
-    inferred_language = language
+    inferred_language = "python" if is_python else language
     if not inferred_language:
-        ext = target_path.suffix.lower()
         ext_to_lang = {
+            # `.pyw` is Python here too. This map is reached only when the
+            # policy set did not already say so, and widens what is parsed
+            # rather than narrowing it. Kept from c331e47.
             ".py": "python",
+            ".pyw": "python",
             ".json": "json",
             ".yaml": "yaml",
             ".yml": "yaml",
@@ -190,11 +222,32 @@ def execute_generate_code(
         }
         inferred_language = ext_to_lang.get(ext, "")
 
-    if validate_syntax and inferred_language:
-        syntax_err = _validate_code_syntax(filepath, code, inferred_language)
+    # Python is parsed whether or not `validate_syntax` is set. The flag governs
+    # syntax reporting; letting it govern the policy check made that check
+    # optional for the agent whose output it exists to constrain.
+    if is_python or (validate_syntax and inferred_language):
+        syntax_err, tree = _validate_code_syntax(filepath, code, inferred_language)
         if syntax_err is not None:
-            logger.warning("Syntax validation failed for %s: %s", filepath, syntax_err)
-            return failed(syntax_err)
+            if validate_syntax:
+                logger.warning("Syntax validation failed for %s: %s", filepath, syntax_err)
+                return failed(syntax_err)
+            # Reporting is off, but a module that does not parse yields no tree
+            # and so no findings -- a check that cannot fail rather than one
+            # that passed (R-GEA-4). Refused for want of a judgement, not for
+            # the syntax error the caller asked not to hear about.
+            logger.warning("Refused unjudgeable Python for %s: %s", filepath, syntax_err)
+            return denied(
+                f"Error generating code for {filepath}: unparseable Python cannot be checked against "
+                f"{POLICY_SECTION}.{POLICY_KEY}"
+            )
+        # The tree that just answered "does it parse" also answers "does it name
+        # something `synthesis.prohibited_imports` forbids", and asking it here is
+        # what keeps that defect off disk rather than in a repair cycle (R-GEA-3).
+        # `active_policy_path` so both policy reads in this function name one file.
+        prohibited = None if tree is None else prohibited_symbol_denial(tree, policy_path=active_policy_path())
+        if prohibited is not None:
+            logger.warning("Denied generate_code naming a prohibited symbol: %s (%s)", filepath, prohibited)
+            return denied(f"Error generating code for {filepath}: {prohibited}")
 
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)

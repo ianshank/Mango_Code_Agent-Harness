@@ -784,6 +784,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-065",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet",
+      "path": "docs/decisions/DEC-065.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }

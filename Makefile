@@ -244,6 +244,17 @@ decision-index: ## Regenerate docs/decisions/index.{md,json} and the thin node d
 decision-index-check: ## Fail if decision index artefacts drift from DEC-*.md
 	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root . --check
 
+# Two invocations, deliberately. The per-stack one keeps the legacy CWD-relative
+# contract the DEC-056 shim window still depends on, and is the live proof that
+# `--workspace`'s default did not change it. The repository-scoped one is the
+# check this target is actually required for: `traceability` is a
+# `ci_required_targets` entry mapped to `validate` (test_ci_gate_coverage.py),
+# and before DEC-065 that required check read 6 requirement IDs out of a corpus
+# of 412 that shared none of them. Running only the per-stack invocation would
+# have left the gate this change exists to fix still pointed at the wrong
+# corpus in production, with the real one exercised solely by pytest -- which
+# enforces it, but leaves an operator reading `passed (6 requirements)` off the
+# named required check. Found by review on PR #120.
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
@@ -251,8 +262,10 @@ validate: ## Run all governance validation scripts
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
-	@echo "  → governance/check_traceability.py"
+	@echo "  → governance/check_traceability.py (per-stack, legacy CWD contract)"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
+	@echo "  → governance/check_traceability.py --workspace . (repository corpus)"
+	@$(PYTHON) $(SHARED_SRC)/governance/check_traceability.py --workspace . || exit 1
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"

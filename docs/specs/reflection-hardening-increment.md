@@ -4,6 +4,10 @@
 > `DEC-064`; Steps 3-5 not started) · Date: 2026-09-07 ·
 > Base: `main` @ `33f21044`
 >
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+>
 > This is a **ledger increment**, not a fourth from-scratch audit. Three prior
 > program plans already ran the full-team reflection this request asks for:
 > `docs/specs/tech-debt-hardening-plan.md` (29/29 boxes ticked, some selectors

@@ -19,6 +19,14 @@ failures this file covers, all of which were present when it was written:
 Age is deliberately *not* a blocking gate here: a clock-dependent assertion
 turns unrelated PRs red at a date boundary. Presence blocks; staleness is for
 the scheduled workflow to raise as an issue.
+
+Companion file: `test_agent_surface_determinism.py` carries the properties that
+survive everything here being true -- that the derived role surface is a pure
+function of the policy files, that the persona and execution-identity graph is
+closed in both directions, that hook commands in *both* settings files resolve
+to real scripts, and that the review horizon this file declines to enforce is
+still sourced from `skill_max_age_days` wherever it is applied. Split rather
+than appended because this module is near `limits.test_size_budget_lines`.
 """
 
 from __future__ import annotations

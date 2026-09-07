@@ -15,10 +15,23 @@ __pycache__/
 
 # Python Tooling (not needed in container)
 .coverage
+# The xdist workers' own coverage data files (`.coverage.<host>.pid<n>.<rand>`),
+# written beside `.coverage` by `make coverage-python` and left behind by an
+# interrupted run. Excluded for the same reason `.coverage` above is, and with
+# the same bounded effect: the only stage that copies anything copies `harness/`
+# alone, so this keeps them out of the *build context*, not out of an image
+# layer they could never have reached.
+.coverage.*
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+# Wheels `pip download` / `pip wheel` leaves in the directory it ran from; six
+# (mypy and its dependency closure, ~40 MB) sat in the repository root during
+# the DEC-065 work. Same bounded effect as `.coverage.*` above -- context size,
+# not image contents -- which is why this sits with the other root transients
+# rather than being argued as a supply-chain control.
+*.whl
 htmlcov/
 
 # IDE & System

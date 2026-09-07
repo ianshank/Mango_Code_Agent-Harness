@@ -2,6 +2,10 @@
 
 > Status: IN PROGRESS, revision 3 (Phase B Done on PR #86; R-SR-5 / AC-5 closed on PR #93; roadmap peer-rewrite 2026-09-05b) · Date: 2026-09-05 · Base: `main` @ `58490c1` (PRs #89-#95 / #93 DECs)
 >
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+>
 > Supersedes the open remainder of `docs/specs/code-quality-tech-debt-plan.md`
 > (closed 2026-09-04 at revision 2) and owns every Blocker, High and Medium
 > finding in `docs/reports/2026-STANDARDS-AUDIT.md` (revision 2). `NEXT_STEPS.md`
