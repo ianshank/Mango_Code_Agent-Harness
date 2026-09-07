@@ -171,6 +171,11 @@ if a 3.9 context remains (R-SR-23, AC-23).
 
 **Depends on.** Nothing. Unblocks NS-35 and packaging halves of Phase F.
 
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 1/2
+(R-RHI-1); re-measured against `33f21044` with the two carve-outs this line
+predates (`requirements-lock.txt`'s own `--python-version 3.9` header,
+`_workflow_paths.UNSUPPORTED_LEG`) added to scope.
+
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 
 **Why now.** `langgraph/__init__.py` still carries the remaining
@@ -208,6 +213,8 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 
 **Depends on.** Nothing (Phase B MCP parity shipped).
 
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 3,
+implementing `reasoner-bridge-tool-parity.md`'s existing scaffold in place.
 
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
@@ -232,14 +239,23 @@ as root on an un-digested base (M17); Dependabot lacks `docker` / cooldown
 **Done when.** R-SR-24 and R-SR-25 landed with AC-24 and AC-25; a PR with a
 stale SHA in its attestation table fails `build-full`.
 
-**Depends on.** NS-1 (signatures / ruleset live).
+**Depends on.** NS-1 only for the `required_signatures` half of R-SR-24; the
+attestation-SHA-binding and Dockerfile/Dependabot-cooldown halves depend on
+nothing.
+
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
+`required_signatures` (that clause stays gated on NS-1).
 
 ### NS-29 · The program plans
 
 Pointer only: status is the remediation plan's boxes, read there, not here.
 `docs/specs/code-quality-tech-debt-plan.md` is closed at revision 2.
 Remediation plan is revision 3 (Phase B Done; R-SR-5 / AC-5 closed; Phase E
-gated on R-SR-2).
+gated on R-SR-2). `docs/specs/reflection-hardening-increment.md` is a ledger
+increment against the remediation plan's still-open items (NS-6, NS-18, half
+of NS-36) — a spec, not a fifth program plan; it does not restate or
+re-litigate boxes above, only schedules what a re-measurement against
+`33f21044` still found true.
 
 ---
 
