@@ -322,3 +322,41 @@ class TestCredentialFilesAreDeniedOnTheWriteSide:
 
         assert read_policy.CREDENTIAL_FILENAME_ALTERNATION is write_policy.CREDENTIAL_FILENAME_ALTERNATION
         assert read_policy.CREDENTIAL_FILENAME_PATTERN is write_policy.CREDENTIAL_FILENAME_PATTERN
+
+
+class TestAgentMemoryDirectoryDeniedOnTheWriteSide:
+    """AC-AMI-1, AC-AMI-3: The agent memory directory is denied to raw writes under both resolution modes."""
+
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            ".mango/memory/hypotheses.json",
+            ".mango/memory/gaps.json",
+            ".mango/memory/sub/test.json",
+        ],
+    )
+    def test_the_memory_directory_is_denied_to_raw_writes(self, relpath: str) -> None:
+        reason = write_denial_reason(relpath)
+        assert reason is not None, f"{relpath} was writable"
+        assert "inside the agent memory directory" in reason
+        assert "hypothesis_register" in reason or "knowledge_gap_log" in reason
+
+    def test_a_lookalike_path_outside_the_memory_directory_is_not_denied(self) -> None:
+        assert write_denial_reason(".mango/memory-not-really/x.json") is None
+
+    def test_the_denial_holds_under_both_memory_resolution_modes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from harness.shared import meta_tools
+
+        workspace_memory = tmp_path / ".mango" / "memory"
+        workspace_memory.mkdir(parents=True, exist_ok=True)
+        hyp_file = workspace_memory / "hypotheses.json"
+        hyp_file.write_text("[]", encoding="utf-8")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(meta_tools, "resolve_memory_dir", lambda ws=None: workspace_memory)
+
+        reason = write_denial_reason(str(hyp_file.relative_to(tmp_path)))
+        assert reason is not None
+        assert "inside the agent memory directory" in reason

@@ -67,6 +67,8 @@ TOOL_REQUIRED_ACTION: typing.Mapping[str, str] = {
     # Edits a file in place. The same action as `write_file` because it reaches
     # the same paths -- and it runs the same `write_denial_reason` check to prove it.
     "apply_patch": "write",
+    # Generates code with syntax validation. The same `write` action as `write_file`.
+    "generate_code": "write",
     # Runs a command. `test_execute` is the narrowest declared action that covers
     # running the repository's own gates, which is what the reasoner and verifier
     # personas are instructed to do.
