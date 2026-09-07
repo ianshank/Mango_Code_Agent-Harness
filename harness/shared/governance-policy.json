@@ -211,6 +211,11 @@
     "skip_dirs": [],
     "rationale": "Minimum runtime is derived from the CI python-version matrix; see harness/shared/check_py_compat.py"
   },
+  "gates": {
+    "dedup_min_scripts": 20,
+    "py_compat_min_files": 298,
+    "rationale": "Anti-vacuity population floors for harness/shared/check_dedup.py and harness/shared/check_py_compat.py (docs/specs/attested-execution-isolation.md R-AEI-3, AC-4), read through policy_loader.gate_floors. Both gates exited 0 against an empty tree and printed '[PASS] 0 per-stack script(s)' and '[PASS] 0 file(s) compatible' -- a report a reader cannot tell apart from a real pass, which is the same vacuity defect traceability.min_discovered_requirement_ids exists to catch. dedup_min_scripts is the number of per-stack scripts the gate must actually check (20: ten shims in each of harness/node/scripts and harness/jvm/scripts); py_compat_min_files is the number of first-party Python files it must actually scan (298, the committed tree when this floor was measured). Each is a ratchet: raise it as the population grows, never lower it so a shrinking population passes. Deleting a governed script or module is therefore a deliberate, reviewed edit to this block rather than a silent reduction in what the gates cover. This is a new top-level block rather than a key inside dedup/py_compat because DEC-043 makes an absent key inside an adopted block a PolicyError for every adopter policy that predates it (the R-AEI-11 reason); the built-in default for an adopter with no policy file at all is 0, which leaves both gates behaving exactly as they do today."
+  },
   "synthesis": {
     "max_repair_cycles": 3,
     "lats_enabled": false,

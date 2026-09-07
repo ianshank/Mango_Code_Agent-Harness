@@ -87,8 +87,12 @@ attestation and why the primitive is chosen by measurement here.
   role holds MUST be reported against a ceiling and a population floor, both
   read from `governance-policy.json`, so neither an untuned allowlist nor an
   empty corpus can pass.
-- R-AEI-3: `check_dedup` and `check_py_compat` MUST exit non-zero when their
-  population is empty, against a floor read from `governance-policy.json`.
+- R-AEI-3: `check_dedup` and `check_py_compat` MUST exit non-zero when the
+  population they examined falls below a floor **declared** in
+  `governance-policy.json`. The floor is declared rather than assumed, because a
+  population is repository-specific: a built-in floor would fail a smaller
+  adopter tree for holding less code, so a policy declaring none leaves both
+  gates exactly as they behave today.
 - R-AEI-4: A governed execution MUST produce an evidence entry through
   `EvidenceBuilder`, whose signing key is injected at broker construction
   rather than read from the environment at export, so the suite needs no
@@ -197,10 +201,12 @@ or is recorded as unattestable under C-AEI-6.
       holds fewer entries than the policy floor, and dropping the denied
       entries fails on the floor rather than rescuing the run · stage:
       `make validate` (R-AEI-2, C-AEI-2)
-- [ ] AC-4: `pytest -k test_gate_refuses_empty_population` asserts
-      `check_dedup` and `check_py_compat` exit non-zero on an empty tree, that
-      a population one below the policy floor fails, and that a population at
-      the floor passes · stage: `make ci` (R-AEI-3)
+- [x] AC-4: `pytest -k test_gate_refuses_empty_population` asserts
+      `check_dedup` and `check_py_compat` exit non-zero on an empty tree
+      carrying a policy that declares a floor, where both exit 0 today; that a
+      population one below the floor fails and one at the floor passes; and
+      `test_both_gates_still_run_without_a_policy_file` pins the adopter
+      boundary rather than leaving it incidental · stage: `make ci` (R-AEI-3)
 - [ ] AC-5: `pytest -k test_evidence_entry_digests` monkeypatches
       `enforcement_digests`, `policy_digest` and the backend capability record
       to return sentinels and asserts each sentinel appears verbatim in the
@@ -280,7 +286,7 @@ question. Each phase is one pull request.
    (AC-1, AC-2, AC-3). **Landed** as DEC-066.
 2. Give the two gates a population floor — consumes
    `traceability.min_discovered_requirement_ids` as the pattern; produces the
-   refusal AC-4 checks.
+   refusal AC-4 checks. **Landed** behind `policy_loader.gate_floors`.
 3. Add the evidence entry, its sink and the test digest — consumes the
    loop-start baseline and `write_policy.policy_digest`; produces the record
    AC-5 through AC-8 check. INV-13 reaches four of five here.

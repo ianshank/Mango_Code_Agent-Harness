@@ -86,6 +86,13 @@ class AgentMemoryLimits(TypedDict):
     reasoner_hypothesis_budget_tokens: int
 
 
+class GateFloors(TypedDict):
+    """The `gates` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    dedup_min_scripts: int
+    py_compat_min_files: int
+
+
 def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
     """Record what a policy block resolved to, and which file it came from.
 
@@ -432,4 +439,32 @@ def agent_memory_defaults(policy_path: Path | None = None) -> AgentMemoryLimits:
         "reasoner_hypothesis_budget_tokens": section.int("reasoner_hypothesis_budget_tokens", 1500),
     }
     _log_resolution("agent_memory", resolved, policy_path)
+    return resolved
+
+
+def gate_floors(policy_path: Path | None = None) -> GateFloors:
+    """Anti-vacuity population floors for the drift gates; policy `gates` block.
+
+    A gate that examined nothing prints the same ``[PASS]`` as one that examined
+    everything: ``check_dedup`` and ``check_py_compat`` both exited 0 on an empty
+    tree, reporting ``0 per-stack script(s)`` and ``0 file(s)`` (R-AEI-3). Each
+    floor is the population a run must reach before its pass carries information,
+    and is a ratchet: raise it as the population grows, never lower it to make a
+    shrinking one pass.
+
+    The built-in default is 0 -- *this deployment declares no floor* -- rather
+    than this repository's own population, which no adopter shares and which
+    would fail a smaller tree for having less code. An absent policy file is the
+    adopter path and leaves the gates exactly as they behave today; a policy that
+    carries the block and drops a key raises PolicyError, as every other accessor
+    here does. A **new** top-level block rather than a key in `dedup`/`py_compat`
+    for the DEC-043 reason recorded at R-AEI-11: a key added to an adopted block
+    is a PolicyError for every adopter policy that predates it.
+    """
+    section = _section("gates", policy_path)
+    resolved: GateFloors = {
+        "dedup_min_scripts": section.int("dedup_min_scripts", 0),
+        "py_compat_min_files": section.int("py_compat_min_files", 0),
+    }
+    _log_resolution("gates", resolved, policy_path)
     return resolved
