@@ -308,8 +308,8 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 # The scan reads the lock alone, and that is broader than the three-file
 # invocation it replaces, not narrower (DEC-047). `requirements-dev.txt` opens
 # with `-r requirements.txt`, and the lock compiles from dev + langgraph, so
-# every distribution the two range files name is pinned in the lock -- 15 named
-# across the three inputs, 79 pinned, the other 64 transitive dependencies the
+# every distribution the two range files name is pinned in the lock -- 16 named
+# across the three inputs, 105 pinned, the other 89 transitive dependencies the
 # range files never mention and the old invocation therefore scanned only by
 # accident of resolution. The lock is also what CI installs; a range resolves to
 # whatever PyPI offers that day, so scanning the ranges audited versions nobody

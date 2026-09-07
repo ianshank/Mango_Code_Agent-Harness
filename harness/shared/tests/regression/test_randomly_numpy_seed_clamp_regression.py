@@ -16,9 +16,12 @@ pytestmark = pytest.mark.governance
 
 
 def test_numpy_random_seed_accepts_hashed_randomly_seeds() -> None:
-    numpy = pytest.importorskip("numpy")
+    # Hard import (not importorskip): numpy is pinned in requirements-dev.txt so
+    # CI installs it; a soft-skip here would fail INV-2 without a DEC waiver.
+    import numpy as np
+
     # The exact overflow observed under --randomly-seed=2192051406.
     overflow = 5917428844
     assert overflow >= 2**32
-    numpy.random.seed(overflow)  # must not raise after conftest clamp
-    numpy.random.seed(overflow % (2**32))  # in-range still works
+    np.random.seed(overflow)  # must not raise after conftest clamp
+    np.random.seed(overflow % (2**32))  # in-range still works
