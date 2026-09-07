@@ -182,9 +182,14 @@ is `>=3.10`; the forked dependency markers, the 3.9 CI leg, the
 `continue-on-error` audit carve-out, `requirements-lock.txt`'s
 `--python-version 3.9` header, and `_workflow_paths.UNSUPPORTED_LEG` are
 deleted rather than re-homed; mypy is on 2.x with `warn_unused_ignores`;
-`DEC-060` supersedes DEC-028. The 3.11 half of this item's title is the
-open scope question `reflection-hardening-increment.md` records under
-"Open questions" #1 — deferred, not silently dropped.
+`DEC-064` supersedes DEC-028.
+
+**Follow-up, dated (not open-ended).** 3.10 itself reaches EOL 2026-10-31.
+Before that date: run `make spec NAME=python-floor-311`, re-measuring the
+same evidence class this item's original "Why now" ran for 3.10 (runtime
+dependency floors, mypy/ruff support windows, any CI matrix leg that would
+otherwise ship an EOL-only interpreter) rather than assuming the 3.10 bump's
+reasoning still holds unchecked seven weeks later.
 
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 

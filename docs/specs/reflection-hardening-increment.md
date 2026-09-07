@@ -1,6 +1,8 @@
 # Spec: reflection-hardening-increment
 
-> Status: PROPOSED · Date: 2026-09-07 · Base: `main` @ `33f21044`
+> Status: IN PROGRESS (Step 1/2 landed, `docs/specs/python-floor-310.md` /
+> `DEC-064`; Steps 3-5 not started) · Date: 2026-09-07 ·
+> Base: `main` @ `33f21044`
 >
 > This is a **ledger increment**, not a fourth from-scratch audit. Three prior
 > program plans already ran the full-team reflection this request asks for:
@@ -35,6 +37,20 @@ is sourced from Context7. Implementers of each step below MUST retry
 official upstream docs URL, and MUST cite whichever source actually answered
 the question in that step's PR description — Context7 is for reading
 documentation, never for generating product code (user instruction, repeated
+
+**Step 1 retry (2026-09-07, at implementation time).** `resolve-library-id`
+was retried for both `Ruff` and `mypy`; both again returned
+`Monthly quota exceeded`. Falling back per this section's own instruction:
+Step 1's ruff/mypy claims (`target-version` deriving from `requires-python`
+when unset; `mypy` 2.3.1 installing and running under `warn_unused_ignores`)
+were verified empirically against this repository's own toolchain —
+`python3 -m ruff check .` / `python3 -m ruff format --check .` and
+`python3 -m mypy --version` run against the changed `pyproject.toml`,
+not read off an upstream docs page — because the tools themselves are the
+authoritative source for "does this exact pinned version behave this way,"
+and a version-specific behavior claim checked against a different release
+than the one this repository pins would be weaker evidence than running the
+pinned release directly.
 in `CLAUDE.md`'s spirit of "no hallucination, cite evidence").
 
 ## Problem statement
@@ -52,7 +68,8 @@ not a check (carries R-SR-23's finding H1, still true at this head).
 **2. The Python floor is past EOL and forces two forked dependency pins.**
 `pyproject.toml:4` still declares `requires-python = ">=3.9"` and
 `pyproject.toml:89` pins `target-version = "py39"`. Python 3.9 reached EOL
-2025-10-31 — nine months ago relative to this document's date.
+2025-10-31 — over ten months ago relative to this document's date (corrected
+at peer review from an earlier "nine months," which undercounted).
 `requirements-dev.txt:10-11` forks `pytest==9.0.3` (`>=3.10`) against
 `pytest==8.4.2` (`<3.10`); `:19-20` forks `pytest-randomly` the same way;
 `requirements.txt:9` gates `mcp` itself behind `python_version >= "3.10"`, so
@@ -192,7 +209,7 @@ is a product decision needing an owner call this document does not make.
 | AC-2 (credential rotate) | `feature/governed-run-console` branch state not re-queried; NS-2 still open | **Owner action; hard gate on Phase E.** |
 | AC-3 (LICENSE) | `ls LICENSE` fails | **Owner action** (NS-30). This document adds no licence text. |
 | AC-4 (`v2.4.0` tag) | `git tag -l` is empty locally | **Owner action** (NS-3). |
-| AC-23 (Python ≥3.10) | Confirmed still `>=3.9`, forked pins, `continue-on-error` 3.9 audit live | **Done: Step 1/2**, `docs/specs/python-floor-310.md`, `DEC-060`. |
+| AC-23 (Python ≥3.10) | Confirmed still `>=3.9`, forked pins, `continue-on-error` 3.9 audit live | **Done: Step 1/2**, `docs/specs/python-floor-310.md`, `DEC-064`. |
 | AC-24 (attestation SHA binding) | No matching test selector found | **Scheduled: Step 4**, minus `required_signatures` (needs NS-1 first). |
 | AC-25 (Dockerfile + Dependabot cooldown) | 3 of 4 sub-defects confirmed live; contract tests absent | **Scheduled: Step 4.** |
 | AC-26 (JVM relocate) | `harness/jvm/` present, 49 files | **Gated on NS-2** (DEC-054). Not started here. |
@@ -419,8 +436,10 @@ Protected paths are marked (P); every (P) slice carries the attestation table
 - Step 1/2: `docs/specs/python-floor-310.md` (new),
   `pyproject.toml` (P), `requirements-dev.txt` (P), `requirements.txt` (P),
   `requirements-lock.txt`, `.github/workflows/python-package.yml` (P),
-  `.github/workflows/scheduled-drift.yml` (P), `.github/rulesets/main.json`,
-  `harness/shared/check_py_compat.py` (P), `harness/shared/tests/test_check_py_compat.py`,
+  `.github/rulesets/main.json`,
+  `harness/shared/check_py_compat.py` (P) (comment-only, no behavior
+  change — its matrix-derived floor needed no code edit, `python-floor-310.md`
+  R-PF-6/AC-7),
   `harness/shared/tests/_workflow_paths.py` (removes `UNSUPPORTED_LEG`),
   `harness/shared/tests/test_workflow_contracts.py` (removes
   `TestTheUnsupportedLegDeselectsRatherThanSkips`; this is also where the
@@ -497,7 +516,7 @@ Protected paths are marked (P); every (P) slice carries the attestation table
 ## Backward compatibility
 
 Python 3.9 support is the one breaking change in this document and is
-intentional (3.9 is nine months past EOL); it is isolated to Step 1/2 and
+intentional (3.9 is over ten months past EOL); it is isolated to Step 1/2 and
 recorded as the floor bump, not silently absorbed into another step. Every
 other step is additive or corrective: the reasoner persona's *observable*
 tool set does not change (C-RHI-2) — only how it is derived; `prompt_sha` is a
@@ -513,11 +532,21 @@ implemented by this document.
 ## Open questions
 
 1. **`python-floor-310` scope: 3.10 only, or 3.10 now + 3.11 in the same
-   spec.** The remediation plan recommended both in one spec to avoid a
-   second floor change in November (3.10 is itself EOL 2026-10-31, roughly
-   seven weeks after this document's date). This document schedules 3.10 only
-   unless the owner asks the child spec to cover both. Blocks Step 1's scope,
-   not its start.
+   spec — resolved to 3.10 only, with a dated trigger, not left open.**
+   The remediation plan recommended both in one spec to avoid a second floor
+   change in November; this document scheduled 3.10 only, reasoning that no
+   owner had asked for 3.11. On its own, that reasoning under-weighs the
+   plan's actual warning: 3.10 itself reaches EOL 2026-10-31 — about seven
+   weeks after this document's date — so "wait for the owner to ask" risks
+   the exact repeat this ledger otherwise exists to prevent (an EOL floor
+   discovered only after it has already lapsed, as DEC-028/DEC-064 record
+   happened once with 3.9). Neither re-opening 3.11 unrequested nor leaving
+   this as a passive question a human might not revisit is the fix: **NS-6
+   in `NEXT_STEPS.md` now carries an explicit trigger** — "before
+   2026-10-31, run `make spec NAME=python-floor-311`, gated on the same
+   dependency-floor evidence check this spec ran for 3.10" — so the next
+   session (agent or human) has a dated, actionable item instead of a static
+   paragraph to rediscover.
 2. **LangGraph park sunset release name.** The remediation plan's own **Open
    Question 4** (`2026-standards-remediation-plan.md:673-674`; corrected at
    draft review — the original citation pointed at `NEXT_STEPS.md`'s NS-4,
