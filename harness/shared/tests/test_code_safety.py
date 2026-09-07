@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 from pathlib import Path
 
 import pytest
 
+from harness.shared import code_safety
 from harness.shared.code_safety import (
     DEFAULT_PYTHON_WRITE_SUFFIXES,
     ProhibitedSymbol,
@@ -416,18 +418,40 @@ class TestThePythonWriteSuffixList:
         assert load_python_write_suffixes(self._policy(tmp_path, [".PY", ".Pyw"])) == {".py", ".pyw"}
 
     def test_the_list_is_the_policy_rather_than_a_literal(self, tmp_path: Path) -> None:
-        assert load_python_write_suffixes(self._policy(tmp_path, [".pyx"])) == {".pyx"}
+        """A suffix no module names arms the check, so the key really is the source."""
+        assert ".pyx" in load_python_write_suffixes(self._policy(tmp_path, [".pyx"]))
 
-    def test_a_missing_key_raises(self, tmp_path: Path) -> None:
+    def test_a_supplied_policy_cannot_narrow_the_harness_floor(self, tmp_path: Path) -> None:
+        """R-PPP-1, one key over: supplying a policy adds, it never takes away.
+
+        As first written this substituted, so a digest-pinned policy naming only
+        `.pyx` made `.py` not-Python and switched the prohibited-symbol check off
+        for Python output -- the check reading its arming list from a document
+        the adopter controls. `write_policy` had already decided this for
+        protected paths; this key had simply not applied it. A review bot found
+        it. The removal is reported rather than obeyed, matching how
+        `write_policy` treats the keys through which a supplied policy could take
+        a harness denial away.
+        """
+        assert DEFAULT_PYTHON_WRITE_SUFFIXES <= load_python_write_suffixes(self._policy(tmp_path, [".pyx"]))
+
+    def test_a_supplied_policy_missing_the_key_gets_the_floor(self, tmp_path: Path) -> None:
+        """Omission is the quietest removal. A policy silent on the key does not
+        narrow it either -- it simply has nothing to add."""
         policy = write_policy_file(tmp_path, {"prohibited_imports": ["subprocess"]})
-        with pytest.raises(ProhibitedSymbolPolicyError, match="is missing"):
-            load_python_write_suffixes(policy)
+        assert load_python_write_suffixes(policy) == DEFAULT_PYTHON_WRITE_SUFFIXES
 
-    def test_a_missing_section_raises(self, tmp_path: Path) -> None:
+    def test_a_supplied_policy_missing_the_section_gets_the_floor(self, tmp_path: Path) -> None:
         path = tmp_path / "governance-policy.json"
         path.write_text(json.dumps({"coverage": {"lines": 90}}), encoding="utf-8")
-        with pytest.raises(ProhibitedSymbolPolicyError, match="is missing"):
-            load_python_write_suffixes(path)
+        assert load_python_write_suffixes(path) == DEFAULT_PYTHON_WRITE_SUFFIXES
+
+    def test_the_reported_removal_names_what_it_kept(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """A removal the union defeats is still an attempt, and a silent
+        no-op teaches the adopter nothing about why their policy did not apply."""
+        with caplog.at_level(logging.WARNING):
+            load_python_write_suffixes(self._policy(tmp_path, [".pyx"]))
+        assert any("omits" in record.message and "union keeps them" in record.message for record in caplog.records)
 
     @pytest.mark.parametrize("value", [[], "py", {}, None])
     def test_a_list_that_cannot_name_a_suffix_raises(self, tmp_path: Path, value: object) -> None:
@@ -590,3 +614,51 @@ class TestTheLivePolicyIsTheCorpusUnderTest:
         assert set(witnesses) == set(live), "a policy entry gained or lost a witness; add one before shipping it"
         for entry, source in witnesses.items():
             assert entry in entries_in(source, live), f"{entry} is declared but nothing the checker sees reaches it"
+
+
+class TestTheHarnessFloorIsTheFloor:
+    """The union's own edges: where the floor comes from, and when there is none.
+
+    `load_prohibited_symbols` and `load_python_write_suffixes` both read the
+    harness policy for a floor and union a supplied policy onto it (R-PPP-1).
+    These are the three branches of that lookup — the adopter with no harness
+    policy at all, the broken install whose harness policy lost the key, and the
+    supplied policy that drops an entry and is reported rather than obeyed.
+    """
+
+    def test_a_supplied_policy_cannot_drop_a_prohibited_symbol(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The sibling of the suffix narrowing, and the more direct one.
+
+        A digest-pinned policy naming only `shutil.rmtree` used to *be* the
+        list, so `os.system` — which the harness policy forbids — became
+        writable. Pinning establishes provenance, not benignity.
+        """
+        narrowed = write_policy_file(tmp_path, {"prohibited_imports": ["shutil.rmtree"]})
+        with caplog.at_level(logging.WARNING):
+            symbols = load_prohibited_symbols(narrowed)
+        assert "os.system" in symbols, "a supplied policy must not be able to drop a harness prohibition"
+        assert "shutil.rmtree" in symbols, "and must still be able to add one"
+        assert any("omits" in record.message for record in caplog.records)
+
+    def test_no_harness_policy_at_all_falls_back_rather_than_raising(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The adopter path `policy_file_is_absent` exists to keep working."""
+        monkeypatch.setattr(code_safety, "POLICY_PATH", tmp_path / "no-such-policy.json")
+        assert load_python_write_suffixes(tmp_path / "also-absent.json") == DEFAULT_PYTHON_WRITE_SUFFIXES
+
+    def test_a_harness_policy_that_lost_the_key_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A broken install, not an adopter choice: there is no floor to enforce.
+
+        Distinguished from a *supplied* policy missing the key, which is silence
+        rather than removal and gets the floor. Substituting a built-in default
+        here would let a truncated harness policy narrow the check to whatever
+        this module happens to say — the failure `policy_loader._Section._value`
+        was written to refuse.
+        """
+        broken = write_policy_file(tmp_path, {"prohibited_imports": ["os.system"]})
+        monkeypatch.setattr(code_safety, "POLICY_PATH", broken)
+        with pytest.raises(ProhibitedSymbolPolicyError, match="no floor to enforce"):
+            load_python_write_suffixes(tmp_path / "supplied.json")

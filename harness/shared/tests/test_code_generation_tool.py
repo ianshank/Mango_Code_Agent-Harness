@@ -15,15 +15,14 @@ import pytest
 from harness.shared import mango_mas_orchestrator as orch_module
 from harness.shared import tool_executors as te
 from harness.shared.agent_authority import tools_for_role
-from harness.shared.governance.broker import ExecutionBroker
-from harness.shared.policy_loader import PolicyError
-from harness.shared.tool_executors import (
+from harness.shared.code_safety import (
     DEFAULT_PYTHON_WRITE_SUFFIXES,
     PYTHON_SUFFIX_KEY,
-    authorize_write,
-    execute_generate_code,
     load_python_write_suffixes,
 )
+from harness.shared.governance.broker import ExecutionBroker
+from harness.shared.policy_loader import PolicyError
+from harness.shared.tool_executors import authorize_write, execute_generate_code
 from harness.shared.tool_result_format import DENIED_POLICY, tool_outcome
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
@@ -401,8 +400,8 @@ class TestPythonWriteSuffixPolicy:
 
     @pytest.mark.parametrize(
         "value",
-        [_ABSENT, "not-a-list", [], [".py", 7], [".py", "py"], [".py", " .pyw"]],
-        ids=["missing", "not-a-list", "empty", "non-string", "undotted", "whitespace"],
+        ["not-a-list", [], [".py", 7], [".py", "py"], [".py", " .pyw"]],
+        ids=["not-a-list", "empty", "non-string", "undotted", "whitespace"],
     )
     def test_a_policy_that_cannot_arm_the_check_raises(self, tmp_path: Path, value: object) -> None:
         """Substituting a default here would silently narrow a security check."""
@@ -422,15 +421,31 @@ class TestPythonWriteSuffixPolicy:
         assert {".py", ".pyw"} <= shipped
         assert ".pyi" not in shipped
 
-    def test_the_accessor_reads_a_suffix_the_module_never_mentions(self, tmp_path: Path) -> None:
-        """One half of "policy, not a relocated literal": the key drives the set.
+    def test_a_supplied_policy_adds_suffixes_and_cannot_remove_them(self, tmp_path: Path) -> None:
+        """One half of "policy, not a relocated literal" — and the limit on it.
 
-        `.pyx` appears nowhere in `tool_executors`, so a set containing it and
-        nothing else can only have come from the file. Moving `".py"` into JSON
-        and reading it straight back would look identical to leaving it in the
-        module; a suffix the module never names cannot.
+        `.pyx` appears nowhere in the module, so a set containing it can only
+        have come from the file: moving `".py"` into JSON and reading it straight
+        back would look identical to leaving it in the module, and a suffix the
+        module never names cannot.
+
+        The other half is what an earlier version of this test asserted, and it
+        had the security property backwards. It required the supplied list to be
+        the *whole* answer, so a digest-pinned policy naming only `.pyx` made
+        `.py` **not Python** and turned the prohibited-symbol check off for
+        Python output — a security check reading its arming list from a document
+        the adopter controls. `write_policy` had already settled this question
+        for protected paths: a supplied policy "is unioned with the harness
+        policy rather than substituted for it" (R-PPP-1). Same invariant, one key
+        over. Reported by a review bot.
         """
-        assert load_python_write_suffixes(self._policy(tmp_path, [".pyx"])) == {".pyx"}
+        widened = load_python_write_suffixes(self._policy(tmp_path, [".pyx"]))
+        assert ".pyx" in widened, "a suffix only the policy names must arm the check"
+        assert DEFAULT_PYTHON_WRITE_SUFFIXES <= widened, "a supplied policy must not narrow the harness floor"
+
+    def test_a_supplied_policy_omitting_the_key_still_gets_the_floor(self, tmp_path: Path) -> None:
+        """Omission is the quietest removal, so it is the one worth pinning."""
+        assert DEFAULT_PYTHON_WRITE_SUFFIXES <= load_python_write_suffixes(self._policy(tmp_path, _ABSENT))
 
     def test_the_write_door_decides_python_ness_by_asking_the_accessor(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

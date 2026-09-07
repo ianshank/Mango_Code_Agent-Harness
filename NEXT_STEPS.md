@@ -317,7 +317,9 @@ over-trusts a green run.
    to each of these files was a security fix, and it arrived with no room. A
    parallel agent's patch for the same findings is behaviourally correct and
    cannot land, because it breached the budget on three files to make room for
-   itself. Split on the predicted seam in PR #120 — analysis versus reporting:
+   itself. Split on the predicted seam in PR #120 — analysis versus reporting,
+   with the line counts below as they stood at that split rather than as a
+   current-state claim, which `make validate` reports live:
    `authority_call_sites.py` 499 → **355** + `authority_call_analysis.py` 415;
    `code_safety.py` → **222** + `code_symbols.py` 440; `graph_topology.py` →
    **349** + `graph_topology_source.py` 306; `test_authority_graph.py` 699 →
@@ -332,9 +334,10 @@ prints the count, the ratchet and the headroom in one line;
 §"Not closed here"; `docs/specs/graph-engineering-adoption.md` AC-GEA-8 unticked;
 no baseline file under `docs/reports/`; `harness/shared/tool_executors.py`
 `execute_generate_code`'s suffix-derived `is_python` gate (the residual item 3
-records as closed); `make validate`'s Size Budget line, which names
-`authority_call_sites.py` at 499 with 1 to spare and `test_authority_graph.py`
-at 699 with 1 to spare.
+records as closed); `make validate`'s Size Budget line, which names the closest
+file and its remaining slack on every run — read it there rather than from a
+number written down here, because the snapshot this line used to carry went
+stale the moment item 4's split landed and a reviewer had no way to tell.
 
 **Done when.**
 

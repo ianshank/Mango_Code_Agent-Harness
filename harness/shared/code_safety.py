@@ -33,8 +33,9 @@ from __future__ import annotations
 
 import ast
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TypeVar
 
 from harness.shared.code_symbols import BUILTINS_NAMESPACE, ProhibitedSymbol, symbol_findings
 from harness.shared.policy_loader import POLICY_PATH, PolicyError, load_policy, policy_file_is_absent
@@ -56,6 +57,8 @@ PYTHON_SUFFIX_KEY = "python_write_suffixes"
 #: (``policy_loader._Section``). ``.pyi`` is excluded on purpose; the policy
 #: rationale carries why.
 DEFAULT_PYTHON_WRITE_SUFFIXES = frozenset({".py", ".pyw"})
+
+_T = TypeVar("_T")
 
 logger = logging.getLogger(__name__)
 
@@ -111,15 +114,33 @@ def load_prohibited_symbols(policy_path: Path | None = None) -> tuple[str, ...]:
     on a policy that is present and unparseable; this adds the three shapes it
     has no opinion about.
     """
-    section = load_policy(policy_path).get(POLICY_SECTION)
-    origin = f"policy {POLICY_SECTION}.{POLICY_KEY} at {policy_path or POLICY_PATH}"
+    path = POLICY_PATH if policy_path is None else policy_path
+    section = load_policy(path).get(POLICY_SECTION)
+    origin = f"policy {POLICY_SECTION}.{POLICY_KEY} at {path}"
     if not isinstance(section, dict) or POLICY_KEY not in section:
         raise ProhibitedSymbolPolicyError(
             f"{origin} is missing; refusing to judge a generated module against a list that "
             "does not exist, which would admit every prohibited import"
         )
     symbols = _validated_symbols(section[POLICY_KEY], origin)
-    logger.debug("loaded %d prohibited symbol(s) from %s", len(symbols), policy_path or POLICY_PATH)
+    if _is_supplied(path) and not policy_file_is_absent(POLICY_PATH):
+        # Same union as the suffixes below, for the same reason: a supplied
+        # policy that drops `os.system` would otherwise admit it. The entries
+        # are a tuple because order is the order findings are reported in;
+        # sorting the union keeps that deterministic across policies.
+        empty: tuple[str, ...] = ()
+        floor = _floor_for(POLICY_KEY, _validated_symbols, empty)
+        merged = frozenset(symbols) | frozenset(floor)
+        removed: frozenset[str] = frozenset(floor) - frozenset(symbols)
+        if removed:
+            logger.warning(
+                "supplied policy %s omits %d harness-prohibited symbol(s) %s; the union keeps them",
+                path,
+                len(removed),
+                sorted(removed),
+            )
+        symbols = tuple(sorted(merged))
+    logger.debug("loaded %d prohibited symbol(s) from %s", len(symbols), path)
     return symbols
 
 
@@ -142,30 +163,85 @@ def _validated_suffixes(entries: object, origin: str) -> frozenset[str]:
     return frozenset(entry.lower() for entry in entries)
 
 
+def _is_supplied(path: Path) -> bool:
+    """Whether ``path`` is a *supplied* policy rather than the harness one.
+
+    A supplied policy is one an adopter points the process at. It is digest-pinned
+    (``write_policy.pin_denial_reason``) so it cannot be forged, but pinning
+    establishes provenance, not benignity: R-PPP-1 states that supplying a policy
+    "cannot widen what an agent may write", and the same argument runs in the
+    other direction for a check -- it must not be able to *narrow* one either.
+    """
+    return path.resolve() != POLICY_PATH.resolve()
+
+
+def _floor_for(key: str, reader: Callable[[object, str], _T], fallback: _T) -> _T:
+    """What the harness policy says about ``key``, as the value a supplied policy
+    is unioned onto. Absent harness policy is the adopter path and uses
+    ``fallback``; a harness policy that lost the key is a broken install and
+    raises, because there is then no floor to union against."""
+    if policy_file_is_absent(POLICY_PATH):
+        return fallback
+    section = load_policy(POLICY_PATH).get(POLICY_SECTION)
+    origin = f"policy {POLICY_SECTION}.{key} at {POLICY_PATH}"
+    if not isinstance(section, dict) or key not in section:
+        raise ProhibitedSymbolPolicyError(f"{origin} is missing from the harness policy; there is no floor to enforce")
+    return reader(section[key], origin)
+
+
+def _unioned(supplied: frozenset[str], floor: frozenset[str], origin: str, what: str) -> frozenset[str]:
+    """``supplied | floor``, reporting every entry the supplied policy dropped.
+
+    Removal is reported rather than obeyed, matching `write_policy`'s treatment
+    of the keys through which a supplied policy could take away a harness
+    denial: the union already makes removal inoperative, and logging is what
+    keeps the attempt from being silent (R-PPP-1, AC-PPP-1).
+    """
+    removed = floor - supplied
+    if removed:
+        logger.warning(
+            "%s omits %d harness %s(es) %s; the union keeps them", origin, len(removed), what, sorted(removed)
+        )
+    added = supplied - floor
+    if added:
+        logger.debug("%s adds %d %s(es) %s", origin, len(added), what, sorted(added))
+    return floor | supplied
+
+
 def load_python_write_suffixes(policy_path: Path | None = None) -> frozenset[str]:
-    """Read ``synthesis.python_write_suffixes``, refusing a policy that lost it.
+    """Read ``synthesis.python_write_suffixes``, unioned with the harness floor.
 
     Which suffixes count is policy rather than a literal, because it decides
     whether a write is judged at all: pinning ``.py`` alone closes the argument
     axis (``language``, ``validate_syntax``) and leaves the filename axis open,
-    and ``.pyw`` is executable Python. Absent policy file, built-in default --
-    the adopter path. Present policy that lost the key, refusal: a plausible
-    substitute would narrow a security check to whatever this module says.
+    and ``.pyw`` is executable Python.
+
+    **A supplied policy may add suffixes and may not remove them.** As first
+    written this substituted the supplied list for the harness one, so a
+    digest-pinned policy omitting ``.py`` turned the prohibited-symbol check off
+    for Python output -- the check reading its own arming list from a document
+    the adopter controls. `write_policy` had already decided this question the
+    other way for protected paths ("a supplied policy is unioned with the harness
+    policy rather than substituted for it", R-PPP-1); this is the same invariant,
+    and the first version simply did not apply it. Reported by a review bot.
+
+    Absent policy file, built-in default -- the adopter path. Harness policy that
+    lost the key, refusal: a plausible substitute would narrow the check to
+    whatever this module says.
     """
+    floor = _floor_for(PYTHON_SUFFIX_KEY, _validated_suffixes, DEFAULT_PYTHON_WRITE_SUFFIXES)
     path = POLICY_PATH if policy_path is None else policy_path
-    if policy_file_is_absent(path):
-        logger.debug("no policy file at %s; using built-in Python write suffixes", path)
-        return DEFAULT_PYTHON_WRITE_SUFFIXES
+    if policy_file_is_absent(path) or not _is_supplied(path):
+        logger.debug("Python write suffixes from the harness policy: %d", len(floor))
+        return floor
     section = load_policy(path).get(POLICY_SECTION)
     origin = f"policy {POLICY_SECTION}.{PYTHON_SUFFIX_KEY} at {path}"
-    if not isinstance(section, dict) or PYTHON_SUFFIX_KEY not in section:
-        raise ProhibitedSymbolPolicyError(
-            f"{origin} is missing; refusing to guess which writes are Python, which would "
-            f"skip the {POLICY_SECTION}.{POLICY_KEY} check on every suffix it failed to name"
-        )
-    suffixes = _validated_suffixes(section[PYTHON_SUFFIX_KEY], origin)
-    logger.debug("loaded %d Python write suffix(es) from %s", len(suffixes), path)
-    return suffixes
+    supplied = (
+        _validated_suffixes(section[PYTHON_SUFFIX_KEY], origin)
+        if isinstance(section, dict) and PYTHON_SUFFIX_KEY in section
+        else frozenset()
+    )
+    return _unioned(supplied, floor, origin, "Python write suffix")
 
 
 def prohibited_symbol_findings(tree: ast.Module, prohibited: Sequence[str]) -> list[ProhibitedSymbol]:
