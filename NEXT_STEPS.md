@@ -275,9 +275,9 @@ nothing.
 **Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
 `required_signatures` (that clause stays gated on NS-1).
 
-### NS-39 · Close the three things DEC-065 bounded rather than fixed *(spec exists)*
+### NS-39 · Close the four things DEC-065 bounded rather than fixed *(spec exists)*
 
-**Why now.** DEC-065 landed four derived checks and left three residuals **by
+**Why now.** DEC-065 landed four derived checks and left four residuals **by
 name**, so they are visible now rather than discovered by a later reader who
 over-trusts a green run.
 
@@ -306,13 +306,31 @@ over-trusts a green run.
    not an argument about a security property, and it had been allowed to settle
    one.
 
+4. *`authority_call_sites.py` has one line of budget left, and the seam it will
+   split on is already known.* Making the approval-flag scan sound (position
+   dominance and parameter tainting, PR #120) took the module from 389 to **499**
+   of `limits.size_budget_lines` = 500, paid for by folding four single-caller
+   helpers rather than by decomposing. It passes the gate the policy sets, so
+   this is not a violation and not a god file — it is a file whose *next* change
+   breaches, forcing whoever makes it to refactor inside a diff about something
+   else. The seam is analysis (`_Scope`, `_read_block`, `_runs_before`,
+   `_binding_at`, `_mapping_entries` — "what does this name provably hold here")
+   versus reporting (`_context_reason`, `_spread_reason`, `_BrokerCallSites`,
+   `approval_flag_reachability` — "which broker calls could carry the flag").
+   `test_authority_graph.py` is at 699 of 700 and splits along the same line.
+   Deliberately **not** done in PR #120: the file is inside the threshold
+   `governance-policy.json` sets, and splitting it on personal taste rather than
+   on the policy is the hard-coded-judgment shape this repository forbids.
+
 **Evidence.** `python3 harness/shared/governance/check_traceability.py --workspace .`
 prints the count, the ratchet and the headroom in one line;
 `docs/decisions/DEC-065.md` §"Residual, named rather than discovered later" and
 §"Not closed here"; `docs/specs/graph-engineering-adoption.md` AC-GEA-8 unticked;
 no baseline file under `docs/reports/`; `harness/shared/tool_executors.py`
 `execute_generate_code`'s suffix-derived `is_python` gate (the residual item 3
-records as closed).
+records as closed); `make validate`'s Size Budget line, which names
+`authority_call_sites.py` at 499 with 1 to spare and `test_authority_graph.py`
+at 699 with 1 to spare.
 
 **Done when.**
 
@@ -336,8 +354,14 @@ records as closed).
   `test_code_generation_tool.py::TestNeitherToolArgumentTurnsTheCheckOff` red
   against the old behaviour across all three policy shapes. Only the first two
   bullets of this item remain open.
+- `authority_call_sites.py` is split on the analysis/reporting seam, with the
+  explanatory docstrings the compaction folded restored rather than re-compacted,
+  and both halves plus their tests carry real headroom against
+  `limits.size_budget_lines` · stage `make validate` (Size Budget names the
+  closest file and its slack on every run, so the number is reported without
+  waiting for a red run).
 
-**Depends on.** Nothing, and **not** NS-2: none of the three touches Phase E or
+**Depends on.** Nothing, and **not** NS-2: none of the four touches Phase E or
 the LangGraph park. DEC-065 shipped topology verification as a plain test rather
 than a gate precisely so the orphan-reviewer defect stays watched while Phase E
 waits on the credential rotation.

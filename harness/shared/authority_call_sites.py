@@ -21,14 +21,28 @@ source *permits*, not about what one execution did. A runtime test can only
 show that the flag was not set on the paths it happened to drive, which is the
 same evidence the repository already had.
 
-Why so little is treated as readable: a name is resolved only when it is bound
-exactly once, in the same function, to a dict display whose keys are all string
+Why so little is treated as readable: a name resolves only when it is bound
+exactly once, in the same function, *at a position that must already have run
+when the broker call does*, to a dict display whose keys are all string
 literals. A parameter, a call result, a ``**`` spread, a name bound twice, a
-name a ``.update()`` was called on -- each is reported rather than analysed
-further. Fail-closed here means over-reporting, and the one shape that must
-*not* over-report is the one live call site: ``execute_run_command`` forwards
-``**kwargs`` built two lines above, so the scan resolves that binding instead of
-flagging every ``**``. A scan that failed on correct code would be switched off.
+name a ``.update()`` was called on, a name assigned only inside an ``if``, a
+``for``, or a ``try`` -- each is reported rather than analysed further.
+
+Position and parameters are the two halves the first version got wrong, and
+each let it report *clean* on code that is not. It read every assignment in a
+body regardless of where the assignment sat, so a literal written *after* a
+broker call laundered the value passed *to* it; and it read a parameter as
+merely unbound rather than as the caller's own value. An unsound scan reporting
+zero witnesses is worse than no scan: it turns "unverified" into "verified"
+without doing the work. :func:`_runs_before` and :func:`_parameter_names` are
+those two halves, each naming the shape it refuses.
+
+Fail-closed means over-reporting, and the shape that must *not* over-report is
+the live call site: ``execute_run_command`` forwards ``**kwargs`` built two
+lines above and extended by ``kwargs["timeout"]`` inside an ``if``. A
+conditional subscript with a *literal* key widens the key set by at most that
+key, so it is read; a conditional *rebinding* is not. A scan that failed on
+correct code gets switched off.
 
 This module is separate from ``authority_graph`` only because the two halves
 together exceed ``limits.size_budget_lines`` in ``governance-policy.json``.
@@ -46,9 +60,10 @@ from __future__ import annotations
 
 import ast
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +84,29 @@ CONTEXT_PARAMETER = "context"
 #: called on is treated as unreadable rather than re-analysed: ``update`` can
 #: merge a caller-supplied mapping, which is precisely the shape being hunted.
 KEY_ADDING_METHODS = frozenset({"update", "setdefault"})
+
+#: Where a statement sits: one ``(id(owner), field, index)`` step per nesting
+#: level from the function body down. Two statements share a block when their
+#: paths agree on every step but the last -- the only case in which source order
+#: is also execution order. Without it a binding answers "what is this name
+#: assigned *somewhere*" when the question is "what does it hold *here*".
+_Position = tuple[tuple[int, str, int], ...]
+
+#: What owns a :class:`_Scope`. A ``lambda`` and a ``class`` body are absent
+#: deliberately: neither gets a scope, so a call inside one resolves nothing.
+_ScopeOwner = ast.Module | ast.FunctionDef | ast.AsyncFunctionDef
+
+#: The AST field shapes holding a statement list. ``except`` handlers and
+#: ``match`` cases are here because they are *not* ``ast.stmt``: read as
+#: expression fields their assignments go unrecorded, so a name rebound only in
+#: an ``except`` branch looks singly-bound and the resolver hands back the
+#: ``try`` branch's literal as the value at the call.
+_BLOCK_KINDS = (ast.stmt, ast.excepthandler, ast.match_case)
+
+#: Statements that open a binding scope of their own. The visitor gives each
+#: its own :class:`_Scope`; a binding credited to the enclosing function is how
+#: a forwarded mapping comes to look like a dict literal.
+_NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 class AuthorityGraphError(ValueError):
@@ -102,35 +140,28 @@ class ApprovalWitness:
     reason: str
 
 
+class _Binding(NamedTuple):
+    """One assignment, with the block position at which it takes effect."""
+
+    value: ast.expr
+    position: _Position
+
+
 @dataclass
 class _Scope:
     """What one function binds, as far as this analysis can read it.
 
-    Absence is the safe state: a name with no binding here -- a parameter, a
-    loop variable, a ``with ... as`` target, an import -- resolves to nothing
-    and is reported. Only a name bound exactly once to a dict literal in this
-    function is treated as readable, which is what makes a forwarded mapping a
-    witness rather than an unhandled case.
+    Absence is the safe state: a name with no binding here -- a loop variable, a
+    ``with ... as`` target, a walrus, an import -- resolves to nothing and is
+    reported. Presence in ``parameters`` is *worse*: the caller chose that value.
     """
 
     name: str
-    bindings: dict[str, ast.expr] = field(default_factory=dict)
+    parameters: set[str] = field(default_factory=set)
+    bindings: dict[str, _Binding] = field(default_factory=dict)
     extra_keys: dict[str, dict[str, ast.expr]] = field(default_factory=dict)
     tainted: set[str] = field(default_factory=set)
-
-    def bind(self, name: str, value: ast.expr) -> None:
-        """Record ``name = value``. A rebound name is tainted: which value
-        reaches the call is a flow question this analysis does not answer."""
-        if name in self.bindings:
-            self.tainted.add(name)
-        self.bindings[name] = value
-
-    def bind_key(self, name: str, key: str | None, value: ast.expr) -> None:
-        """Record ``name[key] = value``. A non-literal key taints the name."""
-        if key is None:
-            self.tainted.add(name)
-            return
-        self.extra_keys.setdefault(name, {})[key] = value
+    positions: dict[int, _Position] = field(default_factory=dict)
 
 
 def _literal_key(node: ast.expr | None) -> str | None:
@@ -145,21 +176,37 @@ def _literal_key(node: ast.expr | None) -> str | None:
     return None
 
 
-def _own_statements(owner: ast.AST) -> Iterator[ast.AST]:
-    """Yield what ``owner`` contains without descending into a nested scope.
+def _parameter_names(owner: _ScopeOwner) -> set[str]:
+    """Every name the signature binds, ``*args`` and ``**kwargs`` included.
 
-    A nested ``def`` gets its own :class:`_Scope` from the visitor, so walking
-    into one here would attribute its bindings to the enclosing function -- and
-    a binding attributed to the wrong scope is how a forwarded mapping comes to
-    look like a dict literal.
+    A parameter is caller-controlled by definition, and the property is "no
+    *caller* can supply ``human_approved``" (DEC-065). Reading an unbound name
+    as merely unreadable reads the same as unknown-and-fine, so
+    ``run(broker, cmd, context)`` forwarding its own ``context`` read clean.
     """
-    stack = list(ast.iter_child_nodes(owner))
-    while stack:
-        node = stack.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
-            continue
-        yield node
-        stack.extend(ast.iter_child_nodes(node))
+    if isinstance(owner, ast.Module):
+        return set()
+    args = owner.args
+    named = {arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)}
+    return named | {arg.arg for arg in (args.vararg, args.kwarg) if arg is not None}
+
+
+def _runs_before(binding: _Position, call: _Position) -> bool:
+    """Whether ``binding`` is guaranteed to have run by the time ``call`` runs.
+
+    True only when the two paths agree on every enclosing block down to one
+    they both sit *directly* in, and the binding comes first there. A binding
+    nested deeper -- in an ``if``, a ``for``, a ``try`` -- is skipped on some
+    path, and one later in a loop body reaches the call on the next iteration.
+    With no position at all, a literal assigned *after* a broker call was read
+    as the value passed *to* it.
+    """
+    for depth, (bound, called) in enumerate(zip(binding, call, strict=False)):
+        if bound[:2] != called[:2]:
+            return False
+        if bound[2] != called[2]:
+            return bound[2] < called[2] and depth == len(binding) - 1
+    return False
 
 
 def _mutated_name(node: ast.AST) -> str | None:
@@ -171,47 +218,100 @@ def _mutated_name(node: ast.AST) -> str | None:
     return node.func.value.id
 
 
-def _record_target(scope: _Scope, target: ast.expr, value: ast.expr) -> None:
-    """Record one assignment target. Unreadable shapes are simply not recorded."""
+def _record_target(scope: _Scope, target: ast.expr, value: ast.expr, position: _Position) -> None:
+    """Record one assignment target. Unreadable shapes are simply not recorded.
+
+    A rebound name is tainted: which value reaches the call is a flow question
+    this analysis does not answer. ``name[key] = value`` with a literal key is
+    kept whatever its position -- it widens the key set by at most that key
+    wherever it sits -- and a computed key taints instead.
+    """
     if isinstance(target, ast.Name):
-        scope.bind(target.id, value)
+        if target.id in scope.bindings:
+            scope.tainted.add(target.id)
+        scope.bindings[target.id] = _Binding(value=value, position=position)
     elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
-        scope.bind_key(target.value.id, _literal_key(target.slice), value)
-
-
-def _scope_for(owner: ast.AST, name: str) -> _Scope:
-    """Read the bindings of one function (or the module) into a :class:`_Scope`."""
-    scope = _Scope(name=name)
-    for node in _own_statements(owner):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                _record_target(scope, target, node.value)
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            _record_target(scope, node.target, node.value)
-        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-            scope.tainted.add(node.target.id)
+        key = _literal_key(target.slice)
+        if key is None:
+            scope.tainted.add(target.value.id)
         else:
-            mutated = _mutated_name(node)
-            if mutated is not None:
-                scope.tainted.add(mutated)
-    return scope
+            scope.extra_keys.setdefault(target.value.id, {})[key] = value
 
 
-def _mapping_entries(expr: ast.expr, scope: _Scope) -> tuple[dict[str, ast.expr] | None, str]:
+def _read_block(parent: ast.AST, field_name: str, body: list[ast.AST], prefix: _Position, scope: _Scope) -> None:
+    """Index one statement list: what each statement binds, and where it sits.
+
+    Every node in a non-block field inherits its statement's position, which is
+    how a broker call buried in a ``return`` or an ``if`` test is later placed
+    relative to the assignments around it. A ``lambda`` is not walked into: it
+    binds names of its own and gets no :class:`_Scope`. A shape with no readable
+    target -- tuple unpacking, ``with ... as``, a walrus -- is left unrecorded,
+    so the name stays unbound and is reported.
+    """
+    for index, statement in enumerate(body):
+        if isinstance(statement, _NESTED_SCOPES):
+            continue
+        position = (*prefix, (id(parent), field_name, index))
+        if isinstance(statement, ast.Assign):
+            for target in statement.targets:
+                _record_target(scope, target, statement.value, position)
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            _record_target(scope, statement.target, statement.value, position)
+        elif isinstance(statement, ast.AugAssign) and isinstance(statement.target, ast.Name):
+            scope.tainted.add(statement.target.id)
+        for name, value in ast.iter_fields(statement):
+            if isinstance(value, list) and value and isinstance(value[0], _BLOCK_KINDS):
+                _read_block(statement, name, value, position, scope)
+                continue
+            stack = [item for item in (value if isinstance(value, list) else [value]) if isinstance(item, ast.AST)]
+            while stack:
+                node = stack.pop()
+                if isinstance(node, (*_NESTED_SCOPES, ast.Lambda)):
+                    continue
+                scope.positions[id(node)] = position
+                mutated = _mutated_name(node)
+                if mutated is not None:
+                    scope.tainted.add(mutated)
+                stack.extend(ast.iter_child_nodes(node))
+
+
+def _binding_at(name: str, scope: _Scope, at: _Position | None) -> tuple[ast.expr | None, str]:
+    """The value ``name`` provably holds at ``at``, or ``None`` and why not.
+
+    Every branch but the last is a refusal naming the rule that refused, in
+    order of severity: a parameter is not an unhandled shape, it is the hole.
+    """
+    binding = scope.bindings.get(name)
+    if name in scope.parameters:
+        reason = f"`{name}` is a parameter of {scope.name}, so its value is the caller's"
+    elif name in scope.tainted:
+        reason = f"`{name}` is rebound or mutated in {scope.name}"
+    elif binding is None:
+        reason = f"`{name}` is not bound to a dict literal in {scope.name}"
+    elif at is None or not _runs_before(binding.position, at):
+        reason = f"`{name}`'s binding in {scope.name} is not guaranteed to have run at this call"
+    else:
+        logger.debug("Resolved `%s` in %s: its one binding precedes this call unconditionally", name, scope.name)
+        return binding.value, ""
+    logger.debug("Tainted `%s` in %s: %s", name, scope.name, reason)
+    return None, reason
+
+
+def _mapping_entries(expr: ast.expr, scope: _Scope, at: _Position | None) -> tuple[dict[str, ast.expr] | None, str]:
     """The key/value entries ``expr`` provably has, or ``None`` and why not.
 
     "Provably" is narrow on purpose: a dict display whose keys are all string
-    constants, optionally reached through one name bound once in this function
+    constants, optionally reached through one name bound once *before ``at``*
     and extended by literal-key subscript assignment. Anything else returns
-    ``None``, because the analysis cannot show the mapping does not carry the
-    flag -- and "cannot show" must read as "reports", never as "passes".
+    ``None``: "cannot show" must read as "reports", never "passes".
     """
     extra: dict[str, ast.expr] = {}
     target = expr
     if isinstance(expr, ast.Name):
-        if expr.id in scope.tainted or expr.id not in scope.bindings:
-            return None, f"`{ast.unparse(expr)}` is not bound to a dict literal in {scope.name}"
-        target = scope.bindings[expr.id]
+        resolved, refusal = _binding_at(expr.id, scope, at)
+        if resolved is None:
+            return None, refusal
+        target = resolved
         extra = scope.extra_keys.get(expr.id, {})
     if not isinstance(target, ast.Dict):
         return None, f"`{ast.unparse(target)}` is not a dict literal"
@@ -226,9 +326,9 @@ def _mapping_entries(expr: ast.expr, scope: _Scope) -> tuple[dict[str, ast.expr]
     return entries, ""
 
 
-def _context_reason(expr: ast.expr, scope: _Scope) -> str | None:
+def _context_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str | None:
     """Why ``expr`` could carry the approval flag into the broker, or ``None``."""
-    entries, reason = _mapping_entries(expr, scope)
+    entries, reason = _mapping_entries(expr, scope, at)
     if entries is None:
         return f"the broker context is not literal here: {reason}, so a caller could supply {APPROVAL_FLAG!r}"
     if APPROVAL_FLAG in entries:
@@ -236,15 +336,15 @@ def _context_reason(expr: ast.expr, scope: _Scope) -> str | None:
     return None
 
 
-def _spread_reason(expr: ast.expr, scope: _Scope) -> str | None:
+def _spread_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str | None:
     """Why a ``**`` argument could carry the approval flag, or ``None``.
 
     ``execute_run_command`` forwards its arguments this way today, with a dict
     literal built two lines above, so the spread is resolved rather than
-    reported. The mutation this guards against is the same call growing a
-    ``context`` it did not build.
+    reported. What this guards against is the same call growing a ``context`` it
+    did not build -- a bag that *is* a ``**kwargs`` parameter included.
     """
-    entries, reason = _mapping_entries(expr, scope)
+    entries, reason = _mapping_entries(expr, scope, at)
     if entries is None:
         return f"the call forwards `**{ast.unparse(expr)}`, a mapping it did not build here: {reason}"
     if APPROVAL_FLAG in entries:
@@ -252,23 +352,29 @@ def _spread_reason(expr: ast.expr, scope: _Scope) -> str | None:
     context = entries.get(CONTEXT_PARAMETER)
     if context is None:
         return None
-    return _context_reason(context, scope)
+    return _context_reason(context, scope, at)
 
 
 def _call_reasons(call: ast.Call, scope: _Scope) -> list[tuple[str, ast.expr]]:
-    """Every way this call site could carry the flag, each with the blamed expression."""
+    """Every way this call site could carry the flag, each with the blamed expression.
+
+    The call's block position is looked up once and threaded down. A call with
+    no position -- inside a ``lambda`` or a class body, neither of which gets a
+    scope -- resolves no name at all: this analysis does not know where it runs.
+    """
+    at = scope.positions.get(id(call))
     found: list[tuple[str, ast.expr]] = []
     # `execute_command(command, context, ...)`: the context is the second
     # positional slot of the broker's declared signature.
     if len(call.args) > 1:
-        reason = _context_reason(call.args[1], scope)
+        reason = _context_reason(call.args[1], scope, at)
         if reason is not None:
             found.append((reason, call.args[1]))
     for keyword in call.keywords:
         if keyword.arg == CONTEXT_PARAMETER:
-            reason = _context_reason(keyword.value, scope)
+            reason = _context_reason(keyword.value, scope, at)
         elif keyword.arg is None:
-            reason = _spread_reason(keyword.value, scope)
+            reason = _spread_reason(keyword.value, scope, at)
         else:
             continue
         if reason is not None:
@@ -290,8 +396,12 @@ class _BrokerCallSites(ast.NodeVisitor):
         self.sites: list[tuple[ast.Call, _Scope]] = []
         self._scopes: list[_Scope] = []
 
-    def _enter(self, node: ast.AST, name: str) -> None:
-        self._scopes.append(_scope_for(node, name))
+    def _enter(self, node: _ScopeOwner, name: str) -> None:
+        """Read one function (or the module) into a scope, then visit it."""
+        scope = _Scope(name=name, parameters=_parameter_names(node))
+        _read_block(node, "body", list(node.body), (), scope)
+        logger.debug("Scope %s: %s parameter(s), %s binding(s)", name, len(scope.parameters), len(scope.bindings))
+        self._scopes.append(scope)
         self.generic_visit(node)
         self._scopes.pop()
 

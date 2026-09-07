@@ -4,8 +4,8 @@ Three properties, each written against a specific way the naive version of this
 check passes for the wrong reason:
 
 * **The approval flag is unreachable from agent input** (AC-GEA-2, R-GEA-2). The
-  guarantee rests on one dict literal in ``execute_run_command``; the mutation
-  fixtures below are the proof that the scan would notice if it changed.
+  guarantee rests on one dict literal in ``execute_run_command``, read *at the
+  call*: position- and parameter-blind, the scan called six of these sites clean.
 * **High-risk reachability is asserted on the half where it is non-vacuous**
   (AC-GEA-2b, R-GEA-2b). Three of the five ``high_risk_actions`` are declared
   by no role at all, so asserting "no high-risk action is reachable" is 60%
@@ -17,10 +17,9 @@ check passes for the wrong reason:
   ``orchestrator``; that pair is the one a single-surface query answers wrongly
   (finding S-5).
 
-Plus the boundary (AC-GEA-6) and every fail-closed raise (R-GEA-4). Mutation
-fixtures are written into ``tmp_path`` and analysed by the same function that
-reads the real tree -- no test here edits a source file, and
-``agent_authority.py`` is a protected path besides.
+Plus the boundary (AC-GEA-6) and every fail-closed raise (R-GEA-4). Fixtures are
+written into ``tmp_path`` and analysed by the function that reads the real tree
+-- no test here edits a source file, and ``agent_authority.py`` is protected.
 
 Spec: ``docs/specs/graph-engineering-adoption.md``.
 """
@@ -315,6 +314,60 @@ class TestTheApprovalFlagIsUnreachable:
             "    return broker.execute_command(command, context)\n",
         )
         assert approval_flag_reachability([path])
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            """def run(broker, cmd, context):
+    broker.execute_command(cmd, context)
+    context = {"agent_id": "x"}""",
+            """def run(broker, cmd, context):
+    context = {"agent_id": "x"}
+    broker.execute_command(cmd, context)""",
+            """def run(broker, cmd, role):
+    if role:
+        context = {"agent_id": role}
+    broker.execute_command(cmd, context)""",
+            """def run(broker, cmd, roles):
+    for role in roles:
+        context = {"agent_id": role}
+    broker.execute_command(cmd, context)""",
+            """def run(broker, cmd, role):
+    try:
+        context = {"agent_id": role}
+    finally:
+        broker.execute_command(cmd, context)""",
+            """def run(broker, cmd, contexts):
+    for context in contexts:
+        broker.execute_command(cmd, context)
+        context = {"agent_id": "late"}
+    stored = broker.execute_command(cmd, stored)
+    broker.execute_command(cmd, MODULE_CONTEXT)""",
+        ],
+    )
+    def test_a_laundered_binding_is_reported(self, tmp_path: Path, source: str) -> None:
+        """Shapes that read *clean* while one scope was built from every
+        assignment in a body: a literal written after the call, an iteration late,
+        over a parameter, or under an ``if``/``for``/``try`` that may not have run
+        stood in for the mapping the broker was actually handed."""
+        found = approval_flag_reachability([_fixture(tmp_path, "laundered", source)])
+        assert found and all(APPROVAL_FLAG in w.reason for w in found), source
+
+    def test_a_parameter_reads_as_the_caller_s_value(self, tmp_path: Path) -> None:
+        """Reporting a parameter as "not bound to a dict literal" reads as a
+        shape this analysis gave up on. It is the hole itself -- the caller chose
+        that mapping, by name or as the whole ``**`` bag -- and it must say so."""
+        source = "def run(broker, cmd, context):\n    broker.execute_command(cmd, context)\n"
+        source += "def bag(broker, cmd, **kw):\n    broker.execute_command(cmd, **kw)\n"
+        found = approval_flag_reachability([_fixture(tmp_path, "parameters", source)])
+        assert [(w.function, "is a parameter of" in w.reason) for w in found] == [("run", True), ("bag", True)]
+
+    def test_a_binding_that_dominates_its_call_is_not_reported(self, tmp_path: Path) -> None:
+        """Dominance, not nesting: a rule tainting every binding under an ``if``
+        would fire on ``kwargs["timeout"] = timeout``, which is correct code."""
+        guarded = "def run(broker, cmd, role):\n    if role:\n        context = {'agent_id': role}\n"
+        guarded += "        return broker.execute_command(cmd, context)\n    return None\n"
+        assert approval_flag_reachability([_fixture(tmp_path, "dominating", guarded)]) == []
 
     def test_the_real_forwarding_shape_is_not_reported(self, tmp_path: Path) -> None:
         """The one shape that must stay clean. A scan that flagged every ``**``

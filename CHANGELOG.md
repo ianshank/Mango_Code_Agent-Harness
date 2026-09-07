@@ -86,6 +86,23 @@ attestations each time — and the report that proposed one priced none of it.
   `harness/shared/governance/`, `write_policy.py`, `read_policy.py` or
   `agent_authority.py`: the graph reads the governance layer, never the reverse.
   `test_authority_graph.py`.
+- **That scan's first zero was not evidence, and review caught it.** As first
+  written it read every assignment in a function body regardless of position, so a
+  dict literal written *after* a broker call resolved as the value passed *to* it,
+  and it treated a parameter as merely unreadable rather than as the caller's own
+  value. Four of the five call sites pass a literal inline and were never at risk;
+  the fifth — `execute_run_command`, the only one needing analysis — was cleared by
+  a resolver answering "is this name assigned to a literal *somewhere*" when the
+  question is "what does it hold *here*". The count is unchanged (five sites, zero
+  witnesses, 114 modules); what changed is whether the zero carries information.
+  `_runs_before` requires a binding to sit directly in a block the call also sits
+  in, ahead of it, and `_parameter_names` refuses a parameter before consulting
+  bindings at all — so `**kwargs` built two lines above and extended by
+  `kwargs["timeout"]` under an `if` still reads clean, while six shapes the old
+  scan passed are now witnesses: a literal after the call, a parameter overwritten
+  by a dominating literal, bindings under `if`/`for`/`try`, and a loop reading the
+  previous iteration. A check that inspects nothing passes vacuously; one that
+  inspects the wrong thing passes falsely, and both read green in CI.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide
