@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.4.0 — Root Makefile
+# Agentic SSD v2.5.0 â€” Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -44,7 +44,7 @@ PYTEST_ORDER_FLAGS ?= -p randomly
 # for `coverage-python` fell from 92s to 36s on four cores. Set
 # `PYTEST_PARALLEL_FLAGS=` to run serially, e.g. to bisect an order coupling
 # with `--randomly-seed=N` on one worker.
-PYTEST_PARALLEL_FLAGS ?= -n auto
+PYTEST_PARALLEL_FLAGS ?= -n 8
 PYTEST_RUN_FLAGS := $(PYTEST_ORDER_FLAGS) $(PYTEST_PARALLEL_FLAGS)
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
@@ -64,7 +64,7 @@ GITLEAKS_VERSION ?= v8.28.0
 # `$(go env GOPATH)/bin` -- a directory that is not on PATH by default. So the
 # `command -v` guard in `secrets` failed closed immediately after a successful
 # install, and CI worked around it by prefixing PATH by hand (2026 standards
-# audit, §2). Resolve the tool the same way it was installed: PATH first, then
+# audit, Â§2). Resolve the tool the same way it was installed: PATH first, then
 # GOPATH/bin. A name found in neither is left as written, so the guard still
 # fails closed when the tool is genuinely absent, and a command-line
 # `GITLEAKS=...` still overrides everything here (make's precedence rule).
@@ -85,7 +85,7 @@ PIP_AUDIT ?= $(PYTHON) -m pip_audit
 # against line coverage and coverage.branches against branch coverage. With
 # `branch = true` in pyproject, pytest-cov's single "total" is a blended
 # statements+branches percentage, so gating that blend with --cov-fail-under
-# would mislabel what the lines floor applies to — the same "gate that lowers
+# would mislabel what the lines floor applies to â€” the same "gate that lowers
 # itself" inversion the old hard-coded COV_MIN=80 fallback had. The gate script
 # fails closed on a missing or malformed report or policy.
 
@@ -126,7 +126,7 @@ lint-python: ## Run ruff check + ruff format --check + mypy + vulture across all
 	$(VULTURE) $(MYPY_TARGETS) vulture_whitelist.py --min-confidence $(VULTURE_MIN_CONFIDENCE) --exclude '*/tests/*'
 
 .PHONY: lint-cold
-lint-cold: ## Typecheck with no mypy cache — CI always runs cold, the inner loop does not
+lint-cold: ## Typecheck with no mypy cache â€” CI always runs cold, the inner loop does not
 	$(MYPY) $(MYPY_TARGETS) --explicit-package-bases $(MYPY_FLAGS) --no-incremental
 
 .PHONY: check-compat
@@ -248,12 +248,12 @@ decision-index-check: ## Fail if decision index artefacts drift from DEC-*.md
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
 	@for script in validate_governance_docs validate_policy validate_adoption validate_agent_policy check_projections; do \
-		echo "  → $$script.py"; \
+		echo "  â†’ $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
-	@echo "  → governance/check_traceability.py"
+	@echo "  â†’ governance/check_traceability.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
-	@echo "  → validate_invariants.py"
+	@echo "  â†’ validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
 
@@ -441,7 +441,7 @@ test: test-python test-node verify-zero-skips ## Run all Python and Node tests +
 coverage: coverage-python ## Run coverage validation
 
 .PHONY: ci
-ci: lint lint-node lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint → lint-node → lock-check → coverage → python zero-skips → test-node → zero-skips → specs → remotes → validate → drift-check → digest-regen
+ci: lint lint-node lock-check coverage verify-zero-skips-python test-node verify-zero-skips specs remotes validate check-dedup digest-regen ## Full CI pipeline: lint â†’ lint-node â†’ lock-check â†’ coverage â†’ python zero-skips â†’ test-node â†’ zero-skips â†’ specs â†’ remotes â†’ validate â†’ drift-check â†’ digest-regen
 
 # The Node suite's result is Python-version-independent, so the CI matrix runs
 # the full `ci` on one leg only and this Python-scoped pipeline on the others.
@@ -456,7 +456,7 @@ spec: ## Scaffold a new spec from docs/specs/SPEC_TEMPLATE.md (usage: make spec 
 	@mkdir -p docs/specs
 	@test -f docs/specs/SPEC_TEMPLATE.md || { echo 'ERROR: docs/specs/SPEC_TEMPLATE.md missing'; exit 1; }
 	@cp docs/specs/SPEC_TEMPLATE.md docs/specs/$(NAME).md
-	@echo "Scaffolded docs/specs/$(NAME).md — fill in the required sections."
+	@echo "Scaffolded docs/specs/$(NAME).md â€” fill in the required sections."
 
 .PHONY: review
 review: validate ## Mechanical pre-PR review gate (invariants + governance validators)

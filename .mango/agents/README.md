@@ -43,3 +43,11 @@ rather than the union, and the active roles are not themselves declared in
 `agent-policy.json`, because declaring them would give the agent's own governing
 policy an execution grant (DEC-011). An active role absent from
 `EXECUTION_IDENTITY` cannot execute any command.
+
+## Workflow and orchestration agents
+
+Supporting workflow agents (`narrow-critic`, `sdlc-orchestrator`) live in
+`.mango/workflows/` rather than here. They are invoked by slash-command workflows
+and are not part of the `planner → nemotron-reasoner → verifier` execution loop.
+They are not mapped in `ACTIVE_TO_CANONICAL` and do not receive broker-enforced
+tool grants.

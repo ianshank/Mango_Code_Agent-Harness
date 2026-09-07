@@ -1741,6 +1741,38 @@ Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
   and `harness/node/package.json` are checked against it by
   `test_documentation_truth.py`, negative case included.
 
+## [2.5.0] - 2026-09-07
+
+### Added
+
+- `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` — hook shims
+  required by `.mango/agents/hooks.json` PostToolUse and PreToolUse enforcement
+  (HOOK-1 / RCA-1). Both shims delegate dynamically to `make lint` and
+  `validate_invariants.is_protected()` respectively; no hard-coded paths.
+- `.mango/workflows/` directory for workflow and orchestration agent definitions
+  (`narrow-critic.md`, `sdlc-orchestrator.md`) that are not execution loop roles.
+- Regression tests: `test_scripts_hook_shims.py` (AQA-001),
+  `test_process_backend_isolation_regression.py` (AQA-006),
+  `test_gaps_memory_integrity.py` (AQA-004).
+
+### Fixed
+
+- `RecordingBackend._probe()` override added to prevent real `bash` invocation
+  on Windows dev machines, fixing 17 flaky failures under `pytest-xdist`
+  parallel execution (RCA-7).
+- UTF-16 null-byte corruption in `.gitignore` and `.dockerignore` removed
+  (origin/main merge encoding artefact).
+- Version mirrors (`Makefile`, `harness/node/package.json`, `CHANGELOG.md`)
+  synced to `pyproject.toml` canonical source `2.5.0`.
+- `narrow-critic.md` and `sdlc-orchestrator.md` moved from `.mango/agents/`
+  (execution loop directory) to `.mango/workflows/` — these are SDLC/critic
+  workflow agents, not `planner → reasoner → verifier` loop participants.
+
+### Changed
+
+- `EXPECTED_ACTIVE_ROLES` comment in `test_agent_harness_wiring.py` clarified
+  to document the `ACTIVE_TO_CANONICAL` invariant it must match.
+
 ## [2.4.0] - 2026-09-01
 
 ### Added

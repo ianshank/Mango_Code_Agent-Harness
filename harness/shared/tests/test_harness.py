@@ -86,7 +86,7 @@ class HarnessTests(unittest.TestCase):
             self.assertNotRegex(mk, r"GITLEAKS_VERSION\s*\?=\s*(latest|main|master)\b")
 
     def test_hook_installer_uses_effective_path_and_refuses_foreign_overwrite(self):
-        with tempfile.TemporaryDirectory() as td:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             r = Path(td)
             subprocess.run(["git", "init", "-q", str(r)], check=True)
             (r / "scripts").mkdir()
