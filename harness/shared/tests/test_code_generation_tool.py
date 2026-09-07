@@ -19,6 +19,7 @@ from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.policy_loader import PolicyError
 from harness.shared.tool_executors import (
     DEFAULT_PYTHON_WRITE_SUFFIXES,
+    PYTHON_SUFFIX_KEY,
     authorize_write,
     execute_generate_code,
     load_python_write_suffixes,
@@ -385,11 +386,17 @@ class TestPythonWriteSuffixPolicy:
     PROHIBITED = _PROHIBITED_PAYLOAD
 
     def _policy(self, tmp_path: Path, value: object) -> Path:
-        body = {"synthesis": {"prohibited_imports": ["os.system"]}}
+        # The section is `dict[str, object]` rather than inferred, because the
+        # cases below deliberately write shapes the key forbids -- a string, an
+        # int, a list with a non-string in it. Letting mypy infer
+        # `dict[str, list[str]]` from the first entry makes writing those a type
+        # error, and silencing that with an ignore hides the one thing this
+        # helper exists to do.
+        section: dict[str, object] = {"prohibited_imports": ["os.system"]}
         if value is not _ABSENT:
-            body["synthesis"]["python_write_suffixes"] = value  # type: ignore[index]
+            section[PYTHON_SUFFIX_KEY] = value
         path = tmp_path / "governance-policy.json"
-        path.write_text(json.dumps(body), encoding="utf-8")
+        path.write_text(json.dumps({"synthesis": section}), encoding="utf-8")
         return path
 
     @pytest.mark.parametrize(
