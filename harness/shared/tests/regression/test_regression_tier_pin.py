@@ -11,11 +11,15 @@ under the unit suite.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
 
-from harness.shared.tests._helpers import REPO
+# Ensure repository root is on sys.path so direct execution or test runners without cwd on path succeed
+REPO = Path(__file__).resolve().parents[4]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 pytestmark = pytest.mark.governance
 
@@ -73,3 +77,7 @@ def test_required_reproduction_is_not_defined_under_the_unit_tier(basename: str)
         f"{[p.relative_to(REPO).as_posix() for p in unit_hits]}; keep the "
         "reproduction in harness/shared/tests/regression/"
     )
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))
