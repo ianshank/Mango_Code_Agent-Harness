@@ -99,12 +99,13 @@ def test_the_guard_can_be_declared_off_per_test() -> None:
 
 def test_no_global_socket_exemption_exists() -> None:
     """AC-EGF-7: the floor must not be quietly re-opened in configuration."""
+    import sys
     from pathlib import Path
 
-    try:  # tomllib entered the stdlib in 3.11; tomli is its backport (see requirements-dev.txt)
+    if sys.version_info >= (3, 11):
         import tomllib
-    except ModuleNotFoundError:  # pragma: no cover - exercised on the 3.10 matrix leg
-        import tomli as tomllib  # type: ignore[no-redef]
+    else:  # pragma: no cover - exercised on the 3.10 matrix leg
+        import tomli as tomllib
 
     root = Path(__file__).resolve().parents[3]
     cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))

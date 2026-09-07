@@ -89,6 +89,7 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.shadow_planner", "DEFAULT_SHADOW_TIMEOUT_SEC", decision="DEC-025"),
     Row("harness.shared.cognitive_signal", "MAX_SIGNAL_BYTES", decision="DEC-025"),
     Row("harness.shared.cognitive_signal", "MAX_SINK_BYTES", decision="DEC-025"),
+    Row("harness.shared.cognitive_signal", "MAX_PAYLOAD_DEPTH", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "failureThreshold", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/nemotron-client.ts", "baseBackoffMs", decision="DEC-025"),
     # DEC-025 accepts five Node resilience constants by name; the inventory
