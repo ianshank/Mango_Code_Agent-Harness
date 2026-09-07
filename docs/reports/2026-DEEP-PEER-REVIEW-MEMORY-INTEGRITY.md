@@ -109,7 +109,17 @@ and nothing in the closed B4 work, DEC-057, or DEC-058 claims it is.
    hand-edited store from crashing the renderer (`memory_view.py:126-160`'s own comments say so:
    *"can only come from a hand-edited store"*), not to authenticate that an entry came from a
    real `hypothesis_register` call. Shape validation and authenticity are different properties;
-   this module has the first and not the second.
+   this module has the first and not the second. `knowledge_gap_log` (`meta_tools.py:121-150`)
+   has **no** field validation at all — it appends `question`/`what_needed`/`proposed_approach`
+   verbatim — so the raw-write bypass for `gaps.json` is not even a bypass of a check; there was
+   never one to bypass, only the file-path gate this spec adds.
+   One clarification the shape of the exploit must not overstate: registering a `confirmed`,
+   high-confidence hypothesis through the **real** `hypothesis_register` call is not itself a
+   defect — every canonical role holds the `read` action `hypothesis_register` requires
+   (`agent_authority.TOOL_REQUIRED_ACTION`), and a model asserting a settled belief is the
+   feature working as designed. The defect is specifically that a **second**, unvalidated path
+   to the same bytes exists for the one role (`nemotron-reasoner`) that also holds `write_file`,
+   and that second path skips checks the first path enforces.
 
 5. **The forged entry is then rendered into a real prompt with no signature check.**
    `format_hypotheses_for_reasoner` (referenced by DEC-058, implemented per
@@ -221,20 +231,26 @@ worse operator experience than the vulnerability it fixes.
 
 PR #115 (`feature/origin-sync-test-e2e-aqa-20260906`) is unrelated to the memory-integrity
 finding but was explicitly requested to be compared against `main`. All four Python build legs
-are red (`gh pr checks 115`); `secret-scan` and `dependency-audit` pass. Root causes, each
-confirmed directly rather than inferred from the CI log alone:
+are red (`gh pr checks 115`); `secret-scan` and `dependency-audit` pass. A dedicated subagent
+re-derived each root cause from primary evidence (`git show`/`git log` at the exact culprit
+commit, live CI logs, direct byte-hashing) rather than the CI summary alone; the results refine
+two of the four rows below:
 
 | # | Defect | Evidence on the PR branch | Fix direction |
 |---|---|---|---|
-| 1 | `.gitignore` / `.dockerignore` re-saved as UTF-16LE with embedded NUL bytes, breaking `test_documentation_truth.py`'s dead-rule checks | `git diff main...origin/feature/... -- .gitignore .dockerignore` reports both as binary; a Windows-side editor artifact, consistent with DEC-059/061/062 on the same branch being Windows-portability work | Re-save both files as UTF-8 without BOM before merge |
-| 2 | Version mirrors say `2.5.0`, `pyproject.toml` still says `2.4.0` | `git show origin/feature/...:pyproject.toml \| grep version` → `2.4.0`; `git show origin/feature/...:README.md \| grep Version` → `2.5.0` | `pyproject.toml` is the declared single source (`test_every_mirror_agrees_with_pyproject`); bump it to `2.5.0` to match the mirrors' evident intent, not the reverse |
-| 3 | `harness/control-plane/policy-artifact.json` hash (`641510baabdddc74`) does not match the working tree's computed hash (`ad55682ced09dd25`) | CI log, `test_publish_policy_artifact.py::test_committed_artifact_matches_working_tree` | Rebuild via `python harness/control-plane/publish_policy_artifact.py build --output harness/control-plane/policy-artifact.json` after the branch's `governance-policy.json` edit (adds the `test_egress_floor` / DEC-059 keys) |
-| 4 | `build-full` fails closed: 11 protected paths touched, PR body has no attestation table | CI log: `[FAIL] ... 11 protected path(s) need one` | Run the protected-path-attestation derivation and populate the table before requesting `infra-reviewed` |
+| 1 | `.gitignore` / `.dockerignore` re-saved as UTF-16-like binary (NUL-interleaved), breaking `test_documentation_truth.py`'s dead-rule checks | Exact culprit isolated to commit `795f6e6` ("chore(docs): update documentation and ops files for version 2.5.0 origin sync") — `git show` reports both files `Bin … -> Bin …` there for the first time; the immediately preceding commit still shows them as ASCII/UTF-8 text. `main` is correct throughout | Re-save both files as UTF-8/ASCII, keeping `795f6e6`'s intended rule additions, before merge |
+| 2 | Version mirrors partially bumped to `2.5.0`; `pyproject.toml` still `2.4.0` | Precise mirror-by-mirror check against `pyproject.toml` (2.4.0 on both branches): only `README.md`, `NEXT_STEPS.md`, and `docs/architecture/c4_architecture.md` drifted to `2.5.0`. `Makefile`, `CHANGELOG.md`'s `## [x.y.z]` heading, and `harness/node/package.json` were **never bumped on either branch** — the CHANGELOG's Unreleased section only narrates 2.5.0-shaped work in prose, and `main` has zero drift anywhere | This is a half-finished release, not a stray edit: finish the bump (`pyproject.toml` → `2.5.0`, `package.json` → `2.5.0`, add a real `## [2.5.0]` CHANGELOG heading, update the Makefile version comment) rather than reverting the three docs that were already bumped |
+| 3 | `harness/control-plane/policy-artifact.json` claims `policy_version` / hash `641510baabdddc74` (6732 bytes); the actual `governance-policy.json` on the branch hashes to `ad55682ced09dd25` (6731 bytes) | CI log (`test_publish_policy_artifact.py::test_committed_artifact_matches_working_tree`). Traced to commit `36c95d5` ("renumber Windows DECs"), which touches **only** `policy-artifact.json` — `governance-policy.json` is byte-identical before and after that commit, and stays `ad55682ced09dd25`/6731 bytes through every later commit up to the PR tip | The artifact's claimed hash corresponds to **no committed state of `governance-policy.json`** on this branch, before or after `36c95d5` — the publisher script was evidently run against an uncommitted or stale local copy of the policy file, and only its output was committed. Regenerate from the actual committed source (`python harness/control-plane/publish_policy_artifact.py build --output harness/control-plane/policy-artifact.json`), which reproduces `ad55682ced09dd25`/6731 bytes for the current tree — unless a real policy content change was intended and is simply missing from the PR, in which case add that change first |
+| 4 | `build-full` fails closed: 11 protected paths touched, PR body has no attestation table | CI log: `[FAIL] ... 11 protected path(s) need one`; `gh pr view 115 --json body` shows the template's `\| File \| Change \| Why it is safe \|` header still followed by one empty row | The already-applied `infra-reviewed` label sets `ALLOW_GITHUB_CHANGES=1` for the mechanical Makefile gate but does **not** excuse this separate, unconditional check — populate one row per listed protected file per DEC-038's "verified, not transcribed" rule before merge |
 
 None of these four are in tension with the current `main`; they are pre-merge hygiene defects
-local to the PR branch, most plausibly introduced by editing on Windows. Confirmed no
-DEC-number collision: PR #115 declares DEC-059…DEC-062, and `main`'s `docs/decisions/index.json`
-currently ends at DEC-058, so the numbering is contiguous, not colliding, as of this review.
+local to the PR branch. Confirmed no DEC-number collision: PR #115 declares DEC-059…DEC-062
+(inherited 057/058 unchanged, four new IDs, 63 total entries, no duplicates), and `main`'s
+`docs/decisions/index.json` currently ends at DEC-058, so the numbering is contiguous, not
+colliding, as of this review. Required-check name drift was also checked independently (static
+workflow parse, the repo's own `test_required_contexts_are_exactly_the_reported_check_names`,
+and live `gh pr checks 115` output): none found — the nine checks declared in
+`.github/rulesets/main.json` are exactly the nine GitHub actually reports.
 
 ---
 
