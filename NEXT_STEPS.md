@@ -2,7 +2,7 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
+**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-064 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -78,9 +78,14 @@ the only remaining step.
 to the workflow's job names.
 
 Required status checks (derived from `.github/workflows/python-package.yml`,
-not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
-`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
-`dependency-audit (3.10)`, `dependency-audit (3.12)`.
+not from memory): `build (3.10)`, `build (3.12)`, `build (3.14)`,
+`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.10)`,
+`dependency-audit (3.12)`, `dependency-audit (3.14)`.
+
+_Updated by `docs/specs/reflection-hardening-increment.md` Step 1/2 /
+DEC-064: the Python 3.9 floor moved to 3.10, replacing the `3.9` legs with
+`3.14` and retiring `dependency-audit (3.9)`'s `continue-on-error`
+carve-out._
 
 **Done when.** Settings → Rules → Rulesets → Import
 `.github/rulesets/main.json` (with `required_signatures` and
@@ -300,7 +305,7 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 | Was | Now |
 |---|---|
-| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-060 after origin re-landed the forward feature. |
+| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-064 after origin re-landed the forward feature. |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 

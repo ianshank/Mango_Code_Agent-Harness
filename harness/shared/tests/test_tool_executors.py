@@ -83,7 +83,7 @@ class TestReadFile:
     def test_a_bool_is_not_an_integer(self, mock_workspace: Path) -> None:
         """`isinstance(True, int)` is True, so bools need naming explicitly."""
         (mock_workspace / "sample.py").write_text("a\n", encoding="utf-8")
-        assert "must be an integer" in execute_read_file(mock_workspace, "sample.py", True)  # type: ignore[arg-type]
+        assert "must be an integer" in execute_read_file(mock_workspace, "sample.py", True)
 
     def test_output_is_capped_and_marked(self, mock_workspace: Path) -> None:
         (mock_workspace / "big.txt").write_text("x" * (DEFAULT_MAX_OUTPUT_BYTES + 5000), encoding="utf-8")
@@ -205,7 +205,7 @@ class TestApplyPatch:
         (mock_workspace / "ro.txt").write_text("alpha\n", encoding="utf-8")
         real_open = open
 
-        def fail_on_write(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+        def fail_on_write(file, mode="r", *args, **kwargs):
             if "w" in mode:
                 raise OSError("read-only file system")
             return real_open(file, mode, *args, **kwargs)

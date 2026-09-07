@@ -20,7 +20,7 @@ import warnings
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from harness.shared import retry_policy
 from harness.shared.json_logging import setup_json_logging
@@ -45,7 +45,7 @@ class NemotronEgressRefused(RuntimeError):
     """Raised when a run would reach the network without an explicit declaration."""
 
 
-def resolve_nemotron_mode(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
+def resolve_nemotron_mode(env: Mapping[str, str] | None = None) -> str | None:
     """Return the declared transport mode, or None when nothing was declared."""
     source = os.environ if env is None else env
     raw = source.get("NEMOTRON_MODE")
@@ -177,16 +177,16 @@ def resolve_api_key() -> str:
 
 def complete_chat(
     messages: list[dict[str, Any]],
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    temperature: Optional[float] = None,
-    top_p: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    timeout_sec: Optional[int] = None,
-    tools: Optional[list[dict[str, Any]]] = None,
-    tool_choice: Optional[Any] = None,
-    max_retries: Optional[int] = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    max_tokens: int | None = None,
+    timeout_sec: int | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: Any | None = None,
+    max_retries: int | None = None,
 ) -> dict[str, Any]:
     """Execute a chat completion request against NVIDIA Nemotron API.
 

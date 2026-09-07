@@ -28,15 +28,15 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "build (3.9)" },
           { "context": "build (3.10)" },
           { "context": "build (3.12)" },
+          { "context": "build (3.14)" },
           { "context": "build-full" },
           { "context": "secret-scan" },
           { "context": "dependency-audit" },
-          { "context": "dependency-audit (3.9)" },
           { "context": "dependency-audit (3.10)" },
-          { "context": "dependency-audit (3.12)" }
+          { "context": "dependency-audit (3.12)" },
+          { "context": "dependency-audit (3.14)" }
         ]
       }
     }

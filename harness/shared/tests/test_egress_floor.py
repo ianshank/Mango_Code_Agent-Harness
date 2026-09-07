@@ -100,7 +100,7 @@ def test_no_global_socket_exemption_exists() -> None:
 
     try:  # tomllib entered the stdlib in 3.11; tomli is its backport (see requirements-dev.txt)
         import tomllib
-    except ModuleNotFoundError:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
+    except ModuleNotFoundError:  # pragma: no cover - exercised on the 3.10 matrix leg
         import tomli as tomllib  # type: ignore[no-redef]
 
     root = Path(__file__).resolve().parents[3]

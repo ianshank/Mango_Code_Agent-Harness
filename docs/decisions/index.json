@@ -338,12 +338,12 @@
     },
     {
       "id": "DEC-028",
-      "status": "accepted",
+      "status": "superseded",
       "date": "2026-09-02",
       "title": "The Python 3.9 floor stays",
       "path": "docs/decisions/DEC-028.md",
       "supersedes": [],
-      "superseded_by": null,
+      "superseded_by": "DEC-064",
       "owners": [
         "governance-maintainers"
       ]
@@ -766,6 +766,20 @@
       "title": "Windows-platform skip for AF_UNIX egress-floor proof approved",
       "path": "docs/decisions/DEC-063.md",
       "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-064",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "The Python floor moves to 3.10, retiring the 3.9 carve-outs DEC-017 and DEC-028 recorded",
+      "path": "docs/decisions/DEC-064.md",
+      "supersedes": [
+        "DEC-028"
+      ],
       "superseded_by": null,
       "owners": [
         "governance-maintainers"

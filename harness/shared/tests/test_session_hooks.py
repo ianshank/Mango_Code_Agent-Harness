@@ -115,7 +115,7 @@ class TestCollectionTimeSkipsAreRecorded:
             nodeid = "test_ok.py"
             longrepr = None
 
-        assert _skip_events.collect_skip_event(_Report()) is None  # type: ignore[arg-type]
+        assert _skip_events.collect_skip_event(_Report()) is None
 
     def test_a_runtest_report_is_not_taken_as_a_collect_skip(self) -> None:
         """`when` discriminates the two report types; a setup skip belongs to the other hook."""
@@ -126,7 +126,7 @@ class TestCollectionTimeSkipsAreRecorded:
             nodeid = "test_x.py::test_y"
             longrepr = ("test_x.py", 1, "Skipped: because")
 
-        assert _skip_events.collect_skip_event(_Report()) is None  # type: ignore[arg-type]
+        assert _skip_events.collect_skip_event(_Report()) is None
 
 
 class TestLanggraphDeselection:
