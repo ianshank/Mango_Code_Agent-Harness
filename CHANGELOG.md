@@ -103,6 +103,32 @@ attestations each time — and the report that proposed one priced none of it.
   by a dominating literal, bindings under `if`/`for`/`try`, and a loop reading the
   previous iteration. A check that inspects nothing passes vacuously; one that
   inspects the wrong thing passes falsely, and both read green in CI.
+- **A second review round found the same defect three more times.** Reflective
+  lookup walked past the write door (`os.system("id")` refused,
+  `getattr(os, "system")("id")` written); the topology extractor found its builder
+  by bare name across the whole module, so two functions each binding `builder`
+  returned one *merged* graph and renaming one silently dropped the second; and a
+  one-line alias (`invoke = broker.execute_command`) was not a call site, so the
+  approval scan reported a clean zero over an unexamined caller. With the `.pyw`
+  suffix, that is four instances of one shape: **a resolver answering a narrower
+  question than its caller asked, and returning a confident answer anyway** — same
+  type, same shape as the true answer, with nothing in the result saying which
+  question it answered. All four are closed, each reproduced before it was
+  believed. Reflective reads now resolve through both spellings and through
+  attributes read off the result; a *computed* key is reported only where policy
+  forbids something under the resolved base, so `getattr(self, name)` still
+  passes. The extractor keeps lexical scope and raises on ambiguous builders. The
+  alias rule reports a read of the broker method that leaves the scan as a value,
+  and the five live call sites still read clean.
+- **Three modules were split because the fixes had nowhere to go.**
+  `code_safety.py` → 222 + `code_symbols.py`; `authority_call_sites.py` 499 → 355
+  + `authority_call_analysis.py`; `graph_topology.py` → 349 +
+  `graph_topology_source.py`; `test_authority_graph.py` 699 → 397 +
+  `test_authority_call_sites.py`. Docstring content an earlier budget squeeze had
+  folded away is restored. NS-39 predicted this seam and declined to act on it,
+  correctly — a file inside the policy threshold is not a violation — but the next
+  change to each was a security fix that arrived with no room, which is the
+  argument for treating headroom as something a module owes the next change.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide

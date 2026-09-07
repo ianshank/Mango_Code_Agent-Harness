@@ -306,21 +306,25 @@ over-trusts a green run.
    not an argument about a security property, and it had been allowed to settle
    one.
 
-4. *`authority_call_sites.py` has one line of budget left, and the seam it will
-   split on is already known.* Making the approval-flag scan sound (position
-   dominance and parameter tainting, PR #120) took the module from 389 to **499**
-   of `limits.size_budget_lines` = 500, paid for by folding four single-caller
-   helpers rather than by decomposing. It passes the gate the policy sets, so
-   this is not a violation and not a god file — it is a file whose *next* change
-   breaches, forcing whoever makes it to refactor inside a diff about something
-   else. The seam is analysis (`_Scope`, `_read_block`, `_runs_before`,
-   `_binding_at`, `_mapping_entries` — "what does this name provably hold here")
-   versus reporting (`_context_reason`, `_spread_reason`, `_BrokerCallSites`,
-   `approval_flag_reachability` — "which broker calls could carry the flag").
-   `test_authority_graph.py` is at 699 of 700 and splits along the same line.
-   Deliberately **not** done in PR #120: the file is inside the threshold
-   `governance-policy.json` sets, and splitting it on personal taste rather than
-   on the policy is the hard-coded-judgment shape this repository forbids.
+4. *The one-line-of-slack seam is **closed**; this item is retained only to
+   record what the wait cost.* Making the approval-flag scan sound took
+   `authority_call_sites.py` from 389 to 499 of `limits.size_budget_lines` = 500,
+   paid for by folding four single-caller helpers rather than by decomposing.
+   This item originally declined to split it, on the grounds that a file inside
+   the policy threshold is not a violation and splitting on personal taste
+   substitutes private judgement for `governance-policy.json`. That reasoning
+   was right and the outcome argues against waiting anyway: the **next** change
+   to each of these files was a security fix, and it arrived with no room. A
+   parallel agent's patch for the same findings is behaviourally correct and
+   cannot land, because it breached the budget on three files to make room for
+   itself. Split on the predicted seam in PR #120 — analysis versus reporting:
+   `authority_call_sites.py` 499 → **355** + `authority_call_analysis.py` 415;
+   `code_safety.py` → **222** + `code_symbols.py` 440; `graph_topology.py` →
+   **349** + `graph_topology_source.py` 306; `test_authority_graph.py` 699 →
+   **397** + `test_authority_call_sites.py` 537. Docstring content an earlier
+   squeeze had folded away is restored. Nothing remains to do here. The lesson
+   for the next bound: headroom is part of what a module owes the next change,
+   and a budget measured only at the moment of breach is measured too late.
 
 **Evidence.** `python3 harness/shared/governance/check_traceability.py --workspace .`
 prints the count, the ratchet and the headroom in one line;
@@ -354,12 +358,14 @@ at 699 with 1 to spare.
   `test_code_generation_tool.py::TestNeitherToolArgumentTurnsTheCheckOff` red
   against the old behaviour across all three policy shapes. Only the first two
   bullets of this item remain open.
-- `authority_call_sites.py` is split on the analysis/reporting seam, with the
-  explanatory docstrings the compaction folded restored rather than re-compacted,
-  and both halves plus their tests carry real headroom against
-  `limits.size_budget_lines` · stage `make validate` (Size Budget names the
-  closest file and its slack on every run, so the number is reported without
-  waiting for a red run).
+- ~~`authority_call_sites.py` is split on the analysis/reporting seam, with the
+  explanatory docstrings the compaction folded restored rather than
+  re-compacted, and both halves plus their tests carry real headroom.~~
+  **Done on PR #120**, along with `code_safety.py` and `graph_topology.py`,
+  which needed the same room for the same reason · stage `make validate` (Size
+  Budget names the closest file and its slack on every run, so the number is
+  reported without waiting for a red run). Only the first two bullets of this
+  item remain open.
 
 **Depends on.** Nothing, and **not** NS-2: none of the four touches Phase E or
 the LangGraph park. DEC-065 shipped topology verification as a plain test rather
