@@ -122,7 +122,11 @@ class TestCodeGenerationTool:
 
     def test_generate_code_schema_filtering(self) -> None:
         """Confirm generate_code is in NEMOTRON_TOOLS and filtered by role authority."""
-        declared_names = {t["function"]["name"] for t in NEMOTRON_TOOLS}
+        declared_names = {
+            func.get("name")
+            for t in NEMOTRON_TOOLS
+            if isinstance(t, dict) and isinstance(func := t.get("function"), dict)
+        }
         assert "generate_code" in declared_names
 
         reasoner_names = {t["function"]["name"] for t in tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)}
