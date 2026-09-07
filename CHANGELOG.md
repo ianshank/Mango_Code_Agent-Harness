@@ -184,6 +184,19 @@ attestations each time — and the report that proposed one priced none of it.
   and refusing those would have rejected the real graph's dominant edge form.
   `START`/`END` stay legal and the DEC-052 orphan reviewers are the converse case:
   a node with no edge names no endpoint, so it cannot dangle.
+- **A roadmap item was withdrawn because its mechanism was wrong.** NS-40 claimed
+  a required status check that never ran reads as *pending*, so a ruleset cannot
+  block on it. GitHub's required checks do block on an absent report, and more to
+  the point **NS-1 records that no ruleset is applied to this repository at all**
+  — so nothing was required, and the bot head read green because every gate here
+  is advisory, which is NS-1's own opening sentence. The claim was asserted with
+  no run cited: the DEC-024 shape, in an item written about the DEC-024 shape. A
+  drafted spec and verdict module were removed unlanded after four of this
+  repository's own gates rejected them (traceability ratchet, `validate_plan`,
+  mypy, `test_verdict_literals`) and all four `openspec-peer-review` personas
+  refused signoff. The incident is now evidence under NS-1, where it argues for
+  work already known to be needed, rather than a separate item arguing for work
+  that would not have helped.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide

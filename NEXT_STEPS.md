@@ -77,6 +77,17 @@ the only remaining step.
 `test_workflow_contracts.py` / `test_ci_gate_required_checks.py` pin the export
 to the workflow's job names.
 
+_What "advisory" cost, measured on 2026-09-07 (PR #120)._ A bot-authored commit
+`c331e47` became the PR head and produced **two** check runs — the authoring
+app's own job and a deployment card — where the human-authored pushes on either
+side of it each produced nine. That head failed `make validate` on three Size
+Budget entries and failed the suite (`2 failed, 4238 passed`), and none of it
+appeared on the pull request. With the ruleset applied, nine required contexts
+with no report would have held the merge; with no ruleset, there was nothing to
+hold it. This is the first incident on record where the gap between "the gates
+pass" and "the gates ran" was demonstrated rather than argued, and it is an
+argument for this item, not for a new one (see NS-40, folded).
+
 Required status checks (derived from `.github/workflows/python-package.yml`,
 not from memory): `build (3.10)`, `build (3.12)`, `build (3.14)`,
 `build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.10)`,
@@ -375,51 +386,54 @@ the LangGraph park. DEC-065 shipped topology verification as a plain test rather
 than a gate precisely so the orphan-reviewer defect stays watched while Phase E
 waits on the credential rotation.
 
-### NS-40 · A commit with no check runs reads exactly like a commit that passed *(spec required)*
+### NS-40 · The bot-push incident is evidence for NS-1, not a separate item *(no spec; folded)*
 
-**Why now.** On PR #120 a bot-authored commit (`c331e47`) became the PR head and
-produced **two** check runs — the authoring app's own job, and a Vercel card.
-`build`, `build-full`, `secret-scan` and `dependency-audit` never fired, because
-GitHub does not cascade workflows from pushes made with the default token. The
-commit failed `make validate` on three Size Budget entries and failed the suite
-(`test_cli_survives_a_bogus_log_level` shells out to `validate_invariants` and
-asserts a zero exit), and none of that was visible anywhere on the PR.
+**Status: folded into NS-1.** This item was opened with the wrong mechanism and
+is retained to record the correction rather than deleted, because the wrong
+version was quoted in a decision record and a PR description.
 
-This is not that commit's defect, and the fix is not to distrust one author. It
-is that **absent** and **passing** render identically. `mergeable_state` was
-`unstable`, the checks list was short but green, and the required-status ruleset
-cannot block on a check that was never created — a required check that never
-reports is pending, not failing, and a reviewer scanning a green list has no
-prompt to ask which runs are missing. DEC-024 recorded the sibling of this: a
-merge whose body claimed `make ci` passed while every run on its head was red.
-The lesson was "only the check runs on the pushed head are evidence". This is
-the case that lesson does not cover, because there are no runs to read.
+**What was claimed.** That a required status check which was never created reads
+as *pending* rather than failing, so a branch ruleset cannot block on it and
+`absent` renders identically to `passing` on the merge button.
 
-**Evidence.** PR #120, head `c331e47`: `pull_request_read` with
-`get_check_runs` returns `total_count: 2` (`copilot`, `Vercel Preview
-Comments`); the immediately preceding and following human-authored pushes each
-return nine. Reproduced locally against that exact commit in a detached
-worktree: `validate_invariants` reports `authority_call_sites.py` at 519,
-`graph_topology.py` at 508, `test_authority_graph.py` at 710, then
-`Repo Invariants Check FAILED`; the suite reports `2 failed, 4238 passed`.
+**Why that is wrong.** GitHub's required status checks *do* block on an absent
+report — an unreported required context shows as "Expected — waiting for status
+to be reported" and holds the merge. The claim was asserted with no run cited,
+which is the DEC-024 shape, in an item written about the DEC-024 shape. A peer
+review of the drafted spec caught it (Product Manager, P1) and the structural
+reason is stronger than the review's: **NS-1 records that
+`GET /repos/…/rules/branches/main` returns `[]`.** No ruleset is applied, so
+nothing is required, so there was never a required check to be pending. The bot
+head read green because **every gate here is advisory** — which is NS-1's
+opening sentence, and NS-1 is P0 and blocked on a person.
 
-**Done when.**
+**What the incident is actually good for.** It is the concrete cost of NS-1
+staying open, and belongs in NS-1's evidence: on PR #120, `c331e47` became the
+head, produced **two** check runs (the authoring app's own job and a deployment
+card) where the neighbouring human-authored pushes each produced nine, and
+failed `make validate` on three Size Budget entries and the suite
+(`2 failed, 4238 passed`) — with none of it visible on the pull request. That is
+what advisory gates cost, measured rather than argued.
 
-- The nine checks `.github/rulesets/main.json` makes required are also *demanded*
-  rather than merely required — a head carrying zero runs for a required context
-  is reported as unsatisfied, not as pending-and-green. Either the workflow is
-  triggered on a shape a bot push does reach, or a gate reads the head's check
-  list and fails closed on a missing required context.
-- A test pins it: a synthetic head with an empty check list must be judged
-  not-ready by whatever the previous bullet produces. Without that, the fix is
-  the same shape as the bug — a check that passes because it inspected nothing.
-- `harness/CONTRACT.md` says which contexts are mandatory-present, so "which
-  runs should exist for this head" is answerable from the repository rather than
-  from memory of what CI usually does.
+**The residual, if any.** Once the ruleset is applied, the merge button is
+protected and the remaining question is only reviewer *visibility* — whether a
+person scanning a short green list is prompted to ask which runs are missing.
+That is a smaller item than this one claimed to be, it overlaps **NS-36**
+(Phase D, CI truthfulness), and it should not be opened until NS-1 lands and the
+residual can be measured instead of predicted.
 
-**Depends on.** Overlaps **NS-36** (Phase D, CI truthfulness) and should be
-folded into it rather than run beside it if that work starts first — NS-36
-already owns the question of whether a green PR page means a green head.
+**What was tried and withdrawn.** A spec (`required-run-presence.md`) and a pure
+verdict module were drafted, then removed unlanded. Four of this repository's own
+gates rejected them — the traceability ratchet (8 uncited requirement IDs),
+`validate_plan` (4 orphan requirements), mypy, and
+`test_verdict_literals` (restating status names the repo names once) — and all
+four `openspec-peer-review` personas refused signoff. The review's closing
+prediction was that the tests would be written to make the ratchet arithmetic
+work rather than to prove the property, naming `C-RRP-3` — a clause asserting
+the spec does not overclaim — as the one that would end up cited by a test
+asserting nothing. That test had already been written when the review arrived.
+The gates and the review agreed, and the item was withdrawn rather than argued
+past.
 
 ### NS-29 · The program plans
 
