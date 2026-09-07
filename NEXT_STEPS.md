@@ -1,6 +1,6 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.5.0
+**Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
 **Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
