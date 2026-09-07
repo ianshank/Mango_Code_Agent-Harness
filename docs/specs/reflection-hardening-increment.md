@@ -192,7 +192,7 @@ is a product decision needing an owner call this document does not make.
 | AC-2 (credential rotate) | `feature/governed-run-console` branch state not re-queried; NS-2 still open | **Owner action; hard gate on Phase E.** |
 | AC-3 (LICENSE) | `ls LICENSE` fails | **Owner action** (NS-30). This document adds no licence text. |
 | AC-4 (`v2.4.0` tag) | `git tag -l` is empty locally | **Owner action** (NS-3). |
-| AC-23 (Python ≥3.10) | Confirmed still `>=3.9`, forked pins, `continue-on-error` 3.9 audit live | **Scheduled: Step 1.** |
+| AC-23 (Python ≥3.10) | Confirmed still `>=3.9`, forked pins, `continue-on-error` 3.9 audit live | **Done: Step 1/2**, `docs/specs/python-floor-310.md`, `DEC-060`. |
 | AC-24 (attestation SHA binding) | No matching test selector found | **Scheduled: Step 4**, minus `required_signatures` (needs NS-1 first). |
 | AC-25 (Dockerfile + Dependabot cooldown) | 3 of 4 sub-defects confirmed live; contract tests absent | **Scheduled: Step 4.** |
 | AC-26 (JVM relocate) | `harness/jvm/` present, 49 files | **Gated on NS-2** (DEC-054). Not started here. |
@@ -296,13 +296,17 @@ is a product decision needing an owner call this document does not make.
 At least one criterion per step names a rejection/failure outcome, not only a
 success path.
 
-- [ ] AC-1: `python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['requires-python'])"`
-      prints `>=3.10` (today: `>=3.9`); `git grep -n "3\.9" .github/workflows pyproject.toml requirements-dev.txt requirements.txt requirements-lock.txt harness/shared/governance-policy.json harness/shared/check_py_compat.py harness/shared/tests/_workflow_paths.py`
-      returns nothing (today: 3.9 present in the matrix, both forked
-      requirement pins, `requirements.txt`'s `mcp` marker,
-      `check_py_compat.py`'s docstring/constant, `requirements-lock.txt`'s
-      `--python-version 3.9` regenerate-command header, and
-      `_workflow_paths.UNSUPPORTED_LEG`); `git grep -n "target-version" pyproject.toml`
+- [x] AC-1: `python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['requires-python'])"`
+      prints `>=3.10` (today: `>=3.9`); `git grep -n '"3\.9"\|'"'"'3\.9'"'"'\|UNSUPPORTED_LEG\|dependency-audit (3\.9)' .github/workflows .github/rulesets/main.json harness/shared/tests/_workflow_paths.py`
+      returns nothing (today: the matrix's quoted `"3.9"` leg, the ruleset's
+      `dependency-audit (3.9)` context, and `_workflow_paths.UNSUPPORTED_LEG`;
+      **narrowed at implementation** from a blanket `git grep -n "3\.9"` — the
+      unscoped form also flags legitimate historical prose, e.g.
+      `check_py_compat.py`'s docstring explaining what the check caught back
+      when 3.9 was the floor, and `requirements-dev.txt`'s comment on why
+      `mypy`/`pip-audit` were pinned; those explain a past decision rather
+      than encode a live carve-out, so banning the string itself would make
+      the AC fail on correct documentation); `git grep -n "target-version" pyproject.toml`
       returns nothing; `python3 -m mypy --version` reports a 2.x release with
       `warn_unused_ignores = true` in `pyproject.toml`; the ruleset's required
       list contains no `dependency-audit (3.9)` context, verified by
@@ -312,7 +316,7 @@ success path.
       `.github/rulesets/main.json` — corrected at draft review, confirmed by
       reading both test files); `NEXT_STEPS.md`'s check-name sentence stays in
       sync, verified by the unchanged `test_ci_gate_required_checks.py`
-      · stage: `make ci` (R-RHI-1, C-RHI-1)
+      · stage: `make ci` (R-RHI-1, C-RHI-1) — **done**, `docs/specs/python-floor-310.md`.
 - [ ] AC-2: `pytest harness/shared/tests -k test_reasoner_system_prompt_tools_match_bridge`
       passes and asserts the composed system prompt names exactly
       `tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)`'s function names,

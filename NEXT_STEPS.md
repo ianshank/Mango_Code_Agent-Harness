@@ -176,10 +176,15 @@ if a 3.9 context remains (R-SR-23, AC-23).
 
 **Depends on.** Nothing. Unblocks NS-35 and packaging halves of Phase F.
 
-**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 1/2
-(R-RHI-1); re-measured against `33f21044` with the two carve-outs this line
-predates (`requirements-lock.txt`'s own `--python-version 3.9` header,
-`_workflow_paths.UNSUPPORTED_LEG`) added to scope.
+**Done (3.10 leg).** `docs/specs/python-floor-310.md` (R-RHI-1,
+`reflection-hardening-increment.md` Step 1/2) landed: `requires-python`
+is `>=3.10`; the forked dependency markers, the 3.9 CI leg, the
+`continue-on-error` audit carve-out, `requirements-lock.txt`'s
+`--python-version 3.9` header, and `_workflow_paths.UNSUPPORTED_LEG` are
+deleted rather than re-homed; mypy is on 2.x with `warn_unused_ignores`;
+`DEC-060` supersedes DEC-028. The 3.11 half of this item's title is the
+open scope question `reflection-hardening-increment.md` records under
+"Open questions" #1 — deferred, not silently dropped.
 
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 
