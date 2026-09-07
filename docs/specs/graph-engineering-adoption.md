@@ -14,13 +14,14 @@
 
 ## Problem statement
 
-Three defects, each evidenced against `main` @ `3fc9c3e`:
+Three defects, each evidenced against `main` @ `3fc9c3e` and re-verified after merging
+`main` @ `5cd423b` (PR #118, `python-floor-310`):
 
 1. **A governance gate checks a corpus it was not meant to check.**
    `check_traceability.py:25` reads `TRACEABILITY_CONFIG = Path(".governance/traceability.json")`
    relative to the CWD, and `Makefile:255` runs it from `harness/node`. The globs therefore
    resolve to `harness/node/docs/specs/**`. Measured: the gate reads 6 requirement IDs; the
-   real corpus at `docs/specs/` holds 380 more, and the two sets are disjoint. `make validate`
+   real corpus at `docs/specs/` holds 412, sharing not one member with them. `make validate`
    prints `traceability: passed (6 requirements)` and exits 0.
 
 2. **One approval flag is guarded by construction and by nothing else.** `policy_decision.decide`
@@ -68,8 +69,9 @@ env, and protected-path attestation on every PR". The only caller of `build_grap
 is `harness/shared/experimental/autonomous_healing.py`; the live runtime is the sequential
 `ExecutionLoop` (`orchestrator/loop.py:38`). A new fail-closed CI invariant over parked code
 adds a required check, a `CONTRACT.md` row, and three protected-path attestations to a subsystem
-with a named sunset — and the 3.9 CI leg sets `MANGO_CI_DESELECT_LANGGRAPH: 1`, so the check
-would be absent on the oldest supported interpreter.
+with a named sunset. *(A fourth point — that the 3.9 leg would not run the check — is withdrawn:
+PR #118 moved the floor to 3.10 and langgraph now installs on every leg. The counter stands on
+the remaining three and on DEC-053's unchanged `accepted` status.)*
 
 **Rebuttal (third position).** Both arguments assume the deliverable is "a LangGraph checker",
 and it is not. The property worth having — *every path from entry to a write-capable node
@@ -88,9 +90,9 @@ position). Reachability, path enumeration, and community detection are one Cyphe
 each, and hand-rolling them means writing and testing graph algorithms instead of governance
 logic.
 
-**Counter-Argument.** Every dependency here is a lock entry in a 240 KB hashed
+**Counter-Argument.** Every dependency here is a lock entry in a 216 KB hashed
 `requirements-lock.txt` behind a `lock-check` gate, an `audit` surface, and a `check_py_compat`
-risk against a 3.9 floor. `import networkx` fails in this checkout and networkx is in no
+risk against the 3.10 floor. `import networkx` fails in this checkout and networkx is in no
 requirements file, so even the report's "no new dependency beyond NetworkX" is a new dependency.
 Kùzu, the obvious embedded choice, was archived in October 2025. A new module must additionally
 carry ≥90% line and ≥80% branch coverage *on its own file* (`coverage.per_file: true`) and stay
@@ -210,7 +212,7 @@ conflation D-5 had already resolved.**
   rather than inferred from the filename, and a document declaring neither MUST be treated as a
   contract spec so the permissive class is never the default. Without this, re-scoping the globs
   alone produces a gate that cannot go green while any planned work exists — measured at 98 of
-  251 current gaps arising from four program-plan documents — and a gate that cries wolf is
+  271 current gaps declared only in roadmap documents (83), plus 14 in this plan itself — and a gate that cries wolf is
   switched off.
 - R-GEA-2: A new module `harness/shared/authority_graph.py` MUST derive, without any persisted
   artifact, the reachability of `policy_decision.decide`'s `human_approved` argument from
@@ -249,8 +251,13 @@ conflation D-5 had already resolved.**
   enforcement surface is the ordinary pytest run, following `test_constant_triage.py`'s
   precedent: no `make` target, no policy entry, no protected path.
 - R-GEA-6c: If NS-31 supersedes DEC-053, the topology extractor MUST derive nodes and edges from
-  module source via `ast` rather than from a compiled graph object, so the check runs on the 3.9
-  leg where `MANGO_CI_DESELECT_LANGGRAPH` is set and no `skipif` on an optional import is needed.
+  module source via `ast` rather than from a compiled graph object, so the check needs no
+  `skipif` on an optional import and cannot become a skip in search of a waiver under INV-2.
+  The original reason — that a compiling check would be absent on the 3.9 leg where
+  `MANGO_CI_DESELECT_LANGGRAPH` is set — expired when PR #118 moved the floor to 3.10
+  (`docs/specs/python-floor-310.md`); langgraph now installs on every leg and the policy's
+  `deselect_env` key is inert. The requirement stands on the INV-2 ground alone, which is the
+  stronger of the two and was always the load-bearing half.
 - C-GEA-1: This change MUST NOT add a runtime dependency; every module it introduces imports
   only the standard library and existing first-party modules, so `make lock-check` recompiles
   unchanged.
@@ -267,7 +274,7 @@ conflation D-5 had already resolved.**
 ## Acceptance criteria
 
 - [ ] AC-GEA-1: `check_traceability.py --workspace .` run from the repository root discovers at
-      least 380 requirement IDs, and the same invocation against a workspace containing no spec
+      least 412 requirement IDs, and the same invocation against a workspace containing no spec
       files exits non-zero with `no spec files matched` — verified by
       `pytest -k test_traceability_workspace_scope` · stage: `make validate` (R-GEA-1)
 - [ ] AC-GEA-1b: after step 2, `make validate` exits 0 with every contract-spec ID carrying both
@@ -360,8 +367,8 @@ later requirement ID is closed first.
    a class declaration in each spec, and a gate that reads the real corpus. *The scope fix and
    the classification are one step because shipping the first alone produces a gate that cannot
    go green (S-3).*
-2. **Reconcile the newly visible corpus.** Fixing step 1 exposes 380 previously unchecked IDs.
-   Running the gate's own logic against root-scoped globs measures **251 of 392 IDs missing an
+2. **Reconcile the newly visible corpus.** Fixing step 1 exposes 412 previously unchecked IDs.
+   Running the gate's own logic against root-scoped globs measures **271 of 412 IDs missing an
    implementation citation, a test citation, or both** — a figure sensitive to the chosen
    `implementation_globs` / `test_globs` and therefore an order of magnitude, not a target.
    Consumes step 1's output; produces either citations or a decision record listing accepted
@@ -435,7 +442,7 @@ out.
 Thresholds are read from `harness/shared/governance-policy.json`; none is restated here.
 
 - `make lint` — ruff check, ruff format, mypy, vulture, and `check_py_compat` against the
-  3.9 floor for every new module (C-GEA-1)
+  3.10 floor for every new module (C-GEA-1)
 - `make test-python` — the reachability, witness-path, vacuity, boundary, and parking tests
   (AC-GEA-2…AC-GEA-6, AC-GEA-8…AC-GEA-10)
 - `make coverage-python` — per-file lines and branches floors from `coverage.lines`,

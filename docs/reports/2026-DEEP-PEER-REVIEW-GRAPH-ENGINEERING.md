@@ -1,6 +1,7 @@
 # Deep peer review: graph engineering applied to this harness
 
-**Reviewed head:** `main` @ `3fc9c3e` (2026-09-07, "fix(ci): restore main tip after #115")
+**Reviewed head:** `main` @ `3fc9c3e`, re-verified after merging `main` @ `5cd423b`
+(PR #118, `python-floor-310`) — see §2 point 2 and §7 S-6 for what that merge changed
 **Subject under review:** the three-model synthesis "Graph Engineering Applied to
 Mango_Code_Agent-Harness" (Claude Opus 5 Thinking / Nemotron 3 Ultra / GPT-5.6 Sol Thinking),
 26 unique recommendations across four sections
@@ -10,11 +11,12 @@ citation read directly. Where the report asserts a repository fact, this review 
 rather than accepting it. Four `openspec-peer-review` personas (Architecture, SDLC/CI Lead,
 QA Director, Product) are applied in §5.
 
-> **Scope note.** This review does not have network access to the live GitHub API in this
-> session, so it makes no claim about branch rulesets, run status, or PR state. Every
-> statement below is about the checkout at `3fc9c3e`. `make ci` was **not** run — the
-> environment has no `fastapi`, no `langgraph`, no `pnpm`, and a flaky package index. Per
-> `CLAUDE.md`'s DEC-024 rule, nothing here should be read as a passing-gate claim.
+> **Scope note.** Every statement below is a command run against this checkout or a
+> `file:line` read; none is a claim about branch rulesets or repository settings, which this
+> review did not query. `make ci` was **not** run in full — the environment has no `pnpm` and a
+> flaky package index — so per `CLAUDE.md`'s DEC-024 rule nothing here is a passing-gate claim;
+> the check runs on the pushed head are. The Python suite *was* run on this branch after the
+> `main` merge, and §7 S-6 records what it caught.
 
 ---
 
@@ -31,12 +33,12 @@ does not.
 | 2 | A code-property graph would cut agent token cost | **Accepted, re-scoped** | Correct, but the report proposes a new Tree-sitter ingestion pass while `execute_generate_code` already holds a parsed AST at the governed write door. §4.3 |
 | 3 | Governance policy is naturally a reachability graph | **Accepted, promoted to first** | The chain is real and live: `@with_authority` → `ACTIVE_TO_CANONICAL` → `allowed_actions` → `TOOL_REQUIRED_ACTION`. Today it is checked by unit tests over endpoints, never over paths. §3.1 |
 | 4 | Graph-driven regression test selection | **Deferred, unchanged** | Correct that it is a near-free derivative of (2). Wrong that it is urgent — see the QA persona, §5.3. |
-| 5 | Traceability belongs in a graph, not glob-scoped scripts | **Diagnosis accepted, prescription rejected** | The glob defect is real and worse than stated: the gate reads 6 IDs and **380 are disjoint from them**. The fix is a `--workspace` flag `DEC-056` already schedules, not a graph database. §4.1 |
+| 5 | Traceability belongs in a graph, not glob-scoped scripts | **Diagnosis accepted, prescription rejected** | The glob defect is real and worse than stated: the gate reads 6 IDs and **412 are disjoint from them**. The fix is a `--workspace` flag `DEC-056` already schedules, not a graph database. §4.1 |
 | 6 | Evidence manifests form a provenance DAG | **Accepted, low priority** | Structurally true; no defect demonstrated. |
 | 7 | Learned topology optimization (GPTSwarm / G-Designer) | **Accepted as parked** | The report's own caution is correct and matches `DEC-027`. |
 
 **Findings all three models missed** are in §4. The most consequential is §4.1: a governance
-gate that prints `traceability: passed (6 requirements)` while 380 requirement IDs — a set
+gate that prints `traceability: passed (6 requirements)` while 412 requirement IDs — a set
 sharing not one member with those six — go unread.
 
 ---
@@ -78,11 +80,21 @@ Four independent facts confirm the park is the correct read of the code, not mer
    The live runtime is `harness/shared/orchestrator/loop.py:38` (`ExecutionLoop`) — a
    sequential loop, not a graph. Nothing in the production path compiles a `StateGraph`.
 
-2. **The gate could not run on a third of the CI matrix.** The matrix is
-   `["3.9", "3.10", "3.12"]` (`.github/workflows/python-package.yml:61`) and langgraph
-   declares `Requires-Python >=3.10`, so the 3.9 leg sets
-   `MANGO_CI_DESELECT_LANGGRAPH: 1` (line 102). A gate that compiles the graph is a gate
-   that is absent on the oldest supported interpreter.
+2. ~~**The gate could not run on a third of the CI matrix.**~~ **Withdrawn — this fact expired
+   during review.** It read: the matrix is `["3.9","3.10","3.12"]` and langgraph declares
+   `Requires-Python >=3.10`, so the 3.9 leg sets `MANGO_CI_DESELECT_LANGGRAPH: 1`; a gate that
+   compiles the graph is absent on the oldest supported interpreter. PR #118 (`R-RHI-1`,
+   `docs/specs/python-floor-310.md`, superseding DEC-028) landed on `main` while this review was
+   being written and moved the floor to 3.10 with the matrix `["3.10","3.12","3.14"]`. No leg
+   sets the deselect variable any more — the policy key at `governance-policy.json`
+   `coverage.optional_extras.langgraph.deselect_env` survives it and is now inert — so langgraph
+   installs everywhere and this objection is dead.
+
+   Stated rather than quietly edited, because it is this review's own DEC-024 moment: the claim
+   was true when written, checked against the checkout, and false three hours later. §7's S-3
+   is the same lesson about a number; this is the version about a fact. **The inversion in §2
+   stands on the other three points and on DEC-053 itself, which is still `status: accepted`,
+   `superseded_by: null` after the merge.**
 
 3. **`harness/shared/langgraph/**` is a protected path**
    (`governance-policy.json` → `protected_paths`, 82 entries). Every PR touching it needs the
@@ -90,7 +102,7 @@ Four independent facts confirm the park is the correct read of the code, not mer
 
 4. **The report's proposed dependency is not present.** `import networkx` fails in this
    checkout, and networkx appears in no requirements file. "No new dependency beyond NetworkX"
-   is a contradiction in a repo with a hashed `requirements-lock.txt` and a `lock-check` gate.
+   is a contradiction in a repo with a hashed `requirements-lock.txt` (216 KB) and a `lock-check` gate.
 
 **This does not retire the idea.** Section 6 of the companion plan re-points it. The
 observation that makes it survivable: *the interesting property is not LangGraph-shaped.*
@@ -210,7 +222,7 @@ resolved against `harness/node/`, not the repository root. Measured:
 
 ```
 $ ls harness/node/docs/specs/*.md | wc -l                        # 2   — what the gate reads
-$ ls docs/specs/*.md | grep -v SPEC_TEMPLATE | wc -l             # 32  — where the specs are
+$ ls docs/specs/*.md | grep -v SPEC_TEMPLATE | wc -l             # 35  — where the specs are
 ```
 
 Unique requirement IDs on each side, and their intersection:
@@ -218,12 +230,12 @@ Unique requirement IDs on each side, and their intersection:
 ```
 gate-visible (harness/node/docs/specs): 6
   C-AI-SEC-1, C-GOV-1, R-AI-NEMO-1, R-AI-NEMO-2, R-AI-RES-3, R-GOV-2
-root docs/specs (excluding SPEC_TEMPLATE.md): 380
-root IDs not in the gate-visible set:        380
+root docs/specs (excluding SPEC_TEMPLATE.md): 412
+root IDs not in the gate-visible set:        412
 ```
 
-The gate prints `traceability: passed (6 requirements)` and exits 0. **380 requirement IDs
-across 32 specifications are never checked for implementation or test citation, and the two
+The gate prints `traceability: passed (6 requirements)` and exits 0. **412 requirement IDs
+across 35 specifications are never checked for implementation or test citation, and the two
 sets are disjoint** — the gate is not checking a subset of the real corpus, it is checking a
 different corpus.
 
@@ -241,19 +253,19 @@ the same `REQ` pattern and the same bidirectional rule:
 
 ```
 $ python3 - <<'PY'   # gate logic verbatim, globs re-pointed at the repository root
-specs matched: 34 | impl files: 286 | test files: 191
-requirement IDs discovered: 392
-IDs with a missing citation: 251
+unique requirement IDs across 35 specs: 412
+unique IDs missing a citation:          271
 PY
 ```
 
-**251 of 392 requirement IDs have no implementation citation, no test citation, or neither.**
+**271 of 412 requirement IDs have no implementation citation, no test citation, or neither.**
 
-> **Read that number with §7's S-3 correction.** 98 of the 251 (39%) come from four
-> program-plan documents whose `R-SR-*` / `R-CQ-*` IDs name scheduled work rather than shipped
-> behaviour, and 10 more are this PR's own plan. The contract-spec backlog is nearer **143**.
-> The figure is also sensitive to the choice of `implementation_globs` and `test_globs` — the
-> ones used here are `harness/**/*.py` plus the Node stack, reasonable but not authoritative.
+> **Read that number with §7's S-3 correction.** 83 of the 271 (31%) are declared *only* in
+> roadmap documents, whose `R-SR-*` / `R-CQ-*` / `R-RHI-*` IDs name scheduled work rather than
+> shipped behaviour, and 14 more are declared only in this PR's own plan. The contract-spec
+> backlog is nearer **174**. The figure is also sensitive to the choice of
+> `implementation_globs` and `test_globs` — the ones used here are `harness/**/*.py` plus the
+> Node stack, reasonable but not authoritative.
 
 What is not scope-sensitive is the direction: repairing the gate does not produce a green gate,
 it produces a backlog — and, per S-3, one that a scope fix alone can never clear, because a
@@ -319,8 +331,8 @@ none of the models enumerated:
 
 | Constraint | Source | Consequence |
 |---|---|---|
-| Python floor 3.9 | `pyproject.toml:4`, matrix `["3.9","3.10","3.12"]` | No `match`, no PEP 604 at runtime; `check_py_compat.py` is a gate |
-| Hashed universal lock + `lock-check` | `Makefile:362`, `requirements-lock.txt` (240 KB) | Any new dependency is a lock regeneration and an `audit` surface |
+| Python floor 3.10 *(was 3.9 until PR #118)* | `pyproject.toml:4`, matrix `["3.10","3.12","3.14"]` | `check_py_compat.py` is still a gate, now against runtime-only 3.11+ constructs; its PEP 604 check is inert at this floor |
+| Hashed universal lock + `lock-check` | `Makefile:362`, `requirements-lock.txt` (216 KB) | Any new dependency is a lock regeneration and an `audit` surface |
 | Per-file coverage floor | `governance-policy.json` → `coverage.per_file: true`, `lines: 90`, `branches: 80` | A new module must carry ≥90% line coverage *on its own* |
 | Per-file size budget | `limits.size_budget_lines: 500` / `test_size_budget_lines: 700` | No single-file graph engine |
 | Every module-level numeric constant triaged | `test_constant_triage.py:341` | Any tuning number must cite a policy key or a `DEC-` id |
@@ -469,12 +481,14 @@ would prevent.
 The sections above were written from reading. This section was written after *computing* the
 graph §3.1 proposes — building the authorization graph by hand from
 `ACTIVE_TO_CANONICAL`, `agent-policy.json`, and `TOOL_REQUIRED_ACTION` and asking it the
-questions the companion plan's acceptance criteria ask. Five findings, four of them against
-this review and its plan rather than against the report.
+questions the companion plan's acceptance criteria ask — and then, in S-6, after CI answered
+back. Six findings, five of them against this review and its plan rather than against the report.
 
-The pattern in all five is the same one §5.3 warned about, arriving from the inside: **a check
-that passes for a reason unrelated to what it claims to check.** Naming that failure mode in a
-persona review turns out to be no protection against committing it four paragraphs later.
+The pattern in S-1 through S-5 is the same one §5.3 warned about, arriving from the inside: **a
+check that passes for a reason unrelated to what it claims to check.** Naming that failure mode
+in a persona review turns out to be no protection against committing it four paragraphs later.
+S-6 is the complement: a check that failed for exactly the reason it claims to check, and caught
+this document.
 
 ### S-1 · `AC-GEA-2` is 60% vacuous, and the plan does not say so — *Major*
 
@@ -540,22 +554,19 @@ privileged flag — and it is what `R-GEA-2` should target instead of the grant 
 
 ### S-3 · This review's own headline number is inflated for the use it was put to — *Major*
 
-§4.1 reports 251 of 392 requirement IDs missing a citation. The figure is what the gate's logic
-produces, but presenting it as a citation backlog overstates it. Decomposed by source:
+§4.1 reports 271 of 412 requirement IDs missing a citation. The figure is what the gate's logic
+produces, but presenting it as a citation backlog overstates it. Counting each unique ID once and
+attributing it only where it is declared *exclusively*:
 
-| Source | IDs | Gaps |
-|---|---|---|
-| `2026-standards-remediation-plan.md` | 60 | 53 |
-| `code-quality-tech-debt-plan.md` | 36 | 21 |
-| `god-file-decomposition.md` | 14 | 12 |
-| `tech-debt-hardening-plan.md` | 35 | 12 |
-| **four program-plan documents, subtotal** | | **98 (39%)** |
-| `graph-engineering-adoption.md` (this PR's own plan) | 11 | 10 |
-| remainder — contract specs | | **~143** |
+| Source | Unique gapped IDs |
+|---|---|
+| declared only in roadmap documents — `2026-standards-remediation-plan`, `reflection-hardening-increment`, `code-quality-tech-debt-plan`, `god-file-decomposition`, `tech-debt-hardening-plan` | **83 (31%)** |
+| declared only in `graph-engineering-adoption.md` (this PR's own plan) | 14 |
+| remainder — contract specs | **~174** |
 
-`R-SR-*` and `R-CQ-*` are roadmap items. A requirement that says "park LangGraph" has no
+`R-SR-*`, `R-CQ-*`, and `R-RHI-*` are roadmap items. A requirement that says "park LangGraph" has no
 implementation file to cite until it is done, and citing it in a test would be meaningless.
-Quoting 251 without that split is the same species of unearned number this review criticised the
+Quoting 271 without that split is the same species of unearned number this review criticised the
 source report for in §3.3.
 
 The correction matters beyond arithmetic, because it exposes a design defect in `R-GEA-1`:
@@ -606,6 +617,49 @@ broker asks the PDP about). `planner` holds `spec_write` but executes as `orches
 lacks it; `verifier` holds `review_write` and `security_scan` but executes as `test-eval`, which
 lacks both. A reachability check over the wrong surface returns a confident wrong answer, and
 `R-GEA-2` names only one of the two.
+
+### S-6 · CI caught this review with a gate the review did not know existed — *Major, and the most instructive*
+
+The first push of this document turned all four `build` legs red. One assertion, on every leg:
+
+```
+FAILED harness/shared/tests/test_documentation_claims.py::TestEveryReportIsIndexed::
+       test_the_index_matches_the_directory
+  harness/README.md indexes [...11 reports...]
+  but docs/reports/ holds [...12, including '2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md']
+1 failed, 4176 passed, 1 skipped
+```
+
+`harness/README.md` carries a prose index of `docs/reports/`, and
+`test_documentation_claims.py:315` asserts that index equals the directory. Adding a report
+without indexing it is a CI failure. The fix is one filename in one sentence.
+
+Three things make this worth a numbered finding rather than a footnote.
+
+**It is the exact inverse of §4.1.** That section's whole argument is that this repository has a
+gate reading a corpus it was not aimed at, passing on 6 IDs while 412 go unread. `TestEveryReportIsIndexed`
+is the same *kind* of check — documentation claim against directory reality — aimed correctly,
+failing closed, and catching a real drift within minutes. The repository is not uniformly weak
+at this; it is strong at it in the places someone thought about, and §4.1 is a place someone did
+not. A review that reported only the failure would have mischaracterised the codebase.
+
+**The local gate run that "passed" was not the gate.** §4 of this document lists four validators
+run locally, all green — `validate_plan`, `validate_specs`, `validate_invariants`,
+`validate_governance_docs`. None of them is `make ci`, and the failing assertion lives in the
+pytest suite that `coverage-python` runs, which the local environment could not execute at the
+time. The PR body said so explicitly, which is the only reason this is a caught defect rather
+than a false claim — but "I ran the validators" was still doing rhetorical work that "I ran the
+gate" would have earned. `CLAUDE.md`'s rule is that a verification claim in prose is not
+evidence; the sharper form this incident teaches is that **a partial verification reported
+without naming what it omits reads as a total one.**
+
+**A graph would not have caught it, and that is the honest limit.** The dependency here is
+`docs/reports/*.md` → a prose sentence in `harness/README.md`. No call graph, no import graph,
+and no code-property graph contains that edge. It is a documentation-consistency invariant,
+enforced by a hand-written test that someone had to think of — exactly the kind of thing the
+source report's graph-first framing has nothing to say about. The graph is the right tool for
+§4.2's write door and §7's S-2 approval flag. It is not a general solvent, and a review
+advocating for it should say where it stops.
 
 ### What survives
 
