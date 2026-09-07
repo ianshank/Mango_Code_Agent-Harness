@@ -390,7 +390,11 @@ waits on the credential rotation.
 
 **Status: folded into NS-1.** This item was opened with the wrong mechanism and
 is retained to record the correction rather than deleted, because the wrong
-version was quoted in a decision record and a PR description.
+version was quoted in PR #120's description. (An earlier draft of this paragraph
+also claimed it was quoted in a decision record. It was not — `DEC-065` does not
+mention NS-40. That sentence was written without checking, in the paragraph
+withdrawing an item for a claim written without checking, and is corrected here
+rather than silently fixed.)
 
 **What was claimed.** That a required status check which was never created reads
 as *pending* rather than failing, so a branch ruleset cannot block on it and

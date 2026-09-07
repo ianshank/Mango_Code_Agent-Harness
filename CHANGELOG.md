@@ -194,7 +194,11 @@ attestations each time — and the report that proposed one priced none of it.
   drafted spec and verdict module were removed unlanded after four of this
   repository's own gates rejected them (traceability ratchet, `validate_plan`,
   mypy, `test_verdict_literals`) and all four `openspec-peer-review` personas
-  refused signoff. The incident is now evidence under NS-1, where it argues for
+  refused signoff. The withdrawal commit itself then claimed the wrong version
+  had been quoted in a decision record; `DEC-065` does not mention NS-40, and
+  that sentence was written without checking. Corrected in `NEXT_STEPS.md`
+  rather than silently dropped — it is the same failure one layer up, and the
+  third time on this PR that a claim about evidence went unchecked. The incident is now evidence under NS-1, where it argues for
   work already known to be needed, rather than a separate item arguing for work
   that would not have helped.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
