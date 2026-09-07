@@ -97,7 +97,7 @@ def setup_json_logging(level: int = logging.INFO) -> None:
     root_logger.setLevel(level)
 
 
-class _LazyStderrHandler(logging.StreamHandler):  # type: ignore[type-arg]
+class _LazyStderrHandler(logging.StreamHandler):
     """A stderr handler that resolves ``sys.stderr`` at emit time, not construction.
 
     ``logging.StreamHandler()`` captures the stream object when it is built. A gate

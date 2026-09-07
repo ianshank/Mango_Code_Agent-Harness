@@ -33,7 +33,7 @@ before validation and scrubs every string at every depth, including the
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -71,8 +71,8 @@ class ToolCallFunction(_WireModel):
     set. Rejecting a shape the dispatcher accepted would recreate the 500 this
     model exists to remove (Copilot review on PR #86)."""
 
-    name: Optional[str] = None
-    arguments: Optional[Any] = None
+    name: str | None = None
+    arguments: Any | None = None
 
 
 class ToolCall(_WireModel):
@@ -84,9 +84,9 @@ class ToolCall(_WireModel):
     message. A wire model stricter than the loop turns those completed runs
     back into a 500 (Copilot review on PR #86)."""
 
-    id: Optional[Any] = None
-    type: Optional[Any] = None
-    function: Optional[ToolCallFunction] = None
+    id: Any | None = None
+    type: Any | None = None
+    function: ToolCallFunction | None = None
 
 
 class SystemMessage(_WireModel):
@@ -105,8 +105,8 @@ class AssistantMessage(_WireModel):
     but leaves every earlier one as the provider sent it."""
 
     role: Literal["assistant"]
-    content: Optional[str] = None
-    tool_calls: Optional[list[ToolCall]] = None
+    content: str | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
 class ToolMessage(_WireModel):
@@ -116,12 +116,12 @@ class ToolMessage(_WireModel):
 
     role: Literal["tool"]
     content: str
-    tool_call_id: Optional[Any] = None
-    name: Optional[str] = None
+    tool_call_id: Any | None = None
+    name: str | None = None
 
 
 HistoryMessage = Annotated[
-    Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage],
+    SystemMessage | UserMessage | AssistantMessage | ToolMessage,
     Field(discriminator="role"),
 ]
 

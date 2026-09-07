@@ -184,7 +184,7 @@ class TestMultiToolBudgetExhaustionRegression:
             def _recording_hook(hook_name: str, **kwargs: object) -> None:
                 hook_events.append((hook_name, kwargs))
 
-            orch.execution_loop.hook_runner.run_hook = _recording_hook  # type: ignore[assignment]
+            orch.execution_loop.hook_runner.run_hook = _recording_hook  # type: ignore[method-assign]
 
             with pytest.raises(RuntimeError, match="exceeded the tool-call budget"):
                 orch.execute_agent("nemotron-reasoner", "read both files", budget=budget)

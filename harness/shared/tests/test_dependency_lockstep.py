@@ -25,7 +25,7 @@ from pathlib import Path
 
 if sys.version_info >= (3, 11):
     import tomllib
-else:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
+else:  # pragma: no cover - exercised on the 3.10 matrix leg
     import tomli as tomllib
 
 import pytest

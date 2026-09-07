@@ -33,7 +33,6 @@ from harness.shared.tests._workflow_paths import (
     DEPENDABOT,
     DRIFT_WORKFLOW,
     RULESET,
-    UNSUPPORTED_LEG,
     WORKFLOW,
 )
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
@@ -134,18 +133,22 @@ def jobs(workflow_text: str) -> dict[str, str]:
     return sections
 
 
-class TestTheUnsupportedLegDeselectsRatherThanSkips:
-    """R-TDH-4: no skip on the leg that cannot install langgraph."""
+class TestNoLegDeselectsLangGraph:
+    """R-RHI-1 (DEC-064): every leg installs langgraph unconditionally now
+    that the floor is >=3.10 (langgraph's own floor); no CI leg has a reason
+    to set the deselect variable, so none should. The deselect mechanism
+    itself (`_session_hooks.py`, `coverage.optional_extras`) stays live for an
+    adopter fork that chooses not to install the extra at all -- this test
+    only pins that this repository's own workflow does not (re)introduce a
+    3.9-shaped carve-out."""
 
-    def test_the_deselect_variable_is_set_only_on_the_unsupported_leg(self, jobs: dict[str, str]) -> None:
-        leg = re.escape(UNSUPPORTED_LEG)
-        pattern = rf"{LANGGRAPH_DESELECT_ENV}: \$\{{\{{ matrix\.python-version == '{leg}' && '1' \|\| '' \}}\}}"
-        assert re.search(pattern, jobs["build"]), (
-            f"the {UNSUPPORTED_LEG} leg must set {LANGGRAPH_DESELECT_ENV}=1 so conftest deselects the "
-            "langgraph-marked suites; a skip there would be an unwaived INV-2 violation"
+    def test_build_does_not_set_the_deselect_variable(self, jobs: dict[str, str]) -> None:
+        assert LANGGRAPH_DESELECT_ENV not in jobs["build"], (
+            "every build leg supports langgraph's own >=3.10 floor; setting "
+            f"{LANGGRAPH_DESELECT_ENV} here would silently reintroduce a skip-shaped carve-out"
         )
 
-    def test_the_primary_leg_does_not_deselect(self, jobs: dict[str, str]) -> None:
+    def test_build_full_does_not_set_the_deselect_variable(self, jobs: dict[str, str]) -> None:
         assert LANGGRAPH_DESELECT_ENV not in jobs["build-full"], (
             "build-full runs the regression tier with langgraph present; deselecting there "
             "would hide the very tests the lock exists to run"

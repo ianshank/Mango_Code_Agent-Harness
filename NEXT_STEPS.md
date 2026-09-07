@@ -2,7 +2,7 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
+**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-064 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -78,9 +78,14 @@ the only remaining step.
 to the workflow's job names.
 
 Required status checks (derived from `.github/workflows/python-package.yml`,
-not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
-`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
-`dependency-audit (3.10)`, `dependency-audit (3.12)`.
+not from memory): `build (3.10)`, `build (3.12)`, `build (3.14)`,
+`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.10)`,
+`dependency-audit (3.12)`, `dependency-audit (3.14)`.
+
+_Updated by `docs/specs/reflection-hardening-increment.md` Step 1/2 /
+DEC-064: the Python 3.9 floor moved to 3.10, replacing the `3.9` legs with
+`3.14` and retiring `dependency-audit (3.9)`'s `continue-on-error`
+carve-out._
 
 **Done when.** Settings → Rules → Rulesets → Import
 `.github/rulesets/main.json` (with `required_signatures` and
@@ -171,6 +176,21 @@ if a 3.9 context remains (R-SR-23, AC-23).
 
 **Depends on.** Nothing. Unblocks NS-35 and packaging halves of Phase F.
 
+**Done (3.10 leg).** `docs/specs/python-floor-310.md` (R-RHI-1,
+`reflection-hardening-increment.md` Step 1/2) landed: `requires-python`
+is `>=3.10`; the forked dependency markers, the 3.9 CI leg, the
+`continue-on-error` audit carve-out, `requirements-lock.txt`'s
+`--python-version 3.9` header, and `_workflow_paths.UNSUPPORTED_LEG` are
+deleted rather than re-homed; mypy is on 2.x with `warn_unused_ignores`;
+`DEC-064` supersedes DEC-028.
+
+**Follow-up, dated (not open-ended).** 3.10 itself reaches EOL 2026-10-31.
+Before that date: run `make spec NAME=python-floor-311`, re-measuring the
+same evidence class this item's original "Why now" ran for 3.10 (runtime
+dependency floors, mypy/ruff support windows, any CI matrix leg that would
+otherwise ship an EOL-only interpreter) rather than assuming the 3.10 bump's
+reasoning still holds unchecked seven weeks later.
+
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 
 **Why now.** `langgraph/__init__.py` still carries the remaining
@@ -208,6 +228,8 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 
 **Depends on.** Nothing (Phase B MCP parity shipped).
 
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 3,
+implementing `reasoner-bridge-tool-parity.md`'s existing scaffold in place.
 
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
@@ -232,14 +254,23 @@ as root on an un-digested base (M17); Dependabot lacks `docker` / cooldown
 **Done when.** R-SR-24 and R-SR-25 landed with AC-24 and AC-25; a PR with a
 stale SHA in its attestation table fails `build-full`.
 
-**Depends on.** NS-1 (signatures / ruleset live).
+**Depends on.** NS-1 only for the `required_signatures` half of R-SR-24; the
+attestation-SHA-binding and Dockerfile/Dependabot-cooldown halves depend on
+nothing.
+
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
+`required_signatures` (that clause stays gated on NS-1).
 
 ### NS-29 · The program plans
 
 Pointer only: status is the remediation plan's boxes, read there, not here.
 `docs/specs/code-quality-tech-debt-plan.md` is closed at revision 2.
 Remediation plan is revision 3 (Phase B Done; R-SR-5 / AC-5 closed; Phase E
-gated on R-SR-2).
+gated on R-SR-2). `docs/specs/reflection-hardening-increment.md` is a ledger
+increment against the remediation plan's still-open items (NS-6, NS-18, half
+of NS-36) — a spec, not a fifth program plan; it does not restate or
+re-litigate boxes above, only schedules what a re-measurement against
+`33f21044` still found true.
 
 ---
 
@@ -284,7 +315,7 @@ gated on R-SR-2).
 
 | Was | Now |
 |---|---|
-| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-060 after origin re-landed the forward feature. |
+| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-064 after origin re-landed the forward feature. |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 

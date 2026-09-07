@@ -33,7 +33,7 @@ from pathlib import Path
 
 if sys.version_info >= (3, 11):
     import tomllib
-else:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
+else:  # pragma: no cover - exercised on the 3.10 matrix leg
     import tomli as tomllib
 
 import pytest
@@ -57,6 +57,25 @@ def _per_file_ignores() -> dict[str, list[str]]:
     return ignores
 
 
+def _ruff_target_version(config: dict) -> str:
+    """The effective ``--target-version`` ruff would infer for this project.
+
+    ``[tool.ruff].target-version`` was removed on purpose
+    (docs/specs/python-floor-310.md, DEC-064): ruff already derives it from
+    ``[project].requires-python`` when the key is absent, so restating it here
+    would be the second independently-driftable literal that removal exists to
+    avoid. An explicit key still wins if a future edit sets one, matching
+    ruff's own precedence.
+    """
+    explicit = config.get("tool", {}).get("ruff", {}).get("target-version")
+    if explicit:
+        return str(explicit)
+    requires_python = config["project"]["requires-python"]
+    match = re.match(r">=\s*(\d+)\.(\d+)", requires_python)
+    assert match, f"pyproject.toml's requires-python {requires_python!r} is not a '>=X.Y' floor ruff can infer from"
+    return f"py{match.group(1)}{match.group(2)}"
+
+
 def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
     """Findings ruff reports with the project config ignored.
 
@@ -64,7 +83,8 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
     per-file-ignores under test, so every pattern would look dead. Line length
     and target version are restated because isolation drops those too.
     """
-    ruff_cfg = _config()["tool"]["ruff"]
+    config = _config()
+    ruff_cfg = config["tool"]["ruff"]
     # ruff_json raises with ruff's stderr if the invocation itself fails. Without
     # that, an exit-2 error leaves stdout empty, parses to [], and every pattern
     # below reports as dead -- a tool failure dressed up as a config finding.
@@ -77,7 +97,7 @@ def _isolated_findings(codes: list[str]) -> list[tuple[str, str]]:
             "--line-length",
             str(ruff_cfg["line-length"]),
             "--target-version",
-            ruff_cfg["target-version"],
+            _ruff_target_version(config),
             "--select",
             ",".join(codes),
         ]
