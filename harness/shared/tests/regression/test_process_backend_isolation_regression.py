@@ -16,13 +16,19 @@ Spec: INV-9 (fail-closed only on *real* unavailability), RCA-7.
 from __future__ import annotations
 
 import subprocess
+import sys
 import typing
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from harness.shared.governance.broker import ExecutionBroker, ProcessBackend
+# Ensure repository root is on sys.path so direct execution or IDE runners succeed
+_REPO = Path(__file__).resolve().parents[4]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
+from harness.shared.governance.broker import ExecutionBroker, ProcessBackend  # noqa: E402
 
 
 class _MinimalRecordingBackend(ProcessBackend):
@@ -104,3 +110,7 @@ def test_process_backend_probe_caching_is_per_instance() -> None:
         "ProcessBackend._probed is shared across instances. "
         "The cache must be per-instance (instance attribute, not class attribute)."
     )
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))
