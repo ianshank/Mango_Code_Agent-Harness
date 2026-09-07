@@ -32,8 +32,8 @@ contracts' `allowed_actions`, **minus** each contract's
 | Active role | Effective actions | Tools received |
 |---|---|---|
 | `planner` | `read`, `plan`, `delegate`, `spec_write` | `read_file`, both meta-tools |
-| `nemotron-reasoner` | `read`, `write`, `test_execute` | `read_file`, `apply_patch`, `write_file`, `run_command`, both meta-tools |
-| `verifier` | `read`, `test_execute`, `evidence_write`, `review_write`, `security_scan` | `read_file`, `run_command`, both meta-tools — **no `write_file`/`apply_patch`** |
+| `nemotron-reasoner` | `read`, `write`, `test_execute` | `read_file`, `apply_patch`, `write_file`, `generate_code`, `run_command`, both meta-tools |
+| `verifier` | `read`, `test_execute`, `evidence_write`, `review_write`, `security_scan` | `read_file`, `run_command`, both meta-tools — **no `write_file`/`apply_patch`/`generate_code`** |
 
 **Execution identity.** `EXECUTION_IDENTITY` records the canonical role each
 active role *executes as* when the broker asks the authority model for a

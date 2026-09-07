@@ -97,7 +97,7 @@ class TestRetryPredicate:
         [
             urllib.error.URLError("down"),
             TimeoutError("slow"),
-            socket.timeout("slow"),
+            TimeoutError("slow"),
             ConnectionResetError("reset"),
             ConnectionAbortedError("aborted"),
         ],

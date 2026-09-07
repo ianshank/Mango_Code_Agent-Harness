@@ -99,7 +99,13 @@ NEMOTRON_TOOLS = [
                     },
                     "validate_syntax": {
                         "type": "boolean",
-                        "description": "Whether to perform syntax validation before writing (default true).",
+                        "description": (
+                            "Whether syntax errors are reported before writing (default true). "
+                            "Python targets are always parsed for safety checks: setting this false does not "
+                            "disable them, and Python that does not parse is denied either way. Which target "
+                            "suffixes count as Python comes from `synthesis.python_write_suffixes` in the "
+                            "governance policy, not from this argument or `language`."
+                        ),
                     },
                     "overwrite": {
                         "type": "boolean",

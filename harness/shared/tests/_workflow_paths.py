@@ -27,8 +27,6 @@ LOCK_NAME = LOCK.name
 #: opens with `-r requirements.txt`, and `requirements-langgraph.txt` is the
 #: second compile input. DEC-047 turns on the lock subsuming both.
 RANGE_FILES = (REPO / "requirements.txt", REPO / "requirements-langgraph.txt", REPO / "requirements-dev.txt")
-# The oldest interpreter in the matrix; langgraph declares Requires-Python >=3.10.
-UNSUPPORTED_LEG = "3.9"
 
 
 def pip_install_lines(workflow_text: str) -> list[str]:

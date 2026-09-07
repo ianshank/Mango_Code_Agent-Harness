@@ -56,9 +56,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # pyproject ruff target-version is py39 (oldest supported).
-        # check_py_compat gate enforces no runtime-only 3.10+ constructs.
-        python-version: ["3.9", "3.10", "3.12"]
+        # pyproject requires-python is >=3.10 (docs/specs/python-floor-310.md,
+        # superseding DEC-028); ruff derives target-version from it.
+        # check_py_compat gate enforces no runtime-only 3.11+ constructs
+        # (its own PEP 604 check is inert now that the floor is 3.10).
+        python-version: ["3.10", "3.12", "3.14"]
 
     steps:
       - name: Checkout
@@ -79,16 +81,16 @@ jobs:
           python -m pip install --require-hashes -r requirements-lock.txt
           python -m pip install -e . --no-deps
 
-      # Dependencies come from requirements-lock.txt, a universal lock whose
-      # environment markers pip evaluates per interpreter: the 3.9 leg gets no
-      # langgraph (it declares Requires-Python >=3.10) and every other leg does,
-      # so the `langgraph`-marked suites run there instead of skipping. On 3.9
-      # they are *deselected* -- visible in pytest's summary, never a skip --
-      # through the conftest hook keyed to MANGO_CI_DESELECT_LANGGRAPH below,
-      # and coverage_gate.py reads the same variable (via the policy's
-      # coverage.optional_extras) to waive the per-file floor for the
-      # langgraph modules on that leg only; aggregate floors still apply
-      # (DEC-028). Pinned by test_workflow_contracts.py
+      # Dependencies come from requirements-lock.txt, a universal lock. Every
+      # leg in this matrix now satisfies langgraph's own Requires-Python
+      # >=3.10 (docs/specs/python-floor-310.md, superseding DEC-028), so every
+      # leg installs it and runs the `langgraph`-marked suites unconditionally;
+      # this job no longer sets the deselect variable that used to key off the
+      # unsupported leg. The deselection mechanism itself
+      # (coverage.optional_extras, _session_hooks.py) is not removed -- it is
+      # a general "optional extra not installed" waiver an adopter fork can
+      # still opt into -- but this workflow no longer drives it, since it has
+      # no leg that lacks the extra. Pinned by test_workflow_contracts.py
       # (tech-debt-hardening-plan R-TDH-4, R-TDH-9).
 
       - name: Run Python CI gate (make ci-python)
@@ -99,7 +101,6 @@ jobs:
         # gate stays fail-closed. Never set this unconditionally.
         env:
           ALLOW_GITHUB_CHANGES: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'infra-reviewed') && '1' || '' }}
-          MANGO_CI_DESELECT_LANGGRAPH: ${{ matrix.python-version == '3.9' && '1' || '' }}
         run: make ci-python
 
   build-full:
@@ -306,15 +307,16 @@ jobs:
   # `pip-audit` resolves dependency markers, `Requires-Python` and transitive
   # constraints under the interpreter that runs it. The `audit` job above only ever
   # resolves under 3.11, so a vulnerability that surfaces only under a transitive
-  # dependency selected on 3.9, 3.10 or 3.12 would never be caught. Matrixed like
+  # dependency selected on 3.10, 3.12 or 3.14 would never be caught. Matrixed like
   # `build`; Python-only, since the Node delegation already runs once, in `audit`.
   #
-  # The 3.9 leg is non-blocking (DEC-017): the patched releases of every vulnerable
-  # package this leg has found (starlette, click, python-dotenv) require Python
-  # >=3.10, so no version pin in requirements.txt can satisfy both "install under
-  # 3.9" and "clean under 3.9" at once. Findings still surface -- fail-fast is off
-  # and the step itself is not silenced -- this only stops them from blocking merge
-  # on a gap this PR cannot close without dropping the 3.9 floor.
+  # DEC-017's non-blocking 3.9 leg is gone with the floor
+  # (docs/specs/python-floor-310.md, superseding DEC-028): every fix DEC-017
+  # named (starlette, click, python-dotenv) required Python >=3.10, so every
+  # remaining leg can both install the patched release and stay
+  # vulnerability-clean. No leg here carries `continue-on-error` any more --
+  # a required check that cannot fail on its own finding is not a check
+  # (R-SR-23).
   audit-matrix:
     name: dependency-audit (${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -322,7 +324,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.12"]
+        python-version: ["3.10", "3.12", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -338,9 +340,4 @@ jobs:
         run: make audit-install-python
 
       - name: Run dependency audit gate (make audit-python)
-        # See DEC-017: every currently-available fix for a 3.9-resolved finding
-        # requires Python >=3.10, so this leg cannot be made both 3.9-installable
-        # and vulnerability-clean. Non-blocking here only; 3.10 and 3.12 stay
-        # fully enforced.
-        continue-on-error: ${{ matrix.python-version == '3.9' }}
         run: make audit-python

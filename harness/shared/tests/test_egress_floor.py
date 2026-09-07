@@ -64,7 +64,10 @@ def test_a_unix_socketpair_is_permitted_while_tcp_still_raises() -> None:
     present. A skip here does NOT weaken the floor -- the socket guard still
     blocks TCP (test_the_socket_guard_is_actually_active) on every platform.
     """
-    _AF_UNIX = socket.AF_UNIX  # type: ignore[attr-defined]  # guarded by skipif above
+    # AddressFamily enum member: typed on every platform mypy knows, unlike
+    # ``socket.AF_UNIX`` which needs a Linux-only ignore that becomes unused
+    # under warn_unused_ignores (DEC-064 / mypy 2.x) on CI.
+    _AF_UNIX = socket.AddressFamily.AF_UNIX
     left, right = socket.socketpair(_AF_UNIX, socket.SOCK_STREAM)
     try:
         assert left.fileno() >= 0 and right.fileno() >= 0
@@ -96,12 +99,13 @@ def test_the_guard_can_be_declared_off_per_test() -> None:
 
 def test_no_global_socket_exemption_exists() -> None:
     """AC-EGF-7: the floor must not be quietly re-opened in configuration."""
+    import sys
     from pathlib import Path
 
-    try:  # tomllib entered the stdlib in 3.11; tomli is its backport (see requirements-dev.txt)
+    if sys.version_info >= (3, 11):
         import tomllib
-    except ModuleNotFoundError:  # pragma: no cover - exercised on the 3.9/3.10 matrix legs
-        import tomli as tomllib  # type: ignore[no-redef]
+    else:  # pragma: no cover - exercised on the 3.10 matrix leg
+        import tomli as tomllib
 
     root = Path(__file__).resolve().parents[3]
     cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))

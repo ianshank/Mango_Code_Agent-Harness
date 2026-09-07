@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
+**Last reviewed:** 2026-09-07 · `claude/graph-engineering-mango-agent-1ic553` (PR #120) @ `dc42d4c`, DEC-065 landed at `7ff4cd7` — graph-engineering adoption: four derived checks, none of them a new `ci_required_target`; the traceability gate re-scoped from 6 to 412 requirement IDs behind a policy floor and a ratchet, and `make validate` now runs it per-stack **and** repository-scoped so the required check reads the real corpus; `.governance/**` reclassified out of the dormant protected-path set as DEC-056 predicted → what it bounded rather than fixed is **NS-39** · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and **DEC-060** rollback retirement completed (this line said DEC-064; DEC-064 is the Python 3.10 floor — the NS-17/NS-21 rollback pins were retired under DEC-060) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -84,10 +84,26 @@ the only remaining step.
 `test_workflow_contracts.py` / `test_ci_gate_required_checks.py` pin the export
 to the workflow's job names.
 
+_What "advisory" cost, measured on 2026-09-07 (PR #120)._ A bot-authored commit
+`c331e47` became the PR head and produced **two** check runs — the authoring
+app's own job and a deployment card — where the human-authored pushes on either
+side of it each produced nine. That head failed `make validate` on three Size
+Budget entries and failed the suite (`2 failed, 4238 passed`), and none of it
+appeared on the pull request. With the ruleset applied, nine required contexts
+with no report would have held the merge; with no ruleset, there was nothing to
+hold it. This is the first incident on record where the gap between "the gates
+pass" and "the gates ran" was demonstrated rather than argued, and it is an
+argument for this item, not for a new one (see NS-40, folded).
+
 Required status checks (derived from `.github/workflows/python-package.yml`,
-not from memory): `build (3.9)`, `build (3.10)`, `build (3.12)`,
-`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.9)`,
-`dependency-audit (3.10)`, `dependency-audit (3.12)`.
+not from memory): `build (3.10)`, `build (3.12)`, `build (3.14)`,
+`build-full`, `secret-scan`, `dependency-audit`, `dependency-audit (3.10)`,
+`dependency-audit (3.12)`, `dependency-audit (3.14)`.
+
+_Updated by `docs/specs/reflection-hardening-increment.md` Step 1/2 /
+DEC-064: the Python 3.9 floor moved to 3.10, replacing the `3.9` legs with
+`3.14` and retiring `dependency-audit (3.9)`'s `continue-on-error`
+carve-out._
 
 **Done when.** Settings → Rules → Rulesets → Import
 `.github/rulesets/main.json` (with `required_signatures` and
@@ -178,6 +194,21 @@ if a 3.9 context remains (R-SR-23, AC-23).
 
 **Depends on.** Nothing. Unblocks NS-35 and packaging halves of Phase F.
 
+**Done (3.10 leg).** `docs/specs/python-floor-310.md` (R-RHI-1,
+`reflection-hardening-increment.md` Step 1/2) landed: `requires-python`
+is `>=3.10`; the forked dependency markers, the 3.9 CI leg, the
+`continue-on-error` audit carve-out, `requirements-lock.txt`'s
+`--python-version 3.9` header, and `_workflow_paths.UNSUPPORTED_LEG` are
+deleted rather than re-homed; mypy is on 2.x with `warn_unused_ignores`;
+`DEC-064` supersedes DEC-028.
+
+**Follow-up, dated (not open-ended).** 3.10 itself reaches EOL 2026-10-31.
+Before that date: run `make spec NAME=python-floor-311`, re-measuring the
+same evidence class this item's original "Why now" ran for 3.10 (runtime
+dependency floors, mypy/ruff support windows, any CI matrix leg that would
+otherwise ship an EOL-only interpreter) rather than assuming the 3.10 bump's
+reasoning still holds unchecked seven weeks later.
+
 ### NS-9 · Justify the last pragma, and stop the swallow behind it
 
 **Why now.** `langgraph/__init__.py` still carries the remaining
@@ -215,6 +246,22 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 
 **Depends on.** Nothing (Phase B MCP parity shipped).
 
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 3,
+implementing `reasoner-bridge-tool-parity.md`'s existing scaffold in place.
+
+**Re-measured 2026-09-07, and the drift now costs more than vocabulary.** The
+persona body still enumerates four bridge tools and omits `generate_code`, which
+NS-38 added to `NEMOTRON_TOOLS` on #116, while instructing "Always write new
+files using `write_file`". Since DEC-065 that instruction names the one write
+door that does **not** refuse Python naming a `synthesis.prohibited_imports`
+symbol: `generate_code` carries the pre-write refusal, `write_file` is unchanged
+by design (C-CGT-2). The persona therefore steers new-file writes away from the
+checked door by default. Do **not** patch the list by hand — R-RBT-2 says the
+tool inventory must stop living in `.mango/agents/` markdown at all, and a
+hand-edit to a protected path buys an attestation for a paragraph this item
+deletes. Fix it by landing R-RBT-1/R-RBT-2 so the paragraph is generated from
+`tools_for_role(...)`, and add the write-door refusal as an *operating rule*
+(R-RBT-2 keeps those in the persona) in the same change.
 
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
@@ -239,14 +286,176 @@ as root on an un-digested base (M17); Dependabot lacks `docker` / cooldown
 **Done when.** R-SR-24 and R-SR-25 landed with AC-24 and AC-25; a PR with a
 stale SHA in its attestation table fails `build-full`.
 
-**Depends on.** NS-1 (signatures / ruleset live).
+**Depends on.** NS-1 only for the `required_signatures` half of R-SR-24; the
+attestation-SHA-binding and Dockerfile/Dependabot-cooldown halves depend on
+nothing.
+
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
+`required_signatures` (that clause stays gated on NS-1).
+
+### NS-39 · Close the four things DEC-065 bounded rather than fixed *(spec exists)*
+
+**Why now.** DEC-065 landed four derived checks and left four residuals **by
+name**, so they are visible now rather than discovered by a later reader who
+over-trusts a green run.
+
+1. *The traceability gate is green on a ratchet, not on a traced corpus.*
+   Re-scoping it from 6 to 412 requirement IDs did not produce a green gate, it
+   produced a backlog: **223** contract-spec IDs missing an implementation
+   citation, a test citation, or both (222 as the corpus stood, plus R-GEA-5,
+   which is deliberately unimplemented and so has nothing to cite). The number
+   lives in `traceability.max_uncited_contract_requirement_ids` and may only be
+   lowered — a bound, not a fix.
+2. *`AC-GEA-8` is the one unticked criterion in the spec.* R-GEA-5 requires a
+   recorded tokens-and-tool-calls-per-subagent-turn baseline under `docs/reports/`
+   **before** any code-property graph is built, with the build decision comparing
+   that baseline against a policy threshold rather than the imported 10× benchmark
+   measured on somebody else's corpus (D-3). Nothing records the number, so the
+   argument that would settle it cannot be had — adopting first and measuring
+   later is the DEC-024 shape.
+3. *`execute_generate_code`'s residual bypass is **closed**; this item is
+   retained only to record it.* The check once ran on a tree that existed only
+   when `validate_syntax=True` **and** the model-supplied `language` resolved to
+   Python, so either argument let the agent switch it off. Python-ness is now
+   derived from the resolved target suffix and the check runs on every Python
+   write regardless of the flag (`tool_executors.execute_generate_code`, PR #120).
+   Nothing remains to do here. The reasoning that first accepted it — that closing
+   it would widen a protected-path diff — is worth keeping in view: a diff cost is
+   not an argument about a security property, and it had been allowed to settle
+   one.
+
+4. *The one-line-of-slack seam is **closed**; this item is retained only to
+   record what the wait cost.* Making the approval-flag scan sound took
+   `authority_call_sites.py` from 389 to 499 of `limits.size_budget_lines` = 500,
+   paid for by folding four single-caller helpers rather than by decomposing.
+   This item originally declined to split it, on the grounds that a file inside
+   the policy threshold is not a violation and splitting on personal taste
+   substitutes private judgement for `governance-policy.json`. That reasoning
+   was right and the outcome argues against waiting anyway: the **next** change
+   to each of these files was a security fix, and it arrived with no room. A
+   parallel agent's patch for the same findings is behaviourally correct and
+   cannot land, because it breached the budget on three files to make room for
+   itself. Split on the predicted seam in PR #120 — analysis versus reporting,
+   with the line counts below as they stood at that split rather than as a
+   current-state claim, which `make validate` reports live:
+   `authority_call_sites.py` 499 → **355** + `authority_call_analysis.py` 415;
+   `code_safety.py` → **222** + `code_symbols.py` 440; `graph_topology.py` →
+   **349** + `graph_topology_source.py` 306; `test_authority_graph.py` 699 →
+   **397** + `test_authority_call_sites.py` 537. Docstring content an earlier
+   squeeze had folded away is restored. Nothing remains to do here. The lesson
+   for the next bound: headroom is part of what a module owes the next change,
+   and a budget measured only at the moment of breach is measured too late.
+
+**Evidence.** `python3 harness/shared/governance/check_traceability.py --workspace .`
+prints the count, the ratchet and the headroom in one line;
+`docs/decisions/DEC-065.md` §"Residual, named rather than discovered later" and
+§"Not closed here"; `docs/specs/graph-engineering-adoption.md` AC-GEA-8 unticked;
+no baseline file under `docs/reports/`; `harness/shared/tool_executors.py`
+`execute_generate_code`'s suffix-derived `is_python` gate (the residual item 3
+records as closed); `make validate`'s Size Budget line, which names the closest
+file and its remaining slack on every run — read it there rather than from a
+number written down here, because the snapshot this line used to carry went
+stale the moment item 4's split landed and a reviewer had no way to tell.
+
+**Done when.**
+
+- The ratchet is **lowered** in a reviewed policy edit with the citations that
+  earned each reduction attached. `test_traceability_gaps_are_cited_or_recorded`
+  fails when the backlog exceeds the ratchet, and
+  `test_the_repository_run_reports_the_count_and_the_headroom` names the lower
+  value on every green run — so an allowance that has stopped being needed is
+  reported without waiting for a red run · stage `make test-python` / `make validate`.
+- A baseline under `docs/reports/` names measured tokens and tool calls for at
+  least three recorded subagent turns, and AC-GEA-8's named test
+  (`test_code_graph_is_gated_on_a_recorded_baseline`, which does **not** exist
+  yet — the criterion is unticked, so `test_spec_selectors_collect.py` does not
+  judge it) is written and fails a tree holding a code-property-graph module with
+  no such baseline · stage `make test-python`.
+- ~~Either `execute_generate_code` decides the prohibited-symbol question on a
+  path no model-supplied argument can skip, or a decision record states why the
+  `validate_syntax=False` path is accepted.~~ **Done on PR #120.** The first
+  branch was taken: `is_python` derives from the resolved target suffix and the
+  check runs regardless of `validate_syntax`, with
+  `test_code_generation_tool.py::TestNeitherToolArgumentTurnsTheCheckOff` red
+  against the old behaviour across all three policy shapes. Only the first two
+  bullets of this item remain open.
+- ~~`authority_call_sites.py` is split on the analysis/reporting seam, with the
+  explanatory docstrings the compaction folded restored rather than
+  re-compacted, and both halves plus their tests carry real headroom.~~
+  **Done on PR #120**, along with `code_safety.py` and `graph_topology.py`,
+  which needed the same room for the same reason · stage `make validate` (Size
+  Budget names the closest file and its slack on every run, so the number is
+  reported without waiting for a red run). Only the first two bullets of this
+  item remain open.
+
+**Depends on.** Nothing, and **not** NS-2: none of the four touches Phase E or
+the LangGraph park. DEC-065 shipped topology verification as a plain test rather
+than a gate precisely so the orphan-reviewer defect stays watched while Phase E
+waits on the credential rotation.
+
+### NS-40 · The bot-push incident is evidence for NS-1, not a separate item *(no spec; folded)*
+
+**Status: folded into NS-1.** This item was opened with the wrong mechanism and
+is retained to record the correction rather than deleted, because the wrong
+version was quoted in PR #120's description. (An earlier draft of this paragraph
+also claimed it was quoted in a decision record. It was not — `DEC-065` does not
+mention NS-40. That sentence was written without checking, in the paragraph
+withdrawing an item for a claim written without checking, and is corrected here
+rather than silently fixed.)
+
+**What was claimed.** That a required status check which was never created reads
+as *pending* rather than failing, so a branch ruleset cannot block on it and
+`absent` renders identically to `passing` on the merge button.
+
+**Why that is wrong.** GitHub's required status checks *do* block on an absent
+report — an unreported required context shows as "Expected — waiting for status
+to be reported" and holds the merge. The claim was asserted with no run cited,
+which is the DEC-024 shape, in an item written about the DEC-024 shape. A peer
+review of the drafted spec caught it (Product Manager, P1) and the structural
+reason is stronger than the review's: **NS-1 records that
+`GET /repos/…/rules/branches/main` returns `[]`.** No ruleset is applied, so
+nothing is required, so there was never a required check to be pending. The bot
+head read green because **every gate here is advisory** — which is NS-1's
+opening sentence, and NS-1 is P0 and blocked on a person.
+
+**What the incident is actually good for.** It is the concrete cost of NS-1
+staying open, and belongs in NS-1's evidence: on PR #120, `c331e47` became the
+head, produced **two** check runs (the authoring app's own job and a deployment
+card) where the neighbouring human-authored pushes each produced nine, and
+failed `make validate` on three Size Budget entries and the suite
+(`2 failed, 4238 passed`) — with none of it visible on the pull request. That is
+what advisory gates cost, measured rather than argued.
+
+**The residual, if any.** Once the ruleset is applied, the merge button is
+protected and the remaining question is only reviewer *visibility* — whether a
+person scanning a short green list is prompted to ask which runs are missing.
+That is a smaller item than this one claimed to be, it overlaps **NS-36**
+(Phase D, CI truthfulness), and it should not be opened until NS-1 lands and the
+residual can be measured instead of predicted.
+
+**What was tried and withdrawn.** A spec (`required-run-presence.md`) and a pure
+verdict module were drafted, then removed unlanded. Four of this repository's own
+gates rejected them — the traceability ratchet (8 uncited requirement IDs),
+`validate_plan` (4 orphan requirements), mypy, and
+`test_verdict_literals` (restating status names the repo names once) — and all
+four `openspec-peer-review` personas refused signoff. The review's closing
+prediction was that the tests would be written to make the ratchet arithmetic
+work rather than to prove the property, naming `C-RRP-3` — a clause asserting
+the spec does not overclaim — as the one that would end up cited by a test
+asserting nothing. That test had already been written when the review arrived.
+The gates and the review agreed, and the item was withdrawn rather than argued
+past.
 
 ### NS-29 · The program plans
 
 Pointer only: status is the remediation plan's boxes, read there, not here.
 `docs/specs/code-quality-tech-debt-plan.md` is closed at revision 2.
 Remediation plan is revision 3 (Phase B Done; R-SR-5 / AC-5 closed; Phase E
-gated on R-SR-2).
+gated on R-SR-2). `docs/specs/reflection-hardening-increment.md` is a ledger
+increment against the remediation plan's still-open items (NS-6, NS-18, half
+of NS-36) — a spec, not a fifth program plan; it does not restate or
+re-litigate boxes above, only schedules what a re-measurement against
+`33f21044` still found true.
 
 ---
 
@@ -291,7 +500,7 @@ gated on R-SR-2).
 
 | Was | Now |
 |---|---|
-| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-060 after origin re-landed the forward feature. |
+| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via **DEC-060** after origin re-landed the forward feature (this row said DEC-064; `docs/decisions/DEC-060.md` is the record that retires those pins, and DEC-064 — added later, on #118 — is the Python 3.10 floor). |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 
@@ -311,7 +520,7 @@ gated on R-SR-2).
 |---|---|
 | **HOOK-1** Missing hook shim scripts | **Landed.** Created `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` with dynamic Makefile/validate_invariants delegation; tested by AQA-001 `test_scripts_hook_shims.py`. |
 | **RCA-7** RecordingBackend probe xdist isolation | **Landed.** Overrode `_probe()` in `RecordingBackend` to return `True` unconditionally, eliminating 17 spurious parallel test failures on Windows; pinned by AQA-006 `test_process_backend_isolation_regression.py`. |
-| **MEM-1 (DEC-064)** Stub corruption in gaps memory | **Landed.** Pruned 199 corrupt stub records from `.mango/memory/gaps.json`, preserving 24 substantive entries; documented in `docs/decisions/DEC-064.md` and pinned by AQA-004 `test_gaps_memory_integrity.py`. |
+| **MEM-1 (DEC-066)** Stub corruption in gaps memory | **Landed.** Pruned 199 corrupt stub records from `.mango/memory/gaps.json`, preserving 24 substantive entries; documented in `docs/decisions/DEC-066.md` and pinned by AQA-004 `test_gaps_memory_integrity.py`. |
 | **Tier 5 Live Nemotron E2E** Real NIM verification | **Landed.** Full live E2E and smoke suites verified against live NVIDIA Nemotron NIM endpoint across Python and Node/Vitest; resolved Windows console charmap encoding and DEC-026 zero-skip governance attribution. |
 
 **Closed 2026-09-05b (this rewrite's evidence pass):**

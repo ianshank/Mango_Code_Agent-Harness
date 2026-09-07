@@ -3,8 +3,9 @@
 pytest scopes a conftest's per-item hooks (``pytest_runtest_logreport`` among
 them) to the directory the conftest sits in. The skip evidence that
 ``make verify-zero-skips-python`` reads (INV-2, DEC-026) and the langgraph
-deselection for the 3.9 leg (R-TDH-4) therefore have to be registered here,
-at the rootdir, or a skip under ``harness/api_server/tests`` or
+deselection mechanism (R-TDH-4; no CI leg drives it since the floor moved to
+3.10, DEC-064, but an adopter fork without the extra still can) therefore have
+to be registered here, at the rootdir, or a skip under ``harness/api_server/tests`` or
 ``harness/control-plane/tests`` goes unrecorded -- which is exactly what
 happened while they lived in ``harness/shared/tests/conftest.py``
 (tech-debt-hardening-plan R-TDH-26). The logic is in

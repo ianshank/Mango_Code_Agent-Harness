@@ -15,7 +15,7 @@
 
 **Version:** 2.5.0 (C4 model updated 2026-09-06 — Origin Sync, Hypothesis Surfacing, Context Budgets)
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)
-**Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`) (INV-1..INV-16)
+**Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`) (INV-1..INV-17)
 
 > **2.5.0 delta from 2.4.0:**
 >
@@ -134,6 +134,12 @@ graph TD
         RepoVerifier["Repository Verifier<br/>(verify_repository.py)"]
     end
 
+    subgraph Derived_Views ["Derived Views — recomputed per query, never stored (DEC-065)"]
+        AuthGraph["Authority Graph<br/>(authority_graph.py, authority_call_sites.py)"]
+        CodeSafety["Prohibited-Symbol Judgement<br/>(code_safety.py)"]
+        TopologyView["StateGraph Topology Extractor<br/>(graph_topology.py)"]
+    end
+
     CLI --> APIServer
     CLI --> Governance_Kernel
     APIServer -->|execute_loop| MAS
@@ -155,6 +161,9 @@ graph TD
     VerifRunner --> ExecBroker
     MAS --> Shadow
     Governance_Kernel --> PolicyArtifact
+    Executors -->|prohibited_symbol_denial over the tree the syntax check already parsed| CodeSafety
+    AuthGraph -.->|asks the live decide once per role and action; one-way by C-GEA-2| PDP
+    TopologyView -.->|reads langgraph/graph.py as source text; imports no langgraph| LangGraph_Engine
 ```
 
 The `MAS`/`LangGraph_Engine` edge is drawn in the direction the code calls: the
@@ -168,6 +177,22 @@ imports LangGraph, and `build_graph` is reached only from the parked
 / `context_chars_per_token` from policy (audit H4); the full append-only history
 is retained for dumps and API responses. An earlier revision drew
 `Loop → LangGraph_Engine`, which reversed that dependency.
+
+`Derived Views` is a container in the C4 sense — three modules with a shared
+lifetime rule — rather than a runtime process. Nothing in it holds an artifact:
+each query recomputes from the same functions the enforcing code calls, because a
+persisted copy of governance state is a cache, and a cache of governance state is
+a staleness bug with a security consequence — the stored graph says one thing
+while the broker enforces another (§4.10). All three edges above point *into* the
+subsystems the views read and none points back out: `C-GEA-2` forbids
+`harness/shared/governance/**`, `write_policy.py`, `read_policy.py` and
+`agent_authority.py` from importing either `authority_graph` or
+`authority_call_sites`, and
+`test_authority_graph.py::TestTheGovernanceLayerDoesNotDependOnTheGraph` decides
+that by `ast` rather than by grep, so a docstring that merely names the module
+does not trip it. `CodeSafety` is the one exception to "a derived view is a
+read-only observer": it sits on the live write path, and `execute_generate_code`
+refuses the write on its verdict (`tool_executors.execute_generate_code`, §4.5.2).
 
 ### 2.1 Detailed container view of `harness/shared` (from the v2.1.9 snapshot)
 
@@ -226,6 +251,13 @@ graph TD
                 CoverageScope[coverage_scope.py<br/>which files the floors judge:<br/>per-file floor, optional-extra waivers,<br/>measured-set bound vs on-disk sources]
                 CoverageGate -->|delegates membership to| CoverageScope
             end
+            subgraph "Derived views — recomputed per query, never stored (DEC-065)"
+                AuthorityGraph["authority_graph.py<br/>two grant surfaces that deliberately disagree:<br/>tool exposure vs execution identity;<br/>a query naming neither raises UnnamedSurfaceError"]
+                CallSites["authority_call_sites.py<br/>ast scan for a broker context a caller did not build:<br/>114 first-party non-test modules, 5 call sites, 0 witnesses"]
+                TopologyExtract["graph_topology.py<br/>StateGraph nodes and edges from source via ast;<br/>imports no langgraph, so no skipif and no INV-2 skip"]
+                CodeSafetyView["code_safety.py<br/>the write door's second question of one parse tree:<br/>does this name a synthesis.prohibited_imports symbol"]
+                AuthorityGraph -->|re-exports approval_flag_reachability| CallSites
+            end
             subgraph "governance/"
                 Broker[broker.py<br/>ExecutionBroker + ProcessBackend<br/>INV-8/9/10 — contains, does not isolate]
                 PDP[policy_decision.py<br/>In-process PDP<br/>mirrors tool_broker_reference.py]
@@ -248,6 +280,9 @@ graph TD
             Broker -->|write targets of a command| WritePolicy
             Orchestrator -->|tools_for_role / execution_identity| Authority
             Orchestrator -.->|guarded, observation-only| Shadow
+            Orchestrator -->|generate_code: refused before bytes land| CodeSafetyView
+            AuthorityGraph -->|allowed_actions and execution_identity, the live functions| Authority
+            AuthorityGraph -->|decide per canonical role and action| PDP
         end
 
         subgraph "Control Plane - harness/control-plane"
@@ -368,7 +403,15 @@ classDiagram
         +execute_read_file(workspace_dir, filepath, start_line, end_line) str
         +execute_apply_patch(workspace_dir, filepath, old_text, new_text) str
         +execute_run_command(broker, active_role, workspace_dir, command, timeout) str
+        +execute_generate_code(workspace_dir, filepath, code, language, validate_syntax, overwrite) str
         +authorize_write(broker, active_role, filepath) str|None
+        -_validate_code_syntax(filepath, code, language) tuple
+    }
+
+    class CodeSafety {
+        +load_prohibited_symbols(policy_path) tuple
+        +prohibited_symbol_findings(tree, prohibited) list
+        +prohibited_symbol_denial(tree, policy_path) str|None
     }
 
     class ExecutionBroker {
@@ -401,7 +444,8 @@ classDiagram
     MangoMASOrchestrator --> ToolExecutors : invokes operations
     MangoMASOrchestrator --> NemotronBridge : requests chat completions
     MangoMASOrchestrator --> VerificationRunner : derives terminal verdict
-    ToolExecutors --> ExecutionBroker : brokers run_command; asks the PDP for write/patch
+    ToolExecutors --> ExecutionBroker : brokers run_command, asks the PDP for write/patch
+    ToolExecutors --> CodeSafety : re-uses the parse tree, denies before the write
     ExecutionBroker --> ProcessBackend : executes with budget & containment
 ```
 
@@ -477,6 +521,58 @@ governance-policy.json ──▶ policy_loader._Section(data, name, backed) ─�
 - `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and `MAX_SHIM_LINES` may only **tighten** a budget; a loosening value is ignored and logged. Returned verbatim, they let anyone who could set an environment variable switch a gate off while it still printed its PASS line.
 - `verify_zero_skips` resolves its decision-ID grammar on first use, not at import, so a gate's fail-closed `SystemExit` stays inside the run being gated rather than inside any importer's process.
 
+### 4.5.2 The generate-code write door asks its parse tree a second question (`R-GEA-3`)
+
+- `execute_generate_code` has always parsed generated Python with `ast.parse` to
+  answer *does it compile*, then discarded the tree.
+  `tool_executors._validate_code_syntax` now returns `(error, tree)`, and
+  `execute_generate_code` puts that same tree to
+  `code_safety.prohibited_symbol_denial` before any byte reaches disk. A denial there is a refusal, not a repair cycle:
+  the file never exists, which is the property `execute_generate_code` already
+  had for a syntax error and did not have for a policy violation.
+- **The defect this check's shape prevents is a checker that decides two of five
+  entries.** `synthesis.prohibited_imports` declares `os.system`, `subprocess`,
+  `shutil.rmtree`, `importlib` and `__import__` — three different shapes in one
+  key. Two are importable modules; two are attribute targets reachable through a
+  bare `import os` / `import shutil`; and `__import__` is a builtin no import
+  statement ever names. A walk over `ast.Import` / `ast.ImportFrom`, which is the
+  obvious reading of the key's *name*, decides the first two and passes the other
+  three in silence while reporting success. So `code_safety.py` resolves import
+  bindings first (`import os as o` makes `o.system` the policy entry
+  `os.system`), reads the longest name chain rather than each prefix, treats an
+  unbound head as itself — which is what catches `__import__` — and expands
+  `from os import *` into the prohibited attributes that star binds on the
+  module's behalf.
+- Single-module decidable by construction (`C-GEA-3`): it reads the one
+  `ast.Module` it is handed plus the policy file, and consults no repository-wide
+  index, because a write door that depends on a stale index denies valid writes.
+- Fail-closed on its own input (`R-GEA-4`): a `synthesis.prohibited_imports` that
+  is missing, empty, of the wrong type, or holding a non-string raises
+  `ProhibitedSymbolPolicyError` rather than admitting everything. An empty
+  prohibition is a check that cannot fail, which is worse than an absent check
+  because it converts an open question into a false assurance.
+- The analysis lives in the unprotected `code_safety.py` rather than inside
+  `tool_executors.py`, which is a protected path: a four-line diff there is a
+  cheap review and a sixty-line one is not, and the next write door needing this
+  judgement calls a function instead of copying one.
+- **No model-supplied argument turns the check off.** Python-ness is derived from
+  the *resolved target suffix*, not from the `language` argument, and the
+  prohibited-symbol check runs on every Python write regardless of
+  `validate_syntax`. Both are model-supplied, so deriving from either would let
+  the agent whose output the check constrains decide whether it applies — a `.py`
+  target declared `language="markdown"` did exactly that. DEC-065 first recorded
+  this as an accepted residual, on the reasoning that closing it would widen a
+  protected-path diff; review on PR #120 rejected that and was right, since a diff
+  cost is not an argument about a security property. One parse still serves both
+  questions, so `R-GEA-3`'s "reuse the AST already parsed" is honoured rather than
+  contradicted, and `validate_syntax` keeps its only defensible meaning: whether a
+  syntax *error* is reported. Workspace confinement, `write_denial_reason` and
+  `authorize_write` run first and are unchanged.
+- `write_file`, `apply_patch`, `read_file` and `run_command` are unchanged, so
+  `C-CGT-2` in `docs/specs/code-generation-tool.md` still holds. What changed is
+  one previously accepted input class: generated Python naming a prohibited
+  symbol now returns a denial where it previously wrote the file.
+
 ### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
 
 - **Capability Profiles**: The production `ProcessBackend` only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. Full filesystem and network isolation via fine-grained capability profiles (e.g., `network-isolated`, `read-only-fs`) are explicitly out of scope for production as defined in the code-execution spec.
@@ -494,7 +590,53 @@ governance-policy.json ──▶ policy_loader._Section(data, name, backed) ─�
 - **INV-LG-6: Fail-Closed Verdict**: A run MUST NOT terminate `VERIFIED` when the `errors` channel holds a **blocking** record, or when the latest `test_results` entry is inconclusive (`passed + failed == 0`). Terminality is decided once, in `langgraph/errors.py`: control-plane nodes block, the observation plane (`OBSERVATION_NODES`) does not — because `INV-16` requires an observation-mode producer's failure to leave the incumbent path unaffected — and an unrecognised node name blocks, so an unclassified error fails closed. A blocking error routes straight to `escalate` rather than consuming revision budget, since `errors` is an `operator.add` accumulator no node clears and a retry cannot remove the record that failed the gate.
 - **INV-LG-7: Injectable Config Contract**: Every node and routing function that reads `config` MUST annotate that parameter in a form LangGraph injects — `RunnableConfig`, `Optional[RunnableConfig]`, or no annotation at all (`KWARGS_CONFIG_KEYS` in `langgraph._internal._runnable`). Any other annotation, `Any` included, is skipped with a `UserWarning` raised at graph-build time and the parameter never arrives, so a policy threaded through `configurable` is silently discarded while unit tests that call the function directly still pass. Under PEP 563 the annotation is compared as the string it spells, so `X | None` is **not** an accepted form. Pinned by `TestConfigInjectionContract`.
 
+**There is deliberately no `INV-LG-8`.** `R-GEA-6` adds no LangGraph invariant
+while `DEC-053`'s park carries `status: accepted`, and the reason is that the
+park is *decided but unexecuted*: `harness/shared/langgraph/` is still at its
+original path, Phase E is blocked behind NS-2 (a credential rotation needing a
+human at a provider), and a new fail-closed invariant over parked code would buy
+a required check, a `harness/CONTRACT.md` row and a protected-path attestation on
+every PR for a subsystem with a named sunset. What the park does *not* justify is
+leaving the defect unwatched for that indefinite period, so the pin lands on the
+test surface instead (§4.8.2):
+
+- `peer_reviewer` and `security_reviewer` are registered as nodes with **no
+  incoming and no outgoing edge**, so `INV-LG-1`'s `findings` accumulator is
+  empty on every run. `DEC-052` records that state in prose.
+  `test_langgraph_graph.py::test_graph_has_all_expected_nodes_live`
+  asserts the node *set*, which both orphans satisfy — a fix that wired them in
+  would not fail it and a fix that deleted them would, so the behavioural suite
+  pinned the defect rather than catching it.
+- `test_graph_topology_parked.py::test_orphan_reviewers_match_the_recorded_decision`
+  now asserts both halves at once: the two nodes are edgeless **and** `DEC-052`
+  says so. It goes red when either reviewer is wired in without amending
+  DEC-052, and when either node is deleted silently.
+- The topology it asserts over comes from `graph_topology.extract_topology`,
+  which reads `harness/shared/langgraph/graph.py` as
+  **source text** and imports nothing from `langgraph` — 10 nodes and 13 edges
+  today, with `nodes_without_edges()` returning exactly those two. Reading source
+  is what keeps the check off a `skipif` on an optional import, and therefore out
+  of `INV-2`'s skip ledger looking for a waiver (`R-GEA-6c`;
+  `test_graph_topology.py::test_topology_extraction_is_source_based` pins the
+  absence of that import). Every failure to read the source raises
+  `TopologyExtractionError` rather than returning an empty topology, because
+  "`peer_reviewer` has no incoming edge" is vacuously true of a graph with no
+  edges (`R-GEA-4`).
+- `test_graph_topology_parked.py::test_topology_gate_is_parked_with_langgraph`
+  pins the absence of a topology **target** to DEC-053's status, and does not
+  fail merely because a topology *test* exists — the two are different
+  enforcement surfaces, and conflating them is what an earlier revision of the
+  spec did.
+
 ### 4.8 Fail-Closed Invariants & Governance Gates (CI gate chain)
+
+The chain below draws the checks a change passes on the way to merge. Most are
+`make` targets that `governance-policy.json` → `ci_required_targets` names; the
+last few are pytest-resident, and §4.8.1 says why each of those exists. It is
+**not** a complete inventory of this repository's fail-closed checks, and a
+check's absence from it is not a weaker status — §4.8.2 records four properties
+deliberately landed without a new target, a `ci_required_targets` entry or a
+`harness/CONTRACT.md` row, and the rule that decided that.
 
 ```mermaid
 flowchart TD
@@ -509,7 +651,7 @@ flowchart TD
     Remotes --> Hooks[INV-4: Non-Destructive Effective Git Hook Installer]
     Hooks --> GateCov["INV-5: CI Gate Coverage<br/>(every ci_required_target reachable from make ci,<br/>or a declared gap — test_ci_gate_coverage.py)"]
     GateCov --> SpecGate["Spec Gate<br/>(make specs → bash validate_specs.sh)"]
-    SpecGate --> SpecTrace[Traceability: Bidirectional Requirements]
+    SpecGate --> SpecTrace["Traceability: Bidirectional Requirements<br/>(check_traceability.py --workspace, resolved against an explicit root<br/>rather than the process CWD; a config declaring scope 'repository' must also<br/>clear traceability.min_discovered_requirement_ids and stay at or below<br/>traceability.max_uncited_contract_requirement_ids — DEC-065)"]
     SpecTrace --> Policy[INV-6: External Root of Trust Digest Verification]
     Policy --> Protected["Protected-Path Gate<br/>(fail-closed unless ALLOW_GITHUB_CHANGES;<br/>patterns proven live by test_protected_path_liveness.py)"]
     Protected --> Attested["Attestation Table Check<br/>(make attestation-check — the PR's per-file table must match the set<br/>the protected-path gate enforces, in both directions.<br/>Runs in build-full BEFORE make ci and independent of the label:<br/>make ci stops at the gate above without it, so a later step<br/>would never run on the PRs this is for — DEC-038)"]
@@ -550,6 +692,72 @@ already happened silently.
   which existed, and `.mango/settings.json` invoked mode-644 scripts by bare
   path. A dormant hook that is wrong fails the day someone wakes it.
 
+#### 4.8.2 Which enforcement surface, not gate-or-nothing (DEC-065)
+
+A new check does not automatically become a new gate here, and the reason is this
+repository's own evidence rather than a preference. `validate_invariants.py`
+already carries four unrelated invariants behind the single `make validate`
+entry, and `test_constant_triage.py` enforces a repository-wide property from
+inside the ordinary pytest run with no target of its own. So the question a new
+check raises is *which enforcement surface*, and the rule is:
+
+> A check that is a pure function over repository state belongs in the test
+> suite, where it costs nothing new and inherits `INV-2`'s zero-skip discipline.
+> Only a check that must run outside pytest — because it shells out, or because
+> an operator needs to run it alone — earns a `make` target.
+
+The marginal target is not free: each one costs a `ci_required_targets` entry, a
+`harness/CONTRACT.md` row, a `test_ci_gate_coverage.py` update, and
+protected-path attestation on `Makefile`, `governance-policy.json` and
+`harness/CONTRACT.md`. Paying that for a check the pytest run already fails on
+buys a longer contract, not a stronger guarantee — and `INV-5` then has one more
+entry to reconcile, on a contract that already records itself as *partially*
+enforced with one declared exception (`specs`, in `test_ci_gate_coverage.py`'s
+`PARTIAL_COVERAGE`).
+
+On that rule the four checks DEC-065 landed took three different surfaces, and
+`ci_required_targets` stayed at ten entries with no row added to
+`harness/CONTRACT.md`:
+
+| Check | Surface it took | Where it is decided | Why not a new target |
+|---|---|---|---|
+| StateGraph topology and the orphan-reviewer pin (§4.7) | ordinary pytest run | `graph_topology.py` · `test_graph_topology.py`, `test_graph_topology_parked.py` | A pure function over `langgraph/graph.py`'s source. A target would also have to be removed when `DEC-053`'s park executes. |
+| Authority reachability and the approval-flag scan (§4.10) | ordinary pytest run | `authority_graph.py`, `authority_call_sites.py` · `test_authority_graph.py` | A pure function over `agent-policy.json` and the source tree; nothing to shell out to. |
+| Prohibited symbols at the generate-code write door (§4.5.2) | live runtime path | `code_safety.py` · called from `tool_executors.execute_generate_code` | Not a repository property at all — a decision made per write, before bytes land. Its regression proof is in pytest. |
+| Requirement traceability, re-scoped (`R-GEA-1`) | the **existing** `traceability` target | `governance/check_traceability.py` · `test_traceability_scope.py` | It re-points a gate that already exists rather than adding one, which is why it is the only one of the four drawn in the chain above. |
+
+The traceability re-scope is worth stating precisely, because it is the case
+where the surface was already settled and only the *corpus* was wrong. The gate
+resolved `.governance/traceability.json` and every glob against the process CWD
+and `make validate` ran it from `harness/node`, so it read **6** requirement IDs
+while `docs/specs/` held **412** sharing not one member with them, and printed
+`traceability: passed (6 requirements)` with exit 0. Both of its emptiness guards
+passed, because the failure mode is not "found nothing" but "found the wrong two
+files", which no emptiness check can catch. `--workspace`
+(`check_traceability.main`) makes the root explicit and defaults to the CWD, so
+the per-stack shims that `runpy` the module during the `DEC-056` shim window
+behave exactly as before and `harness/node/.governance/traceability.json` is
+untouched — leaving it untouched is what proves the compatibility claim. Only a
+config declaring `"scope": "repository"` — today the root
+`.governance/traceability.json` alone — is additionally subject to
+`traceability.min_discovered_requirement_ids`, an anti-vacuity floor that makes
+"the gate is pointed at the wrong corpus" fail instead of pass, and
+`traceability.max_uncited_contract_requirement_ids`, a ratchet over the
+contract-spec IDs still missing an implementation citation, a test citation, or
+both (`check_traceability._enforce_repository_scope`).
+
+Two properties decide whether that ratchet is a control or a waiver. It may only
+be **lowered** — every citation that lands makes the recorded number wrong in the
+one direction the policy refuses — so an allowance cannot outlive the backlog it
+covers (`C-GEA-4`). And a run *below* the ratchet prints the headroom and names
+the lower value the policy should be set to, so an allowance that has stopped
+being needed is visible on every green run rather than only on a red one.
+Requirement IDs are classified per document by a line carrying
+`traceability.spec_class_marker`: a document declaring nothing is graded as
+`traceability.default_spec_class` — the strict branch — and a document declaring
+an unrecognised class raises rather than falling into the permissive one, because
+a class inferred from a filename is a class an author can acquire by accident.
+
 ### 4.9 Cognitive/Execution Boundary (INV-16)
 
 The shadow planner channel is one-directional and off by default. It is
@@ -580,3 +788,124 @@ Enforced by `pytest -m governance` (byte-identity when disabled,
 zero-authority, envelope invariance, containment) and the static boundary
 scan in `test_shadow_planner.py`. See `docs/specs/mangomas-integration-core.md`
 and `.mango/skills/boundary-invariant-review/SKILL.md`.
+
+### 4.10 Derived Authorization View: two surfaces, one direction (`R-GEA-2`, DEC-065)
+
+The authorization chain — `ACTIVE_TO_CANONICAL` → `agent-policy.json` →
+`allowed_actions` → `TOOL_REQUIRED_ACTION` — has always been a graph. Until
+DEC-065 it was checked only at its endpoints, by unit tests asking "does this
+role hold this action", never along its paths. `authority_graph.py` and
+`authority_call_sites.py` make the path questions answerable. Both are Level 4
+material rather than Level 2/3 runtime containers for the same reason §4.9 gives
+about the shadow channel: their defining property is a constraint, not a process.
+
+**Derived, and deliberately never stored.** The graph is small — 3 active roles,
+7 canonical roles, 7 tools, 11 declared actions — and it is a *pure function* of
+`agent-policy.json` and three mappings in `agent_authority.py`. A persisted copy
+would be a cache of governance state, and a stale cache of governance state is a
+security bug with a specific shape: the stored graph says one thing while the
+broker enforces another. So every query recomputes, calling the same functions
+the broker calls — `agent_authority.allowed_actions` for tool exposure and
+`policy_decision.decide` for the execution identity — rather than restating their
+logic. A restatement would agree with the enforced answer only until one of them
+changed, which is the drift `test_a_naive_union_reimplementation_turns_the_live_half_red`
+exists to demonstrate.
+
+**Two grant surfaces that deliberately disagree, and no default between them.**
+
+```mermaid
+flowchart LR
+    Role["active role<br/>planner · nemotron-reasoner · verifier"]
+    Role -->|Surface.TOOL_EXPOSURE| Exposure["agent_authority.allowed_actions<br/>union over ACTIVE_TO_CANONICAL, minus each role's<br/>human_approval_required_for<br/>filters the tool schema the model is shown"]
+    Role -->|Surface.EXECUTION_IDENTITY| Identity["execution_identity of the role, evaluated by policy_decision.decide<br/>the single canonical role the broker names to the PDP"]
+    Exposure --> Ex1["planner reaches spec_write"]
+    Identity --> Ex2["planner, executing as orchestrator, does not"]
+    Role -.->|surface not named| Raise["UnnamedSurfaceError<br/>a default would answer the other question, confidently"]
+```
+
+`planner` holds `spec_write` while executing as `orchestrator`, which lacks it;
+`verifier` holds `review_write` and `security_scan` while executing as
+`test-eval`, which lacks both. A single-surface reachability check therefore
+returns a confident wrong answer for exactly the pairs a reader is most likely to
+ask about, so `Surface` has no default and `build_authority_graph(None)` raises
+`UnnamedSurfaceError` (`authority_graph._require_surface`). Today the derivation yields 28
+nodes on either surface, with 32 edges on tool exposure against 28 on execution
+identity — re-derive with `build_authority_graph(surface).node_count` /
+`.edge_count` rather than trusting these figures.
+
+**Witness paths, not booleans.** `paths_to("nemotron-reasoner", "write_file",
+Surface.TOOL_EXPOSURE)` returns `[["nemotron-reasoner", "implementer", "write",
+"write_file"]]` and the same query for `planner` returns `[]`. "The reasoner can
+write" is a claim a reader cannot check; the witness names the edge to delete if
+the grant is wrong. A tool no mapping declares **raises** rather than returning
+`[]`, because an empty list for a misspelled tool name reads as "safely
+unreachable" for a tool that does not exist.
+
+**What the high-risk reachability property is, and what it is not.** Of the five
+`high_risk_actions`, only `external_write` and `production_change` are declared by
+a canonical role at all (`release-auditor`, both approval-gated). The other three
+— `destructive`, `permission_change`, `secret_access` — are
+`command_actions.classify` *output* rather than grants, so `decide()` denies them
+by absence, which is `default_deny` operationalised. `high_risk_actions` mixes a
+grant vocabulary and a classification vocabulary in one namespace, which is what
+made this easy to miss: an assertion that the verifier reaches none of the five
+would pass on three of them for a reason unrelated to reachability, there being
+no edge to traverse. `test_high_risk_reachability_names_its_live_half` says so in
+its own assertion messages, and the neighbouring property is *not* a gap —
+`validate_agent_policy.py` already fails closed on any role granting a high-risk
+action without approval-gating it. The plan's first revision claimed a gap that
+was mostly closed; the correction is recorded rather than quietly applied.
+
+**The approval-flag property, with its scope stated.** `policy_decision.decide`
+takes `human_approved`, the one argument that turns a high-risk DENY into an
+ALLOW. `broker.py:133` sources it from the caller's `context` with an identity
+check (`is True`, deliberately not truthiness, because `bool("false")` is
+`True`), and `tool_executors.execute_run_command` builds that context as a literal
+`{"agent_id": execution_identity(active_role)}` — no such key, so the agent path
+cannot reach the flag. The guarantee was real, rested on one dict literal, and
+nothing asserted it: `broker.execute_command(command, **kwargs)` makes forwarding
+a caller-supplied mapping a one-line edit that no test would have failed.
+`approval_flag_reachability` (`authority_call_sites`) now scans every
+caller of `ExecutionBroker.execute_command` and reports any site whose context is
+not provably a literal mapping — **114** first-party non-test modules, **5**
+broker call sites (`tool_executors.py`, three in `governance/verification.py`,
+one in `experimental/autonomous_healing.py`), **0** witnesses.
+
+Two limits are stated here rather than left for a later reader to over-trust:
+
+- The scan is deliberately **not** applied to `broker.py`'s own plumbing.
+  `_policy_decision` receives the context as a *parameter* by design, and
+  reporting it would fire on correct code every run — and a check that fires on
+  correct code gets switched off. So the property is "no *caller* can supply
+  `human_approved`", not "the flag is unreachable by any path". If the external
+  broker contract ever accepts a context from an untrusted transport, that is a
+  different hole and this check does not cover it.
+- Resolution is narrow on purpose, and over-reporting is the safe direction: a
+  name is readable only when bound exactly once, in the same function, to a dict
+  display whose keys are all string literals, optionally extended by
+  literal-key subscript assignment. A rebinding, an `update`/`setdefault`, a
+  computed key or a `**` spread it did not build all taint the name. The one
+  shape that must not over-report is the live call site — `execute_run_command`
+  forwards `**kwargs` built two lines above and mutated by
+  `kwargs["timeout"] = timeout` — and `test_the_real_forwarding_shape_is_not_reported`
+  pins that a scan flagging every `**`, which is the obvious implementation,
+  would have failed on correct code.
+
+**Fails closed on its own inputs, in both modules** (`R-GEA-4`). An empty active
+role map, an authority model declaring no canonical role or no action, no tool
+declaring a required action, no role granted anything, a scan handed no files, or
+a scanned corpus containing no broker call at all — each raises
+`EmptyDerivationError` rather than reporting a satisfied property, because every
+assertion over an empty set is true for the reason that nothing was inspected.
+This repository has been bitten by that shape three times: DEC-024's
+carried-forward claim, DEC-052's assertion over a channel's whole domain, and the
+traceability gate of §4.8.2.
+
+**The dependency runs one way, and is checked** (`C-GEA-2`). Nothing under
+`harness/shared/governance/`, nor `write_policy.py`, `read_policy.py` or
+`agent_authority.py`, may import `authority_graph` or `authority_call_sites`: the
+graph reads the governance layer, and a governance module importing it would put
+a derived view underneath the thing it derives from.
+`test_governance_layer_does_not_import_the_graph` decides that by `ast`, so a
+docstring mentioning the module does not trip it, and a companion test introduces
+such an import into a fixture to prove the scan can fail.

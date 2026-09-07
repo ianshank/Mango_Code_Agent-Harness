@@ -135,7 +135,10 @@ def optional_extra_waivers(policy_path: Path, environ: dict[str, str] | None = N
 def _importable(name: str) -> bool:
     """True when `name` resolves to a real, installed module in this interpreter.
 
-    Two things made a naive `find_spec` lie on the 3.9 leg. First, invoked as
+    Two things made a naive `find_spec` lie when this was first measured
+    (originally found on the since-retired 3.9 leg, but the cause is the
+    invocation shape, not the interpreter version, so it applies to any leg
+    run the same way). First, invoked as
     `python harness/shared/coverage_gate.py`, Python puts `harness/shared/` at
     the head of `sys.path`, where `harness/shared/langgraph/` shadows the real
     `langgraph` distribution: the probe reported the extra importable while

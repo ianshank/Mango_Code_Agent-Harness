@@ -83,12 +83,14 @@ TRIAGE: tuple[Row, ...] = (
         policy_key="orchestrator.tool_timeout_sec",
     ),
     # accepted by decision
+    Row("harness.shared.tests.test_traceability_scope", "ACCEPTED_RATCHET_CEILING", decision="DEC-065"),
     Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-025"),
     Row("harness.shared.retry_policy", "DEFAULT_MAX_SEC", decision="DEC-025"),
     Row("harness.shared.retry_policy", "DEFAULT_JITTER_RATIO", decision="DEC-025"),
     Row("harness.shared.shadow_planner", "DEFAULT_SHADOW_TIMEOUT_SEC", decision="DEC-025"),
     Row("harness.shared.cognitive_signal", "MAX_SIGNAL_BYTES", decision="DEC-025"),
     Row("harness.shared.cognitive_signal", "MAX_SINK_BYTES", decision="DEC-025"),
+    Row("harness.shared.cognitive_signal", "MAX_PAYLOAD_DEPTH", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/circuit-breaker.ts", "failureThreshold", decision="DEC-025"),
     Row("harness/node/src/ai/nemotron/nemotron-client.ts", "baseBackoffMs", decision="DEC-025"),
     # DEC-025 accepts five Node resilience constants by name; the inventory

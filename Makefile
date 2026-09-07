@@ -250,6 +250,17 @@ decision-index: ## Regenerate docs/decisions/index.{md,json} and the thin node d
 decision-index-check: ## Fail if decision index artefacts drift from DEC-*.md
 	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root . --check
 
+# Two invocations, deliberately. The per-stack one keeps the legacy CWD-relative
+# contract the DEC-056 shim window still depends on, and is the live proof that
+# `--workspace`'s default did not change it. The repository-scoped one is the
+# check this target is actually required for: `traceability` is a
+# `ci_required_targets` entry mapped to `validate` (test_ci_gate_coverage.py),
+# and before DEC-065 that required check read 6 requirement IDs out of a corpus
+# of 412 that shared none of them. Running only the per-stack invocation would
+# have left the gate this change exists to fix still pointed at the wrong
+# corpus in production, with the real one exercised solely by pytest -- which
+# enforces it, but leaves an operator reading `passed (6 requirements)` off the
+# named required check. Found by review on PR #120.
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
@@ -257,8 +268,10 @@ validate: ## Run all governance validation scripts
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
-	@echo "  → governance/check_traceability.py"
+	@echo "  → governance/check_traceability.py (per-stack, legacy CWD contract)"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
+	@echo "  → governance/check_traceability.py --workspace . (repository corpus)"
+	@$(PYTHON) $(SHARED_SRC)/governance/check_traceability.py --workspace . || exit 1
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
@@ -314,8 +327,8 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 # The scan reads the lock alone, and that is broader than the three-file
 # invocation it replaces, not narrower (DEC-047). `requirements-dev.txt` opens
 # with `-r requirements.txt`, and the lock compiles from dev + langgraph, so
-# every distribution the two range files name is pinned in the lock -- 15 named
-# across the three inputs, 79 pinned, the other 64 transitive dependencies the
+# every distribution the two range files name is pinned in the lock -- 16 named
+# across the three inputs, 105 pinned, the other 89 transitive dependencies the
 # range files never mention and the old invocation therefore scanned only by
 # accident of resolution. The lock is also what CI installs; a range resolves to
 # whatever PyPI offers that day, so scanning the ranges audited versions nobody

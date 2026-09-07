@@ -30,17 +30,19 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 15 reusable skills; the only skill root
+│   ├── skills/                          # 17 reusable skills; the only skill root
 │   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
 │   │   ├── gate-mutation-proof/         # Prove a gate catches the defect it names
+│   │   ├── god-file-decomposer/          # Safely decompose oversized modules
 │   │   ├── harness-engineering/         # Harness inspection & extension rules
 │   │   ├── nemotron-reasoner/           # NVIDIA Nemotron AI operational cheatsheet
 │   │   ├── openspec-peer-review/        # Architecture/SDLC/QA/Product peer review
 │   │   ├── protected-path-attestation/  # Produces the per-file attestation block
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
+│   │   ├── regression-pin-author/        # Pin regression reproductions into AQA
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
 │   │   ├── standards-audit/             # Yearly external-standards audit with a falsification pass
@@ -106,9 +108,13 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── nemotron_bridge.py           # Zero-dependency Python Nemotron bridge
 │   │   ├── write_policy.py              # Runtime write gate: protected_paths, .git, credentials
 │   │   ├── agent_authority.py           # Per-role tool exposure derived from agent-policy.json
+│   │   ├── authority_graph.py           # Authority reachability on two named surfaces; derived, never stored (DEC-065)
+│   │   ├── authority_call_sites.py      # AST scan: no caller may hand the broker a `human_approved` it did not build
+│   │   ├── code_safety.py               # Prohibited-symbol judgement over the tree generate_code already parsed
+│   │   ├── graph_topology.py            # StateGraph nodes/edges from source via ast; imports no langgraph
 │   │   ├── check_dedup.py               # Drift gate: shim vs copy detection (make check-dedup)
-│   │   ├── check_py_compat.py           # Python 3.9 compatibility gate (make check-compat)
-│   │   ├── ast_visitors.py              # AST visitor rules for Python 3.9+ compatibility checks
+│   │   ├── check_py_compat.py           # Compat gate against the CI matrix floor, 3.10 today (make check-compat)
+│   │   ├── ast_visitors.py              # AST visitor rules the compatibility gate applies
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
 │   │   │   ├── broker.py                # ExecutionBroker — INV-8/9/10 on the live path
 │   │   │   ├── process_backend.py       # Decoupled subprocess execution & byte-capping
@@ -120,7 +126,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
 │   │   │   ├── indirect_exec.py         # make/pnpm/npx argument grading: no indirect shell via test_execute
 │   │   │   └── check_traceability.py    # Requirement specification tracing
-│   │   └── tests/                       # Python AQA Engine (3,840 tests; coverage gate from policy)
+│   │   └── tests/                       # Python AQA Engine (count in §3, not restated here; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
 │   │       │   ├── test_scripts_hook_shims.py        # AQA-001: Hook shim existence, bash shebang, dynamic paths
@@ -192,9 +198,12 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment and any credential-bearing filename (`.env*`, `.netrc`, `.npmrc`, `.pypirc`, `id_[rd]sa`, `*.pem`) — three classes `validate_invariants` structurally cannot see, the last because `.env` is untracked and so matched no `protected_paths` pattern at all (DEC-007, DEC-042).
 - **`read_policy.py`**: the read-side counterpart to `write_policy.py`. `command_actions.classify` already denies reading a credential through `run_command` (graded `secret_access`, an action no role holds); `read_policy.read_denial_reason` closes the same gap for the orchestrator's `read_file` handler, which reads the filesystem directly and so is invisible to that classifier. The pattern has one definition, in `write_policy`, re-exported here and composed by `command_actions` — three anchorings of one alternation rather than three that can drift (DEC-012, DEC-042).
 - **`agent_authority.py`**: derives each active role's tool exposure from `agent-policy.json`. The verifier holds no `write_file` (DEC-008) or `apply_patch` (DEC-012) — both grade as the `write` action, which every canonical contract the verifier maps to already denied in prose — but does hold `read_file`.
+- **`authority_graph.py` / `authority_call_sites.py`**: a **derived** view of that same chain — recomputed on every query from the functions the broker calls, and never stored, because a persisted copy of governance state is a cache whose staleness has a security consequence. It models the two grant surfaces separately, since they deliberately disagree (`planner` holds `spec_write` while executing as `orchestrator`, which lacks it), and a query that names neither surface raises rather than confidently answering the other question. Its second half machine-checks what was previously true only by construction: across all 114 first-party non-test modules there are 5 callers of `ExecutionBroker.execute_command` and **0** that could supply `policy_decision.decide`'s `human_approved` (DEC-065).
+- **`code_safety.py`**: the `generate_code` write door's second question of one parse tree. `execute_generate_code` already ran `ast.parse` to answer *does it compile*; the same tree now answers *does this name a `synthesis.prohibited_imports` symbol*, and a match denies the write before any byte reaches disk. It resolves aliases, attribute targets and `__import__`, because that policy key's five entries span three shapes and an import-only checker would decide two of them while reporting success.
+- **`graph_topology.py`**: recovers the LangGraph `StateGraph` node and edge sets from `graph.py`'s **source** via `ast`, importing nothing from `langgraph` — so the check needs no `skipif` on an optional extra and cannot become a skip hunting an INV-2 waiver. It is what lets an ordinary test pin `peer_reviewer` and `security_reviewer` as edgeless *and* pin that this is DEC-052's recorded state, while DEC-053's park keeps the topology **gate** unbuilt.
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
-- **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in Python 3.9 (PEP 604 unions, `datetime.UTC`, unannotated `AnnAssign`). Run via `make check-compat`.
+- **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in the lowest interpreter the CI matrix declares (`datetime.UTC`, and PEP 604 unions / unannotated `AnnAssign` below 3.10). The floor is *resolved from the workflow matrix*, not written down here, so moving the matrix moves the gate; it is 3.10 today (`docs/specs/python-floor-310.md`). Run via `make check-compat`.
 
 **Required environment variable:**
 
@@ -230,11 +239,11 @@ The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero
   and `test_windows_portability_regression.py` expanded from 7 to ~35 tests (enterprise AQA).
   `pytest --collect-only` is the authoritative source — a carried-forward figure is a claim, not a measurement (DEC-024).
 - **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **99.20% Lines | 97.91% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 82 files with all 79 gated files meeting the per-file floor and **none waived**. Measured 2026-09-04 on Python 3.11 with the `langgraph` extra installed — the configuration `build-full` runs, re-measured after the fail-closed-verdict change rather than carried forward. The 3.9 matrix leg cannot install `langgraph` (it declares `Requires-Python >=3.10`) and reports its own aggregate there; its figure is not restated here, because a number this file cannot reproduce is a claim rather than a measurement. The per-file waiver for those modules needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import (DEC-028), so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
+- **Python AQA Coverage:** **98.91% Lines | 97.07% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 93 files with all 90 gated files meeting the per-file floor and **none waived**. Measured 2026-09-07 on Python 3.11 with the `langgraph` extra installed — the configuration `build-full` runs, re-measured after the graph-engineering checks were added rather than carried forward: `make coverage-python`'s pytest invocation and `coverage_gate.py` on a clean checkout of `296b085` (4 377 passed, 47 skipped, 7 deselected, 0 failures). The three files in the measured set that are not gated are the zero-statement `__init__.py` files, which `check_per_file` skips rather than waives. The earlier note about a 3.9 leg unable to install `langgraph` (`Requires-Python >=3.10`) no longer describes this repository: DEC-064 moved the floor (`docs/specs/python-floor-310.md`, superseding DEC-028) and the matrix is `["3.10", "3.12", "3.14"]`, so the extra installs on every leg and `coverage.optional_extras.langgraph.deselect_env` survives as a key no leg now sets. The per-file waiver for those modules still needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import, so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
 - **Windows Platform Parity:** **3 417 passed, 133 expected skips, 0 failures** (DEC-061 make-guards, DEC-062 asyncio guards, DEC-063 AF_UNIX on Windows dev). Expected skip count is **0 on Linux CI** where `make` and `AF_UNIX` are available.
-- **Requirements Traceability:** **6 / 6 requirements** traced bidirectionally (`check_traceability.py`); its globs resolve relative to `harness/node`, so root `docs/specs/` IDs are not yet reached
+- **Requirements Traceability:** **412 requirement IDs** read from `docs/specs/` by a repository-scoped `check_traceability.py --workspace .`. Before DEC-065 the gate resolved its config and every glob against the process CWD and `make validate` ran it from `harness/node`, so it read 6 IDs sharing not one member with those 412 and printed `traceability: passed`. Re-scoping it produces a backlog rather than a green gate, and the backlog is bounded rather than waived: `traceability.min_discovered_requirement_ids` is an anti-vacuity floor a repository-scoped run must clear, and `traceability.max_uncited_contract_requirement_ids` is a ratchet over the contract-spec IDs still missing an implementation citation, a test citation, or both — it may only be lowered as citations land, and a passing run prints the count and the headroom. Per-stack configs declare no `scope` and are unaffected
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
-- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than Python 3.9 across all repository sources
+- **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than the lowest interpreter in the CI matrix, resolved from the workflow rather than hard-coded; that is **3.10** since `docs/specs/python-floor-310.md` moved the floor and the matrix became `["3.10", "3.12", "3.14"]`
 
 ---
 
@@ -291,7 +300,7 @@ cd ../..
 
 # 3. Run Python AQA Engine & Governance Validators
 make ci              # Full pipeline: lint → lint-node → lock-check → coverage → zero-skips-python → test-node → zero-skips → specs → remotes → validate → dedup → digest-regen
-make lint            # ruff + mypy + check_py_compat (Python 3.9 compat gate)
+make lint            # ruff + mypy + check_py_compat (compat gate at the CI matrix floor)
 make test            # Full test suite (Pytest + Vitest + Zero-Skips)
 make test-regression # Run regression/AQA tier only (reproductions + rollback pins + portability)
 make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)
@@ -352,7 +361,7 @@ When introducing new features or modules:
 
 - **Write Tests Across All 7 Tiers:** Ensure coverage spans Unit, Integration, Functional, E2E, User Journey, Security, and Stress/Sanity tiers.
 - **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. Any temporary waiver must be formally declared in `.governance/skip-waivers.json` citing an approved decision from `docs/decisions/` (thin ID index still at `harness/node/.governance/decision-log.md` for `--decision-log`).
-- **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code and test docstrings, ensuring `python harness/shared/check_traceability.py` validates 100% requirement coverage.
+- **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code *and* test docstrings; `python harness/shared/governance/check_traceability.py --workspace .` reads every ID in `docs/specs/` and reports each uncited one with the side it is missing from. A repository-scoped run is not required to reach zero — it must clear `traceability.min_discovered_requirement_ids` and stay at or below `traceability.max_uncited_contract_requirement_ids`, a ratchet that may only be lowered. A document whose IDs name scheduled work declares `Spec class: program-plan`; a document declaring nothing is graded strictly, so the permissive class is never the default.
 
 ### 5.3 Local Development & Gate Validation
 

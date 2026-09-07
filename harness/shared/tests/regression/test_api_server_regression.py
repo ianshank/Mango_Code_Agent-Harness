@@ -109,7 +109,7 @@ class TestConstantTimeKeyComparison:
         calls: list[tuple[str, str]] = []
         real = secrets.compare_digest
 
-        def recording(a, b):  # type: ignore[no-untyped-def]
+        def recording(a, b):
             calls.append((a, b))
             return real(a, b)
 

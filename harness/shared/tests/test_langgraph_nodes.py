@@ -54,7 +54,7 @@ class TestGetConfigurableHelper:
                     return {"orchestrator": "orch2"}
                 return default
 
-        res = _get_configurable(FakeConfig())  # type: ignore[arg-type]
+        res = _get_configurable(FakeConfig())
         assert res == {"orchestrator": "orch2"}
 
     def test_extract_from_kwargs(self) -> None:

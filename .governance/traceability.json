@@ -1,0 +1,23 @@
+{
+  "scope": "repository",
+  "spec_globs": ["docs/specs/**/*.md"],
+  "implementation_globs": [
+    "harness/shared/*.py",
+    "harness/shared/governance/*.py",
+    "harness/shared/orchestrator/*.py",
+    "harness/shared/langgraph/*.py",
+    "harness/shared/experimental/*.py",
+    "harness/shared/agents/*.md",
+    "harness/api_server/*.py",
+    "harness/control-plane/*.py",
+    "harness/node/src/**/*.ts",
+    "harness/node/src/**/*.js"
+  ],
+  "test_globs": [
+    "harness/shared/tests/**/*.py",
+    "harness/api_server/tests/**/*.py",
+    "harness/control-plane/tests/**/*.py",
+    "harness/node/tests/**/*.ts",
+    "harness/node/tests/**/*.js"
+  ]
+}

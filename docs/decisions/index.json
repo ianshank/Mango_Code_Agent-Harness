@@ -338,12 +338,12 @@
     },
     {
       "id": "DEC-028",
-      "status": "accepted",
+      "status": "superseded",
       "date": "2026-09-02",
       "title": "The Python 3.9 floor stays",
       "path": "docs/decisions/DEC-028.md",
       "supersedes": [],
-      "superseded_by": null,
+      "superseded_by": "DEC-064",
       "owners": [
         "governance-maintainers"
       ]
@@ -775,8 +775,34 @@
       "id": "DEC-064",
       "status": "accepted",
       "date": "2026-09-07",
-      "title": "gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved",
+      "title": "The Python floor moves to 3.10, retiring the 3.9 carve-outs DEC-017 and DEC-028 recorded",
       "path": "docs/decisions/DEC-064.md",
+      "supersedes": [
+        "DEC-028"
+      ],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-065",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet",
+      "path": "docs/decisions/DEC-065.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-066",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved",
+      "path": "docs/decisions/DEC-066.md",
       "supersedes": [],
       "superseded_by": null,
       "owners": [

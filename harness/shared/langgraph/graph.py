@@ -19,8 +19,8 @@ try:
     from langchain_core.runnables import RunnableConfig
     from langgraph.graph import END, START, StateGraph
 except ImportError:  # pragma: no cover
-    END = "__end__"  # type: ignore[assignment]
-    START = "__start__"  # type: ignore[assignment]
+    END = "__end__"
+    START = "__start__"
     StateGraph = None  # type: ignore[assignment, misc]
     RunnableConfig = dict  # type: ignore[assignment, misc]
 
