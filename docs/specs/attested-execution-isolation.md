@@ -15,7 +15,7 @@ tool-version digests. `harness/CONTRACT.md` records it as **not currently
 satisfiable**, and `harness/shared/agent-policy.json` names the reason: the
 process backend contains but does not isolate.
 
-Four results measured against this branch turn that into a plan. Each was
+Five results measured against this branch turn that into a plan. Each was
 reproduced independently before this spec was written.
 
 **1. The gap is reachable.** Driving the real `ExecutionBroker` as
@@ -36,7 +36,17 @@ verdict chain: `HarnessCheck`, `Verdict` and `ExecutionResult` all lack one.
 INV-13 is **zero of five**. A sandbox digest cannot be added to a record that
 does not exist, which is why this plan orders the work as it does.
 
-**3. The classifier and `CLAUDE.md` are opposed, not merely misaligned.**
+**3. The classifier graded a rewrite as a gate run, and was opposed to
+`CLAUDE.md`.** `ruff` and `eslint` were graded `test_execute` by program name in
+every form, so `ruff format .` and `ruff check --fix .` — each of which rewrites
+every file it reaches, in place — ran for every role holding `test_execute`.
+Reproduced through the real broker as `implementer`: `ruff format .` rewrote
+`harness/shared/governance/broker.py`, a path `write_denial_reason` refuses by
+name, and the broker returned `SUCCESS`. `write_targets` looks for a redirect,
+which an in-place formatter does not present, so the write policy was never
+consulted. Closed by DEC-066.
+
+The same table settles the opposite defect.
 `python -m ruff check .` and `python -m mypy harness` classify `destructive`,
 an action `agent-policy.json` states no role may hold, so the forms `CLAUDE.md`
 mandates under DEC-013 cannot execute through the broker. The bare forms it
@@ -67,11 +77,12 @@ attestation and why the primitive is chosen by measurement here.
 
 ## Requirements
 
-- R-AEI-1: The classifier MUST model interpreter-invoked tool forms by
-  subcommand rather than by module, so `python -m ruff check`,
-  `python -m ruff format --check` and `python -m mypy` reach a read-equivalent
-  action while `python -m ruff format` reaches `write`, because an in-place
-  formatter presents no redirect target for `write_targets` to see.
+- R-AEI-1: The classifier MUST grade a tool by the form it is invoked in
+  rather than by its program name, from one table driving both the bare and the
+  `python -m` path, so an inspecting form keeps the action it already had, a
+  rewrite naming its files is `write` over exactly those paths, and a rewrite
+  over a directory, a glob or no operand reaches the unmodelled default because
+  it has no enumerable target set for `write_targets` to report.
 - R-AEI-2: The share of a committed command corpus resolving to an action no
   role holds MUST be reported against a ceiling and a population floor, both
   read from `governance-policy.json`, so neither an untuned allowlist nor an
@@ -171,18 +182,21 @@ or is recorded as unattestable under C-AEI-6.
 
 ## Acceptance criteria
 
-- [ ] AC-1: `pytest -k test_interpreter_forms_by_subcommand` asserts
+- [x] AC-1: `pytest harness/shared/tests/test_tool_forms.py` asserts
       `python -m ruff check` and `python -m mypy` reach an action the
-      implementer holds, and that `python -m ruff format .` is denied for a
-      role without `write` · stage: `make coverage` (R-AEI-1)
-- [ ] AC-2: `pytest -k test_unmodelled_program_defaults` asserts an
-      unmodelled program name reaches the fail-closed default, and asserts
-      `python -c` separately by its own classification reason, so deleting
-      either rule turns exactly one case red · stage: `make coverage` (R-AEI-1)
-- [ ] AC-3: `python harness/shared/governance/denial_rate.py` exits non-zero
+      implementer holds, that an unbounded rewrite reaches the unmodelled
+      default, and that `ruff format .` through the real broker returns
+      `BLOCKED` leaving a protected file unchanged · stage: `make coverage`
+      (R-AEI-1)
+- [x] AC-2: `pytest -k test_an_unmodelled_module_is_not_guessed_at` asserts
+      an unmodelled `python -m` module is not made executable as a side effect,
+      and `test_the_unmodelled_default_is_held_by_no_role` asserts the premise
+      every denial here rests on · stage: `make coverage` (R-AEI-1)
+- [x] AC-3: `python harness/shared/governance/denial_rate.py` exits non-zero
       above the policy ceiling and exits non-zero when the committed corpus
-      holds fewer entries than the policy floor · stage: `make validate`
-      (R-AEI-2, C-AEI-2)
+      holds fewer entries than the policy floor, and dropping the denied
+      entries fails on the floor rather than rescuing the run · stage:
+      `make validate` (R-AEI-2, C-AEI-2)
 - [ ] AC-4: `pytest -k test_gate_refuses_empty_population` asserts
       `check_dedup` and `check_py_compat` exit non-zero on an empty tree, that
       a population one below the policy floor fails, and that a population at
@@ -259,12 +273,11 @@ or is recorded as unattestable under C-AEI-6.
 Ordered so the two live defects ship first and nothing waits on the vendor
 question. Each phase is one pull request.
 
-1. Model the interpreter forms by subcommand and add the denial-rate metric
-   with its committed corpus — produces
-   `harness/shared/governance/interpreter_forms.py` and
-   `denial_rate.py`; the new module is a sibling because
-   `command_actions.py` stands 29 lines below `limits.size_budget_lines`
-   (AC-1, AC-2, AC-3).
+1. Grade tools by invocation form and add the denial-rate metric with its
+   committed corpus — produces `harness/shared/governance/tool_forms.py`,
+   `denial_rate.py` and `command-corpus.json`; the table is a sibling module
+   because `command_actions.py` stood 29 lines below `limits.size_budget_lines`
+   (AC-1, AC-2, AC-3). **Landed** as DEC-066.
 2. Give the two gates a population floor — consumes
    `traceability.min_discovered_requirement_ids` as the pattern; produces the
    refusal AC-4 checks.
@@ -300,8 +313,9 @@ mismatch in either direction (C-AEI-1).
 
 - `harness/shared/governance/broker.py`, `process_backend.py`,
   `evidence_manifest.py`, `command_actions.py`, `verdict.py`, `__init__.py`
-- `harness/shared/governance/execution_backend.py`, `interpreter_forms.py`,
-  `capability_probe.py`, `sandbox_policy.py`, `denial_rate.py` (new)
+- `harness/shared/governance/execution_backend.py`, `tool_forms.py`,
+  `capability_probe.py`, `sandbox_policy.py`, `denial_rate.py`,
+  `command-corpus.json` (new)
 - `harness/shared/governance-policy.json`, `validate_policy.py`,
   `policy_loader.py`
 - `harness/shared/check_dedup.py`, `check_py_compat.py`
