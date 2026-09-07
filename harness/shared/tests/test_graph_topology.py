@@ -96,6 +96,25 @@ class TestExtraction:
         assert topology.builder_name == "state_graph_under_construction"
         assert topology.nodes == ("alpha", "beta", "orphan")
 
+    def test_multiple_graph_builders_fail_closed(self, tmp_path: Path) -> None:
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+            def first():
+                left = StateGraph(dict)
+                left.add_node("left", node)
+                left.add_edge(START, "left")
+                left.add_edge("left", END)
+
+            def second():
+                right = StateGraph(dict)
+                right.add_node("right", node)
+                right.add_edge(START, "right")
+                right.add_edge("right", END)
+        """
+        with pytest.raises(TopologyExtractionError, match="ambiguous lexical scopes"):
+            extract_topology(write_source(tmp_path, source))
+
     def test_sentinels_resolve_from_names_attributes_and_literals(self, tmp_path: Path) -> None:
         """``START``, ``constants.END`` and ``"__end__"`` all name the same nodes."""
         source = """

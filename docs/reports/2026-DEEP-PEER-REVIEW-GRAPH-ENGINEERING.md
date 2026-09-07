@@ -199,7 +199,7 @@ done. No action.
 
 ## 4. What all three models missed
 
-### 4.1 The traceability gate reads 6 of 412 requirement IDs
+### 4.1 The traceability gate reads 412 requirement IDs
 
 The report flags that "the repo's own globs don't reach root `docs/specs/`". That is true and
 the magnitude is worse than implied.

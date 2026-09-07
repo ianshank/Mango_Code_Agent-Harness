@@ -235,6 +235,17 @@ class TestTheApprovalFlagIsUnreachable:
         (witness,) = approval_flag_reachability([path])
         assert witness.expression == "context"
 
+    def test_an_alias_of_the_broker_entry_point_is_reported(self, tmp_path: Path) -> None:
+        path = _fixture(
+            tmp_path,
+            "broker_alias",
+            "def run(broker, command, context):\n"
+            "    invoke = broker.execute_command\n"
+            "    return invoke(command, context)\n",
+        )
+        (witness,) = approval_flag_reachability([path])
+        assert witness.expression == "context"
+
     def test_a_literal_approval_key_is_reported(self, tmp_path: Path) -> None:
         """A hard-coded ``human_approved`` is literal in the constructing
         function and still a standing approval on the agent path."""

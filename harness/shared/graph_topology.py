@@ -223,8 +223,8 @@ def extract_topology(source_path: Path) -> Topology:
     module docstring for why an empty result is never returned in its place.
     """
     tree = _parse(source_path)
-    builder_name = _builder_variable(tree, source_path)
-    nodes, edges = _collect_topology(tree, builder_name, source_path)
+    builder_name, builder_scope = _builder_variable(tree, source_path)
+    nodes, edges = _collect_topology(builder_scope, builder_name, source_path)
     if not nodes:
         raise TopologyExtractionError(
             f"{source_path}: builder {builder_name!r} has no add_node call; an empty node set is a broken "
@@ -262,12 +262,14 @@ def _parse(source_path: Path) -> ast.Module:
         raise TopologyExtractionError(f"{source_path}: cannot be parsed: {exc}") from exc
 
 
-def _builder_variable(tree: ast.Module, source_path: Path) -> str:
+def _builder_variable(tree: ast.Module, source_path: Path) -> tuple[str, ast.AST]:
     """The name bound to a ``StateGraph(...)`` call, wherever it is assigned.
 
     Discovered rather than assumed: see the module docstring's last section for
     what hard-coding ``builder`` would cost.
     """
+    parents = {id(child): node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    found: list[tuple[str, ast.AST]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
             continue
@@ -275,13 +277,31 @@ def _builder_variable(tree: ast.Module, source_path: Path) -> str:
             continue
         for target in node.targets:
             if isinstance(target, ast.Name):
-                logger.debug(
-                    "graph_topology: builder variable %r discovered at %s:%d",
-                    target.id,
-                    source_path,
-                    node.lineno,
-                )
-                return target.id
+                scope: ast.AST = tree
+                parent = parents.get(id(node))
+                while parent is not None:
+                    if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        scope = parent
+                        break
+                    parent = parents.get(id(parent))
+                found.append((target.id, scope))
+    if len(found) == 1:
+        builder_name, scope = found[0]
+        logger.debug(
+            "graph_topology: builder variable %r discovered at %s:%d",
+            builder_name,
+            source_path,
+            next(
+                node.lineno
+                for node in ast.walk(scope)
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+            ),
+        )
+        return builder_name, scope
+    if found:
+        raise TopologyExtractionError(
+            f"{source_path}: found {len(found)} StateGraph builders; refusing to merge ambiguous lexical scopes"
+        )
     raise TopologyExtractionError(
         f"{source_path}: no assignment of a StateGraph(...) call was found, so there is no builder whose "
         "topology calls could be collected"
@@ -298,7 +318,7 @@ def _called_name(func: ast.expr) -> str | None:
 
 
 def _collect_topology(
-    tree: ast.Module,
+    scope: ast.AST,
     builder_name: str,
     source_path: Path,
 ) -> tuple[list[str], list[tuple[str, str]]]:
@@ -313,7 +333,7 @@ def _collect_topology(
     nodes: list[str] = []
     edges: list[tuple[str, str]] = []
     calls: list[tuple[ast.Call, str]] = []
-    for call in ast.walk(tree):
+    for call in ast.walk(scope):
         if not isinstance(call, ast.Call):
             continue
         func = call.func

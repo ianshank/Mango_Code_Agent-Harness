@@ -31,10 +31,12 @@ The reasoner currently edits and creates files using `write_file` (raw string ov
   or target `.mango/memory/`.
 - R-CGT-3: `generate_code` MUST require the `write` action via `agent_authority.TOOL_REQUIRED_ACTION`
   and MUST be authorized by `authorize_write` before execution.
-- R-CGT-4: When `validate_syntax` is True and the file type is supported (e.g., `.py` for Python,
-  `.json` for JSON), `execute_generate_code` MUST validate the syntax (e.g. via `ast.parse` for Python
-  or `json.loads` for JSON) before writing to disk. If syntax validation fails, the tool MUST refuse
-  to write to disk and MUST return an error detailing the syntax error location and message.
+- R-CGT-4: When `validate_syntax` is True and the file type is supported (e.g., `.py` or `.pyw` for
+  Python, `.json` for JSON), `execute_generate_code` MUST validate the syntax (e.g. via `ast.parse`
+  for Python or `json.loads` for JSON) before writing to disk. Python targets are always parsed so
+  prohibited-symbol checks cannot be bypassed; `validate_syntax` controls whether syntax errors are
+  reported. If syntax validation fails, the tool MUST refuse to write to disk and MUST return an error
+  detailing the syntax error location and message.
 - R-CGT-5: When `overwrite` is False and the destination file already exists, `execute_generate_code`
   MUST refuse to overwrite and MUST return an error indicating the file exists.
 - R-CGT-6: Output lengths and file size bounds MUST derive from `governance-policy.json` or

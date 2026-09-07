@@ -201,13 +201,14 @@ def execute_generate_code(
     # A Python target is Python whatever `language` says, because the suffix is
     # where the bytes land and `language` is a model-supplied argument.
     ext = target_path.suffix.lower()
-    is_python = ext == PYTHON_SUFFIX
+    is_python = ext in (PYTHON_SUFFIX, ".pyw")
 
     # Infer language from file extension if not explicitly specified
     inferred_language = "python" if is_python else language
     if not inferred_language:
         ext_to_lang = {
             ".py": "python",
+            ".pyw": "python",
             ".json": "json",
             ".yaml": "yaml",
             ".yml": "yaml",

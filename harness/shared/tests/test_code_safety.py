@@ -123,6 +123,10 @@ class TestAttributeTargets:
     def test_an_unrelated_attribute_of_the_same_name_is_not_flagged(self) -> None:
         assert findings_for("class Shell:\n    system = 1\nShell().system\n") == []
 
+    def test_literal_getattr_attribute_is_resolved(self) -> None:
+        findings = findings_for("import os\ngetattr(os, 'system')('x')\n")
+        assert [(f.policy_entry, f.lineno) for f in findings] == [("os.system", 2)]
+
 
 class TestTheBuiltinNoImportNames:
     """`__import__`: the third shape, invisible to an `ast.Import` walk."""
@@ -166,6 +170,10 @@ class TestTheBuiltinsNamespaceIsNotADetour:
         ``builtins`` to the prohibited list.
         """
         assert findings_for("import builtins\nprint(builtins.len([1]))\n") == []
+
+    def test_literal_getattr_builtin_is_resolved(self) -> None:
+        findings = findings_for("import builtins\ngetattr(builtins, '__import__')('os')\n")
+        assert [(f.policy_entry, f.lineno) for f in findings] == [("__import__", 2)]
 
     def test_the_denial_names_the_entry_and_the_spelling(self, tmp_path: Path) -> None:
         """The author has to see both: the rule, and the name their file contains."""

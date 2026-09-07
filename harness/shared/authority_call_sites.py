@@ -382,11 +382,27 @@ def _call_reasons(call: ast.Call, scope: _Scope) -> list[tuple[str, ast.expr]]:
     return found
 
 
-def _is_broker_call(node: ast.Call) -> bool:
+def _broker_aliases(node: _ScopeOwner) -> set[str]:
+    """Names assigned directly from a broker entry point in this scope."""
+    aliases: set[str] = set()
+    for candidate in ast.walk(node):
+        if isinstance(candidate, _NESTED_SCOPES):
+            continue
+        if not isinstance(candidate, ast.Assign) or not isinstance(candidate.value, ast.Attribute):
+            continue
+        if candidate.value.attr not in BROKER_ENTRY_POINTS:
+            continue
+        for target in candidate.targets:
+            if isinstance(target, ast.Name):
+                aliases.add(target.id)
+    return aliases
+
+
+def _is_broker_call(node: ast.Call, aliases: set[str]) -> bool:
     """Whether this call goes through a broker entry point, by name."""
     if isinstance(node.func, ast.Attribute):
         return node.func.attr in BROKER_ENTRY_POINTS
-    return isinstance(node.func, ast.Name) and node.func.id in BROKER_ENTRY_POINTS
+    return isinstance(node.func, ast.Name) and (node.func.id in BROKER_ENTRY_POINTS or node.func.id in aliases)
 
 
 class _BrokerCallSites(ast.NodeVisitor):
@@ -395,6 +411,7 @@ class _BrokerCallSites(ast.NodeVisitor):
     def __init__(self) -> None:
         self.sites: list[tuple[ast.Call, _Scope]] = []
         self._scopes: list[_Scope] = []
+        self._aliases: list[set[str]] = []
 
     def _enter(self, node: _ScopeOwner, name: str) -> None:
         """Read one function (or the module) into a scope, then visit it."""
@@ -402,7 +419,10 @@ class _BrokerCallSites(ast.NodeVisitor):
         _read_block(node, "body", list(node.body), (), scope)
         logger.debug("Scope %s: %s parameter(s), %s binding(s)", name, len(scope.parameters), len(scope.bindings))
         self._scopes.append(scope)
+        aliases = _broker_aliases(node)
+        self._aliases.append(aliases)
         self.generic_visit(node)
+        self._aliases.pop()
         self._scopes.pop()
 
     # The capitalised method names below are `ast.NodeVisitor`'s dispatch
@@ -417,7 +437,7 @@ class _BrokerCallSites(ast.NodeVisitor):
         self._enter(node, node.name)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if _is_broker_call(node):
+        if _is_broker_call(node, self._aliases[-1]):
             self.sites.append((node, self._scopes[-1]))
         self.generic_visit(node)
 

@@ -162,13 +162,10 @@ def test_topology_gate_is_parked_with_langgraph(makefile_text: str) -> None:
     rather than a skip: INV-2 counts skips, and a check that quietly does
     nothing is the failure mode this whole spec is about.
     """
-    if frontmatter_value(DEC_053, "status") != "accepted":
-        successor = frontmatter_value(DEC_053, "superseded_by")
-        assert successor not in ("", "null", "None"), (
-            "docs/decisions/DEC-053.md is no longer `accepted` but names no superseding record. The LangGraph "
-            "park is the premise of this test; a lifted park needs a decision that lifted it."
-        )
-        return
+    assert frontmatter_value(DEC_053, "status") == "accepted", (
+        "DEC-053 no longer parks the LangGraph topology gate; replace or revise this assertion in the "
+        "same change that supersedes the decision."
+    )
 
     targets = _make_targets(makefile_text)
     assert "ci" in targets, "the root Makefile has no `ci` target; the parser, not the Makefile, is what changed"

@@ -291,6 +291,20 @@ def _reference_findings(
         entry = _matched_entry(resolved, prohibited)
         if entry is not None:
             findings.append(ProhibitedSymbol(entry, dotted, lineno))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+            continue
+        if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant) or not isinstance(node.args[1].value, str):
+            continue
+        base = _dotted_name(node.args[0])
+        if base is None:
+            continue
+        head, _, rest = base.partition(".")
+        resolved_base = f"{bindings.get(head, head)}.{rest}" if rest else bindings.get(head, head)
+        resolved = f"{resolved_base}.{node.args[1].value}"
+        entry = _matched_entry(resolved, prohibited)
+        if entry is not None:
+            findings.append(ProhibitedSymbol(entry, f"getattr({base}, {node.args[1].value!r})", node.lineno))
     return findings
 
 

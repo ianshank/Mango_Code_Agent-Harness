@@ -99,7 +99,10 @@ NEMOTRON_TOOLS = [
                     },
                     "validate_syntax": {
                         "type": "boolean",
-                        "description": "Whether to perform syntax validation before writing (default true).",
+                        "description": (
+                            "Whether syntax errors are reported before writing (default true). "
+                            "Python targets are always parsed for safety checks."
+                        ),
                     },
                     "overwrite": {
                         "type": "boolean",

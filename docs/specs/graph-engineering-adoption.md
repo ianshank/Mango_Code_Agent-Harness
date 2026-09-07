@@ -6,7 +6,7 @@
 > Every design decision below is argued **Thesis → Counter-Argument → Rebuttal**, where the
 > rebuttal is required to introduce a third position rather than restate the thesis.
 >
-> **Revision 2** applies findings S-1…S-5 of that report's §7, which computed the graph this
+> **Revision 3** applies findings S-1…S-5 of that report's §7, which computed the graph this
 > spec proposes and found four defects in revision 1: `R-GEA-2` targeted a property
 > `validate_agent_policy.py` already decides (S-1) instead of the agent-input-to-privileged-flag
 > path that is genuinely unasserted (S-2); `R-GEA-1` would have produced a gate that can never
@@ -203,9 +203,11 @@ conflation D-5 had already resolved.**
 
 ## Requirements
 
-- R-GEA-1: `check_traceability.py` MUST resolve its configuration and globs against an explicit
-  workspace root rather than the process CWD, defaulting to the repository root, so that the
-  requirement IDs it reads are the corpus under `docs/specs/` and not `harness/node/docs/specs/`.
+- R-GEA-1: The repository invocation of `check_traceability.py` MUST pass `--workspace .` so its
+  configuration and globs resolve against the repository root rather than the process CWD, and
+  the requirement IDs it reads are the corpus under `docs/specs/` rather than
+  `harness/node/docs/specs/`. The option's omitted-value default remains CWD-relative for the
+  per-stack compatibility shims.
 - R-GEA-1b: The gate MUST distinguish **contract specs**, whose requirement IDs name shipped
   behaviour and must carry both citations, from **program plans**, whose IDs name scheduled work
   and cannot cite an implementation until it exists. The class MUST be declared per document
@@ -384,7 +386,8 @@ Ordered so that each step's inputs exist before it runs, and so that the defect 
 later requirement ID is closed first.
 
 1. **Fix the traceability scope, and classify the corpus in the same change.** Add `--workspace`
-   to `check_traceability.py`, defaulting to the repository root, and a per-document class
+   to `check_traceability.py`; the root invocation passes `--workspace .`, while the per-stack
+   default remains CWD-relative for compatibility; and add a per-document class
    declaration (contract spec vs program plan) defaulting to the strict branch; keep the
    CWD-relative path working for the per-stack shim during the `DEC-056` shim window — consumes
    `harness/node/.governance/traceability.json`; produces a root `.governance/traceability.json`,
@@ -432,7 +435,7 @@ Rows marked **protected** match `protected_paths` in `governance-policy.json` an
 row in the PR's `infra-reviewed` attestation table. *Revision 3: revision 2 opened this section
 with "No path below matches `protected_paths` … so this spec's own landing needs no
 `infra-reviewed` attestation", which was false of its own list — four rows below were already
-marked protected, and the PR carries seven attestation rows. The sentence was written when the
+marked protected, and the PR carries the required `infra-reviewed` attestation. The sentence was written when the
 plan expected to touch only documentation and was not revised when the implementation landed.*
 
 - `docs/specs/graph-engineering-adoption.md` (this document)
