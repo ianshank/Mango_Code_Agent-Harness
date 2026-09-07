@@ -28,7 +28,9 @@ _REPO = Path(__file__).resolve().parents[4]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from harness.shared.governance.broker import ExecutionBroker, ProcessBackend  # noqa: E402
+from harness.shared.governance.broker import ExecutionBroker  # noqa: E402
+from harness.shared.governance.process_backend import ProcessBackend  # noqa: E402
+from harness.shared.tests.test_governance_broker import RecordingBackend  # noqa: E402
 
 
 class _MinimalRecordingBackend(ProcessBackend):
@@ -52,7 +54,7 @@ class _FixedRecordingBackend(_MinimalRecordingBackend):
 
 def test_recording_backend_with_probe_override_is_always_available() -> None:
     """RecordingBackend._probe() must return True without invoking bash (RCA-7 fix)."""
-    backend = _FixedRecordingBackend()
+    backend = RecordingBackend()
     assert backend.available() is True, (
         "RecordingBackend.available() returned False. "
         "_probe() must be overridden to return True so no bash process is spawned."
