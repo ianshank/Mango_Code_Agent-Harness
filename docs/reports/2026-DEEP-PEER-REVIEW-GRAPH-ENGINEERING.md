@@ -130,7 +130,11 @@ and `default_deny: true`, and the tests that guard them
 (`test_agent_authority.py`, `test_governance_broker.py` — 48 test functions across the broker
 file) assert endpoint outcomes, not path non-existence.
 
-**This is the report's strongest recommendation and it ranked it third.** It should be first.
+**This is the report's strongest recommendation and it ranked it third.** It should be first —
+though §7's S-1 and S-2 substantially narrow *which* property is worth checking here. Computing
+the graph rather than describing it showed that the grant half is largely covered already by
+`validate_agent_policy.py:48-50`, and that the genuinely unasserted property is one level up:
+whether any agent-controlled input can reach `policy_decision.decide`'s `human_approved` flag.
 
 ### 3.2 The orphan-node finding is real, known, and ungated
 
@@ -244,12 +248,18 @@ PY
 ```
 
 **251 of 392 requirement IDs have no implementation citation, no test citation, or neither.**
-That figure is sensitive to the choice of `implementation_globs` and `test_globs` — the ones
-used here are `harness/**/*.py` plus the Node stack, which is a reasonable but not authoritative
-scope — so treat 251 as the order of magnitude, not the final number. What is not
-scope-sensitive is the direction: repairing the gate does not produce a green gate, it produces
-a backlog. The companion plan sequences that reconciliation second, before anything depends on
-it, precisely so its size is discovered rather than assumed.
+
+> **Read that number with §7's S-3 correction.** 98 of the 251 (39%) come from four
+> program-plan documents whose `R-SR-*` / `R-CQ-*` IDs name scheduled work rather than shipped
+> behaviour, and 10 more are this PR's own plan. The contract-spec backlog is nearer **143**.
+> The figure is also sensitive to the choice of `implementation_globs` and `test_globs` — the
+> ones used here are `harness/**/*.py` plus the Node stack, reasonable but not authoritative.
+
+What is not scope-sensitive is the direction: repairing the gate does not produce a green gate,
+it produces a backlog — and, per S-3, one that a scope fix alone can never clear, because a
+roadmap item has no implementation to cite until it is done. The companion plan therefore ships
+the scope fix and a contract-spec/program-plan class distinction as one step, and sequences the
+reconciliation immediately after, so its size is measured rather than assumed.
 
 **The fix is not a graph.** DEC-056 already schedules `--workspace` on "the seven CWD-relative
 gates" and a single root `.governance/`. Adding a graph database here would be building
@@ -436,8 +446,9 @@ where each decision is argued Thesis → Counter-Argument → Rebuttal.
 
 | Order | Work | Why here | Report's rank |
 |---|---|---|---|
-| 0 | Fix the traceability scope (6 IDs → the whole 386-ID corpus) | A gate that lies is a defect, not an optimization. Prerequisite: it is how every later requirement ID gets checked | not proposed |
-| 1 | Authorization reachability over the live governance chain | Live, unparked, security-critical, no path-level check today | 3rd |
+| 0a | Pin the orphan reviewers to DEC-052 as a plain test | Live in the tree today, depends on nothing, costs one test file (§7 S-4) | not proposed |
+| 0b | Fix the traceability scope **and** classify the corpus | A gate that lies is a defect, not an optimization. The scope fix alone cannot go green (§7 S-3) | not proposed |
+| 1 | Reachability of `decide()`'s `human_approved` from agent input | Holds by construction in one dict literal, asserted nowhere (§7 S-2) | 3rd, and aimed at the wrong half |
 | 2 | Pre-write semantic validation on the AST `generate_code` already parses | The only place a defect can be stopped before bytes hit disk | not proposed |
 | 3 | Static topology verification, retargeted at the *live* orchestrator and re-pointed at LangGraph only if NS-31 revives it | Technique is sound; DEC-053 makes the original target wrong | 1st |
 | 4 | Read-only code graph + MCP tools, adopted only if measured on this corpus | Real but unproven gain; the measurement is the gate | 2nd |
@@ -450,3 +461,162 @@ apposite, and its instinct to defer to the repository's determinism ethos is cor
 ranking is wrong because it read the code and not the decisions — which is, appropriately
 enough, the exact failure mode a queryable graph over this repository's own governance artifacts
 would prevent.
+
+---
+
+## 7. Review of this review
+
+The sections above were written from reading. This section was written after *computing* the
+graph §3.1 proposes — building the authorization graph by hand from
+`ACTIVE_TO_CANONICAL`, `agent-policy.json`, and `TOOL_REQUIRED_ACTION` and asking it the
+questions the companion plan's acceptance criteria ask. Five findings, four of them against
+this review and its plan rather than against the report.
+
+The pattern in all five is the same one §5.3 warned about, arriving from the inside: **a check
+that passes for a reason unrelated to what it claims to check.** Naming that failure mode in a
+persona review turns out to be no protection against committing it four paragraphs later.
+
+### S-1 · `AC-GEA-2` is 60% vacuous, and the plan does not say so — *Major*
+
+The criterion asserts that `reachable_actions("verifier")` excludes every member of
+`high_risk_actions`. Computed:
+
+```
+destructive          declared_by= -- NOBODY --          approval_gated_on=[]
+external_write       declared_by= ['release-auditor']   approval_gated_on=['release-auditor']
+permission_change    declared_by= -- NOBODY --          approval_gated_on=[]
+production_change    declared_by= ['release-auditor']   approval_gated_on=['release-auditor']
+secret_access        declared_by= -- NOBODY --          approval_gated_on=[]
+```
+
+Three of the five high-risk actions are declared by **no canonical role at all**. The criterion
+passes for those three for a reason that has nothing to do with reachability — there is no edge
+to traverse — and the mutation proof it specifies (revert the `human_approval_required_for`
+subtraction in `allowed_actions`) cannot move them. The property is non-trivial for
+`external_write` and `production_change` only, both through the single
+`verifier → release-auditor` edge.
+
+Worse, the half that *is* non-trivial is **already enforced**. `validate_agent_policy.py:48-50`:
+
+```python
+unapproved = high.intersection(allowed) - set(approvals)
+if unapproved:
+    raise SystemExit(f"agent-policy: {rid} high-risk actions lack human approval: …")
+```
+
+So `R-GEA-2` as written proposes a graph to re-derive a property a nine-line gate already
+decides. That is not worthless — the graph would catch it across *composition* where the gate
+checks one file — but the plan claimed a gap that is mostly closed.
+
+### S-2 · The property actually worth checking is one level up — *Major*
+
+Why the three actions are ungranted turns out to be the interesting part. `destructive`,
+`permission_change`, and `secret_access` are not grant-vocabulary at all: they are what
+`command_actions.classify` **produces** from a command name — `rm` → `destructive`, `chmod` →
+`permission_change`, `env` → `secret_access`, with `UNCLASSIFIED_ACTION = "destructive"` so an
+unmodelled command fails closed. `high_risk_actions` mixes both vocabularies in one namespace.
+Their absence from every role's `allowed_actions` *is* the denial: `decide()` returns
+`DENY, "action 'destructive' is not granted to …"` by absence, which is `default_deny: true`
+operationalised.
+
+Which relocates the real question. `decide()` takes `human_approved`, and a `True` there is the
+one argument that turns a high-risk denial into an ALLOW. Tracing every non-test setter:
+
+```
+broker.py:133   human_approved = context.get("human_approved", False) is True
+broker.py:166   verdict = decide(agent_id, required, policy, human_approved=human_approved)
+tool_executors.py:384   "context": {"agent_id": execution_identity(active_role)}   # no such key
+```
+
+The agent path cannot reach the flag: `execute_run_command` builds the context as a literal
+dict, the only agent-controlled input is `command`, and that goes to `classify()`, not to
+`context`. The identity check (`is True`, with a comment explaining why `bool("false")` makes
+truthiness wrong) is a second defense.
+
+**The property holds. It holds by construction, in one dict literal, and nothing asserts it.**
+`broker.execute_command(command, **kwargs)` makes threading a caller-supplied context
+syntactically easy, and no test would go red. *That* is a path property — agent input to
+privileged flag — and it is what `R-GEA-2` should target instead of the grant graph.
+
+### S-3 · This review's own headline number is inflated for the use it was put to — *Major*
+
+§4.1 reports 251 of 392 requirement IDs missing a citation. The figure is what the gate's logic
+produces, but presenting it as a citation backlog overstates it. Decomposed by source:
+
+| Source | IDs | Gaps |
+|---|---|---|
+| `2026-standards-remediation-plan.md` | 60 | 53 |
+| `code-quality-tech-debt-plan.md` | 36 | 21 |
+| `god-file-decomposition.md` | 14 | 12 |
+| `tech-debt-hardening-plan.md` | 35 | 12 |
+| **four program-plan documents, subtotal** | | **98 (39%)** |
+| `graph-engineering-adoption.md` (this PR's own plan) | 11 | 10 |
+| remainder — contract specs | | **~143** |
+
+`R-SR-*` and `R-CQ-*` are roadmap items. A requirement that says "park LangGraph" has no
+implementation file to cite until it is done, and citing it in a test would be meaningless.
+Quoting 251 without that split is the same species of unearned number this review criticised the
+source report for in §3.3.
+
+The correction matters beyond arithmetic, because it exposes a design defect in `R-GEA-1`:
+**re-scoping the globs alone produces a gate that can never go green** while any planned-but-undone
+work lives in `docs/specs/`. Step 1 needs a class distinction between contract specs and program
+plans that neither the current gate nor the plan has. Without it, fixing the scope trades a gate
+that lies for a gate that cries wolf, and the second gets switched off.
+
+### S-4 · `R-GEA-6` commits the conflation `D-5` dissolved — *Moderate*
+
+`D-5`'s rebuttal concluded that the choice is not "gate or no gate" but *which enforcement
+surface*, and that pure functions over repository state belong in the test suite where `INV-2`
+already governs them. `R-GEA-6` then says a topology checker "MUST NOT be wired into any CI
+target while `DEC-053`'s park stands" — and `AC-GEA-9` tests for its absence. That forbids the
+gate and the plain test alike.
+
+It matters because the park is **decided but not executed**:
+
+```
+$ ls harness/shared/experimental/          # __init__.py autonomous_healing.py lats_optimizer.py
+$ test -d harness/shared/langgraph && echo STILL THERE    # STILL THERE
+```
+
+Phase E is blocked on NS-2 — a credential rotation requiring a human at a provider, open since
+at least 2026-09-05, and NEXT_STEPS is explicit that "DEC-053…056 are logged; they do not lift
+this gate." So `findings` stays empty on every run, and `test_langgraph_graph.py` keeps pinning
+it, for an indefinite period during which this plan forbids even noticing.
+
+The fix is small and follows `test_constant_triage.py`'s precedent exactly: a plain test
+asserting the two reviewers are edgeless **and that this is DEC-052's recorded state**, which
+goes red both when someone wires them in without updating DEC-052 and when someone deletes them
+silently. One test file, no protected path, no new gate, no attestation.
+
+### S-5 · `AC-GEA-3`'s witness paths are narrower than the criterion implies — *Minor*
+
+Eight of the eleven declared actions are exercised by no tool:
+
+```
+declared (11): delegate evidence_write external_write plan production_change read
+               review_write security_scan spec_write test_execute write
+tool-required (3): read test_execute write
+```
+
+So role→tool witness paths exist only for `read`, `write`, and `test_execute`. Related, and
+worth stating rather than discovering later: each active role has **two** grant surfaces that
+deliberately disagree — `allowed_actions` (tool exposure) and `EXECUTION_IDENTITY` (what the
+broker asks the PDP about). `planner` holds `spec_write` but executes as `orchestrator`, which
+lacks it; `verifier` holds `review_write` and `security_scan` but executes as `test-eval`, which
+lacks both. A reachability check over the wrong surface returns a confident wrong answer, and
+`R-GEA-2` names only one of the two.
+
+### What survives
+
+§2's inversion stands: DEC-053 is accepted, unsuperseded, and the report's top recommendation
+still lands on it. §4.1's defect stands — the gate reads a disjoint corpus — with the magnitude
+corrected. §4.2 stands unchanged. §4.3's constraint table stands.
+
+What does not survive unamended is this review's own plan, in four places, and the corrections
+are in the companion spec's revision 2 rather than left as prose here. The exercise is worth
+generalising: **every finding in S-1 through S-5 was produced by executing the plan's own
+acceptance criteria against real data rather than reading them.** None was visible from the
+document. That is the argument for the graph, made against its own advocate — and it is also why
+`R-GEA-4` (fail closed when the input set is empty) was the most valuable requirement in the
+first draft, and the one this review then failed to apply to itself.

@@ -1,10 +1,16 @@
 # Spec: graph-engineering adoption
 
-> **Status:** DRAFT, revision 1. Contract for adopting graph representations of this
+> **Status:** DRAFT, revision 2. Contract for adopting graph representations of this
 > repository's governance chain, generated code, and orchestration topology, as reviewed in
 > [`docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`](../reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md).
 > Every design decision below is argued **Thesis → Counter-Argument → Rebuttal**, where the
 > rebuttal is required to introduce a third position rather than restate the thesis.
+>
+> **Revision 2** applies findings S-1…S-5 of that report's §7, which computed the graph this
+> spec proposes and found four defects in revision 1: `R-GEA-2` targeted a property
+> `validate_agent_policy.py` already decides (S-1) instead of the agent-input-to-privileged-flag
+> path that is genuinely unasserted (S-2); `R-GEA-1` would have produced a gate that can never
+> go green (S-3); and `R-GEA-6` forbade the plain test `D-5` says should exist (S-4).
 
 ## Problem statement
 
@@ -17,14 +23,23 @@ Three defects, each evidenced against `main` @ `3fc9c3e`:
    real corpus at `docs/specs/` holds 380 more, and the two sets are disjoint. `make validate`
    prints `traceability: passed (6 requirements)` and exits 0.
 
-2. **The authorization chain's safety property is argued, not checked.** The chain
-   `@with_authority` (`langgraph/nodes.py:89,143,204`) → `ACTIVE_TO_CANONICAL`
-   (`agent_authority.py:34`) → `allowed_actions` (`:93`) → `TOOL_REQUIRED_ACTION` (`:60`) →
-   `write_policy` / `read_policy` / `command_actions` decides every side effect the harness
-   permits. `agent-policy.json` declares `default_deny: true` and five `high_risk_actions`.
-   The existing tests assert endpoint outcomes for named roles and named tools; no check
-   states the general property that no active role reaches a high-risk action by any
-   composition of those edges. DEC-008 and DEC-012 answer that question in prose.
+2. **One approval flag is guarded by construction and by nothing else.** `policy_decision.decide`
+   takes `human_approved`, the single argument that turns a high-risk denial into an ALLOW
+   (`policy_decision.py:51,76`). `broker.py:133` sources it from `context` with an identity check
+   (`is True`), and `tool_executors.py:384` builds that context as a literal
+   `{"agent_id": execution_identity(active_role)}` — no such key, so the agent path cannot reach
+   the flag. The guarantee is real and it rests on one dict literal in one function;
+   `broker.execute_command(command, **kwargs)` makes threading a caller-supplied context
+   syntactically easy, and no test would go red. The property "no agent-controlled input reaches
+   `human_approved`" is nowhere asserted.
+
+   The neighbouring property is *not* a gap, and revision 1 wrongly claimed it was:
+   `validate_agent_policy.py:48-50` already fails closed on any role granting a high-risk action
+   without approval-gating it. Three of the five `high_risk_actions` — `destructive`,
+   `permission_change`, `secret_access` — are declared by no role at all, because they are
+   `command_actions.classify` output rather than grants, and `decide()` denies them by absence.
+   `high_risk_actions` mixes a grant vocabulary and a classification vocabulary in one namespace,
+   which is what made the distinction easy to miss.
 
 3. **Generated code is validated for syntax and then the analysis is discarded.**
    `execute_generate_code` (`tool_executors.py:144`) parses every generated Python file with
@@ -157,15 +172,57 @@ because an operator needs to run them alone — earn a target. On that rule R-GE
 are tests, R-GEA-3 is a code path in an existing tool, and no new `ci_required_target` is
 proposed by this spec at all.
 
+### D-6 · Whether an unexecuted park is a park (added in revision 2)
+
+**Thesis.** D-1 settled this: DEC-053 parks LangGraph, so nothing new is built on it. The
+orphan reviewers wait for NS-31.
+
+**Counter-Argument.** DEC-053 is a decision, not a state. `harness/shared/langgraph/` is still
+at its original path; `harness/shared/experimental/` contains only `autonomous_healing.py` and
+`lats_optimizer.py`. The only thing that moves it is Phase E, gated on NS-2 — a credential
+rotation requiring a human at a provider, open since at least 2026-09-05, and NEXT_STEPS says
+plainly that "DEC-053…056 are logged; they do not lift this gate". So `findings` is empty on
+every run and `test_langgraph_graph.py` keeps asserting the node set that pins it, for an
+indefinite period. "Don't invest in parked code" against an indefinitely deferred park means the
+defect ships indefinitely.
+
+**Rebuttal (third position).** Both positions argue about whether to *build the checker*, and
+neither notices they want different artifacts. D-1 rejects a fail-closed **CI gate** on parked
+code — a required check, a `CONTRACT.md` row, three protected-path attestations, an entry in a
+ten-item `ci_required_targets`. The counter wants the defect **visible**, which needs none of
+that. D-5's rebuttal already dissolved this: the choice is which enforcement surface, and a pure
+function over repository state belongs in the test suite. So the answer is neither "add a gate"
+nor "wait for the park" — it is a plain test, following `test_constant_triage.py`'s precedent,
+asserting the reviewers are edgeless *and that this is DEC-052's recorded state*. It fails when
+someone wires them in without amending DEC-052, and when someone deletes them silently. One test
+file, no target, no policy entry, no attestation. **Resolution: R-GEA-6 is split — 6 keeps the
+gate parked, 6b requires the test, and revision 1's blanket prohibition is withdrawn as the same
+conflation D-5 had already resolved.**
+
 ## Requirements
 
 - R-GEA-1: `check_traceability.py` MUST resolve its configuration and globs against an explicit
   workspace root rather than the process CWD, defaulting to the repository root, so that the
   requirement IDs it reads are the corpus under `docs/specs/` and not `harness/node/docs/specs/`.
-- R-GEA-2: A new module `harness/shared/authority_graph.py` MUST derive the authorization graph
-  — active role → canonical role → action → tool → filesystem effect — by calling
-  `agent_authority` and `policy_loader` at runtime, and MUST NOT read or write any persisted
-  graph artifact.
+- R-GEA-1b: The gate MUST distinguish **contract specs**, whose requirement IDs name shipped
+  behaviour and must carry both citations, from **program plans**, whose IDs name scheduled work
+  and cannot cite an implementation until it exists. The class MUST be declared per document
+  rather than inferred from the filename, and a document declaring neither MUST be treated as a
+  contract spec so the permissive class is never the default. Without this, re-scoping the globs
+  alone produces a gate that cannot go green while any planned work exists — measured at 98 of
+  251 current gaps arising from four program-plan documents — and a gate that cries wolf is
+  switched off.
+- R-GEA-2: A new module `harness/shared/authority_graph.py` MUST derive, without any persisted
+  artifact, the reachability of `policy_decision.decide`'s `human_approved` argument from
+  agent-controlled input: the graph's nodes are the call sites that construct a broker `context`,
+  and it MUST report any path on which a value not literal in the constructing function can
+  reach `context["human_approved"]`.
+- R-GEA-2b: The same module MUST model the two grant surfaces separately — `allowed_actions`
+  (tool exposure) and `EXECUTION_IDENTITY` (what the broker asks the PDP about) — because they
+  deliberately disagree: `planner` holds `spec_write` while executing as `orchestrator`, which
+  lacks it, and `verifier` holds `review_write` and `security_scan` while executing as
+  `test-eval`, which lacks both. A query that does not name which surface it means MUST raise
+  rather than pick one.
 - R-GEA-3: `execute_generate_code` MUST reject, before any bytes reach disk, generated Python in
   which any entry of `governance-policy.json` → `synthesis.prohibited_imports` appears as an
   imported name **or** as a resolved attribute reference, reusing the AST already parsed by
@@ -182,9 +239,18 @@ proposed by this spec at all.
   under `docs/reports/` before any code-property graph is built, and the decision to build one
   MUST compare that baseline against a threshold read from `governance-policy.json`.
 - R-GEA-6: Static topology verification of a `StateGraph` MUST NOT be wired into any CI target
-  while `DEC-053`'s park stands; if NS-31 supersedes DEC-053, the topology extractor MUST derive
-  nodes and edges from module source via `ast` rather than from a compiled graph object, so the
-  check runs on the 3.9 leg where `MANGO_CI_DESELECT_LANGGRAPH` is set.
+  or `ci_required_targets` entry while `DEC-053`'s park stands. It MUST NOT be omitted from the
+  ordinary test suite on that account: per D-5 the two are different enforcement surfaces, and
+  DEC-053's park is decided but unexecuted — `harness/shared/langgraph/` is still at its original
+  path and Phase E is blocked behind NS-2 — so the defect is live for an indefinite period.
+- R-GEA-6b: A test MUST assert that `peer_reviewer` and `security_reviewer` have no incoming or
+  outgoing edge **and** that this is `DEC-052`'s recorded state, so it fails both when the
+  reviewers are wired in without updating DEC-052 and when they are deleted silently. Its
+  enforcement surface is the ordinary pytest run, following `test_constant_triage.py`'s
+  precedent: no `make` target, no policy entry, no protected path.
+- R-GEA-6c: If NS-31 supersedes DEC-053, the topology extractor MUST derive nodes and edges from
+  module source via `ast` rather than from a compiled graph object, so the check runs on the 3.9
+  leg where `MANGO_CI_DESELECT_LANGGRAPH` is set and no `skipif` on an optional import is needed.
 - C-GEA-1: This change MUST NOT add a runtime dependency; every module it introduces imports
   only the standard library and existing first-party modules, so `make lock-check` recompiles
   unchanged.
@@ -204,20 +270,38 @@ proposed by this spec at all.
       least 380 requirement IDs, and the same invocation against a workspace containing no spec
       files exits non-zero with `no spec files matched` — verified by
       `pytest -k test_traceability_workspace_scope` · stage: `make validate` (R-GEA-1)
-- [ ] AC-GEA-1b: after step 2, `make validate` exits 0 with every discovered ID carrying both
+- [ ] AC-GEA-1b: after step 2, `make validate` exits 0 with every contract-spec ID carrying both
       citations, or with each remaining gap listed in a `DEC-` record that the gate reads as an
       accepted exemption; a gap that is neither cited nor recorded fails the gate — verified by
       `pytest -k test_traceability_gaps_are_cited_or_recorded` · stage: `make validate`
       (R-GEA-1, C-GEA-4)
-- [ ] AC-GEA-2: `authority_graph.reachable_actions("verifier")` excludes every member of
-      `agent-policy.json` → `high_risk_actions`, and a mutation that removes the
-      `human_approval_required_for` subtraction in `agent_authority.allowed_actions` makes the
-      test go red — verified by `pytest -k test_no_active_role_reaches_a_high_risk_action`
-      · stage: `make test-python` (R-GEA-2)
+- [ ] AC-GEA-1c: a document declaring no class is graded as a contract spec and its uncited IDs
+      fail the gate, while a document declaring `program-plan` has its IDs counted and reported
+      but not required to cite an implementation; a document declaring an unrecognised class
+      raises rather than defaulting to the permissive branch — verified by
+      `pytest -k test_spec_class_defaults_to_the_strict_branch` · stage: `make validate`
+      (R-GEA-1b)
+- [ ] AC-GEA-2: `authority_graph` reports zero agent-reachable paths to
+      `context["human_approved"]`, and a fixture in which `execute_run_command` forwards a
+      caller-supplied `context` instead of its literal dict makes the test go red with a witness
+      naming that call site — verified by
+      `pytest -k test_no_agent_input_reaches_the_approval_flag` · stage: `make test-python`
+      (R-GEA-2)
+- [ ] AC-GEA-2b: `reachable_actions("verifier")` excludes `external_write` and
+      `production_change`, and reverting the `human_approval_required_for` subtraction in
+      `agent_authority.allowed_actions` makes exactly that assertion go red; the same test
+      asserts that `destructive`, `permission_change`, and `secret_access` are absent from every
+      role's `allowed_actions`, so the criterion states which two of the five high-risk actions
+      it is non-vacuous for rather than passing on three that have no edge — verified by
+      `pytest -k test_high_risk_reachability_names_its_live_half` · stage: `make test-python`
+      (R-GEA-2b, R-GEA-4)
 - [ ] AC-GEA-3: `authority_graph` path enumeration from `nemotron-reasoner` to `write_file`
-      returns a witness path naming each intermediate role and action, and returns the empty
-      list for `planner`, whose canonical roles hold no `write` — verified by
-      `pytest -k test_write_paths_are_role_specific` · stage: `make test-python` (R-GEA-2)
+      returns a witness naming each intermediate role and action on the surface it was asked
+      about, returns the empty list for `planner`, and **raises** when the caller does not name
+      a surface — with `planner` → `spec_write` present on the tool-exposure surface and absent
+      on the execution-identity surface, which is the pair a single-surface query would answer
+      wrongly — verified by `pytest -k test_write_paths_name_their_surface`
+      · stage: `make test-python` (R-GEA-2b)
 - [ ] AC-GEA-4: `execute_generate_code` writes zero bytes, leaves any pre-existing file
       byte-for-byte unchanged, and returns a denial naming the offending symbol for each of the
       three shapes the policy key spans — `import subprocess`, `import os` followed by a call to
@@ -242,26 +326,40 @@ proposed by this spec at all.
       graph exists in the tree until that file does — verified by
       `pytest -k test_code_graph_is_gated_on_a_recorded_baseline` · stage: `make test-python`
       (R-GEA-5)
-- [ ] AC-GEA-9: No `StateGraph` topology checker is reachable from `make ci` or listed in
+- [ ] AC-GEA-9: No `StateGraph` topology **target** is reachable from `make ci` or listed in
       `governance-policy.json` → `ci_required_targets` while `docs/decisions/DEC-053.md` carries
-      `status: accepted`; a test asserts the pairing and goes red if a topology target is added
-      without superseding DEC-053 — verified by
+      `status: accepted`; the test goes red if such a target is added without superseding
+      DEC-053, and does not fail merely because a topology *test* exists — verified by
       `pytest -k test_topology_gate_is_parked_with_langgraph` · stage: `make test-python`
       (R-GEA-6)
+- [ ] AC-GEA-9b: A test asserts `peer_reviewer` and `security_reviewer` are edgeless in
+      `graph.py` and that `DEC-052` records that state; wiring either reviewer in without
+      amending DEC-052 fails it, and deleting either node fails it — verified by
+      `pytest -k test_orphan_reviewers_match_the_recorded_decision`
+      · stage: `make test-python` (R-GEA-6b)
 - [ ] AC-GEA-10: An exemption entry whose subject no longer requires it is rejected: a test
       constructs an exemption for a node that is reachable and asserts the checker exits
       non-zero with a `stale exemption` message — verified by
       `pytest -k test_stale_exemption_fails_closed` · stage: `make test-python` (C-GEA-4)
+- [ ] AC-GEA-11: If DEC-053 is superseded, the topology extractor reads `graph.py` as source and
+      returns the same node and edge sets under `MANGO_CI_DESELECT_LANGGRAPH=1` as without it,
+      and raises rather than reporting an empty topology when its `builder` binding is renamed —
+      verified by `pytest -k test_topology_extraction_is_source_based`
+      · stage: `make test-python` (R-GEA-6c, R-GEA-4)
 
 ## Steps
 
 Ordered so that each step's inputs exist before it runs, and so that the defect blocking every
 later requirement ID is closed first.
 
-1. **Fix the traceability scope.** Add `--workspace` to `check_traceability.py`, defaulting to
-   the repository root; keep the CWD-relative path working for the per-stack shim during the
-   `DEC-056` shim window — consumes `harness/node/.governance/traceability.json`; produces a
-   root `.governance/traceability.json` and a passing gate over 386 IDs.
+1. **Fix the traceability scope, and classify the corpus in the same change.** Add `--workspace`
+   to `check_traceability.py`, defaulting to the repository root, and a per-document class
+   declaration (contract spec vs program plan) defaulting to the strict branch; keep the
+   CWD-relative path working for the per-stack shim during the `DEC-056` shim window — consumes
+   `harness/node/.governance/traceability.json`; produces a root `.governance/traceability.json`,
+   a class declaration in each spec, and a gate that reads the real corpus. *The scope fix and
+   the classification are one step because shipping the first alone produces a gate that cannot
+   go green (S-3).*
 2. **Reconcile the newly visible corpus.** Fixing step 1 exposes 380 previously unchecked IDs.
    Running the gate's own logic against root-scoped globs measures **251 of 392 IDs missing an
    implementation citation, a test citation, or both** — a figure sensitive to the chosen
@@ -270,12 +368,18 @@ later requirement ID is closed first.
    gaps with reasons. *This is the largest step in the plan, and it is sequenced second so its
    size is measured before anything depends on it. Step 1 without step 2 turns a silently
    passing gate into a loudly failing one, which is why they are one deliverable and not two.*
-3. **Derive the authorization graph.** Add `harness/shared/authority_graph.py`: nodes are roles,
-   actions, and tools; edges come from `ACTIVE_TO_CANONICAL`, `agent-policy.json`, and
-   `TOOL_REQUIRED_ACTION`; expose `reachable_actions(role)` and `paths_to(role, tool)` returning
-   witness paths — consumes `agent_authority`, `policy_loader`; produces the graph and its tests.
-4. **Assert the safety property.** Add the reachability tests and the mutation proof that each
-   goes red when the corresponding governance logic is reverted — consumes step 3.
+3. **Derive the authorization graph, on both surfaces.** Add `harness/shared/authority_graph.py`:
+   role/action/tool nodes with edges from `ACTIVE_TO_CANONICAL`, `agent-policy.json`, and
+   `TOOL_REQUIRED_ACTION`, modelled twice — tool exposure and execution identity — with
+   `reachable_actions(role, surface)` and `paths_to(role, tool, surface)` returning witnesses and
+   raising on an unnamed surface — consumes `agent_authority`, `policy_loader`; produces the
+   graph and its tests.
+4. **Assert the approval-flag property.** Add the `human_approved` reachability check over the
+   call sites that construct a broker `context`, plus the mutation proof that forwarding a
+   caller-supplied context from `execute_run_command` turns the test red with a witness naming
+   that site — consumes step 3, `broker.py`, `tool_executors.py`. *This, not the grant graph, is
+   the unasserted property: `validate_agent_policy.py:48-50` already decides the grant half
+   (S-1, S-2).*
 5. **Escalate the write door.** Extend `execute_generate_code` to reuse the parsed AST for a
    prohibited-import check, sourced from `synthesis.prohibited_imports` — consumes
    `tool_executors._validate_code_syntax`; produces the pre-write denial and its regression test.
@@ -283,8 +387,12 @@ later requirement ID is closed first.
    produces `docs/reports/` baseline; gates step 7.
 7. **Decide the code graph.** Compare the baseline against the policy threshold; build only on a
    pass, and record the decision either way — consumes step 6.
-8. **Park the topology checker.** Add the test that pins R-GEA-6's parking to `DEC-053`'s status,
-   so a future topology gate cannot land without superseding it — consumes `docs/decisions/DEC-053.md`.
+8. **Pin the orphan reviewers and park the topology *gate*.** Add the test asserting
+   `peer_reviewer` and `security_reviewer` are edgeless and that DEC-052 records it, and the test
+   pinning the absence of a topology *target* to DEC-053's status — consumes
+   `docs/decisions/DEC-052.md`, `docs/decisions/DEC-053.md`, `harness/shared/langgraph/graph.py`
+   (read only). *Step 8 can run first: it depends on nothing else in this plan and closes the
+   only defect here that is live in the tree today.*
 
 ## Files touched
 
@@ -296,6 +404,8 @@ out.
 - `docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`
 - `harness/shared/authority_graph.py` — new, step 3
 - `harness/shared/tests/test_authority_graph.py` — new, step 4
+- `harness/shared/tests/test_graph_topology_parked.py` — new, step 8 (reads `graph.py`, edits nothing)
+- `docs/specs/*.md` — a class declaration line per document, step 1
 - `harness/shared/governance/check_traceability.py` — **protected** (`harness/shared/governance/**`), step 1
 - `harness/shared/tool_executors.py` — **protected**, step 5
 - `harness/shared/governance-policy.json` — **protected**, step 7 only, to add the code-graph threshold
