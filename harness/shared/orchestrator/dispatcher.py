@@ -19,6 +19,7 @@ from harness.shared.tool_dispatch import (
 from harness.shared.tool_executors import (
     authorize_write,
     execute_apply_patch,
+    execute_generate_code,
     execute_read_file,
     execute_run_command,
     execute_write_file,
@@ -62,6 +63,13 @@ class ToolDispatcher:
 
         self.tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
             "write_file": lambda args: self._execute_write_file(args.get("filepath") or "", args.get("content") or ""),
+            "generate_code": lambda args: self._execute_generate_code(
+                args.get("filepath") or "",
+                args.get("code") or "",
+                language=args.get("language"),
+                validate_syntax=args.get("validate_syntax", True),
+                overwrite=args.get("overwrite", True),
+            ),
             "read_file": lambda args: self._execute_read_file(
                 args.get("filepath") or "", args.get("start_line"), args.get("end_line")
             ),
@@ -102,6 +110,27 @@ class ToolDispatcher:
             logger.warning("Refused write for role %s: %s", self.active_role, denial)
             return denied(f"Denied: {denial}")
         return execute_write_file(self.workspace_dir, filepath, content)
+
+    def _execute_generate_code(
+        self,
+        filepath: str,
+        code: str,
+        language: str | None = None,
+        validate_syntax: bool = True,
+        overwrite: bool = True,
+    ) -> str:
+        denial = authorize_write(self.broker, self.active_role, filepath)
+        if denial is not None:
+            logger.warning("Refused generate_code for role %s: %s", self.active_role, denial)
+            return denied(f"Denied: {denial}")
+        return execute_generate_code(
+            self.workspace_dir,
+            filepath,
+            code,
+            language=language,
+            validate_syntax=validate_syntax,
+            overwrite=overwrite,
+        )
 
     def _execute_read_file(self, filepath: str, start_line: int | None = None, end_line: int | None = None) -> str:
         return execute_read_file(self.workspace_dir, filepath, start_line, end_line)

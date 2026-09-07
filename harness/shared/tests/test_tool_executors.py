@@ -339,6 +339,7 @@ class TestOneWriteAuthorizationPath:
         assert "Success" in d._execute_write_file("notes.md", "hello")
         assert (mock_workspace / "notes.md").read_text(encoding="utf-8") == "hello"
         assert "Success" in d._execute_apply_patch("notes.md", "hello", "goodbye")
+        assert "Success" in d._execute_generate_code("notes_gen.py", "x = 42\n")
 
     #: What the authority model says about `write`, per role, asserted rather
     #: than derived. Symmetry alone (`mcp_denied == loop_denied`) is satisfied by
@@ -362,15 +363,26 @@ class TestOneWriteAuthorizationPath:
             broker = ExecutionBroker()
             handlers = _build_tool_handlers(mock_workspace, broker, role)
             mcp_denied = handlers["write_file"]({"filepath": "probe.md", "content": "x"}).startswith("Denied:")
+            mcp_gen_denied = handlers["generate_code"]({"filepath": "probe_gen.py", "code": "y = 1\n"}).startswith(
+                "Denied:"
+            )
 
             d = ToolDispatcher(workspace_dir=mock_workspace, broker=ExecutionBroker())
             d.set_active_role(role)
             loop_denied = d._execute_write_file("probe.md", "x").startswith("Denied:")
+            loop_gen_denied = d._execute_generate_code("probe_gen.py", "y = 1\n").startswith("Denied:")
 
             assert mcp_denied == loop_denied, f"the two transports disagree about whether {role} may write"
+            assert mcp_gen_denied == loop_gen_denied, (
+                f"the two transports disagree about whether {role} may generate_code"
+            )
             assert mcp_denied is expected_denied, (
                 f"both transports agree about {role}, but on the wrong answer: "
                 f"denied={mcp_denied}, expected denied={expected_denied}"
+            )
+            assert mcp_gen_denied is expected_denied, (
+                f"both transports agree about {role} for generate_code, but on the wrong answer: "
+                f"denied={mcp_gen_denied}, expected denied={expected_denied}"
             )
 
     def test_the_expected_verdicts_are_the_authority_model_s(self) -> None:

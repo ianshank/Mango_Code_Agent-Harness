@@ -64,3 +64,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-056](DEC-056.md) | 2026-09-05 | accepted | Per-stack governance mirroring collapses to a root `.governance/` plus `--workspace` on shared gates |
 | [DEC-057](DEC-057.md) | 2026-09-06 | accepted | `hypothesis_register` gains append-only revision; supersession is structural, not a status; the sequential-thinking MCP server is not adopted |
 | [DEC-058](DEC-058.md) | 2026-09-06 | accepted | Open hypotheses are surfaced to the reasoner prompt, bounded by two `agent_memory` keys; `reasoning` is not rendered; C-HR-2 narrows to C-HS-1 |
+| [DEC-059](DEC-059.md) | 2026-09-07 | accepted | Agent memory directory denied to raw writes; dedicated syntax-validating code generation writing tool added |

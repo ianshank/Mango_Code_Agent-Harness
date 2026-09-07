@@ -55,6 +55,13 @@ class TestDerivedExposure:
         new name."""
         assert "apply_patch" not in _names("verifier")
 
+    def test_the_verifier_cannot_generate_code(self) -> None:
+        """``generate_code`` is a write tool; verifier must not hold it."""
+        assert "generate_code" not in _names("verifier")
+
+    def test_the_reasoner_holds_generate_code(self) -> None:
+        assert "generate_code" in _names("nemotron-reasoner")
+
     def test_the_verifier_can_read_the_work_it_judges(self) -> None:
         """Reading is the verifier's whole job; only editing is denied."""
         assert "read_file" in _names("verifier")
@@ -65,6 +72,7 @@ class TestDerivedExposure:
     def test_the_planner_may_read_but_not_patch(self) -> None:
         assert "read_file" in _names("planner")
         assert "apply_patch" not in _names("planner")
+        assert "generate_code" not in _names("planner")
 
     def test_an_unknown_role_receives_nothing(self) -> None:
         """Defaulting to the full schema on an unrecognised name is how the

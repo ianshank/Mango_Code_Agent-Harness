@@ -10,6 +10,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent memory write-denial (NS-37) & code generation writing tool (NS-38, DEC-059)
+
+- **Agent Memory Integrity**: `write_policy.write_denial_reason` now denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. The denial directs callers to the sanctioned meta-tools (`hypothesis_register`, `knowledge_gap_log`), closing memory poisoning (OWASP ASI06 / MAST FM-2.6) while keeping memory stores excluded from `protected_paths` to preserve digest baseline validity.
+- **Dedicated Code Generation Tool**: Added `generate_code` to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`). Supports pre-write syntax validation (`ast.parse` for Python, `json.loads` for JSON), workspace confinement, write policy enforcement, overwrite guards, and structured logging. Tested via comprehensive unit and regression suites. Specs `docs/specs/agent-memory-integrity.md` and `docs/specs/code-generation-tool.md`. Record DEC-059.
+
 ### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
 
 Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing

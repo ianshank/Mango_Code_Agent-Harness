@@ -710,6 +710,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-059",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "Agent memory directory denied to raw writes; dedicated syntax-validating code generation writing tool added",
+      "path": "docs/decisions/DEC-059.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }
