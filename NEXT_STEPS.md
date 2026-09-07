@@ -2,7 +2,7 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37
+**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -234,37 +234,6 @@ stale SHA in its attestation table fails `build-full`.
 
 **Depends on.** NS-1 (signatures / ruleset live).
 
-### NS-37 · Close the raw-write bypass of `hypothesis_register` / `knowledge_gap_log` *(spec exists)*
-
-**Why now.** `write_policy.write_denial_reason` does not deny
-`.mango/memory/**`: `nemotron-reasoner` holds both the validated meta-tools
-and `write_file`/`apply_patch`, and a raw write to
-`.mango/memory/hypotheses.json` reaches disk with none of
-`hypothesis_register`'s status/confidence validation run over it, then
-surfaces into a future reasoner prompt via `format_hypotheses_for_reasoner`
-(DEC-058) with no integrity check in between. Reproduced directly:
-`write_denial_reason('.mango/memory/hypotheses.json')` returns `None` on
-`main` @ `6ce45d1`. Not previously tracked by the 2026 audit, the remediation
-plan, or this file (`git grep` for "memory poison", "ASI06", "memory.*integrity"
-across `docs/` and this file returns nothing before this entry) — the same bug
-class the harness already fixed once for the verdict-forgery surface (audit
-B4 / DEC-049), unfixed here for the memory surface.
-
-**Evidence.** `docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`;
-`harness/shared/write_policy.py`; `harness/shared/meta_tools.py`;
-`harness/shared/agent_authority.py:34-38,60-78`.
-
-**Done when.** `docs/specs/agent-memory-integrity.md`'s AC-AMI-1…AC-AMI-7 are
-ticked: raw writes to the resolved memory directory are denied across
-`write_file`, `apply_patch` and a `run_command` redirect, under both memory
-resolution modes, proven against a well-formed forged hypothesis (not only a
-malformed one), while `hypothesis_register`/`knowledge_gap_log` and the
-existing hypothesis/gap test suites are unaffected, and `.mango/memory/**` is
-explicitly kept out of `protected_paths` (it would otherwise make every
-ordinary meta-tool call register as `enforcement_tampered`).
-
-**Depends on.** Nothing.
-
 ### NS-29 · The program plans
 
 Pointer only: status is the remediation plan's boxes, read there, not here.
@@ -303,6 +272,13 @@ gated on R-SR-2).
 ---
 
 ## 6. Delivered, and removed from the open list
+
+**Closed 2026-09-07 (DEC-059 / agent-memory integrity NS-37 & code generation writing tool NS-38):**
+
+| Was | Now |
+|---|---|
+| **NS-37 · Close the raw-write bypass of `hypothesis_register` / `knowledge_gap_log`** | **Delivered on PR #116.** `write_policy.write_denial_reason` denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. Regression suite `test_memory_integrity_regression.py` asserts well-formed forgeries are refused and store is byte-for-byte unchanged. Memory store remains excluded from `protected_paths` to preserve digest baseline validity. Decision DEC-059. |
+| **NS-38 · Dedicated code generation writing tool with syntax validation** | **Delivered on PR #116.** `generate_code` writing tool added to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`), implemented in `tool_executors.py` and `dispatcher.py`. Provides pre-write AST parsing for Python and JSON decoding for JSON, workspace confinement, write policy checks, overwrite guard, and structured logging. Tested via `test_code_generation_tool.py`. Spec `docs/specs/code-generation-tool.md`. Decision DEC-059. |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 

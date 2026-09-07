@@ -108,12 +108,13 @@ never calls `write_denial_reason` and is unaffected.
   (`write_policy.py:398-406`). `meta_tools.append_locked` MUST NOT call
   `write_denial_reason` and MUST remain the only writer that reaches the store's bytes,
   unaffected by this change.
-- R-AMI-2: The denial MUST apply uniformly across `write_file`, `apply_patch`, and any
+- R-AMI-2: The denial MUST apply uniformly across all writing tools (`write_file`,
+  `apply_patch`, and code generation writing tool `generate_code`) and any
   `run_command` whose resolved write targets fall inside the memory directory
-  (`command_write_targets.write_targets`), proven by one test per tool rather than assumed
-  from R-AMI-1 alone, since the three tools reach `write_denial_reason` through three
-  different call sites (`tool_executors.execute_write_file`,
-  `tool_executors.execute_apply_patch`, `governance/broker.py:254`).
+  (`command_write_targets.write_targets`), proven by tests across the tool set rather than assumed
+  from R-AMI-1 alone, since the tools reach `write_denial_reason` through their respective
+  call sites (`tool_executors.execute_write_file`, `tool_executors.execute_apply_patch`,
+  `tool_executors.execute_generate_code`, `governance/broker.py:254`).
 - R-AMI-3: The denial MUST hold for both memory-directory resolution modes
   `meta_tools.resolve_memory_dir` supports: the workspace-scoped path
   (`<workspace>/.mango/memory/`) and the legacy install-root path, so an agent cannot route
@@ -149,7 +150,7 @@ never calls `write_denial_reason` and is unaffected.
 
 ## Acceptance criteria
 
-- [ ] AC-AMI-1: `write_denial_reason('.mango/memory/hypotheses.json')` and
+- [x] AC-AMI-1: `write_denial_reason('.mango/memory/hypotheses.json')` and
       `write_denial_reason('.mango/memory/gaps.json')` each return a non-`None` string naming
       the meta-tools as the sanctioned writer, and a path outside the memory directory
       (e.g. `.mango/memory-not-really/x.json`, a sibling with a similar prefix) is unaffected;
@@ -157,36 +158,36 @@ never calls `write_denial_reason` and is unaffected.
       added by this change (no new dependency, no new module) —
       `pytest -k "test_the_memory_directory_is_denied_to_raw_writes or test_a_lookalike_path_outside_the_memory_directory_is_not_denied"`
       · stage: `make coverage` (R-AMI-1, R-AMI-5)
-- [ ] AC-AMI-2: dispatching `write_file` and `apply_patch` at `.mango/memory/hypotheses.json`
+- [x] AC-AMI-2: dispatching `write_file`, `apply_patch`, and `generate_code` at `.mango/memory/hypotheses.json`
       each return the denial message and leave the file's prior bytes unchanged; a
       `run_command` whose shell redirects into that path (e.g. `echo x > .mango/memory/hypotheses.json`)
       is denied by the broker before the subprocess runs —
-      `pytest -k "test_write_file_is_denied_over_the_memory_store or test_apply_patch_is_denied_over_the_memory_store or test_a_shell_redirect_into_the_memory_store_is_denied"`
+      `pytest -k "test_write_file_is_denied_over_the_memory_store or test_apply_patch_is_denied_over_the_memory_store or test_generate_code_denied_on_governed_paths or test_a_shell_redirect_into_the_memory_store_is_denied"`
       · stage: `make test-python` (R-AMI-2)
-- [ ] AC-AMI-3: with the harness resolved to workspace-scoped memory and, separately, to the
+- [x] AC-AMI-3: with the harness resolved to workspace-scoped memory and, separately, to the
       legacy install-root path (`meta_tools.resolve_memory_dir` monkeypatched each way), a
       `write_file` at the resolved hypotheses path is denied in both configurations —
       `pytest -k test_the_denial_holds_under_both_memory_resolution_modes`
       · stage: `make coverage` (R-AMI-3)
-- [ ] AC-AMI-4: seed a store with one genuine `confirmed` entry via `hypothesis_register`;
+- [x] AC-AMI-4: seed a store with one genuine `confirmed` entry via `hypothesis_register`;
       attempt `write_file` with a second, well-formed entry (valid uuid4, status
       `confirmed`, confidence `0.99`, a false claim) appended to the same file; assert the
       write is denied, the store on disk still contains exactly the one genuine entry
       (byte-for-byte), and `format_hypotheses_for_reasoner` over that store renders only the
       genuine entry — `pytest -k test_a_well_formed_forged_hypothesis_is_refused_and_never_surfaced`
       · stage: `make test-regression` (R-AMI-4)
-- [ ] AC-AMI-5: `hypothesis_register` and `knowledge_gap_log`, called normally through the
+- [x] AC-AMI-5: `hypothesis_register` and `knowledge_gap_log`, called normally through the
       dispatcher against a fresh or existing store, succeed exactly as before this change
       (no new denial, no new argument, no changed return shape) — the full existing
       `test_hypothesis_revision.py` and `test_hypothesis_surfacing.py` suites pass unmodified
       · stage: `make coverage` (C-AMI-2)
-- [ ] AC-AMI-6: `git grep -n "\.mango/memory" harness/shared/governance-policy.json` returns
+- [x] AC-AMI-6: `git grep -n "\.mango/memory" harness/shared/governance-policy.json` returns
       nothing, and a test asserts `enforcement_digests()` over a workspace that has had
       `hypothesis_register` called twice during a simulated run reports the same digest set
       before and after (memory is invisible to the tamper baseline by construction) —
       `pytest -k test_the_memory_store_is_not_part_of_the_enforcement_digest_baseline`
       · stage: `make coverage` (C-AMI-1)
-- [ ] AC-AMI-7: a store written by a human operator directly (bypassing both the meta-tool
+- [x] AC-AMI-7: a store written by a human operator directly (bypassing both the meta-tool
       and the agent's tool surface entirely, as `make memory-show`'s own workflow assumes is
       possible) with a malformed entry still renders safely via the existing
       `_is_open` / `_render_confidence` defensive paths — the pre-existing tests for those

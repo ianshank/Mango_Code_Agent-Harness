@@ -295,11 +295,9 @@ and live `gh pr checks 115` output): none found — the nine checks declared in
 
 ## 6. Disposition
 
-This report is peer-review output only; no code changes are proposed or made here. The
-remediation is specified in `docs/specs/agent-memory-integrity.md`, written to this
-repository's existing spec conventions (Problem statement → Requirements → Acceptance criteria
-→ Steps → Files touched → Invariants touched → Validation matrix → Backward compatibility →
-Open questions), ready for `openspec-peer-review` and then implementation as its own PR. It is
-additive to, not a replacement for, `docs/specs/2026-standards-remediation-plan.md`: that plan's
-Phase B already closed the parallel defect on the verdict-forgery surface (B4); this spec closes
-the analogous gap on the memory surface, which that plan's scope never named.
+This report's finding (agent-memory raw-write bypass) is remediated by DEC-059 and
+`docs/specs/agent-memory-integrity.md` (all AC-AMI-1..AC-AMI-7 criteria verified and ticked),
+in conjunction with `docs/specs/code-generation-tool.md` (AC-CGT-1..AC-CGT-7 verified and ticked).
+Direct raw writes to `.mango/memory/**` are denied across `write_file`, `apply_patch`,
+`generate_code`, and shell redirects (`run_command`), closing the memory poisoning vulnerability
+(OWASP ASI06 / MAST FM-2.6) while preserving full meta-tool functionality and digest integrity.
