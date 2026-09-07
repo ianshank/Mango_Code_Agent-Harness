@@ -1,6 +1,7 @@
 """Unit and integration tests for the dedicated code generation writing tool (generate_code).
 
-Spec: docs/specs/code-generation-tool.md (AC-CGT-1..AC-CGT-7).
+Spec: docs/specs/code-generation-tool.md (AC-CGT-1..AC-CGT-7) and
+docs/specs/graph-engineering-adoption.md (AC-GEA-4, R-GEA-3).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from harness.shared.tool_executors import (
     authorize_write,
     execute_generate_code,
 )
+from harness.shared.tool_result_format import DENIED_POLICY, tool_outcome
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 pytestmark = pytest.mark.governance
@@ -151,3 +153,71 @@ class TestCodeGenerationTool:
         )
         assert "Success: Generated" in res
         assert (tmp_path / "generated_module.py").is_file()
+
+
+class TestProhibitedSymbolsNeverReachDisk:
+    """AC-GEA-4: the write door refuses `synthesis.prohibited_imports` before writing.
+
+    The escalation R-GEA-3 asks for: `execute_generate_code` already parsed the
+    module to answer "does it compile", and the same tree answers "does it name
+    something the policy prohibits". Post-hoc analysis would mean the defect is
+    already on disk and a repair cycle is already owed.
+
+    Each shape is checked against a *pre-existing* file, because "returns a
+    denial" and "changed nothing" are two properties and only the second one is
+    the reason the check runs before the write rather than after it.
+    """
+
+    #: The three shapes the policy key spans, and the symbol each denial must name.
+    SHAPES = (
+        ("import subprocess\nsubprocess.run(['ls'])\n", "subprocess"),
+        ("import os\nos.system('rm -rf /')\n", "os.system"),
+        ("mod = __import__('os')\n", "__import__"),
+    )
+
+    def test_generate_code_denies_prohibited_import(self, tmp_path: Path) -> None:
+        """Zero bytes written, the existing file untouched, the symbol named."""
+        sentinel = "ORIGINAL = 1\n"
+        for index, (code, symbol) in enumerate(self.SHAPES):
+            existing = tmp_path / f"existing_{index}.py"
+            existing.write_text(sentinel, encoding="utf-8")
+            fresh = f"fresh_{index}.py"
+
+            over_existing = execute_generate_code(tmp_path, existing.name, code)
+            over_nothing = execute_generate_code(tmp_path, fresh, code)
+
+            for result in (over_existing, over_nothing):
+                assert symbol in result, f"{symbol} is not named in: {result}"
+                assert "prohibited" in result
+                assert tool_outcome(result) == DENIED_POLICY
+            assert existing.read_bytes() == sentinel.encode("utf-8")
+            assert not (tmp_path / fresh).exists()
+
+        # The other half of the criterion: ordinary code still writes, so the
+        # denial is a narrowing rather than a closed door.
+        allowed = "from pathlib import Path\n\n\ndef here() -> Path:\n    return Path('.')\n"
+        assert "Success: Generated" in execute_generate_code(tmp_path, "ok.py", allowed)
+        assert (tmp_path / "ok.py").read_text(encoding="utf-8") == allowed
+
+    def test_aliased_and_dotted_forms_are_denied(self, tmp_path: Path) -> None:
+        """A rename or a submodule must not be the way past the check."""
+        aliased = execute_generate_code(tmp_path, "aliased.py", "import os as o\no.system('x')\n")
+        assert "os.system as o.system" in aliased
+        assert not (tmp_path / "aliased.py").exists()
+
+        dotted = execute_generate_code(tmp_path, "dotted.py", "import importlib.util\n")
+        assert "importlib" in dotted
+        assert not (tmp_path / "dotted.py").exists()
+
+    def test_non_python_content_is_unaffected(self, tmp_path: Path) -> None:
+        """The check reads a Python parse tree; JSON and Markdown never produce one."""
+        assert "Success: Generated" in execute_generate_code(tmp_path, "d.json", '{"cmd": "os.system"}')
+        assert "Success: Generated" in execute_generate_code(tmp_path, "n.md", "Never call `subprocess.run`.\n")
+        assert (tmp_path / "d.json").is_file()
+        assert (tmp_path / "n.md").is_file()
+
+    def test_a_prohibited_name_in_a_docstring_is_prose(self, tmp_path: Path) -> None:
+        """Denying a string constant would deny this repository's own documentation."""
+        code = '"""Never call os.system or import subprocess here."""\n\nVALUE = 1\n'
+        assert "Success: Generated" in execute_generate_code(tmp_path, "doc.py", code)
+        assert (tmp_path / "doc.py").read_text(encoding="utf-8") == code

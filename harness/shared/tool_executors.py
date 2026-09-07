@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from harness.shared.agent_authority import execution_identity
+from harness.shared.code_safety import prohibited_symbol_denial
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.read_policy import read_denial_reason
@@ -117,29 +119,32 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         return failed(f"Error writing file {filepath}: {str(e)}")
 
 
-def _validate_code_syntax(filepath: str, code: str, language: str) -> str | None:
+def _validate_code_syntax(filepath: str, code: str, language: str) -> tuple[str | None, ast.Module | None]:
     """Validate syntax for known languages before writing to disk (R-CGT-4).
 
-    Returns an error message if invalid, or None if valid or unsupported.
+    Returns ``(error, tree)``: an error message if invalid, else None; and the
+    parsed module for valid Python, else None. The tree is handed back instead
+    of discarded because the caller has a second question for it -- the parse
+    that answers "does this compile" also answers "does this name a prohibited
+    symbol", and a second ``ast.parse`` would ask the same question twice with
+    two chances to answer it differently (R-GEA-3).
     """
     lang = language.lower()
     if lang == "python":
-        import ast
-
         try:
-            ast.parse(code, filename=filepath)
+            return None, ast.parse(code, filename=filepath)
         except SyntaxError as e:
             lineno = e.lineno or 1
             offset = e.offset or 0
-            return f"SyntaxError in generated code for {filepath} (line {lineno}, offset {offset}): {e.msg}"
+            return f"SyntaxError in generated code for {filepath} (line {lineno}, offset {offset}): {e.msg}", None
     elif lang == "json":
         import json
 
         try:
             json.loads(code)
         except json.JSONDecodeError as e:
-            return f"JSONDecodeError in generated code for {filepath} (line {e.lineno}, col {e.colno}): {e.msg}"
-    return None
+            return f"JSONDecodeError in generated code for {filepath} (line {e.lineno}, col {e.colno}): {e.msg}", None
+    return None, None
 
 
 def execute_generate_code(
@@ -157,8 +162,10 @@ def execute_generate_code(
     2. Write policy & agent memory integrity (write_denial_reason);
     3. Overwrite guard (when overwrite=False and file exists);
     4. Syntax validation (AST parse for Python, JSON decode for JSON) when validate_syntax=True;
-    5. Length bound check against DEFAULT_MAX_OUTPUT_BYTES;
-    6. Atomic write preserving newlines.
+    5. Prohibited-symbol check over that same parse tree (R-GEA-3), so code naming
+       `synthesis.prohibited_imports` is refused before any byte reaches disk;
+    6. Length bound check against DEFAULT_MAX_OUTPUT_BYTES;
+    7. Atomic write preserving newlines.
     """
     workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
     if denial is not None:
@@ -191,10 +198,18 @@ def execute_generate_code(
         inferred_language = ext_to_lang.get(ext, "")
 
     if validate_syntax and inferred_language:
-        syntax_err = _validate_code_syntax(filepath, code, inferred_language)
+        syntax_err, tree = _validate_code_syntax(filepath, code, inferred_language)
         if syntax_err is not None:
             logger.warning("Syntax validation failed for %s: %s", filepath, syntax_err)
             return failed(syntax_err)
+        # The tree that just answered "does it parse" also answers "does it name
+        # something `synthesis.prohibited_imports` forbids", and asking it here is
+        # what keeps that defect off disk rather than in a repair cycle (R-GEA-3).
+        # `active_policy_path` so both policy reads in this function name one file.
+        prohibited = None if tree is None else prohibited_symbol_denial(tree, policy_path=active_policy_path())
+        if prohibited is not None:
+            logger.warning("Denied generate_code naming a prohibited symbol: %s (%s)", filepath, prohibited)
+            return denied(f"Error generating code for {filepath}: {prohibited}")
 
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
