@@ -26,10 +26,14 @@ UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 #: regression module (not merely mentioned in a comment/string) and must not
 #: be defined anywhere under the unit suite.
 REQUIRED_REGRESSION_MODULES = {
-    "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
-    "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
     "test_context_window_budget_regression.py": "test_tool_group_survival_under_context_budget",
+    "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
+    "test_gaps_memory_integrity.py": "test_gaps_json_has_no_stub_entries",
     "test_hypothesis_surfacing_regression.py": "test_eviction_cannot_rescue_an_oversized_hypothesis_block",
+    "test_process_backend_isolation_regression.py": "test_recording_backend_with_probe_override_is_always_available",
+    "test_scan_findings_windows_waiver.py": "test_scan_findings_waiver_exists",
+    "test_scripts_hook_shims.py": "test_hook_shim_exists",
+    "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
 }
 
 

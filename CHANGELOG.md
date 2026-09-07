@@ -1752,14 +1752,23 @@ Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
 - `.mango/workflows/` directory for workflow and orchestration agent definitions
   (`narrow-critic.md`, `sdlc-orchestrator.md`) that are not execution loop roles.
 - Regression tests: `test_scripts_hook_shims.py` (AQA-001),
-  `test_process_backend_isolation_regression.py` (AQA-006),
-  `test_gaps_memory_integrity.py` (AQA-004).
+  `test_scan_findings_windows_waiver.py` (AQA-002),
+  `test_gaps_memory_integrity.py` (AQA-004),
+  `test_process_backend_isolation_regression.py` (AQA-006).
 
 ### Fixed
 
 - `RecordingBackend._probe()` override added to prevent real `bash` invocation
   on Windows dev machines, fixing 17 flaky failures under `pytest-xdist`
   parallel execution (RCA-7).
+- Windows console charmap encoding fix (`_safe_str`) in `test_mango_mas_live.py`
+  to cleanly escape Unicode symbols (e.g. `\u2192` `→`) and prevent
+  `UnicodeEncodeError` on `cp1252` consoles.
+- Skip governance attribution: wired `(DEC-026)` into `pytest.skip` and
+  `skipTest` calls across live Nemotron NIM test suites, enforcing zero
+  unapproved skips under `verify_zero_skips.py`.
+- Memory integrity (DEC-064): pruned 199 stub records from `.mango/memory/gaps.json`
+  that caused planner prompt bloat, retaining 24 substantive entries.
 - UTF-16 null-byte corruption in `.gitignore` and `.dockerignore` removed
   (origin/main merge encoding artefact).
 - Version mirrors (`Makefile`, `harness/node/package.json`, `CHANGELOG.md`)

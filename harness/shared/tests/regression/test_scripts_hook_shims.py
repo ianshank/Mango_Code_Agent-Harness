@@ -20,11 +20,11 @@ GUARD_SHIM = SCRIPTS_DIR / "guard-forbidden-paths.sh"
 
 # Hard-coded path patterns that are forbidden in the shims
 _HARDCODED_PATTERNS = [
-    re.compile(r"[A-Za-z]:\\"),              # Windows absolute: C:\...
-    re.compile(r"/home/[^${}]"),             # bare /home/username
-    re.compile(r"/Users/[^${}]"),            # bare /Users/username
-    re.compile(r"/root/[^${}]"),             # bare /root/...
-    re.compile(r"E:\\\\Coding_Projects"),    # literal project path
+    re.compile(r"[A-Za-z]:\\"),  # Windows absolute: C:\...
+    re.compile(r"/home/[^${}]"),  # bare /home/username
+    re.compile(r"/Users/[^${}]"),  # bare /Users/username
+    re.compile(r"/root/[^${}]"),  # bare /root/...
+    re.compile(r"E:\\\\Coding_Projects"),  # literal project path
     re.compile(r"harness_TEST", re.IGNORECASE),  # literal repo name
 ]
 
@@ -61,7 +61,7 @@ def test_hook_shim_has_no_hardcoded_paths(shim: Path) -> None:
         match = pattern.search(content)
         assert match is None, (
             f"{shim.name} contains a hard-coded path matching {pattern.pattern!r}: "
-            f"...{content[max(0, match.start()-20):match.end()+20]}..."
+            f"...{content[max(0, match.start() - 20) : match.end() + 20]}..."
         )
 
 
@@ -85,9 +85,7 @@ def test_guard_shim_uses_validate_invariants() -> None:
         "guard-forbidden-paths.sh must use validate_invariants for protected-path checking. "
         "Duplicating the protected-path logic would create drift."
     )
-    assert "is_protected" in content, (
-        "guard-forbidden-paths.sh must call is_protected() from validate_invariants."
-    )
+    assert "is_protected" in content, "guard-forbidden-paths.sh must call is_protected() from validate_invariants."
 
 
 def test_guard_shim_uses_dynamic_repo_root() -> None:

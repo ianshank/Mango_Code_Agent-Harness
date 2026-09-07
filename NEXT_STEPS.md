@@ -298,6 +298,15 @@ gated on R-SR-2).
 |---|---|
 | **Context-window budget** (parked with HITL) | **Landing on PR #110.** Policy keys `orchestrator.context_budget_tokens` / `context_chars_per_token`; pure `harness/shared/context_policy.py` group-atomic eviction; `ExecutionLoop` applies on a copy before `complete_chat` and logs `event=context_policy`. Spec: `docs/specs/context-window-budget.md`. HITL remains parked above. |
 
+**Closed 2026-09-07 (v2.5.0 Origin-Sync, Hook Shims, DEC-064 & Live E2E):**
+
+| Was | Now |
+|---|---|
+| **HOOK-1** Missing hook shim scripts | **Landed.** Created `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` with dynamic Makefile/validate_invariants delegation; tested by AQA-001 `test_scripts_hook_shims.py`. |
+| **RCA-7** RecordingBackend probe xdist isolation | **Landed.** Overrode `_probe()` in `RecordingBackend` to return `True` unconditionally, eliminating 17 spurious parallel test failures on Windows; pinned by AQA-006 `test_process_backend_isolation_regression.py`. |
+| **MEM-1 (DEC-064)** Stub corruption in gaps memory | **Landed.** Pruned 199 corrupt stub records from `.mango/memory/gaps.json`, preserving 24 substantive entries; documented in `docs/decisions/DEC-064.md` and pinned by AQA-004 `test_gaps_memory_integrity.py`. |
+| **Tier 5 Live Nemotron E2E** Real NIM verification | **Landed.** Full live E2E and smoke suites verified against live NVIDIA Nemotron NIM endpoint across Python and Node/Vitest; resolved Windows console charmap encoding and DEC-026 zero-skip governance attribution. |
+
 **Closed 2026-09-05b (this rewrite's evidence pass):**
 
 | Was | Now |

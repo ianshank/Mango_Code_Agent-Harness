@@ -69,3 +69,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-061](DEC-061.md) | 2026-09-05 | accepted | Windows-platform skips for GNU Make-dependent and POSIX-shell stub tests approved |
 | [DEC-062](DEC-062.md) | 2026-09-05 | accepted | Windows portability: asyncio/Starlette self-pipe requires enable_socket under pytest-socket |
 | [DEC-063](DEC-063.md) | 2026-09-05 | accepted | Windows-platform skip for AF_UNIX egress-floor proof approved |
+| [DEC-064](DEC-064.md) | 2026-09-07 | accepted | gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved |

@@ -13,6 +13,7 @@ node_modules/
 dist/
 build/
 coverage/
+.artifacts/
 **/.governance/vitest-results.json
 **/.governance/coverage/
 .mango/memory/
@@ -30,6 +31,7 @@ coverage/
 htmlcov/
 .benchmarks/
 scratch/
+uv.lock
 
 # IDE & System
 .DS_Store

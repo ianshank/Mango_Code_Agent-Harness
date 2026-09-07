@@ -20,6 +20,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── nemotron-reasoner.md         # NVIDIA Nemotron Ultra reasoning subagent
 │   │   ├── planner.md                   # Pre-implementation task planning subagent
 │   │   └── verifier.md                  # Strict post-change verification subagent
+│   ├── workflows/                       # SDLC & critic orchestration workflows
+│   │   ├── narrow-critic.md             # Read-only security and style critic
+│   │   └── sdlc-orchestrator.md         # End-to-end SDLC orchestrator
 │   ├── hooks/
 │   │   ├── block_dangerous.sh           # PreToolUse guard blocking destructive commands
 │   │   ├── loop_detection.sh            # Anti-loop edit cycle detector
@@ -120,6 +123,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── tests/                       # Python AQA Engine (3,840 tests; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
+│   │       │   ├── test_scripts_hook_shims.py        # AQA-001: Hook shim existence, bash shebang, dynamic paths
+│   │       │   ├── test_scan_findings_windows_waiver.py # AQA-002: DEC-061 waiver liveness
+│   │       │   ├── test_gaps_memory_integrity.py     # AQA-004: MEM-1 gaps.json no-stub invariant
+│   │       │   ├── test_process_backend_isolation_regression.py # AQA-006: RecordingBackend probe isolation
 │   │       │   ├── test_langgraph_regression.py      # 37 tests: StateGraph invariants, calling, reductions & fail-closed verdict
 │   │       │   ├── test_cross_platform_regression.py # 34 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
@@ -137,6 +144,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │       ├── policy-artifact.json         # Committed artifact; drift-gated by the test suite
 │       └── tests/                       # Colocated control-plane suite (101 tests; R-TDH-26)
 │
+├── scripts/                             # Operational & CI hook shims
+│   ├── verify-tier-a.sh                 # Tier-A lint & static verification hook shim
+│   └── guard-forbidden-paths.sh         # Invariant protected-paths guard hook shim
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
 ├── .gitleaks.toml                       # Gitleaks security scan configuration

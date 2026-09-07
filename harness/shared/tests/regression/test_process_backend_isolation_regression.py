@@ -16,7 +16,6 @@ Spec: INV-9 (fail-closed only on *real* unavailability), RCA-7.
 from __future__ import annotations
 
 import subprocess
-import sys
 import typing
 from pathlib import Path
 from unittest.mock import patch
@@ -24,7 +23,6 @@ from unittest.mock import patch
 import pytest
 
 from harness.shared.governance.broker import ExecutionBroker, ProcessBackend
-from harness.shared.governance.process_backend import ProcessBackend as _PB
 
 
 class _MinimalRecordingBackend(ProcessBackend):
@@ -55,27 +53,20 @@ def test_recording_backend_with_probe_override_is_always_available() -> None:
     )
 
 
-def test_recording_backend_without_probe_override_may_fail_on_windows() -> None:
+def test_recording_backend_without_probe_override_fails_when_bash_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     """Document the pre-fix defect: a recording backend without _probe override
-    will probe bash, which may not exist on Windows (informational only — not a FAIL gate)."""
-    if sys.platform != "win32":
-        pytest.skip("This defect only manifests on Windows without bash in PATH")
+    will probe bash, which returns False when bash is absent (RCA-7 reproduction)."""
 
-    import shutil
+    def _mock_run(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        raise FileNotFoundError(2, "No such file or directory: 'bash'")
 
-    if shutil.which("bash") is not None:
-        pytest.skip("bash is present in PATH; defect does not manifest")
+    monkeypatch.setattr(subprocess, "run", _mock_run)
 
     backend = _MinimalRecordingBackend()
     # Without bash, _probe returns False → available() returns False
     # This is the defect: a broker using this backend will BLOCK all commands
     result = backend.available()
-    # We assert False here only to document the defect. If this ever fails
-    # (bash is present), the _FixedRecordingBackend is equally safe.
-    assert result is False, (
-        "Expected _probe() to return False on Windows without bash "
-        "(pre-fix defect reproduction)"
-    )
+    assert result is False, "Expected _probe() to return False when bash is absent (pre-fix defect reproduction)"
 
 
 def test_broker_with_fixed_backend_reports_success_on_permitted_command() -> None:

@@ -32,7 +32,10 @@ def _load_gaps() -> list[dict[str, Any]]:
     if not GAPS_PATH.exists():
         pytest.skip(f"gaps.json not found at {GAPS_PATH}; skipping integrity check")
     try:
-        return json.loads(GAPS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(GAPS_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+        return []
     except json.JSONDecodeError as e:
         pytest.fail(f"gaps.json is not valid JSON: {e}")
 
@@ -75,14 +78,9 @@ def test_gaps_json_substantive_entries_have_required_fields() -> None:
     offenders = []
     for entry in gaps:
         # Skip stub entries (caught by test_gaps_json_has_no_stub_entries)
-        if (
-            entry.get("question") == _STUB_QUESTION
-            and entry.get("what_needed") == _STUB_WHAT_NEEDED
-        ):
+        if entry.get("question") == _STUB_QUESTION and entry.get("what_needed") == _STUB_WHAT_NEEDED:
             continue
         missing = required - set(entry.keys())
         if missing:
             offenders.append({"id": entry.get("id", "<no id>"), "missing": sorted(missing)})
-    assert not offenders, (
-        f"The following gaps.json entries are missing required fields: {offenders}"
-    )
+    assert not offenders, f"The following gaps.json entries are missing required fields: {offenders}"

@@ -8,7 +8,7 @@ is present, schema-valid, and not expired.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,9 +29,7 @@ def _load_waivers() -> list[dict[str, Any]]:
     # Standard schema: {"schema_version": ..., "waivers": [...]}
     waivers = raw.get("waivers", [])
     if not isinstance(waivers, list):
-        pytest.fail(
-            f"skip-waivers.json 'waivers' key is not a list, got {type(waivers).__name__}"
-        )
+        pytest.fail(f"skip-waivers.json 'waivers' key is not a list, got {type(waivers).__name__}")
     return waivers
 
 
@@ -65,9 +63,7 @@ def test_scan_findings_waiver_has_required_fields() -> None:
 
     required_fields = {"framework", "unique_id_glob", "decision_id", "reason", "owner", "expires"}
     missing = required_fields - set(waiver.keys())
-    assert not missing, (
-        f"DEC-061 waiver for TestScanFindings is missing required fields: {sorted(missing)}"
-    )
+    assert not missing, f"DEC-061 waiver for TestScanFindings is missing required fields: {sorted(missing)}"
 
 
 def test_scan_findings_waiver_not_expired() -> None:
@@ -81,11 +77,9 @@ def test_scan_findings_waiver_not_expired() -> None:
     try:
         expires = date.fromisoformat(expires_str)
     except (ValueError, TypeError):
-        pytest.fail(
-            f"DEC-061 waiver 'expires' field {expires_str!r} is not a valid ISO date (YYYY-MM-DD)"
-        )
+        pytest.fail(f"DEC-061 waiver 'expires' field {expires_str!r} is not a valid ISO date (YYYY-MM-DD)")
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     assert expires > today, (
         f"DEC-061 waiver for TestScanFindings expired on {expires}. "
         "Update the waiver expiry or remove the skip if the underlying issue is resolved."
@@ -100,9 +94,5 @@ def test_scan_findings_waiver_glob_covers_class() -> None:
         pytest.skip("No DEC-061 waiver found (test_scan_findings_waiver_exists will catch this)")
 
     glob = waiver.get("unique_id_glob", "")
-    assert "TestScanFindings" in glob, (
-        f"Waiver glob {glob!r} does not cover TestScanFindings class"
-    )
-    assert glob.endswith("::*") or glob.endswith("*"), (
-        f"Waiver glob {glob!r} should use a wildcard suffix to cover all test methods"
-    )
+    assert "TestScanFindings" in glob, f"Waiver glob {glob!r} does not cover TestScanFindings class"
+    assert glob.endswith(("::*", "*")), f"Waiver glob {glob!r} should use a wildcard suffix to cover all test methods"
