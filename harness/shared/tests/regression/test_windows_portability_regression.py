@@ -134,7 +134,7 @@ class TestWindowsAsyncioSelfPipeGuard:
 
 
 # ---------------------------------------------------------------------------
-# RCA-1/DEC-059: AF_UNIX hasattr guard
+# RCA-1/DEC-063: AF_UNIX hasattr guard
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ class TestAFUnixGuard:
         src = (REPO / "harness" / "shared" / "tests" / "test_egress_floor.py").read_text(encoding="utf-8")
         has_guard = 'hasattr(socket, "AF_UNIX")' in src or "hasattr(socket, 'AF_UNIX')" in src
         assert has_guard, (
-            "test_egress_floor.py has no hasattr(socket, 'AF_UNIX') guard (DEC-059). "
+            "test_egress_floor.py has no hasattr(socket, 'AF_UNIX') guard (DEC-063). "
             "Required for Windows compatibility."
         )
 

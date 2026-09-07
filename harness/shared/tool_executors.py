@@ -116,6 +116,95 @@ def execute_write_file(workspace_dir: Path, filepath: str, content: str) -> str:
         return failed(f"Error writing file {filepath}: {str(e)}")
 
 
+def _validate_code_syntax(filepath: str, code: str, language: str) -> str | None:
+    """Validate syntax for known languages before writing to disk (R-CGT-4).
+
+    Returns an error message if invalid, or None if valid or unsupported.
+    """
+    lang = language.lower()
+    if lang == "python":
+        import ast
+
+        try:
+            ast.parse(code, filename=filepath)
+        except SyntaxError as e:
+            lineno = e.lineno or 1
+            offset = e.offset or 0
+            return f"SyntaxError in generated code for {filepath} (line {lineno}, offset {offset}): {e.msg}"
+    elif lang == "json":
+        import json
+
+        try:
+            json.loads(code)
+        except json.JSONDecodeError as e:
+            return f"JSONDecodeError in generated code for {filepath} (line {e.lineno}, col {e.colno}): {e.msg}"
+    return None
+
+
+def execute_generate_code(
+    workspace_dir: Path,
+    filepath: str,
+    code: str,
+    language: str | None = None,
+    validate_syntax: bool = True,
+    overwrite: bool = True,
+) -> str:
+    """Generate and write structured code to a workspace file with syntax validation (R-CGT-1..R-CGT-7).
+
+    Checks in order:
+    1. Workspace confinement (_resolve_in_workspace);
+    2. Write policy & agent memory integrity (write_denial_reason);
+    3. Overwrite guard (when overwrite=False and file exists);
+    4. Syntax validation (AST parse for Python, JSON decode for JSON) when validate_syntax=True;
+    5. Length bound check against DEFAULT_MAX_OUTPUT_BYTES;
+    6. Atomic write preserving newlines.
+    """
+    workspace, target_path, denial = _resolve_in_workspace(workspace_dir, filepath)
+    if denial is not None:
+        logger.warning("Denied generate_code outside the workspace: %s", filepath)
+        return denied(f"Error generating code for {filepath}: {denial}")
+
+    denial = write_denial_reason(str(target_path.relative_to(workspace)), policy_path=active_policy_path())
+    if denial is not None:
+        logger.warning("Denied generate_code to a governed path: %s (%s)", filepath, denial)
+        return denied(f"Error generating code for {filepath}: {denial}")
+
+    if not overwrite and target_path.exists():
+        logger.warning("Refused generate_code: file %s exists and overwrite=False", filepath)
+        return failed(f"Error generating code for {filepath}: File exists and overwrite is False.")
+
+    # Infer language from file extension if not explicitly specified
+    inferred_language = language
+    if not inferred_language:
+        ext = target_path.suffix.lower()
+        ext_to_lang = {
+            ".py": "python",
+            ".json": "json",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+            ".md": "markdown",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".sh": "bash",
+        }
+        inferred_language = ext_to_lang.get(ext, "")
+
+    if validate_syntax and inferred_language:
+        syntax_err = _validate_code_syntax(filepath, code, inferred_language)
+        if syntax_err is not None:
+            logger.warning("Syntax validation failed for %s: %s", filepath, syntax_err)
+            return failed(syntax_err)
+
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_preserving_newlines(target_path, code)
+        logger.info("Successfully generated %d characters for %s", len(code), filepath)
+        return f"Success: Generated {len(code)} characters to {target_path.resolve()}"
+    except Exception as e:
+        logger.exception("Failed generating code for %s", filepath)
+        return failed(f"Error generating code for {filepath}: {str(e)}")
+
+
 def execute_read_file(
     workspace_dir: Path,
     filepath: str,
@@ -309,6 +398,7 @@ __all__ = [
     "WRITE_ACTION",
     "authorize_write",
     "execute_apply_patch",
+    "execute_generate_code",
     "execute_read_file",
     "execute_run_command",
     "execute_write_file",

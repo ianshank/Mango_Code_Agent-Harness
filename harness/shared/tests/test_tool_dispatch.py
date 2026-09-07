@@ -68,7 +68,7 @@ class TestNormalizeToolArguments:
         assert result["command"] == "echo 1"
         assert result["options"]["verbose"] is True
 
-    @pytest.mark.parametrize("func_name", ["write_file", "read_file", "run_command", "apply_patch"])
+    @pytest.mark.parametrize("func_name", ["write_file", "read_file", "run_command", "apply_patch", "generate_code"])
     def test_none_for_every_tool(self, func_name: str) -> None:
         """None is a valid model output for any tool — must not raise."""
         assert _normalize_tool_arguments(None, func_name) == {}

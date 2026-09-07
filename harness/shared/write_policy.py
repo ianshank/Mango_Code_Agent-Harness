@@ -357,6 +357,30 @@ def _load_supplied_policy(policy_path: Path) -> tuple[bytes, Mapping[str, Any]]:
     return raw, parsed
 
 
+def _is_memory_directory_target(candidate: str, segments: list[str]) -> bool:
+    """Return True if candidate targets the agent memory directory under either resolution mode."""
+    # Structural segment match: .mango/memory path segment sequence
+    for i in range(len(segments) - 1):
+        if segments[i] == ".mango" and segments[i + 1] == "memory":
+            return True
+
+    # Resolution modes match via resolve_memory_dir (workspace-scoped & legacy install-root)
+    try:
+        from harness.shared.meta_tools import resolve_memory_dir
+
+        candidate_path = Path(candidate).resolve()
+        for mem_dir in (resolve_memory_dir(None), resolve_memory_dir(Path.cwd())):
+            try:
+                mem_resolved = mem_dir.resolve()
+                if candidate_path == mem_resolved or candidate_path.is_relative_to(mem_resolved):
+                    return True
+            except (ValueError, OSError):
+                continue
+    except (ImportError, OSError, ValueError):
+        pass
+    return False
+
+
 def write_denial_reason(relpath: str, policy_path: Path | None = None, pin_path: Path | None = None) -> str | None:
     """Return why ``relpath`` may not be written, or ``None`` when it may.
 
@@ -407,6 +431,12 @@ def write_denial_reason(relpath: str, policy_path: Path | None = None, pin_path:
                 f"{candidate} names a credential-bearing file; writing it is the "
                 "secret_access action, which no agent role holds"
             )
+
+    if _is_memory_directory_target(candidate, segments):
+        return (
+            f"{candidate} is inside the agent memory directory; writing it directly is denied. "
+            "The meta-tools (hypothesis_register, knowledge_gap_log) are the sanctioned path"
+        )
 
     try:
         patterns = load_protected_patterns(DEFAULT_POLICY_PATH)

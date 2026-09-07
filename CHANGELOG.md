@@ -10,17 +10,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Agent memory write-denial (NS-37) & code generation writing tool (NS-38, DEC-059)
+
+- **Agent Memory Integrity**: `write_policy.write_denial_reason` now denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. The denial directs callers to the sanctioned meta-tools (`hypothesis_register`, `knowledge_gap_log`), closing memory poisoning (OWASP ASI06 / MAST FM-2.6) while keeping memory stores excluded from `protected_paths` to preserve digest baseline validity.
+- **Dedicated Code Generation Tool**: Added `generate_code` to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`). Supports pre-write syntax validation (`ast.parse` for Python, `json.loads` for JSON), workspace confinement, write policy enforcement, overwrite guards, and structured logging. Tested via comprehensive unit and regression suites. Specs `docs/specs/agent-memory-integrity.md` and `docs/specs/code-generation-tool.md`. Record DEC-059.
+
 ### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
 
 Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
-Eleven root causes triaged; three governance decisions registered as DEC-059
-(AF_UNIX), DEC-061 (Make/POSIX stubs), and DEC-062 (asyncio self-pipe). IDs
-were renumbered on merge so DEC-057/058 remain the hypothesis revision and
-surfacing records on `origin/main`.
+Eleven root causes triaged; three governance decisions registered as DEC-063
+(AF_UNIX), DEC-061 (Make/POSIX stubs), and DEC-062 (asyncio self-pipe). The
+AF_UNIX skip was originally DEC-059 on this branch; it moved to DEC-063 after
+`origin/main` published DEC-059 for NS-37/NS-38.
 
 | RCA | Root cause | Fix |
 |-----|-----------|-----|
-| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-059 waiver |
+| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-063 waiver |
 | RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
 | RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
 | RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |

@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
+**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -273,11 +273,18 @@ gated on R-SR-2).
 
 ## 6. Delivered, and removed from the open list
 
+**Closed 2026-09-07 (DEC-059 / agent-memory integrity NS-37 & code generation writing tool NS-38):**
+
+| Was | Now |
+|---|---|
+| **NS-37 · Close the raw-write bypass of `hypothesis_register` / `knowledge_gap_log`** | **Delivered on PR #116.** `write_policy.write_denial_reason` denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. Regression suite `test_memory_integrity_regression.py` asserts well-formed forgeries are refused and store is byte-for-byte unchanged. Memory store remains excluded from `protected_paths` to preserve digest baseline validity. Decision DEC-059. |
+| **NS-38 · Dedicated code generation writing tool with syntax validation** | **Delivered on PR #116.** `generate_code` writing tool added to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`), implemented in `tool_executors.py` and `dispatcher.py`. Provides pre-write AST parsing for Python and JSON decoding for JSON, workspace confinement, write policy checks, overwrite guard, and structured logging. Tested via `test_code_generation_tool.py`. Spec `docs/specs/code-generation-tool.md`. Decision DEC-059. |
+
 **Closed 2026-09-05c (Windows portability hardening):**
 
 | Was | Now |
 |---|---|
-| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-059 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-060 after origin re-landed the forward feature. |
+| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-060 after origin re-landed the forward feature. |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 

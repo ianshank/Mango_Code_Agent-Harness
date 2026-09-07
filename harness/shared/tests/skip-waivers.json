@@ -114,7 +114,7 @@
       "framework": "junit",
       "unique_id_glob": "harness/shared/tests/test_egress_floor.py::test_a_unix_socketpair_is_permitted_while_tcp_still_raises",
       "test": "*",
-      "decision_id": "DEC-059",
+      "decision_id": "DEC-063",
       "reason": "AF_UNIX is not available on Windows Python unless the optional Windows feature is enabled; the TCP block (test_the_socket_guard_is_actually_active) still runs on all platforms. Proof runs on Linux CI where AF_UNIX is always present.",
       "owner": "governance-maintainers",
       "expires": "2027-09-02"

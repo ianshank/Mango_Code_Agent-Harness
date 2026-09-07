@@ -12,7 +12,7 @@
 
 In accordance with 2026 enterprise software engineering best practices, ISO/IEC 25010 (Product Quality), and strict multi-agent governance standards (INV-1 through INV-16), this audit examines:
 
-* **Branch Gap Analysis & Portability Gaps:** Parity across Linux CI and Windows dev environments (DEC-026, DEC-058, DEC-059).
+* **Branch Gap Analysis & Portability Gaps:** Parity across Linux CI and Windows dev environments (DEC-026, DEC-061, DEC-062, DEC-063).
 * **God-File Decomposition Scan:** Identification and modular refactoring of large files (>400 lines) following Single Responsibility Principle (SRP) and zero-breakage backwards compatibility.
 * **Objective Peer Review of Work & Technical Debt:** Comprehensive review of architectural seams, test stubs, and deprecation shims.
 * **Code Coverage Gates Enforcement:** Enforcing the 90% lines floor and 80% branch floor per file, eliminating coverage gaps.
@@ -26,7 +26,7 @@ In accordance with 2026 enterprise software engineering best practices, ISO/IEC 
 ### 2.1 Gap 1: SocketBlockedError in `harness/api_server/tests/test_main.py` (RCA-12)
 
 * **Root Cause:** In Python on Windows, `socket.socketpair()` lacks native `AF_UNIX` support and falls back to loopback IPv4 (`127.0.0.1`) TCP sockets. Starlette's `TestClient` uses AnyIO's `start_blocking_portal`, which creates an event loop self-pipe using `socket.socketpair()`. Under `pytest-socket`'s `--disable-socket` flag, this causes 16 test failures with `pytest_socket.SocketBlockedError: A test tried to use socket.socket.`
-* **Precedent:** `harness/shared/tests/regression/test_api_server_regression.py` already implements the DEC-059 platform guard:
+* **Precedent:** `harness/shared/tests/regression/test_api_server_regression.py` already implements the DEC-062 platform guard:
 
   ```python
   if sys.platform == "win32":
@@ -98,7 +98,7 @@ Repository invariants verification confirms:
 ## 5. Verification Matrix & Quality Gates Summary
 
 * **Unit, Regression & Integration Suite:** 3,797 passed, 129 skipped, 0 failed across all 3,927 collected tests (`python -I -m pytest`).
-* **Zero-Skip Gate:** `verify_zero_skips.py` reports `zero-skip: passed` (100% of skips accounted for under DEC-026, DEC-058, DEC-059).
+* **Zero-Skip Gate:** `verify_zero_skips.py` reports `zero-skip: passed` (100% of skips accounted for under DEC-026, DEC-061, DEC-062, DEC-063).
 * **Coverage Gate:**
   * Lines: **99.00%** (gate requires >= 90.00%).
   * Branches: **97.82%** (gate requires >= 80.00%).

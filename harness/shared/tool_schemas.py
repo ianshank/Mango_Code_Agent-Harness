@@ -77,6 +77,43 @@ NEMOTRON_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "generate_code",
+            "description": (
+                "Generate and write structured code to a workspace file with pre-write syntax validation, "
+                "workspace confinement, and write policy checks. Validates Python and JSON syntax before writing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Workspace-relative path to generate or write code to.",
+                    },
+                    "code": {"type": "string", "description": "The code content to generate and write."},
+                    "language": {
+                        "type": "string",
+                        "description": (
+                            "Optional programming language (e.g. 'python', 'json'). "
+                            "Auto-detected from file extension if omitted."
+                        ),
+                    },
+                    "validate_syntax": {
+                        "type": "boolean",
+                        "description": "Whether to perform syntax validation before writing (default true).",
+                    },
+                    "overwrite": {
+                        "type": "boolean",
+                        "description": "Whether to overwrite the file if it already exists (default true).",
+                    },
+                },
+                "required": ["filepath", "code"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_command",
             "description": "Run a shell command and return its output.",
             "parameters": {
