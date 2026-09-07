@@ -193,10 +193,27 @@ class TestSequentialThinkingLoop:
 IS_LIVE = bool(resolve_api_key())
 
 
+@pytest.fixture(autouse=True)
+def _set_nemotron_mode_for_live_orchestrator(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirror ``test_mango_mas_live`` / ``test_nemotron_bridge_live``: declare online egress.
+
+    Without this, ``complete_chat`` raises ``NemotronEgressRefused`` even when
+    ``NVIDIA_API_KEY`` is present (fail-closed transport mode).
+    """
+    if request.node.get_closest_marker("live") is None:
+        return
+    monkeypatch.setenv("NEMOTRON_MODE", "online")
+
+
 @pytest.mark.live
+@pytest.mark.enable_socket
 @pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
 class TestLiveOrchestrator:
     """Real-API smoke tests. Skipped unless explicitly selected with ``-m live``."""
+
+    @pytest.fixture(autouse=True)
+    def _set_nemotron_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NEMOTRON_MODE", "online")
 
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=resolve_api_key())

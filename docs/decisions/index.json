@@ -722,6 +722,54 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-060",
+      "status": "accepted",
+      "date": "2026-09-06",
+      "title": "Retire NS-17/NS-21 temporary rollback regression pins after origin re-lands the forward feature",
+      "path": "docs/decisions/DEC-060.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-061",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "Windows-platform skips for GNU Make-dependent and POSIX-shell stub tests approved",
+      "path": "docs/decisions/DEC-061.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-062",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "Windows portability: asyncio/Starlette self-pipe requires enable_socket under pytest-socket",
+      "path": "docs/decisions/DEC-062.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-063",
+      "status": "accepted",
+      "date": "2026-09-05",
+      "title": "Windows-platform skip for AF_UNIX egress-floor proof approved",
+      "path": "docs/decisions/DEC-063.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }

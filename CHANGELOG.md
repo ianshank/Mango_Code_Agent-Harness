@@ -15,6 +15,38 @@ All notable changes to this project will be documented in this file.
 - **Agent Memory Integrity**: `write_policy.write_denial_reason` now denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. The denial directs callers to the sanctioned meta-tools (`hypothesis_register`, `knowledge_gap_log`), closing memory poisoning (OWASP ASI06 / MAST FM-2.6) while keeping memory stores excluded from `protected_paths` to preserve digest baseline validity.
 - **Dedicated Code Generation Tool**: Added `generate_code` to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`). Supports pre-write syntax validation (`ast.parse` for Python, `json.loads` for JSON), workspace confinement, write policy enforcement, overwrite guards, and structured logging. Tested via comprehensive unit and regression suites. Specs `docs/specs/agent-memory-integrity.md` and `docs/specs/code-generation-tool.md`. Record DEC-059.
 
+### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
+
+Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
+Eleven root causes triaged; three governance decisions registered as DEC-063
+(AF_UNIX), DEC-061 (Make/POSIX stubs), and DEC-062 (asyncio self-pipe). The
+AF_UNIX skip was originally DEC-059 on this branch; it moved to DEC-063 after
+`origin/main` published DEC-059 for NS-37/NS-38.
+
+| RCA | Root cause | Fix |
+|-----|-----------|-----|
+| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-063 waiver |
+| RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
+| RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
+| RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |
+| RCA-5 | `make` absent on Windows in timeout test | `_ensure_make_on_path` autouse fixture |
+| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-061 waiver |
+| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-061 |
+| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-062 |
+| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-061 |
+| RCA-10 | `_sole_decision_id()` breaks with >1 DEC in registry | `_dec_for_posix_only_probes()` asserts DEC-026 |
+| RCA-11 | NTFS same-inode overwrite in tamper test | Case-insensitive assertion on `win32` |
+
+New regression tests: `test_windows_portability_regression.py`. `pyrightconfig.json`
+for IDE parity.
+
+### NS-17/NS-21 temporary rollback regressions retired (DEC-060)
+
+`test_ns17_rollback_regression.py` and `test_ns21_rollback_regression.py`
+asserted the *absence* of workspace-scoped memory and post-turn hooks after a
+temporary CI rollback. `origin/main` re-landed the forward implementation under
+DEC-057/058; those inverted pins are retired with DEC-060.
+
 ### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
 
 Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing

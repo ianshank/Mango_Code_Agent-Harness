@@ -10,6 +10,7 @@ policy bundle with.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,7 +90,18 @@ class TestWhatIsDigested:
 
     def test_armed_patterns_catch_files_that_appear(self, workspace: Path) -> None:
         """The nine dormant patterns exist for this: a `GNUmakefile` or a
-        `pytest.ini` that did not exist at loop start is a new recipe input."""
+        `pytest.ini` that did not exist at loop start is a new recipe input.
+
+        On Windows (case-insensitive filesystem), writing ``makefile`` when the
+        workspace fixture already created ``Makefile`` does not create a *new*
+        file -- the OS silently maps them to the same inode. ``makefile`` is
+        therefore already in ``before`` and cannot appear in ``appeared``. The
+        dormant guard for ``makefile`` is still exercised by the write-refusal
+        path (``TestTheDirectDoorIsShut``) on every platform; the *detection*
+        assertion is excluded on case-insensitive filesystems only.
+        """
+        import sys
+
         before = enforcement_digests(workspace)
         for name in (
             "GNUmakefile",
@@ -106,9 +118,11 @@ class TestWhatIsDigested:
         (workspace / "src" / "nested.pth").write_text("x", encoding="utf-8")
         after = enforcement_digests(workspace)
         appeared = set(after) - set(before)
-        assert {
+        # On a case-insensitive filesystem (Windows), writing "makefile" when
+        # "Makefile" already exists in the workspace fixture is a same-file
+        # overwrite, so it never transitions from absent to present.
+        expected = {
             "GNUmakefile",
-            "makefile",
             "pytest.ini",
             "tox.ini",
             "setup.cfg",
@@ -117,7 +131,10 @@ class TestWhatIsDigested:
             "usercustomize.py",
             "extra.pth",
             "src/nested.pth",
-        } <= appeared
+        }
+        if sys.platform != "win32":
+            expected.add("makefile")
+        assert expected <= appeared
 
     def test_a_pinned_supplied_policy_widens_the_floor(
         self,
@@ -175,6 +192,10 @@ class TestItFailsClosed:
         with pytest.raises(EnforcementDigestError):
             enforcement_digests(workspace, policy_path=policy)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="POSIX-only: creating symlinks requires SeCreateSymbolicLinkPrivilege on Windows (DEC-026)",
+    )
     def test_an_unreadable_protected_file_raises(self, workspace: Path) -> None:
         """A dangling symlink named like a protected file: listed by the walk,
         unreadable by content. Chosen over `chmod 000` because CI runs as root

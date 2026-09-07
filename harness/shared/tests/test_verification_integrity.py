@@ -14,6 +14,7 @@ is ``regression/test_verdict_forgery_regression.py``.
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -79,13 +80,26 @@ class TestTheRunnerRefusesATamperedWorkspace:
     @pytest.mark.parametrize("appeared", ["GNUmakefile", "makefile", "pytest.ini", "tox.ini", "setup.cfg"])
     def test_a_protected_file_that_appears_is_tampering(self, workspace: Path, appeared: str) -> None:
         """Nothing at loop start, something at verification: a recipe input no
-        review saw. This is what the armed dormant patterns are for."""
+        review saw. This is what the armed dormant patterns are for.
+
+        On Windows (case-insensitive FS), writing ``makefile`` when ``Makefile``
+        already exists in the workspace fixture overwrites it in-place. The
+        enforcement digest sees ``Makefile`` (the disk name) as changed, not
+        ``makefile``. Accept either casing on win32; the full-casing check runs
+        on Linux CI where the two are distinct files.
+        """
         runner = _runner()
         runner.snapshot_enforcement(workspace)
         (workspace / appeared).write_text("x", encoding="utf-8")
         check = runner.run(workspace)
         assert check.status == BLOCKED
-        assert check.tampered_files == (appeared,)
+        if sys.platform == "win32":
+            # On a case-insensitive filesystem the runner reports the disk casing
+            # (e.g. 'Makefile') when we write 'makefile' over it.
+            assert len(check.tampered_files) == 1
+            assert check.tampered_files[0].lower() == appeared.lower()
+        else:
+            assert check.tampered_files == (appeared,)
 
     def test_a_protected_file_that_vanishes_is_tampering(self, workspace: Path) -> None:
         runner = _runner()

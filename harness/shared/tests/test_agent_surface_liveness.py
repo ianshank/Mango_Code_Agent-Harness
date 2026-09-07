@@ -566,16 +566,16 @@ class TestSkillsNameRealTargets:
 
 
 class TestHookNamespacePartition:
-    """R-GT-8: every hook script belongs to a namespace, and the live ones exist.
+    """R-GT-8: every hook script belongs to a namespace, and the live one exists.
 
-    `.mango/hooks/` holds three disjoint kinds of script: `pre-nemotron-run.sh`
-    (pre-turn gate), the `post-*-run` recorders `ExecutionLoop` fires at turn
-    end (NS-21), and five that `.mango/settings.json` registers and DEC-003
-    keeps dormant. Nothing asserted the partition, so a new script belonged to
-    neither and no test said so; and nothing asserted the live ones exist,
-    because `HookRunner.run_hook` no-ops when the file is missing -- correct
-    behaviour, but it means deleting or renaming a script leaves the whole
-    suite green while the hook silently stops running.
+    `.mango/hooks/` holds two disjoint kinds of script: `pre-nemotron-run.sh`,
+    which `ExecutionLoop` fires at the top of every agent turn, and five that
+    `.mango/settings.json` registers and DEC-003 keeps dormant. Nothing asserted
+    the partition, so a new script belonged to neither and no test said so; and
+    nothing asserted the live one exists, because `HookRunner.run_hook` no-ops
+    when the file is missing -- correct behaviour, but it means deleting or
+    renaming the script leaves the whole suite green while the hook silently
+    stops running.
     """
 
     MANGO_HOOKS = REPO / ".mango" / "hooks"
@@ -607,38 +607,6 @@ class TestHookNamespacePartition:
         assert "validate_invariants.py" in hook.read_text(encoding="utf-8"), (
             f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
         )
-
-    def test_every_post_run_hook_exists_on_disk(self) -> None:
-        """NS-21: every permitted post-*-run name has a tracked script, or observation is gone."""
-        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
-
-        post_names = sorted(name for name in PERMITTED_HOOK_NAMES if name.startswith("post-") and name.endswith("-run"))
-        assert post_names, "PERMITTED_HOOK_NAMES has no post-*-run entries"
-        missing = [name for name in post_names if not (self.MANGO_HOOKS / f"{name}.sh").is_file()]
-        assert not missing, (
-            f"post-run hooks missing on disk: {missing}. ExecutionLoop fires these at turn end and "
-            "HookRunner.run_hook no-ops when the script is absent, so the NS-21 JSONL record would "
-            "silently stop appearing."
-        )
-        recorder = self.MANGO_HOOKS / "lib" / "record_post_run.sh"
-        assert recorder.is_file(), (
-            f"{recorder.relative_to(REPO)} is missing; the thin post-*-run entrypoints need the shared recorder body"
-        )
-
-    def test_post_run_hooks_are_not_settings_registered(self) -> None:
-        """Orchestrator post-run hooks must not wake via .mango/settings.json (DEC-003)."""
-        from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
-
-        registered = self._settings_registered()
-        post_scripts = {
-            script.stem
-            for script in self._scripts()
-            if script.stem.startswith("post-") and script.stem.endswith("-run")
-        }
-        assert post_scripts, "no post-*-run scripts on disk; partition pin is vacuous"
-        assert post_scripts <= PERMITTED_HOOK_NAMES
-        overlap = post_scripts & registered
-        assert not overlap, f"orchestrator post-run hooks must not appear in .mango/settings.json: {sorted(overlap)}"
 
     def test_every_hook_script_belongs_to_a_namespace(self) -> None:
         """Either the orchestrator may fire it, or a settings file registers it."""

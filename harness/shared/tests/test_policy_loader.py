@@ -269,13 +269,7 @@ class TestPolicyResolutionLogging:
 
     @pytest.mark.parametrize(
         "accessor",
-        [
-            "orchestrator_defaults",
-            "nemotron_defaults",
-            "langgraph_defaults",
-            "coverage_defaults",
-            "agent_memory_defaults",
-        ],
+        ["orchestrator_defaults", "nemotron_defaults", "langgraph_defaults", "coverage_defaults"],
     )
     def test_every_block_accessor_records_its_resolution(self, accessor: str, caplog) -> None:
         """One instrumented accessor and three silent ones is the drift to prevent."""
@@ -301,7 +295,6 @@ class TestLimitsAreTyped:
             ("nemotron_defaults", "NemotronDefaults"),
             ("langgraph_defaults", "LangGraphDefaults"),
             ("coverage_defaults", "CoverageThresholds"),
-            ("agent_memory_defaults", "AgentMemoryLimits"),
         ],
     )
     def test_the_declared_keys_are_the_returned_keys(self, accessor: str, typed: str) -> None:
@@ -340,7 +333,6 @@ class TestAPresentPolicyMissingAKeyFailsClosed:
         pytest.param("coverage_defaults", "coverage", "lines", id="coverage"),
         pytest.param("agent_defaults", "agent_defaults", "max_delegation_depth", id="agent"),
         pytest.param("lats_defaults", "lats", "max_budget", id="lats"),
-        pytest.param("agent_memory_defaults", "agent_memory", "max_gaps", id="agent_memory"),
     ]
 
     def _policy(self, tmp_path: Path, block: str, body: dict) -> Path:
