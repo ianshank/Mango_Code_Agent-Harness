@@ -473,7 +473,7 @@ pre-pr: ci review lint-cold audit secrets ## Pre-PR validation gate (full CI + m
 
 .PHONY: clean
 clean: ## Remove build/test artifacts
-	rm -rf .coverage .pytest_cache .mypy_cache .ruff_cache htmlcov __pycache__
+	rm -rf .coverage .pytest_cache .mypy_cache .ruff_cache htmlcov __pycache__ .artifacts
 	rm -rf $(NODE_DIR)/coverage $(NODE_DIR)/.governance/vitest-results.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true

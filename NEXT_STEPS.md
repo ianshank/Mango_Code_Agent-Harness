@@ -1,15 +1,15 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
+**Last reviewed:** 2026-09-06 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-060 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md)
 
 ---
 
 ## How to read this file
 
 This file is the single roadmap for the repository, and it contains **only work
-that is not yet done**. Completed milestones through v2.4.0 live in
+that is not yet done**. Completed milestones through v2.5.0 live in
 [`docs/releases/milestone-history.md`](docs/releases/milestone-history.md); the
 narrative of what shipped lives in `CHANGELOG.md` and `docs/releases/`.
 
