@@ -24,10 +24,21 @@ both:
   So the shapes here are *derived from the policy list*, and the run fails
   closed if that list stops spanning them.
 
+A third thing was wrong, found later and reproduced here beside the first two:
+
+* **The checker read attribute chains, and `getattr` is not one.**
+  `os.system(...)` and `getattr(os, "system")(...)` reach the same attribute;
+  only the first is an `ast.Attribute`. The check saw `getattr` and `os`,
+  neither of which the policy names, and wrote the file. `import os` is not
+  prohibited and neither is `import builtins`, so for every entry that is an
+  attribute target or the unnamed builtin, the reflective line below is the
+  *only* reason the write is refused -- which is what makes these end-to-end
+  cases a reproduction rather than a restatement.
+
 What would regress: reverting the write-door wiring in `tool_executors.py`, or
-narrowing `code_safety.py` to import statements. Both were run as mutations
-against this file before it landed; each turns
-`test_no_byte_lands_for_any_prohibited_entry` red and leaves the rest of the
+narrowing `code_safety.py`/`code_symbols.py` to import statements or to
+attribute chains. All three were run as mutations against this file before it
+landed; each turns a `test_no_byte_lands_*` case red and leaves the rest of the
 suite green, which is the whole reason the reproduction is here rather than
 folded into the unit tier.
 
@@ -89,6 +100,36 @@ def _module_reaching(entry: str) -> str:
     if shape == UNNAMED_BUILTIN:
         return f'{entry}("os")\n'
     return f"import {entry}\n"
+
+
+def _reflective_module_reaching(entry: str) -> str:
+    """A module that reaches ``entry`` by handing its name to ``getattr`` as a string.
+
+    Built per shape from the entry, like ``_module_reaching``, so the reflective
+    spelling of a sixth entry is exercised the day it is declared. For every
+    shape but the importable module, nothing on the import line is prohibited --
+    ``os`` and ``builtins`` are ordinary imports -- so the last line is the whole
+    of the reason the write is refused.
+    """
+    shape = _shape_of(entry)
+    if shape == ATTRIBUTE_TARGET:
+        head, _, attribute = entry.partition(".")
+        return f'import {head}\n\n\ngetattr({head}, "{attribute}")()\n'
+    if shape == UNNAMED_BUILTIN:
+        return f'import builtins\n\n\ngetattr(builtins, "{entry}")("os")\n'
+    return f'import {entry}\n\n\ngetattr({entry}, "run")\n'
+
+
+def _computed_module_reaching(entry: str) -> str:
+    """The same read with a key the module computes rather than writes down.
+
+    The base is what is judged here, not the key: the policy forbids something
+    under ``os`` and under ``builtins``, so a computed attribute of either could
+    name it. ``chosen`` is never defined, which the write door does not care
+    about -- it judges what the file contains, and this file parses.
+    """
+    base = "builtins" if _shape_of(entry) == UNNAMED_BUILTIN else entry.partition(".")[0]
+    return f"import {base}\n\n\ngetattr({base}, chosen)\n"
 
 
 @pytest.fixture(scope="module")
@@ -159,6 +200,70 @@ class TestProhibitedCodeReachedDisk:
             "An import-only checker decides the importable shape alone, so a list that stops spanning the "
             "three no longer exercises the defect this reproduction exists for."
         )
+
+
+class TestReflectiveCodeReachedDiskToo:
+    """The same entries, spelled as a string, through the same door.
+
+    Kept separate from the class above because the defect is separate: that one
+    is "the analysis was thrown away", this one is "the analysis read attribute
+    chains and a string is not one". Each was a live bypass of a check the other
+    passed.
+    """
+
+    def test_no_byte_lands_for_a_reflective_spelling_of_any_entry(
+        self, tmp_path: Path, prohibited: tuple[str, ...]
+    ) -> None:
+        """AC-GEA-4 again, for the reflective spelling: zero bytes, nothing created.
+
+        The whole workspace is the witness, for the reason the direct case gives:
+        a check that only looks where the write was aimed cannot see a partial
+        write, a temporary file, or a directory created on the way.
+        """
+        for index, entry in enumerate(prohibited):
+            source = _reflective_module_reaching(entry)
+            existing = tmp_path / f"reflective_{index}.py"
+            existing.write_bytes(b"ORIGINAL = 1\n")
+            before = snapshot_tree(tmp_path)
+
+            over_existing = execute_generate_code(tmp_path, existing.name, source)
+            over_nothing = execute_generate_code(tmp_path, f"reflected/fresh_{index}.py", source)
+
+            for result in (over_existing, over_nothing):
+                assert tool_outcome(result) == DENIED_POLICY, f"{entry} via getattr was not denied: {result}"
+                assert entry in result, f"the denial does not name {entry!r}: {result}"
+                assert f"(line {len(source.splitlines())})" in result, (
+                    f"the denial for {entry!r} does not cite the reflective line, so it was refused for "
+                    f"something else on the way: {result}"
+                )
+            assert snapshot_tree(tmp_path) == before, f"writing {entry} through getattr changed the workspace"
+            assert not (tmp_path / "reflected").exists()
+            logger.debug("entry %r denied through a literal getattr key with the workspace unchanged", entry)
+
+    def test_no_byte_lands_for_a_computed_key_on_a_forbidden_base(
+        self, tmp_path: Path, prohibited: tuple[str, ...]
+    ) -> None:
+        """The key the module never writes down, judged by the base it is read from."""
+        for index, entry in enumerate(prohibited):
+            source = _computed_module_reaching(entry)
+            before = snapshot_tree(tmp_path)
+            result = execute_generate_code(tmp_path, f"computed_{index}.py", source)
+            assert tool_outcome(result) == DENIED_POLICY, f"{entry} via a computed key was not denied: {result}"
+            assert entry in result, f"the denial does not name {entry!r}: {result}"
+            assert snapshot_tree(tmp_path) == before, f"the denied write for {entry} changed the workspace"
+
+    def test_ordinary_reflection_still_writes(self, tmp_path: Path) -> None:
+        """The positive control, and the reason the computed-key rule is narrow.
+
+        `getattr(self, name)` is how ordinary Python reaches a field chosen at
+        runtime. A rule that denied it would deny correct code at the write door,
+        and a check that denies correct code is switched off rather than
+        satisfied -- taking the four cases above with it.
+        """
+        allowed = "class C:\n    def get(self, name):\n        return getattr(self, name, None)\n"
+        result = execute_generate_code(tmp_path, "reflective_ok.py", allowed)
+        assert "Success: Generated" in result, result
+        assert (tmp_path / "reflective_ok.py").read_text(encoding="utf-8") == allowed
 
 
 class TestTheCheckIsScopedToTheOneDoorTheRecordNames:

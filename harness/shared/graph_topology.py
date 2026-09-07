@@ -52,16 +52,17 @@ of 412). R-GEA-4 makes the rule explicit: *a derived node set or edge set that
 comes back empty is a broken extractor, not a satisfied property, and MUST
 raise rather than pass.* So `TopologyExtractionError` is raised for an
 unreadable or unparseable file, for source with no ``StateGraph(...)``
-assignment, for source with no ``add_node`` call, for source with no edge, for
-any individual call whose arguments this module cannot resolve to node names,
-and for any builder method it does not model. The last two matter most:
+assignment, for source that assigns more than one, for source with no
+``add_node`` call, for source with no edge, for any individual call whose
+arguments this module cannot resolve to node names, and for any builder method
+it does not model. The last two matter most:
 silently skipping one ``add_node`` whose argument is a variable, or one
 ``add_sequence`` whose whole chain this module never read, drops nodes and
 edges from the graph while still returning a plausible-looking topology --
 worse than raising, because nothing about the result would look wrong.
 
-Why the builder variable is discovered rather than assumed
-----------------------------------------------------------
+Why the builder variable is discovered, scoped, and required to be unique
+-------------------------------------------------------------------------
 
 ``harness/shared/langgraph/graph.py`` happens to spell it ``builder``. Matching
 that name literally would mean a rename — a refactor with no behavioural
@@ -69,6 +70,18 @@ content — silently reduces the extracted graph to nothing, and by the paragrap
 above, silently satisfies every property asserted over it. The builder is
 therefore found by *what it is* (the target of an assignment whose value is a
 ``StateGraph(...)`` call) rather than by what it is called.
+
+Discovering it is not enough, because a *name* means something only inside the
+scope that binds it. Taking the first ``StateGraph(...)`` assignment and then
+collecting every call on that bare name across the whole module produced
+exactly the partial results this module refuses everywhere else: two functions
+each building their own graph, both spelling the builder ``builder``, came back
+as one merged topology carrying both node sets, and a second builder under a
+different name came back as the first graph alone with the second silently
+dropped. Neither result looks wrong. So calls are collected only from the scope
+that binds the builder, and a module assigning more than one ``StateGraph(...)``
+raises instead of choosing: one graph per module is a contract this extractor
+can keep, and picking between two is a guess dressed as an answer.
 """
 
 from __future__ import annotations
@@ -113,6 +126,17 @@ _SET_FINISH_POINT = "set_finish_point"
 #: set only once a reader has decided it declares no node and no edge, which is
 #: the whole difference between an allow-list and a skip-list.
 _NO_TOPOLOGY = frozenset({"compile"})
+
+#: Nodes that open a binding scope. The ``builder`` one function assigns is not
+#: the ``builder`` the next one assigns, so a builder's calls are read out of
+#: the body that binds it rather than out of the module. Comprehensions and
+#: lambdas open scopes too and are absent deliberately: neither can contain the
+#: assignment statement this module looks for, so neither can bind a builder.
+_SCOPES = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+#: One ``name = StateGraph(...)`` site: the name it binds, the line it is on,
+#: and the scope node whose subtree is that name's whole meaning.
+_Binding = tuple[str, int, ast.AST]
 
 
 class TopologyExtractionError(RuntimeError):
@@ -177,12 +201,7 @@ class Topology:
         """
         return tuple(node for node in self.nodes if not self.successors(node) and not self.predecessors(node))
 
-    def path_between(
-        self,
-        src: str,
-        dst: str,
-        avoiding: frozenset[str] = frozenset(),
-    ) -> list[str] | None:
+    def path_between(self, src: str, dst: str, avoiding: frozenset[str] = frozenset()) -> list[str] | None:
         """A shortest path from ``src`` to ``dst``, or ``None`` if there is none.
 
         Returns the *witness* — the node names along the path, ``src`` first and
@@ -223,8 +242,8 @@ def extract_topology(source_path: Path) -> Topology:
     module docstring for why an empty result is never returned in its place.
     """
     tree = _parse(source_path)
-    builder_name = _builder_variable(tree, source_path)
-    nodes, edges = _collect_topology(tree, builder_name, source_path)
+    builder_name, scope = _builder_variable(tree, source_path)
+    nodes, edges = _collect_topology(scope, builder_name, source_path)
     if not nodes:
         raise TopologyExtractionError(
             f"{source_path}: builder {builder_name!r} has no add_node call; an empty node set is a broken "
@@ -235,19 +254,9 @@ def extract_topology(source_path: Path) -> Topology:
             f"{source_path}: builder {builder_name!r} declares {len(nodes)} node(s) and no edge; an empty edge "
             "set makes every reachability property vacuously true"
         )
-    logger.debug(
-        "graph_topology: %s declares %d node(s) and %d edge(s) through builder %r",
-        source_path,
-        len(nodes),
-        len(edges),
-        builder_name,
-    )
-    return Topology(
-        source_path=source_path,
-        builder_name=builder_name,
-        nodes=tuple(nodes),
-        edges=tuple(edges),
-    )
+    summary = "graph_topology: %s declares %d node(s) and %d edge(s) through builder %r"
+    logger.debug(summary, source_path, len(nodes), len(edges), builder_name)
+    return Topology(source_path=source_path, builder_name=builder_name, nodes=tuple(nodes), edges=tuple(edges))
 
 
 def _parse(source_path: Path) -> ast.Module:
@@ -262,30 +271,43 @@ def _parse(source_path: Path) -> ast.Module:
         raise TopologyExtractionError(f"{source_path}: cannot be parsed: {exc}") from exc
 
 
-def _builder_variable(tree: ast.Module, source_path: Path) -> str:
-    """The name bound to a ``StateGraph(...)`` call, wherever it is assigned.
+def _builder_bindings(node: ast.AST, scope: ast.AST, found: list[_Binding]) -> list[_Binding]:
+    """Every ``name = StateGraph(...)`` under ``node``, each tagged with its binding scope.
 
-    Discovered rather than assumed: see the module docstring's last section for
-    what hard-coding ``builder`` would cost.
+    Descends with the enclosing scope in hand rather than reaching for
+    ``ast.walk``, which flattens the tree and so discards the one fact that
+    tells two same-named builders apart.
     """
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
-            continue
-        if _called_name(node.value.func) != "StateGraph":
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                logger.debug(
-                    "graph_topology: builder variable %r discovered at %s:%d",
-                    target.id,
-                    source_path,
-                    node.lineno,
-                )
-                return target.id
-    raise TopologyExtractionError(
-        f"{source_path}: no assignment of a StateGraph(...) call was found, so there is no builder whose "
-        "topology calls could be collected"
-    )
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.Assign) and isinstance(child.value, ast.Call):
+            if _called_name(child.value.func) == "StateGraph":
+                found += [(t.id, child.lineno, scope) for t in child.targets if isinstance(t, ast.Name)]
+        _builder_bindings(child, child if isinstance(child, _SCOPES) else scope, found)
+    return found
+
+
+def _builder_variable(tree: ast.Module, source_path: Path) -> tuple[str, ast.AST]:
+    """The one builder ``tree`` binds, and the scope its calls may be read from.
+
+    Discovered rather than assumed, and refused rather than chosen: see the
+    module docstring's last section for what hard-coding ``builder`` would cost
+    and why a module holding two builders raises instead of picking one.
+    """
+    found = sorted(_builder_bindings(tree, tree, []), key=lambda binding: binding[1])
+    if not found:
+        raise TopologyExtractionError(
+            f"{source_path}: no assignment of a StateGraph(...) call was found, so there is no builder whose "
+            "topology calls could be collected"
+        )
+    if len(found) > 1:
+        competing = ", ".join(f"{name!r} at line {lineno}" for name, lineno, _ in found)
+        raise TopologyExtractionError(
+            f"{source_path}: found {len(found)} StateGraph builders ({competing}); refusing to merge ambiguous "
+            "lexical scopes -- one graph per module is the contract, and merging or dropping either looks whole"
+        )
+    name, lineno, scope = found[0]
+    logger.debug("graph_topology: builder variable %r discovered at %s:%d", name, source_path, lineno)
+    return name, scope
 
 
 def _called_name(func: ast.expr) -> str | None:
@@ -297,12 +319,15 @@ def _called_name(func: ast.expr) -> str | None:
     return None
 
 
-def _collect_topology(
-    tree: ast.Module,
-    builder_name: str,
-    source_path: Path,
-) -> tuple[list[str], list[tuple[str, str]]]:
-    """Every node and edge declared through ``builder_name`` in ``tree``.
+def _collect_topology(scope: ast.AST, builder_name: str, source_path: Path) -> tuple[list[str], list[tuple[str, str]]]:
+    """Every node and edge declared through ``builder_name`` inside ``scope``.
+
+    ``scope`` is the body that binds the builder, not the whole tree: a call on
+    that bare name in a *sibling* scope belongs to some other object, and
+    reading it would either import a second graph's declarations into this one
+    or refuse a file with nothing wrong with it. A scope nested *inside* this
+    one still has its calls read, shadowing included -- pruning those needs a
+    per-scope binding table, and this module is at its size budget.
 
     Sorted by source position rather than taken in ``ast.walk`` order: walk is
     breadth-first, so a call nested inside an ``if`` would be visited after
@@ -313,7 +338,7 @@ def _collect_topology(
     nodes: list[str] = []
     edges: list[tuple[str, str]] = []
     calls: list[tuple[ast.Call, str]] = []
-    for call in ast.walk(tree):
+    for call in ast.walk(scope):
         if not isinstance(call, ast.Call):
             continue
         func = call.func
@@ -329,11 +354,7 @@ def _collect_topology(
 
 
 def _collect_call(
-    call: ast.Call,
-    method: str,
-    source_path: Path,
-    nodes: list[str],
-    edges: list[tuple[str, str]],
+    call: ast.Call, method: str, source_path: Path, nodes: list[str], edges: list[tuple[str, str]]
 ) -> None:
     """Append whatever one builder call declares to ``nodes`` / ``edges``.
 
@@ -456,12 +477,8 @@ def _branches(mapping: ast.expr | None, source_path: Path, call: ast.Call) -> li
                     f"{source_path}:{call.lineno}: add_conditional_edges path_map uses ** unpacking, whose "
                     "branches cannot be read from this module alone"
                 )
-            branches.append(
-                (
-                    _resolve(key, source_path, call, "conditional branch label"),
-                    _resolve(value, source_path, call, "conditional branch destination"),
-                )
-            )
+            label = _resolve(key, source_path, call, "conditional branch label")
+            branches.append((label, _resolve(value, source_path, call, "conditional branch destination")))
         return branches
     if isinstance(mapping, (ast.List, ast.Tuple)):
         names = [_resolve(element, source_path, call, "conditional branch destination") for element in mapping.elts]
@@ -479,10 +496,4 @@ def _describe(expr: ast.expr | None) -> str:
     return type(expr).__name__
 
 
-__all__ = [
-    "END_SENTINEL",
-    "START_SENTINEL",
-    "Topology",
-    "TopologyExtractionError",
-    "extract_topology",
-]
+__all__ = ["END_SENTINEL", "START_SENTINEL", "Topology", "TopologyExtractionError", "extract_topology"]

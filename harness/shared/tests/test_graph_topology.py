@@ -110,11 +110,7 @@ class TestExtraction:
                 builder.add_conditional_edges("alpha", route, {constants.END: constants.END, "x": "__end__"})
         """
         topology = extract_topology(write_source(tmp_path, source))
-        assert topology.edges == (
-            (START_SENTINEL, "alpha"),
-            ("alpha", END_SENTINEL),
-            ("alpha", END_SENTINEL),
-        )
+        assert topology.edges == ((START_SENTINEL, "alpha"), ("alpha", END_SENTINEL), ("alpha", END_SENTINEL))
 
     def test_keyword_arguments_are_read_like_positional_ones(self, tmp_path: Path) -> None:
         source = """
@@ -206,7 +202,16 @@ class TestExtraction:
         assert topology.edges == ((START_SENTINEL, "alpha"), ("alpha", END_SENTINEL))
 
     def test_calls_on_anything_but_the_builder_are_ignored(self, tmp_path: Path) -> None:
-        """A same-named method on another object is not this graph's topology."""
+        """A same-named method on another object is not this graph's topology.
+
+        Three ways for a call to belong to something else: a different receiver,
+        an attribute path, and -- the one collecting calls on the bare name
+        across the whole module got wrong -- the *same* name bound in a sibling
+        scope. ``ghost`` used to land in this graph's node set, and ``render``
+        used to raise as an unmodelled builder method, both on source with
+        nothing wrong with it; a check that fires on correct source gets
+        switched off.
+        """
         source = """
             from langgraph.graph import END, START, StateGraph
 
@@ -218,6 +223,12 @@ class TestExtraction:
                 self.builder.add_edge("not_ours", END)
                 print("add_edge")
                 builder.add_edge(START, "alpha")
+
+
+            def build_docs():
+                builder = DocumentBuilder()
+                builder.add_node("ghost")
+                builder.render()
         """
         topology = extract_topology(write_source(tmp_path, source))
         assert topology.nodes == ("alpha",)
@@ -333,6 +344,39 @@ class TestFailsClosed:
         """
         with pytest.raises(TopologyExtractionError, match="no assignment of a StateGraph"):
             extract_topology(write_source(tmp_path, source))
+
+    def test_two_builders_in_one_module_raise(self, tmp_path: Path) -> None:
+        """Two graphs are two graphs; the first ``StateGraph(...)`` is not evidence about both.
+
+        Taking the first assignment's target and then collecting every call on
+        that bare name across the module merged two same-named builders into one
+        topology carrying both node sets, and returned the first graph alone
+        when the second was spelled differently -- each a plausible, non-empty
+        result no emptiness guard can reject, which is the exact shape R-GEA-4
+        forbids. The refusal names the file and both builders, because a reader
+        who cannot see which two graphs collided cannot act on it.
+        """
+        for second in ("builder", "other"):
+            source = f"""
+                from langgraph.graph import START, StateGraph
+
+
+                def build_one():
+                    builder = StateGraph(dict)
+                    builder.add_node("one", one_node)
+                    builder.add_edge(START, "one")
+
+
+                def build_two():
+                    {second} = StateGraph(dict)
+                    {second}.add_node("two", two_node)
+                    {second}.add_edge(START, "two")
+            """
+            path = write_source(tmp_path, source, name=f"two_{second}.py")
+            expected = rf"found 2 StateGraph builders \('builder' at line \d+, {second!r} at line \d+\)"
+            with pytest.raises(TopologyExtractionError, match=expected) as raised:
+                extract_topology(path)
+            assert str(path) in str(raised.value), f"the {second} refusal does not name the file it refused"
 
     def test_a_builder_with_no_nodes_raises(self, tmp_path: Path) -> None:
         source = """

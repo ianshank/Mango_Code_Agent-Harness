@@ -366,6 +366,52 @@ the LangGraph park. DEC-065 shipped topology verification as a plain test rather
 than a gate precisely so the orphan-reviewer defect stays watched while Phase E
 waits on the credential rotation.
 
+### NS-40 · A commit with no check runs reads exactly like a commit that passed *(spec required)*
+
+**Why now.** On PR #120 a bot-authored commit (`c331e47`) became the PR head and
+produced **two** check runs — the authoring app's own job, and a Vercel card.
+`build`, `build-full`, `secret-scan` and `dependency-audit` never fired, because
+GitHub does not cascade workflows from pushes made with the default token. The
+commit failed `make validate` on three Size Budget entries and failed the suite
+(`test_cli_survives_a_bogus_log_level` shells out to `validate_invariants` and
+asserts a zero exit), and none of that was visible anywhere on the PR.
+
+This is not that commit's defect, and the fix is not to distrust one author. It
+is that **absent** and **passing** render identically. `mergeable_state` was
+`unstable`, the checks list was short but green, and the required-status ruleset
+cannot block on a check that was never created — a required check that never
+reports is pending, not failing, and a reviewer scanning a green list has no
+prompt to ask which runs are missing. DEC-024 recorded the sibling of this: a
+merge whose body claimed `make ci` passed while every run on its head was red.
+The lesson was "only the check runs on the pushed head are evidence". This is
+the case that lesson does not cover, because there are no runs to read.
+
+**Evidence.** PR #120, head `c331e47`: `pull_request_read` with
+`get_check_runs` returns `total_count: 2` (`copilot`, `Vercel Preview
+Comments`); the immediately preceding and following human-authored pushes each
+return nine. Reproduced locally against that exact commit in a detached
+worktree: `validate_invariants` reports `authority_call_sites.py` at 519,
+`graph_topology.py` at 508, `test_authority_graph.py` at 710, then
+`Repo Invariants Check FAILED`; the suite reports `2 failed, 4238 passed`.
+
+**Done when.**
+
+- The nine checks `.github/rulesets/main.json` makes required are also *demanded*
+  rather than merely required — a head carrying zero runs for a required context
+  is reported as unsatisfied, not as pending-and-green. Either the workflow is
+  triggered on a shape a bot push does reach, or a gate reads the head's check
+  list and fails closed on a missing required context.
+- A test pins it: a synthetic head with an empty check list must be judged
+  not-ready by whatever the previous bullet produces. Without that, the fix is
+  the same shape as the bug — a check that passes because it inspected nothing.
+- `harness/CONTRACT.md` says which contexts are mandatory-present, so "which
+  runs should exist for this head" is answerable from the repository rather than
+  from memory of what CI usually does.
+
+**Depends on.** Overlaps **NS-36** (Phase D, CI truthfulness) and should be
+folded into it rather than run beside it if that work starts first — NS-36
+already owns the question of whether a green PR page means a green head.
+
 ### NS-29 · The program plans
 
 Pointer only: status is the remediation plan's boxes, read there, not here.

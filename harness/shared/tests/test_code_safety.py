@@ -6,6 +6,13 @@ case" but "the checker cannot fail": ``synthesis.prohibited_imports`` spans
 importable modules, attribute targets reached through a bare ``import os``, and
 a builtin no import statement names, so an ``ast.Import``-only reading decides
 two of five entries and passes the rest in silence.
+
+The same failure has two more spellings, each covered below. Every entry is
+reachable through ``getattr`` -- a string is not an ``ast.Attribute``, so a
+checker reading attribute chains alone decided none of the five that way. And
+``synthesis.python_write_suffixes`` decides which writes are asked the question
+at all, so a shape of *that* list which cannot be read leaves the whole check
+undone for every target it failed to name.
 """
 
 from __future__ import annotations
@@ -17,12 +24,15 @@ from pathlib import Path
 import pytest
 
 from harness.shared.code_safety import (
+    DEFAULT_PYTHON_WRITE_SUFFIXES,
     ProhibitedSymbol,
     ProhibitedSymbolPolicyError,
     load_prohibited_symbols,
+    load_python_write_suffixes,
     prohibited_symbol_denial,
     prohibited_symbol_findings,
 )
+from harness.shared.policy_loader import PolicyError
 
 pytestmark = pytest.mark.governance
 
@@ -123,6 +133,10 @@ class TestAttributeTargets:
     def test_an_unrelated_attribute_of_the_same_name_is_not_flagged(self) -> None:
         assert findings_for("class Shell:\n    system = 1\nShell().system\n") == []
 
+    def test_literal_getattr_attribute_is_resolved(self) -> None:
+        findings = findings_for("import os\ngetattr(os, 'system')('x')\n")
+        assert [(f.policy_entry, f.lineno) for f in findings] == [("os.system", 2)]
+
 
 class TestTheBuiltinNoImportNames:
     """`__import__`: the third shape, invisible to an `ast.Import` walk."""
@@ -167,12 +181,269 @@ class TestTheBuiltinsNamespaceIsNotADetour:
         """
         assert findings_for("import builtins\nprint(builtins.len([1]))\n") == []
 
+    def test_literal_getattr_builtin_is_resolved(self) -> None:
+        findings = findings_for("import builtins\ngetattr(builtins, '__import__')('os')\n")
+        assert [(f.policy_entry, f.lineno) for f in findings] == [("__import__", 2)]
+
     def test_the_denial_names_the_entry_and_the_spelling(self, tmp_path: Path) -> None:
         """The author has to see both: the rule, and the name their file contains."""
         policy = write_policy_file(tmp_path, {"prohibited_imports": list(ENTRIES)})
         reason = prohibited_symbol_denial(ast.parse("import builtins\nbuiltins.__import__('os')\n"), policy)
         assert reason is not None
         assert "__import__ as builtins.__import__ (line 2)" in reason
+
+
+class TestReflectionIsNotADetourEither:
+    """The same entries, spelled as a string handed to ``getattr``.
+
+    ``os.system(...)`` and ``getattr(os, "system")(...)`` reach the same
+    attribute and only the first is an ``ast.Attribute``, so a checker reading
+    attribute chains alone sees ``getattr`` and ``os`` -- neither prohibited --
+    and writes the file. Every case below was admitted before the reflective
+    resolution landed, and each is a two-line module.
+    """
+
+    def test_the_literal_key_resolves_to_the_attribute(self) -> None:
+        findings = findings_for('import os\ngetattr(os, "system")("id")\n')
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [
+            ("os.system", 'getattr(os, "system")', 2)
+        ]
+
+    def test_an_aliased_import_resolves_through_the_binding(self) -> None:
+        """The rename machinery is shared, so `import os as o` costs the bypass nothing."""
+        findings = findings_for('import os as o\ngetattr(o, "system")("id")\n')
+        assert [(f.policy_entry, f.reference) for f in findings] == [("os.system", 'getattr(o, "system")')]
+
+    def test_the_builtin_no_import_names_is_reached_through_its_namespace(self) -> None:
+        findings = findings_for('import builtins\ngetattr(builtins, "__import__")("os")\n')
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [
+            ("__import__", 'getattr(builtins, "__import__")', 2)
+        ]
+
+    def test_a_renamed_accessor_is_not_a_rename_around_the_check(self) -> None:
+        """`from builtins import getattr as g` is the detour one level up."""
+        findings = findings_for('from builtins import getattr as g\nimport os\ng(os, "system")("id")\n')
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [("os.system", 'g(os, "system")', 3)]
+
+    def test_the_accessor_read_off_its_own_namespace(self) -> None:
+        findings = findings_for('import builtins\nimport os\nbuiltins.getattr(os, "system")("id")\n')
+        assert [(f.policy_entry, f.reference) for f in findings] == [("os.system", 'builtins.getattr(os, "system")')]
+
+    def test_a_module_that_imports_its_own_getattr_is_still_judged(self) -> None:
+        """The inverse direction, decided the way `_spellings` decides its own.
+
+        A name bound to something else is not the builtin, so resolution alone
+        would let this through. The written spelling counts as well, because a
+        denial an author renames around costs a cycle and admitting the bypass
+        costs the check.
+        """
+        assert entries_in('from vendor import getattr\nimport os\ngetattr(os, "system")("id")\n') == ["os.system"]
+
+    def test_the_three_argument_form_reaches_the_same_attribute(self) -> None:
+        assert entries_in('import os\ngetattr(os, "system", None)("id")\n') == ["os.system"]
+
+    def test_nested_reads_resolve_through_the_whole_chain(self) -> None:
+        """`getattr(getattr(a, "b"), "c")` is `a.b.c`, and is matched as `a.b.c`."""
+        source = 'import os\ngetattr(getattr(os, "path"), "join")("a")\n'
+        findings = findings_for(source, ("os.path.join",))
+        assert [(f.policy_entry, f.reference) for f in findings] == [
+            ("os.path.join", 'getattr(getattr(os, "path"), "join")')
+        ]
+
+    def test_an_attribute_read_off_the_result_keeps_resolving(self) -> None:
+        """`getattr(os, "system").__call__("id")` calls the same object."""
+        findings = findings_for('import os\ngetattr(os, "system").__call__("id")\n')
+        assert [(f.policy_entry, f.reference) for f in findings] == [("os.system", 'getattr(os, "system").__call__')]
+
+    def test_the_base_is_not_reported_a_second_time(self) -> None:
+        """One line, one finding: the chain is reported, not the module inside it."""
+        findings = findings_for('import subprocess\ngetattr(subprocess, "run")([])\n')
+        assert [(f.reference, f.lineno) for f in findings] == [
+            ("subprocess", 1),
+            ('getattr(subprocess, "run")', 2),
+        ]
+
+    def test_an_attribute_the_policy_does_not_name_passes(self) -> None:
+        assert findings_for('import os\nprint(getattr(os, "getenv")("HOME"))\n') == []
+
+    def test_a_base_rooted_in_a_call_is_not_resolved(self) -> None:
+        assert findings_for('import os\ndef f():\n    return os\ngetattr(f(), "system")("x")\n') == []
+
+    def test_a_base_rooted_in_a_subscript_is_not_resolved(self) -> None:
+        """A `Name`/`Attribute` chain is the whole of what this module can resolve."""
+        assert findings_for('mods = {}\ngetattr(mods["os"], "system")("x")\n') == []
+
+    def test_a_call_that_is_not_getattr_is_not_a_reflective_read(self) -> None:
+        assert findings_for('import os\nprint(os, "system")\n') == []
+
+    def test_a_callee_that_is_not_a_name_chain_is_not_a_reflective_read(self) -> None:
+        assert findings_for('import os\nfuncs = []\nfuncs[0](os, "system")\n') == []
+
+    def test_the_denial_names_the_entry_and_the_reflective_spelling(self, tmp_path: Path) -> None:
+        policy = write_policy_file(tmp_path, {"prohibited_imports": list(ENTRIES)})
+        reason = prohibited_symbol_denial(ast.parse('import os\ngetattr(os, "system")("id")\n'), policy)
+        assert reason is not None
+        assert 'os.system as getattr(os, "system") (line 2)' in reason
+
+
+class TestAComputedKeyIsJudgedByWhatItsBaseCouldReach:
+    """`getattr(os, name)`: the key is a string the module never writes down.
+
+    The fail-closed reading is "report every one of them", and it is the wrong
+    one -- `getattr(self, name)` is how ordinary Python reaches a field chosen
+    at runtime, and a check that denies correct code is switched off rather than
+    satisfied. So the rule is narrower: report only where the policy forbids
+    something under the base the key is read from.
+    """
+
+    def test_a_computed_key_on_a_forbidden_base_is_reported(self) -> None:
+        findings = findings_for("import os\ngetattr(os, name)('id')\n")
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [
+            ("os.system", "getattr(os, <computed>)", 2)
+        ]
+
+    def test_a_key_bound_earlier_in_the_module_is_still_computed(self) -> None:
+        """The reproduction: the name is a literal one line up, and is not folded.
+
+        Constant folding would decide this one module and not the next, so the
+        base rule decides both: `os` is a base the policy forbids something
+        under, whatever the key turns out to be.
+        """
+        assert entries_in('import os\nname = "system"\ngetattr(os, name)("id")\n') == ["os.system"]
+
+    def test_reflection_on_an_object_the_policy_does_not_name_passes(self) -> None:
+        """The reason the rule is not "report every computed key"."""
+        source = (
+            "class C:\n"
+            "    def get(self, name, obj, attr):\n"
+            "        return getattr(self, name), getattr(obj, attr), getattr(C, name, None)\n"
+        )
+        assert findings_for(source) == []
+
+    def test_the_builtins_namespace_is_reachable_by_a_computed_key(self) -> None:
+        """Every single-segment entry sits under `builtins`; that is what it is."""
+        assert set(entries_in("import builtins\ngetattr(builtins, name)('os')\n")) == {
+            "__import__",
+            "importlib",
+            "subprocess",
+        }
+
+    def test_a_key_that_is_not_a_string_is_a_key_this_module_cannot_read(self) -> None:
+        assert entries_in("import os\ngetattr(os, 1)\n") == ["os.system"]
+
+    def test_a_base_that_does_not_resolve_is_not_judged(self) -> None:
+        """Stated rather than hidden: the same residual as `f().system`."""
+        assert findings_for("def load():\n    return None\ngetattr(load(), name)\n") == []
+
+    def test_the_base_is_not_reported_twice_when_it_is_itself_prohibited(self) -> None:
+        """`subprocess` is already a finding on that line; the rule adds nothing."""
+        findings = findings_for("import subprocess\ngetattr(subprocess, name)\n")
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [
+            ("subprocess", "subprocess", 1),
+            ("subprocess", "subprocess", 2),
+        ]
+
+    def test_the_denial_says_the_key_was_not_written_down(self, tmp_path: Path) -> None:
+        policy = write_policy_file(tmp_path, {"prohibited_imports": list(ENTRIES)})
+        reason = prohibited_symbol_denial(ast.parse("import os\ngetattr(os, name)\n"), policy)
+        assert reason is not None
+        assert "os.system as getattr(os, <computed>) (line 2)" in reason
+
+
+class TestEveryLiveEntryIsReachedReflectively:
+    """The anti-vacuity guard for the reflective spelling, per policy entry.
+
+    `os.system` is the entry the bypass was reported against; a fix tested only
+    against it would leave the other four decided by the direct spelling alone.
+    Witnesses are built per shape from the live policy, so a sixth entry is
+    exercised the day it is declared.
+    """
+
+    @staticmethod
+    def _literal_witness(entry: str) -> str:
+        head, _, attribute = entry.partition(".")
+        if attribute:
+            return f'import {head}\ngetattr({head}, "{attribute}")()\n'
+        if entry.startswith("__") and entry.endswith("__"):
+            return f'import builtins\ngetattr(builtins, "{entry}")("os")\n'
+        return f'import {entry}\ngetattr({entry}, "__name__")\n'
+
+    @staticmethod
+    def _computed_witness(entry: str) -> str:
+        head, _, attribute = entry.partition(".")
+        if attribute:
+            return f"import {head}\ngetattr({head}, name)\n"
+        if entry.startswith("__") and entry.endswith("__"):
+            return "import builtins\ngetattr(builtins, name)\n"
+        return f"import {entry}\ngetattr({entry}, name)\n"
+
+    @pytest.mark.parametrize("entry", load_prohibited_symbols())
+    def test_a_literal_key_reaches_the_entry_at_the_reflective_line(self, entry: str) -> None:
+        live = load_prohibited_symbols()
+        findings = findings_for(self._literal_witness(entry), live)
+        reached = [f for f in findings if f.policy_entry == entry and f.lineno == 2]
+        assert reached, f"{entry} is not reachable through a literal getattr: {findings}"
+
+    @pytest.mark.parametrize("entry", load_prohibited_symbols())
+    def test_a_computed_key_reaches_the_entry_at_the_reflective_line(self, entry: str) -> None:
+        live = load_prohibited_symbols()
+        findings = findings_for(self._computed_witness(entry), live)
+        reached = [f for f in findings if f.policy_entry == entry and f.lineno == 2]
+        assert reached, f"{entry} is not reachable through a computed getattr: {findings}"
+
+
+class TestThePythonWriteSuffixList:
+    """`synthesis.python_write_suffixes`: which writes are asked the question at all.
+
+    A target the list fails to name is never judged against
+    `synthesis.prohibited_imports`, so every shape that cannot be read raises
+    for the same reason the prohibited list does -- with one exception, the
+    adopter who has no policy file, which is a supported path rather than a
+    policy that lost a key.
+    """
+
+    @staticmethod
+    def _policy(tmp_path: Path, value: object) -> Path:
+        return write_policy_file(tmp_path, {"python_write_suffixes": value})
+
+    def test_the_live_policy_names_both_executable_suffixes(self) -> None:
+        assert {".py", ".pyw"} <= load_python_write_suffixes()
+
+    def test_an_absent_policy_file_uses_the_built_in_default(self, tmp_path: Path) -> None:
+        assert load_python_write_suffixes(tmp_path / "nothing-here.json") == DEFAULT_PYTHON_WRITE_SUFFIXES
+
+    def test_case_is_folded_because_the_filesystem_does_not_fold_it(self, tmp_path: Path) -> None:
+        assert load_python_write_suffixes(self._policy(tmp_path, [".PY", ".Pyw"])) == {".py", ".pyw"}
+
+    def test_the_list_is_the_policy_rather_than_a_literal(self, tmp_path: Path) -> None:
+        assert load_python_write_suffixes(self._policy(tmp_path, [".pyx"])) == {".pyx"}
+
+    def test_a_missing_key_raises(self, tmp_path: Path) -> None:
+        policy = write_policy_file(tmp_path, {"prohibited_imports": ["subprocess"]})
+        with pytest.raises(ProhibitedSymbolPolicyError, match="is missing"):
+            load_python_write_suffixes(policy)
+
+    def test_a_missing_section_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / "governance-policy.json"
+        path.write_text(json.dumps({"coverage": {"lines": 90}}), encoding="utf-8")
+        with pytest.raises(ProhibitedSymbolPolicyError, match="is missing"):
+            load_python_write_suffixes(path)
+
+    @pytest.mark.parametrize("value", [[], "py", {}, None])
+    def test_a_list_that_cannot_name_a_suffix_raises(self, tmp_path: Path, value: object) -> None:
+        with pytest.raises(ProhibitedSymbolPolicyError, match="non-empty list"):
+            load_python_write_suffixes(self._policy(tmp_path, value))
+
+    @pytest.mark.parametrize("entry", ["py", " .py", ".py ", 3, ""])
+    def test_an_entry_that_is_not_a_dotted_suffix_raises(self, tmp_path: Path, entry: object) -> None:
+        """`Path.suffix` yields `.py`; a bare `py` would match nothing while looking sound."""
+        with pytest.raises(ProhibitedSymbolPolicyError, match="dotted suffixes"):
+            load_python_write_suffixes(self._policy(tmp_path, [".py", entry]))
+
+    def test_the_refusal_is_catchable_as_a_policy_error(self, tmp_path: Path) -> None:
+        """One name for "the policy cannot arm this check", whichever key lost it."""
+        with pytest.raises(PolicyError):
+            load_python_write_suffixes(self._policy(tmp_path, []))
 
 
 class TestBenignCodePasses:

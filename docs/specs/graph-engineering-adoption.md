@@ -203,9 +203,16 @@ conflation D-5 had already resolved.**
 
 ## Requirements
 
-- R-GEA-1: `check_traceability.py` MUST resolve its configuration and globs against an explicit
-  workspace root rather than the process CWD, defaulting to the repository root, so that the
-  requirement IDs it reads are the corpus under `docs/specs/` and not `harness/node/docs/specs/`.
+- R-GEA-1: The repository invocation of `check_traceability.py` MUST pass `--workspace .` and run
+  from the repository root, so its configuration and globs resolve there rather than under
+  `harness/node`, where `make validate` previously ran it, and the requirement IDs it reads are
+  the corpus under `docs/specs/` rather than `harness/node/docs/specs/`. The option's
+  omitted-value default remains CWD-relative for the per-stack compatibility shims.
+  *Revision 4: revision 3 required the argument to default to the repository root. It does not
+  and must not — the shipped default is `Path.cwd()`, and a repository-root default would have
+  broken the per-stack shims the Backward compatibility section below guarantees, so the
+  requirement contradicted both the code and its own compatibility clause. What fixes the defect
+  is the explicit root on the required check, not a changed default.*
 - R-GEA-1b: The gate MUST distinguish **contract specs**, whose requirement IDs name shipped
   behaviour and must carry both citations, from **program plans**, whose IDs name scheduled work
   and cannot cite an implementation until it exists. The class MUST be declared per document
@@ -384,11 +391,13 @@ Ordered so that each step's inputs exist before it runs, and so that the defect 
 later requirement ID is closed first.
 
 1. **Fix the traceability scope, and classify the corpus in the same change.** Add `--workspace`
-   to `check_traceability.py`, defaulting to the repository root, and a per-document class
-   declaration (contract spec vs program plan) defaulting to the strict branch; keep the
-   CWD-relative path working for the per-stack shim during the `DEC-056` shim window — consumes
-   `harness/node/.governance/traceability.json`; produces a root `.governance/traceability.json`,
-   a class declaration in each spec, and a gate that reads the real corpus. *The scope fix and
+   to `check_traceability.py`; the root invocation passes `--workspace .`, while the omitted-value
+   default remains CWD-relative, which is what keeps the per-stack shim working during the
+   `DEC-056` shim window; and add a per-document class declaration (contract spec vs program plan)
+   defaulting to the strict branch — consumes `harness/node/.governance/traceability.json` (reads
+   it; the file is deliberately left unedited, which is what makes the shim invocation a live
+   proof of the compatibility claim); produces a root `.governance/traceability.json`, a class
+   declaration in each program plan, and a gate that reads the real corpus. *The scope fix and
    the classification are one step because shipping the first alone produces a gate that cannot
    go green (S-3).*
 2. **Reconcile the newly visible corpus.** Fixing step 1 exposes 412 previously unchecked IDs.
@@ -429,24 +438,105 @@ later requirement ID is closed first.
 ## Files touched
 
 Rows marked **protected** match `protected_paths` in `governance-policy.json` and each needs a
-row in the PR's `infra-reviewed` attestation table. *Revision 3: revision 2 opened this section
-with "No path below matches `protected_paths` … so this spec's own landing needs no
-`infra-reviewed` attestation", which was false of its own list — four rows below were already
-marked protected, and the PR carries seven attestation rows. The sentence was written when the
-plan expected to touch only documentation and was not revised when the implementation landed.*
+row in the PR's `infra-reviewed` attestation table. `make attestation BASE_REF=main` generates
+that table from `protected_paths` and the branch diff and is the authority; the list below is a
+snapshot of one head, kept in prose only so a reader can notice an omission without running
+anything. Measured on `eab19b8`: 42 files changed against `origin/main`, of which **ten** are
+protected. `BASE_REF=main` resolves to `origin/main`, because `git_modified_files` prepends
+`origin/`, and `origin/main` is this PR's real base. Do not substitute a bare `git diff
+main...HEAD`: the local `main` ref is an ancestor of `origin/main`, 113 commits behind it, so
+that diff reports several hundred files and buries the ten.
+
+*Revision 3: revision 2 opened this section with "No path below matches `protected_paths` … so
+this spec's own landing needs no `infra-reviewed` attestation", which was false of its own list
+— four rows below were already marked protected, and the PR carries the required `infra-reviewed`
+attestation. The sentence was written when the plan expected to touch only documentation and was
+not revised when the implementation landed.*
+*Revision 4: revision 3's own replacement then carried a stale count, "seven attestation rows",
+against a table of ten, and a list that had drifted from the implementation in four further ways
+— `docs/specs/*.md` claimed a class-declaration line "per document" where only the five program
+plans received one, a code-graph threshold was attributed to the policy that step 7 never
+reached, `harness/node/.governance/traceability.json` was listed as edited when leaving it
+untouched is what proves the compatibility claim, and 27 of the 42 changed files were absent —
+seven of them protected, so a reviewer working from this list would have expected four
+attestation rows, only three of which are real, and met ten. A wrong count in the paragraph
+warning about attestation drift is
+that drift. The count is kept rather than replaced by a bare pointer, because a pointer gives a
+reviewer nothing to disagree with and drift is only ever caught by two figures failing to match;
+it is now stamped with the commit and the command that produced it, so a later reader can tell a
+measurement from a carried-forward claim (DEC-024).*
+
+New modules and their tests:
+
+- `harness/shared/authority_graph.py` — new, step 3
+- `harness/shared/tests/test_authority_graph.py` — new, step 4
+- `harness/shared/authority_call_sites.py` — new, step 4 (the `human_approved` reachability scan)
+- `harness/shared/code_safety.py` — new, step 5 (`prohibited_symbol_denial` over the parsed AST)
+- `harness/shared/tests/test_code_safety.py` — new, step 5
+- `harness/shared/graph_topology.py` — new, step 8 (the R-GEA-6c extractor AC-GEA-9b consumes)
+- `harness/shared/tests/test_graph_topology.py` — new, step 8
+- `harness/shared/tests/test_graph_topology_parked.py` — new, step 8 (reads `graph.py`, edits nothing)
+- `harness/shared/tests/test_traceability_scope.py` — new, step 1
+- `harness/shared/tests/regression/test_traceability_corpus_regression.py` — new, step 1
+- `harness/shared/tests/regression/test_prohibited_symbol_write_door_regression.py` — new, step 5
+
+Existing code and tests amended:
+
+- `harness/shared/governance/check_traceability.py` — **protected** (`harness/shared/governance/**`), step 1
+- `harness/shared/tool_executors.py` — **protected**, step 5 — the write door itself
+- `harness/shared/governance-policy.json` — **protected**, step 1 — adds
+  `traceability.min_discovered_requirement_ids`, `max_uncited_contract_requirement_ids`,
+  `default_spec_class`, `program_plan_class` and `spec_class_marker`. It does **not** add a
+  code-graph threshold: step 7 is gated on step 6's baseline, which this change does not reach.
+- `Makefile` — **protected** (`Makefile`), step 1 — the second, repository-scoped
+  `check_traceability.py --workspace .` invocation alongside the per-stack one
+- `harness/shared/tests/test_protected_path_liveness.py` — **protected**, step 1 — reclassifies
+  `.governance/**` out of `DORMANT_PATTERNS`, since the root directory is now live
+- `harness/shared/tests/test_constant_triage.py` — step 1 — one row, registering
+  `test_traceability_scope.ACCEPTED_RATCHET_CEILING` against DEC-065
+- `harness/shared/tests/test_code_generation_tool.py` — step 5
+- `harness/shared/tests/test_agent_surface_liveness.py` — a pointer to its new companion,
+  `harness/shared/tests/test_agent_surface_determinism.py`. Both pin the derived role/tool
+  surface R-GEA-2b models. They are listed because they changed on this branch, not because a
+  step above produces them.
+
+Governance artefacts and records:
+
+- `.governance/traceability.json` — **protected** (`.governance/**`), step 1 — new, the
+  repository-scoped config declaring `"scope": "repository"`
+- `.mango/agents/README.md` — **protected** (`.mango/agents/**`) — corrects the effective-tool
+  table, which omitted `generate_code` from both roles' surfaces
+- `harness/CONTRACT.md` — **protected**, step 1 — records that root `.governance/` is now live
+- `harness/control-plane/policy-artifact.json` — **protected**, step 1 (policy digest regen,
+  because `governance-policy.json` changed)
+- `harness/node/.governance/decision-log.md` — **protected** (`**/.governance/**`)
+- `docs/decisions/DEC-065.md`, `docs/decisions/index.md`, `docs/decisions/index.json`
+- `CHANGELOG.md`, `NEXT_STEPS.md`, `.gitignore`, `.dockerignore`
+
+Later than the `eab19b8` snapshot, and so *not* in the ten counted above:
+`harness/shared/tool_schemas.py` — **protected** — whose `validate_syntax` description had gone
+on claiming the flag decides whether validation happens, which step 5 stopped being true.
+Regenerate the table with `make attestation BASE_REF=main` before opening the PR rather than
+trusting the count above; that is what the count is a snapshot *of*.
+
+Documentation:
 
 - `docs/specs/graph-engineering-adoption.md` (this document)
 - `docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`
-- `harness/shared/graph_topology.py` — new, step 8 (the R-GEA-6c extractor AC-GEA-9b consumes)
-- `harness/shared/tests/test_graph_topology.py` — new, step 8
-- `harness/shared/authority_graph.py` — new, step 3
-- `harness/shared/tests/test_authority_graph.py` — new, step 4
-- `harness/shared/tests/test_graph_topology_parked.py` — new, step 8 (reads `graph.py`, edits nothing)
-- `docs/specs/*.md` — a class declaration line per document, step 1
-- `harness/shared/governance/check_traceability.py` — **protected** (`harness/shared/governance/**`), step 1
-- `harness/shared/tool_executors.py` — **protected**, step 5
-- `harness/shared/governance-policy.json` — **protected**, step 7 only, to add the code-graph threshold
-- `harness/node/.governance/traceability.json` — **protected** (`**/.governance/**`), step 1
+- `docs/specs/2026-standards-remediation-plan.md`, `docs/specs/code-quality-tech-debt-plan.md`,
+  `docs/specs/god-file-decomposition.md`, `docs/specs/reflection-hardening-increment.md`,
+  `docs/specs/tech-debt-hardening-plan.md` — one class-declaration line each, carrying the
+  `traceability.spec_class_marker` prefix, step 1. (Naming that prefix literally here would
+  declare a class for *this* document, which is why it is named through the policy key.) These
+  five are the program plans; every other document under `docs/specs/` is left undeclared and so
+  graded as a contract spec by `traceability.default_spec_class`, which is the strict branch
+  R-GEA-1b requires the default to be.
+- `README.md`, `harness/README.md`, `docs/architecture/c4_architecture.md`
+
+**Not** touched, deliberately: `harness/node/.governance/traceability.json`. Revision 3 listed it
+as edited. Step 1 *reads* it through the per-stack shim invocation `make validate` still runs, and
+leaving it byte-identical is what makes that invocation a live proof of the Backward compatibility
+claim rather than an assertion about it.
 
 ## Invariants touched
 

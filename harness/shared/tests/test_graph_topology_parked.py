@@ -155,12 +155,22 @@ def test_topology_gate_is_parked_with_langgraph(makefile_text: str) -> None:
     exists. This module is itself such a test, and it must pass.
 
     The pairing is the enforcement: if DEC-053 stops being `accepted` the park is
-    lifted, and a topology gate becomes a legitimate thing to add — so this test
-    checks that the record names its successor and stops asserting, which is the
+    lifted, a topology gate becomes a legitimate thing to add, and the assertions
+    below stop being the right ones to make — so this test *fails* at that point
+    and says what to do about it. The failure is the whole mechanism behind the
     "AC-GEA-9's test is updated in the same change that supersedes it" clause of
-    the spec's backward-compatibility section. That branch is an early return
-    rather than a skip: INV-2 counts skips, and a check that quietly does
-    nothing is the failure mode this whole spec is about.
+    the spec's backward-compatibility section, because only a red test can force
+    a revision into the same change.
+
+    It was an early return, defended on the grounds that INV-2 counts skips and a
+    return is not one. That defence was answered by the wrong question: a return
+    is not a skip, but it is a check that asserts nothing and reports success —
+    the vacuous pass this whole spec is about. It would have gone permanently
+    green the moment a successor was named, forcing no revision at all, while
+    this docstring claimed it forced one. A docstring that describes a mechanism
+    the code does not implement is the defect this repository keeps finding in
+    itself (DEC-024), so the code was made to match the claim rather than the
+    claim trimmed to match the code.
     """
     if frontmatter_value(DEC_053, "status") != "accepted":
         successor = frontmatter_value(DEC_053, "superseded_by")
@@ -168,7 +178,14 @@ def test_topology_gate_is_parked_with_langgraph(makefile_text: str) -> None:
             "docs/decisions/DEC-053.md is no longer `accepted` but names no superseding record. The LangGraph "
             "park is the premise of this test; a lifted park needs a decision that lifted it."
         )
-        return
+        pytest.fail(
+            f"docs/decisions/DEC-053.md is no longer `accepted` (superseded_by: {successor}), so the LangGraph "
+            "park this test asserts under no longer stands and the assertions below are no longer the right "
+            "ones to make. Revise this test in the change that lifts the park: point DEC_053 at the superseding "
+            "record if that record re-parks the gate, or delete test_topology_gate_is_parked_with_langgraph if "
+            "a topology gate is now sanctioned — and say which in the PR. This failure is the mechanism, not an "
+            "accident; an early return here would let the supersession land with a stale, silently green test."
+        )
 
     targets = _make_targets(makefile_text)
     assert "ci" in targets, "the root Makefile has no `ci` target; the parser, not the Makefile, is what changed"

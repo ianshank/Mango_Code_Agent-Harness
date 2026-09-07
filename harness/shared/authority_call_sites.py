@@ -21,36 +21,50 @@ source *permits*, not about what one execution did. A runtime test can only
 show that the flag was not set on the paths it happened to drive, which is the
 same evidence the repository already had.
 
-Why so little is treated as readable: a name resolves only when it is bound
-exactly once, in the same function, *at a position that must already have run
-when the broker call does*, to a dict display whose keys are all string
-literals. A parameter, a call result, a ``**`` spread, a name bound twice, a
-name a ``.update()`` was called on, a name assigned only inside an ``if``, a
-``for``, or a ``try`` -- each is reported rather than analysed further.
+**An enumeration is only as sound as its membership test.** This scan reports
+on the call sites it finds, so a call it does not *recognise* is not a clean
+site -- it is an absent one, and absence reads exactly like safety. The first
+version recognised a call only by the final attribute name of its callee, so one
+line walked past it: bind ``invoke = broker.execute_command``, call ``invoke``,
+and the site was never enumerated while the non-empty-scan guard went on passing
+on the strength of the five direct sites. Two rules close it. A name this
+function binds to the method is an *alias*, and a call through it is a call site
+analysed like any other (:meth:`authority_call_analysis.Scope.bind`). A
+reference to the method that is **not** called here -- handed to a function,
+returned, stored on an object or in a container -- is reported where it leaves,
+because it is called somewhere this scan cannot see with a context it cannot
+read. What is deliberately not chased is a method fetched by a computed name
+(``getattr(broker, chosen)``): there is no name in the source to match, and the
+boundary is stated here rather than left for a later reader to discover.
 
-Position and parameters are the two halves the first version got wrong, and
-each let it report *clean* on code that is not. It read every assignment in a
-body regardless of where the assignment sat, so a literal written *after* a
-broker call laundered the value passed *to* it; and it read a parameter as
-merely unbound rather than as the caller's own value. An unsound scan reporting
-zero witnesses is worse than no scan: it turns "unverified" into "verified"
-without doing the work. :func:`_runs_before` and :func:`_parameter_names` are
-those two halves, each naming the shape it refuses.
+Why so little is treated as readable: :func:`authority_call_analysis.mapping_entries`
+resolves a name only when it is bound exactly once, in the same function, *at a
+position that must already have run when the broker call does*, to a dict
+display whose keys are all string literals. A parameter, a call result, a ``**``
+spread, a name bound twice, a name a ``.update()`` was called on, a name
+assigned only inside an ``if``, a ``for``, or a ``try`` -- each is reported
+rather than analysed further. An unsound scan reporting zero witnesses is worse
+than no scan: it turns "unverified" into "verified" without doing the work.
 
 Fail-closed means over-reporting, and the shape that must *not* over-report is
 the live call site: ``execute_run_command`` forwards ``**kwargs`` built two
 lines above and extended by ``kwargs["timeout"]`` inside an ``if``. A
 conditional subscript with a *literal* key widens the key set by at most that
-key, so it is read; a conditional *rebinding* is not. A scan that failed on
-correct code gets switched off.
+key, so it is read; a conditional *rebinding* is not. The alias rule is drawn as
+narrowly for the same reason: only a name bound to the method *itself* is
+followed, because treating every call through a local name as a broker call
+would report every call in the repository. A scan that failed on correct code
+gets switched off.
 
-This module is separate from ``authority_graph`` only because the two halves
-together exceed ``limits.size_budget_lines`` in ``governance-policy.json``.
-They are one deliverable: ``authority_graph`` re-exports
-:func:`approval_flag_reachability`, so R-GEA-2's named module carries the API,
-and the shared refusal vocabulary (:class:`AuthorityGraphError` and
-:class:`EmptyDerivationError`) is declared here, in the lower of the two, so the
-dependency between them runs one way and cannot cycle.
+This module is the reporting half of one deliverable. The analysis half is
+``authority_call_analysis`` -- "what does this name provably hold here" -- and
+it is the lowest of the three modules, so the shared refusal vocabulary
+(:class:`AuthorityGraphError`, :class:`EmptyDerivationError`) is declared there
+and imported here and by ``authority_graph``, which re-exports
+:func:`approval_flag_reachability` so R-GEA-2's named module carries the API.
+The dependency runs one way through the three and cannot cycle. The split
+itself is forced by ``limits.size_budget_lines`` in ``governance-policy.json``
+and taken on the seam NS-39 item 4 named.
 
 Spec: ``docs/specs/graph-engineering-adoption.md`` (R-GEA-2, R-GEA-4, C-GEA-1,
 C-GEA-2). Standard library and first-party imports only.
@@ -61,9 +75,20 @@ from __future__ import annotations
 import ast
 import logging
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
+
+from harness.shared.authority_call_analysis import (
+    BROKER_ENTRY_POINTS,
+    AuthorityGraphError,
+    EmptyDerivationError,
+    Position,
+    Scope,
+    ScopeOwner,
+    build_scope,
+    mapping_entries,
+    names_entry_point,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,57 +96,8 @@ logger = logging.getLogger(__name__)
 #: scan, the witness messages, and the tests cannot drift from ``broker.py``.
 APPROVAL_FLAG = "human_approved"
 
-#: The broker door the agent path goes through. ``_policy_decision`` is
-#: deliberately absent: it receives the context as a *parameter*, which is the
-#: PDP's own plumbing rather than a caller constructing one, and flagging it
-#: would report the design as a defect on every run.
-BROKER_ENTRY_POINTS = frozenset({"execute_command"})
-
 #: The name of ``ExecutionBroker.execute_command``'s mapping parameter.
 CONTEXT_PARAMETER = "context"
-
-#: Methods that add a key to a mapping already bound to a name. A name they are
-#: called on is treated as unreadable rather than re-analysed: ``update`` can
-#: merge a caller-supplied mapping, which is precisely the shape being hunted.
-KEY_ADDING_METHODS = frozenset({"update", "setdefault"})
-
-#: Where a statement sits: one ``(id(owner), field, index)`` step per nesting
-#: level from the function body down. Two statements share a block when their
-#: paths agree on every step but the last -- the only case in which source order
-#: is also execution order. Without it a binding answers "what is this name
-#: assigned *somewhere*" when the question is "what does it hold *here*".
-_Position = tuple[tuple[int, str, int], ...]
-
-#: What owns a :class:`_Scope`. A ``lambda`` and a ``class`` body are absent
-#: deliberately: neither gets a scope, so a call inside one resolves nothing.
-_ScopeOwner = ast.Module | ast.FunctionDef | ast.AsyncFunctionDef
-
-#: The AST field shapes holding a statement list. ``except`` handlers and
-#: ``match`` cases are here because they are *not* ``ast.stmt``: read as
-#: expression fields their assignments go unrecorded, so a name rebound only in
-#: an ``except`` branch looks singly-bound and the resolver hands back the
-#: ``try`` branch's literal as the value at the call.
-_BLOCK_KINDS = (ast.stmt, ast.excepthandler, ast.match_case)
-
-#: Statements that open a binding scope of their own. The visitor gives each
-#: its own :class:`_Scope`; a binding credited to the enclosing function is how
-#: a forwarded mapping comes to look like a dict literal.
-_NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-
-
-class AuthorityGraphError(ValueError):
-    """Base for every refusal the authority graph makes. Callers catch one name."""
-
-
-class EmptyDerivationError(AuthorityGraphError):
-    """A derived set came back empty (R-GEA-4).
-
-    An empty node, edge, or call-site set is a broken extractor, not a satisfied
-    property: every assertion over it holds for the reason that nothing was
-    inspected. This repository has been bitten by that shape three times --
-    DEC-024, DEC-052, and a traceability gate that read 6 requirement IDs out of
-    412 while printing ``passed``.
-    """
 
 
 @dataclass(frozen=True)
@@ -140,195 +116,9 @@ class ApprovalWitness:
     reason: str
 
 
-class _Binding(NamedTuple):
-    """One assignment, with the block position at which it takes effect."""
-
-    value: ast.expr
-    position: _Position
-
-
-@dataclass
-class _Scope:
-    """What one function binds, as far as this analysis can read it.
-
-    Absence is the safe state: a name with no binding here -- a loop variable, a
-    ``with ... as`` target, a walrus, an import -- resolves to nothing and is
-    reported. Presence in ``parameters`` is *worse*: the caller chose that value.
-    """
-
-    name: str
-    parameters: set[str] = field(default_factory=set)
-    bindings: dict[str, _Binding] = field(default_factory=dict)
-    extra_keys: dict[str, dict[str, ast.expr]] = field(default_factory=dict)
-    tainted: set[str] = field(default_factory=set)
-    positions: dict[int, _Position] = field(default_factory=dict)
-
-
-def _literal_key(node: ast.expr | None) -> str | None:
-    """The string a dict key or subscript is, or ``None`` when it is not one.
-
-    ``None`` covers both a ``**`` spread inside a dict display (whose key node
-    *is* ``None``) and a computed key, and both mean the same thing here: the
-    key set cannot be read, so the mapping is not closed.
-    """
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return None
-
-
-def _parameter_names(owner: _ScopeOwner) -> set[str]:
-    """Every name the signature binds, ``*args`` and ``**kwargs`` included.
-
-    A parameter is caller-controlled by definition, and the property is "no
-    *caller* can supply ``human_approved``" (DEC-065). Reading an unbound name
-    as merely unreadable reads the same as unknown-and-fine, so
-    ``run(broker, cmd, context)`` forwarding its own ``context`` read clean.
-    """
-    if isinstance(owner, ast.Module):
-        return set()
-    args = owner.args
-    named = {arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)}
-    return named | {arg.arg for arg in (args.vararg, args.kwarg) if arg is not None}
-
-
-def _runs_before(binding: _Position, call: _Position) -> bool:
-    """Whether ``binding`` is guaranteed to have run by the time ``call`` runs.
-
-    True only when the two paths agree on every enclosing block down to one
-    they both sit *directly* in, and the binding comes first there. A binding
-    nested deeper -- in an ``if``, a ``for``, a ``try`` -- is skipped on some
-    path, and one later in a loop body reaches the call on the next iteration.
-    With no position at all, a literal assigned *after* a broker call was read
-    as the value passed *to* it.
-    """
-    for depth, (bound, called) in enumerate(zip(binding, call, strict=False)):
-        if bound[:2] != called[:2]:
-            return False
-        if bound[2] != called[2]:
-            return bound[2] < called[2] and depth == len(binding) - 1
-    return False
-
-
-def _mutated_name(node: ast.AST) -> str | None:
-    """The name a key-adding method is called on, if this node is such a call."""
-    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-        return None
-    if node.func.attr not in KEY_ADDING_METHODS or not isinstance(node.func.value, ast.Name):
-        return None
-    return node.func.value.id
-
-
-def _record_target(scope: _Scope, target: ast.expr, value: ast.expr, position: _Position) -> None:
-    """Record one assignment target. Unreadable shapes are simply not recorded.
-
-    A rebound name is tainted: which value reaches the call is a flow question
-    this analysis does not answer. ``name[key] = value`` with a literal key is
-    kept whatever its position -- it widens the key set by at most that key
-    wherever it sits -- and a computed key taints instead.
-    """
-    if isinstance(target, ast.Name):
-        if target.id in scope.bindings:
-            scope.tainted.add(target.id)
-        scope.bindings[target.id] = _Binding(value=value, position=position)
-    elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
-        key = _literal_key(target.slice)
-        if key is None:
-            scope.tainted.add(target.value.id)
-        else:
-            scope.extra_keys.setdefault(target.value.id, {})[key] = value
-
-
-def _read_block(parent: ast.AST, field_name: str, body: list[ast.AST], prefix: _Position, scope: _Scope) -> None:
-    """Index one statement list: what each statement binds, and where it sits.
-
-    Every node in a non-block field inherits its statement's position, which is
-    how a broker call buried in a ``return`` or an ``if`` test is later placed
-    relative to the assignments around it. A ``lambda`` is not walked into: it
-    binds names of its own and gets no :class:`_Scope`. A shape with no readable
-    target -- tuple unpacking, ``with ... as``, a walrus -- is left unrecorded,
-    so the name stays unbound and is reported.
-    """
-    for index, statement in enumerate(body):
-        if isinstance(statement, _NESTED_SCOPES):
-            continue
-        position = (*prefix, (id(parent), field_name, index))
-        if isinstance(statement, ast.Assign):
-            for target in statement.targets:
-                _record_target(scope, target, statement.value, position)
-        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
-            _record_target(scope, statement.target, statement.value, position)
-        elif isinstance(statement, ast.AugAssign) and isinstance(statement.target, ast.Name):
-            scope.tainted.add(statement.target.id)
-        for name, value in ast.iter_fields(statement):
-            if isinstance(value, list) and value and isinstance(value[0], _BLOCK_KINDS):
-                _read_block(statement, name, value, position, scope)
-                continue
-            stack = [item for item in (value if isinstance(value, list) else [value]) if isinstance(item, ast.AST)]
-            while stack:
-                node = stack.pop()
-                if isinstance(node, (*_NESTED_SCOPES, ast.Lambda)):
-                    continue
-                scope.positions[id(node)] = position
-                mutated = _mutated_name(node)
-                if mutated is not None:
-                    scope.tainted.add(mutated)
-                stack.extend(ast.iter_child_nodes(node))
-
-
-def _binding_at(name: str, scope: _Scope, at: _Position | None) -> tuple[ast.expr | None, str]:
-    """The value ``name`` provably holds at ``at``, or ``None`` and why not.
-
-    Every branch but the last is a refusal naming the rule that refused, in
-    order of severity: a parameter is not an unhandled shape, it is the hole.
-    """
-    binding = scope.bindings.get(name)
-    if name in scope.parameters:
-        reason = f"`{name}` is a parameter of {scope.name}, so its value is the caller's"
-    elif name in scope.tainted:
-        reason = f"`{name}` is rebound or mutated in {scope.name}"
-    elif binding is None:
-        reason = f"`{name}` is not bound to a dict literal in {scope.name}"
-    elif at is None or not _runs_before(binding.position, at):
-        reason = f"`{name}`'s binding in {scope.name} is not guaranteed to have run at this call"
-    else:
-        logger.debug("Resolved `%s` in %s: its one binding precedes this call unconditionally", name, scope.name)
-        return binding.value, ""
-    logger.debug("Tainted `%s` in %s: %s", name, scope.name, reason)
-    return None, reason
-
-
-def _mapping_entries(expr: ast.expr, scope: _Scope, at: _Position | None) -> tuple[dict[str, ast.expr] | None, str]:
-    """The key/value entries ``expr`` provably has, or ``None`` and why not.
-
-    "Provably" is narrow on purpose: a dict display whose keys are all string
-    constants, optionally reached through one name bound once *before ``at``*
-    and extended by literal-key subscript assignment. Anything else returns
-    ``None``: "cannot show" must read as "reports", never "passes".
-    """
-    extra: dict[str, ast.expr] = {}
-    target = expr
-    if isinstance(expr, ast.Name):
-        resolved, refusal = _binding_at(expr.id, scope, at)
-        if resolved is None:
-            return None, refusal
-        target = resolved
-        extra = scope.extra_keys.get(expr.id, {})
-    if not isinstance(target, ast.Dict):
-        return None, f"`{ast.unparse(target)}` is not a dict literal"
-
-    entries: dict[str, ast.expr] = {}
-    for key, value in zip(target.keys, target.values, strict=True):
-        literal = _literal_key(key)
-        if literal is None:
-            return None, f"`{ast.unparse(target)}` carries a key this analysis cannot read"
-        entries[literal] = value
-    entries.update(extra)
-    return entries, ""
-
-
-def _context_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str | None:
+def _context_reason(expr: ast.expr, scope: Scope, at: Position | None) -> str | None:
     """Why ``expr`` could carry the approval flag into the broker, or ``None``."""
-    entries, reason = _mapping_entries(expr, scope, at)
+    entries, reason = mapping_entries(expr, scope, at)
     if entries is None:
         return f"the broker context is not literal here: {reason}, so a caller could supply {APPROVAL_FLAG!r}"
     if APPROVAL_FLAG in entries:
@@ -336,7 +126,7 @@ def _context_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str 
     return None
 
 
-def _spread_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str | None:
+def _spread_reason(expr: ast.expr, scope: Scope, at: Position | None) -> str | None:
     """Why a ``**`` argument could carry the approval flag, or ``None``.
 
     ``execute_run_command`` forwards its arguments this way today, with a dict
@@ -344,7 +134,7 @@ def _spread_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str |
     reported. What this guards against is the same call growing a ``context`` it
     did not build -- a bag that *is* a ``**kwargs`` parameter included.
     """
-    entries, reason = _mapping_entries(expr, scope, at)
+    entries, reason = mapping_entries(expr, scope, at)
     if entries is None:
         return f"the call forwards `**{ast.unparse(expr)}`, a mapping it did not build here: {reason}"
     if APPROVAL_FLAG in entries:
@@ -355,7 +145,7 @@ def _spread_reason(expr: ast.expr, scope: _Scope, at: _Position | None) -> str |
     return _context_reason(context, scope, at)
 
 
-def _call_reasons(call: ast.Call, scope: _Scope) -> list[tuple[str, ast.expr]]:
+def _call_reasons(call: ast.Call, scope: Scope) -> list[tuple[str, ast.expr]]:
     """Every way this call site could carry the flag, each with the blamed expression.
 
     The call's block position is looked up once and threaded down. A call with
@@ -382,28 +172,70 @@ def _call_reasons(call: ast.Call, scope: _Scope) -> list[tuple[str, ast.expr]]:
     return found
 
 
-def _is_broker_call(node: ast.Call) -> bool:
-    """Whether this call goes through a broker entry point, by name."""
-    if isinstance(node.func, ast.Attribute):
-        return node.func.attr in BROKER_ENTRY_POINTS
-    return isinstance(node.func, ast.Name) and node.func.id in BROKER_ENTRY_POINTS
+def _escape_reason(reference: ast.expr) -> str:
+    """Why a reference that is read but not called here is a witness.
+
+    The scan can read the arguments of a call it can see. A method handed on as
+    a value is called elsewhere -- in a caller, a registry, a callback -- with
+    arguments that are not in this function at all, so the mapping it eventually
+    receives is outside what any of these rules can decide.
+    """
+    return (
+        f"`{ast.unparse(reference)}` is read here without being called, so the broker method "
+        f"leaves this scan as a value; whatever calls it may pass a context naming {APPROVAL_FLAG!r}"
+    )
 
 
 class _BrokerCallSites(ast.NodeVisitor):
-    """Collect every broker call with the scope that constructs its context."""
+    """Every broker call with the scope that builds its context, and every
+    reference to the method that leaves this scan instead of being called."""
 
     def __init__(self) -> None:
-        self.sites: list[tuple[ast.Call, _Scope]] = []
-        self._scopes: list[_Scope] = []
+        self.sites: list[tuple[ast.Call, Scope]] = []
+        self.escapes: list[tuple[ast.expr, Scope]] = []
+        self._scopes: list[Scope] = []
+        self._called: set[int] = set()
 
-    def _enter(self, node: _ScopeOwner, name: str) -> None:
+    def _enter(self, node: ScopeOwner, name: str) -> None:
         """Read one function (or the module) into a scope, then visit it."""
-        scope = _Scope(name=name, parameters=_parameter_names(node))
-        _read_block(node, "body", list(node.body), (), scope)
-        logger.debug("Scope %s: %s parameter(s), %s binding(s)", name, len(scope.parameters), len(scope.bindings))
-        self._scopes.append(scope)
+        self._scopes.append(build_scope(node, name))
         self.generic_visit(node)
         self._scopes.pop()
+
+    def _is_alias(self, name: str) -> bool:
+        """Whether any scope now open binds ``name`` to a broker entry point.
+
+        The whole stack, not just the innermost scope: a nested function closes
+        over the names around it, so ``invoke = broker.execute_command`` in a
+        wrapper is callable inside the ``def`` it wraps. Reading only the
+        innermost scope would put that call outside the enumeration again, one
+        ``def`` deeper than the bypass this rule closes.
+        """
+        return any(name in scope.aliases for scope in self._scopes)
+
+    def _is_broker_call(self, node: ast.Call) -> bool:
+        """Whether this call goes through a broker entry point, by name or alias."""
+        if names_entry_point(node.func):
+            return True
+        return isinstance(node.func, ast.Name) and self._is_alias(node.func.id)
+
+    def _record_reference(self, node: ast.Name | ast.Attribute) -> None:
+        """Report a read of the broker method that this scan cannot follow.
+
+        Three shapes are not reported, checked in the order that makes the rule
+        cheapest to state: a store is not a read of the method at all; the
+        callee of a call is analysed as a call site instead; and the right-hand
+        side of an alias binding is followed through every call to that name.
+        There is no fourth -- anything else takes the method somewhere this scan
+        does not go, and is reported at the point it leaves.
+        """
+        if not isinstance(node.ctx, ast.Load) or id(node) in self._called:
+            return
+        scope = self._scopes[-1]
+        if id(node) in scope.alias_values:
+            return
+        if names_entry_point(node) or (isinstance(node, ast.Name) and self._is_alias(node.id)):
+            self.escapes.append((node, scope))
 
     # The capitalised method names below are `ast.NodeVisitor`'s dispatch
     # protocol rather than this module's naming choice.
@@ -417,33 +249,54 @@ class _BrokerCallSites(ast.NodeVisitor):
         self._enter(node, node.name)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if _is_broker_call(node):
+        # Recorded before descending: `generic_visit` reaches `node.func` next,
+        # and a callee must not be mistaken for a reference that escaped.
+        self._called.add(id(node.func))
+        if self._is_broker_call(node):
             self.sites.append((node, self._scopes[-1]))
         self.generic_visit(node)
 
+    def visit_Name(self, node: ast.Name) -> None:
+        self._record_reference(node)
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self._record_reference(node)
+        self.generic_visit(node)
+
+
+def _witness(path: Path, at: ast.expr, scope: Scope, blamed: ast.expr, reason: str) -> ApprovalWitness:
+    """One witness: where it is, which function owns it, and what to look at."""
+    return ApprovalWitness(
+        path=str(path),
+        line=at.lineno,
+        function=scope.name,
+        expression=ast.unparse(blamed),
+        reason=reason,
+    )
+
 
 def _scan_source(path: Path) -> tuple[list[ApprovalWitness], int]:
-    """Witnesses and inspected call-site count for one file.
+    """Witnesses and inspected-reference count for one file.
 
     A file that cannot be parsed raises out of ``ast.parse`` rather than being
     skipped: a skipped file is a file the property was not checked on, reported
-    as a pass.
+    as a pass. The count returned is what the scan *looked at* -- calls plus
+    escaping references -- because it is what the emptiness guard in
+    :func:`approval_flag_reachability` is about.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     visitor = _BrokerCallSites()
     visitor.visit(tree)
     witnesses = [
-        ApprovalWitness(
-            path=str(path),
-            line=call.lineno,
-            function=scope.name,
-            expression=ast.unparse(expression),
-            reason=reason,
-        )
+        _witness(path, call, scope, expression, reason)
         for call, scope in visitor.sites
         for reason, expression in _call_reasons(call, scope)
     ]
-    return witnesses, len(visitor.sites)
+    witnesses += [
+        _witness(path, reference, scope, reference, _escape_reason(reference)) for reference, scope in visitor.escapes
+    ]
+    return witnesses, len(visitor.sites) + len(visitor.escapes)
 
 
 def approval_flag_reachability(source_paths: Iterable[Path]) -> list[ApprovalWitness]:
@@ -451,31 +304,34 @@ def approval_flag_reachability(source_paths: Iterable[Path]) -> list[ApprovalWit
 
     Today ``execute_run_command`` builds a dict literal holding ``agent_id``
     alone, so the result is empty -- and if that function grew a ``context``
-    parameter, or forwarded a ``**`` mapping it did not build, the site would
-    appear here by name, line, and expression (R-GEA-2, finding S-2).
+    parameter, forwarded a ``**`` mapping it did not build, or reached the
+    broker through a name bound to its method, the site would appear here by
+    name, line, and expression (R-GEA-2, finding S-2).
 
     Raises when handed no files, or when the scanned corpus contains no broker
-    call at all: an empty result from an empty scan is the vacuous pass R-GEA-4
-    exists to refuse, and it is the failure mode a path-narrowing typo produces.
+    call or reference at all: an empty result from an empty scan is the vacuous
+    pass R-GEA-4 exists to refuse, and it is the failure mode a path-narrowing
+    typo produces.
     """
     paths = [Path(source) for source in source_paths]
     if not paths:
         raise EmptyDerivationError("no source file was handed to the approval-flag scan; there is nothing to prove")
 
     witnesses: list[ApprovalWitness] = []
-    sites = 0
+    inspected = 0
     for path in paths:
-        found, inspected = _scan_source(path)
+        found, seen = _scan_source(path)
         witnesses.extend(found)
-        sites += inspected
+        inspected += seen
 
-    if not sites:
+    if not inspected:
         raise EmptyDerivationError(
-            f"scanned {len(paths)} file(s) and found no call to any of {sorted(BROKER_ENTRY_POINTS)}; "
-            "the scan inspected nothing, which is not the same as finding nothing"
+            f"scanned {len(paths)} file(s) and found no call to, and no reference to, any of "
+            f"{sorted(BROKER_ENTRY_POINTS)}; the scan inspected nothing, which is not the same "
+            "as finding nothing"
         )
 
-    logger.debug("Approval-flag scan: %s file(s), %s broker call site(s)", len(paths), sites)
+    logger.debug("Approval-flag scan: %s file(s), %s broker reference(s)", len(paths), inspected)
     for witness in witnesses:
         logger.warning(
             "Approval flag reachable at %s:%s in %s: `%s` -- %s",

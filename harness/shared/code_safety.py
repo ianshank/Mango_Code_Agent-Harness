@@ -17,78 +17,65 @@ call a function rather than copy one -- three copies of a containment check
 being three chances for one of them to drift, which is why
 ``_resolve_in_workspace`` was extracted in the first place.
 
-**The defect this prevents is a checker that decides two of five entries.** The
-policy key is called ``prohibited_imports``, and the obvious reading of that
-name is a walk over ``ast.Import`` / ``ast.ImportFrom``. Its five entries span
-three shapes: ``subprocess`` and ``importlib`` are importable modules;
-``os.system`` and ``shutil.rmtree`` are attribute targets reachable through a
-bare ``import os``; and ``__import__`` is a builtin that no import statement
-ever names. An import-only checker passes the last three in silence, reporting
-success against a policy it is not enforcing -- the vacuity failure arriving
-through the front door.
+This module is the policy half: which keys are read, what makes a list unusable,
+and how a refusal is worded. Reading Python -- what an expression names, and
+whether that name falls under an entry -- is ``code_symbols``, which never opens
+a policy file. Both halves are quoted in a denial an author has to act on, so
+both are kept small enough to review whole (``limits.size_budget_lines``).
 
-The same entry has a second spelling, and matching it is why ``_spellings``
-exists: every builtin is also an attribute of the ``builtins`` module, so
-``builtins.__import__("os")`` reaches ``__import__`` through a name the bare
-entry neither equals nor prefixes. A checker that compares prefixes alone is
-one ``import builtins`` away from deciding nothing about that entry.
-
-Single-module decidable by construction (C-GEA-3): everything below reads the
-one ``ast.Module`` it is handed plus the policy file. Nothing consults a
-repository-wide index, an import graph, or any other file, because a write door
-that depends on a stale index denies valid writes.
+Two policy keys, not one, because two questions gate a write. ``POLICY_KEY``
+says what is forbidden; ``PYTHON_SUFFIX_KEY`` says which writes are asked at
+all, and a target the second fails to name is never judged by the first --
+which is why an unreadable value of either raises rather than defaulting.
 """
 
 from __future__ import annotations
 
 import ast
 import logging
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
 
-from harness.shared.policy_loader import POLICY_PATH, load_policy
+from harness.shared.code_symbols import BUILTINS_NAMESPACE, ProhibitedSymbol, symbol_findings
+from harness.shared.policy_loader import POLICY_PATH, PolicyError, load_policy, policy_file_is_absent
 
 #: Where the prohibition is declared. Named once so the raised errors, the
 #: denial text and the reader all spell the policy address the same way.
 POLICY_SECTION = "synthesis"
 POLICY_KEY = "prohibited_imports"
 
-#: The namespace that gives every builtin a second, dotted spelling. This is a
-#: language fact rather than a policy value -- ``builtins`` is what CPython
-#: calls the module holding ``__import__``, in the same sense that
-#: ``encoding="utf-8"`` is a fact and not a threshold -- so naming it here
-#: duplicates no ``governance-policy.json`` key and states no limit.
-BUILTINS_NAMESPACE = "builtins"
+#: The sibling key naming the suffixes that make a generated target Python, and
+#: so which writes are judged against ``POLICY_KEY`` at all. It lives beside the
+#: list it arms, not in ``policy_loader``, whose accessors are the numeric blocks.
+PYTHON_SUFFIX_KEY = "python_write_suffixes"
+
+#: Used only when *no* policy file exists -- the adopter case
+#: ``policy_file_is_absent`` exists to keep working. A policy that is present
+#: and has lost the key raises instead: substituting a plausible default would
+#: silently narrow a security check to whatever this constant says
+#: (``policy_loader._Section``). ``.pyi`` is excluded on purpose; the policy
+#: rationale carries why.
+DEFAULT_PYTHON_WRITE_SUFFIXES = frozenset({".py", ".pyw"})
 
 logger = logging.getLogger(__name__)
 
 
-class ProhibitedSymbolPolicyError(ValueError):
-    """The prohibited-symbol list cannot be used, so no write may be judged by it.
+class ProhibitedSymbolPolicyError(PolicyError):
+    """The policy cannot arm this check, so no write may be judged by it.
 
     Raised rather than degraded into "nothing is prohibited" (R-GEA-4). A
     missing key, an empty list, or a list holding something that is not a string
     all make :func:`prohibited_symbol_findings` return ``[]`` for every input --
     a check that cannot fail, which is worse than an absent check because it
-    converts an open question into a false assurance.
+    converts an open question into a false assurance. The same holds for the
+    suffix list, one question earlier: a write nobody calls Python is a write
+    nobody checks.
+
+    A ``PolicyError`` because that is what it is, and because a call site already
+    catching the ``policy_loader`` failures should not need a second name to keep
+    failing closed. Still its own class, so a caller that wants *this* refusal
+    rather than "the file did not parse" can say so.
     """
-
-
-@dataclass(frozen=True)
-class ProhibitedSymbol:
-    """One prohibited reference, in the terms the denial has to report.
-
-    ``policy_entry`` is the ``governance-policy.json`` string that matched;
-    ``reference`` is what the module actually wrote (``o.system`` under
-    ``import os as o``). Both are carried because a denial echoing only the
-    policy entry sends the author hunting for a name their source does not
-    contain, and one echoing only the reference never names the rule.
-    """
-
-    policy_entry: str
-    reference: str
-    lineno: int
 
 
 def _validated_symbols(entries: object, origin: str) -> tuple[str, ...]:
@@ -136,162 +123,49 @@ def load_prohibited_symbols(policy_path: Path | None = None) -> tuple[str, ...]:
     return symbols
 
 
-def _spellings(resolved: str) -> tuple[str, ...]:
-    """``resolved`` plus the equivalent name a prefix comparison would miss.
+def _validated_suffixes(entries: object, origin: str) -> frozenset[str]:
+    """Reject every shape of the suffix list that could leave a write unjudged.
 
-    **The defect this prevents is a two-line detour through ``builtins``.**
-    ``import builtins`` then ``builtins.__import__("os")``, and ``from builtins
-    import __import__ as load`` then ``load("os")``, both resolve to
-    ``builtins.__import__`` -- a name that is neither equal to the
-    ``__import__`` entry nor prefixed by it, so a prefix-only comparison let
-    either one past the one entry the policy declares *because* no import
-    statement names it. Stripping the namespace is general rather than a case
-    for ``__import__``: it holds for every builtin a future entry might name.
-
-    The inverse -- a module that binds its own ``builtins`` and reads an
-    attribute off it -- is denied by the same rule. That is the direction a
-    write door errs in: a denial an author can read and rename around costs one
-    cycle, while admitting the bypass costs the check.
+    Case is folded because the filesystem hands back whatever the model typed and
+    ``EVIL.PYW`` is the same file as ``evil.pyw``; the leading dot is required
+    because ``Path.suffix`` produces one, and an entry without it would match
+    nothing while looking like it matched everything.
     """
-    prefix = f"{BUILTINS_NAMESPACE}."
-    return (resolved, resolved[len(prefix) :]) if resolved.startswith(prefix) else (resolved,)
+    if not isinstance(entries, list) or not entries:
+        raise ProhibitedSymbolPolicyError(
+            f"{origin} must be a non-empty list, got {entries!r}; a suffix list that names nothing "
+            f"leaves every generated write unchecked against {POLICY_SECTION}.{POLICY_KEY}"
+        )
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.startswith(".") or entry != entry.strip():
+            raise ProhibitedSymbolPolicyError(f"{origin} entries must be dotted suffixes, got {entry!r}")
+    return frozenset(entry.lower() for entry in entries)
 
 
-def _matched_entry(resolved: str, prohibited: Sequence[str]) -> str | None:
-    """The prohibited entry ``resolved`` falls under, most specific first.
+def load_python_write_suffixes(policy_path: Path | None = None) -> frozenset[str]:
+    """Read ``synthesis.python_write_suffixes``, refusing a policy that lost it.
 
-    Dotted prefixes match because prohibiting a package and then admitting its
-    submodules decides nothing: ``importlib.util`` is ``importlib``, and
-    ``subprocess.run`` is ``subprocess``. Every spelling of ``resolved`` is
-    tried, so the ``builtins.`` namespace is not a way around the comparison.
+    Which suffixes count is policy rather than a literal, because it decides
+    whether a write is judged at all: pinning ``.py`` alone closes the argument
+    axis (``language``, ``validate_syntax``) and leaves the filename axis open,
+    and ``.pyw`` is executable Python. Absent policy file, built-in default --
+    the adopter path. Present policy that lost the key, refusal: a plausible
+    substitute would narrow a security check to whatever this module says.
     """
-    matches = [
-        entry
-        for spelling in _spellings(resolved)
-        for entry in prohibited
-        if spelling == entry or spelling.startswith(f"{entry}.")
-    ]
-    return max(matches, key=len) if matches else None
-
-
-def _star_bindings(module: str, prohibited: Sequence[str]) -> dict[str, str]:
-    """What ``from <module> import *`` puts in scope that the policy prohibits.
-
-    A star import binds names this module never spells, so the prohibited
-    attributes of the imported module are bound on its behalf. Without it
-    ``from os import *`` followed by ``system(...)`` is the one-line bypass.
-    """
-    bound: dict[str, str] = {}
-    for entry in prohibited:
-        head, _, attribute = entry.rpartition(".")
-        if attribute and head == module:
-            bound[attribute] = entry
-    return bound
-
-
-def _import_bindings(tree: ast.Module, prohibited: Sequence[str]) -> dict[str, str]:
-    """Map every name the module binds by import to the dotted symbol it stands for.
-
-    This is what turns ``import os as o`` followed by ``o.system(...)`` into the
-    policy entry ``os.system``. Without it a checker sees an attribute on a local
-    name and decides nothing, which is two of the five entries lost to a rename.
-    """
-    bindings: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                # `import a.b` binds `a`; `import a.b as x` binds `x` to `a.b`.
-                bindings[alias.asname or alias.name.split(".")[0]] = (
-                    alias.name if alias.asname else alias.name.split(".")[0]
-                )
-        # A relative import (`node.level`) cannot name a top-level distribution,
-        # so `from . import subprocess` is a sibling module and not this one.
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            for alias in node.names:
-                if alias.name == "*":
-                    bindings.update(_star_bindings(node.module, prohibited))
-                else:
-                    bindings[alias.asname or alias.name] = f"{node.module}.{alias.name}"
-    logger.debug("resolved %d import binding(s): %s", len(bindings), bindings)
-    return bindings
-
-
-def _dotted_name(node: ast.expr) -> str | None:
-    """The dotted spelling of a ``Name``/``Attribute`` chain, or ``None``.
-
-    ``None`` for anything rooted in a call, subscript or literal (``f().system``):
-    resolving those needs values this module does not have, and guessing is how a
-    single-module check starts wanting a repository-wide index (C-GEA-3).
-    """
-    parts: list[str] = []
-    current: ast.expr = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if not isinstance(current, ast.Name):
-        return None
-    parts.append(current.id)
-    return ".".join(reversed(parts))
-
-
-def _maximal_references(tree: ast.Module) -> Iterator[tuple[int, str]]:
-    """Yield ``(lineno, dotted)`` for the longest read of each name chain.
-
-    Longest, because ``os.system`` contains ``os``: reporting both would name the
-    module twice for one call and bury the entry that actually matched. Reads
-    only, because ``subprocess = 1`` binds a local of that name rather than
-    reaching the module.
-    """
-    nested = {id(node.value) for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.Name, ast.Attribute)) or id(node) in nested:
-            continue
-        if not isinstance(node.ctx, ast.Load):
-            continue
-        dotted = _dotted_name(node)
-        if dotted is not None:
-            yield node.lineno, dotted
-
-
-def _import_findings(tree: ast.Module, prohibited: Sequence[str]) -> list[ProhibitedSymbol]:
-    """Findings for names the module imports outright.
-
-    Reported at the import even when the name is never used: an unused
-    prohibited import is still a prohibited import, and the write door judges the
-    file's contents rather than its reachable behaviour.
-    """
-    findings: list[ProhibitedSymbol] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names = [alias.name for alias in node.names]
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            names = [node.module, *(f"{node.module}.{a.name}" for a in node.names if a.name != "*")]
-        else:
-            continue
-        for name in names:
-            entry = _matched_entry(name, prohibited)
-            if entry is not None:
-                findings.append(ProhibitedSymbol(entry, name, node.lineno))
-    return findings
-
-
-def _reference_findings(
-    tree: ast.Module, prohibited: Sequence[str], bindings: dict[str, str]
-) -> list[ProhibitedSymbol]:
-    """Findings for names the module *reads*, resolved through its own imports.
-
-    An unbound head resolves to itself, which is what catches ``__import__``: the
-    builtin no import statement ever names, and one of the three shapes an
-    import-only checker passes in silence.
-    """
-    findings: list[ProhibitedSymbol] = []
-    for lineno, dotted in _maximal_references(tree):
-        head, _, rest = dotted.partition(".")
-        resolved = f"{bindings.get(head, head)}.{rest}" if rest else bindings.get(head, head)
-        entry = _matched_entry(resolved, prohibited)
-        if entry is not None:
-            findings.append(ProhibitedSymbol(entry, dotted, lineno))
-    return findings
+    path = POLICY_PATH if policy_path is None else policy_path
+    if policy_file_is_absent(path):
+        logger.debug("no policy file at %s; using built-in Python write suffixes", path)
+        return DEFAULT_PYTHON_WRITE_SUFFIXES
+    section = load_policy(path).get(POLICY_SECTION)
+    origin = f"policy {POLICY_SECTION}.{PYTHON_SUFFIX_KEY} at {path}"
+    if not isinstance(section, dict) or PYTHON_SUFFIX_KEY not in section:
+        raise ProhibitedSymbolPolicyError(
+            f"{origin} is missing; refusing to guess which writes are Python, which would "
+            f"skip the {POLICY_SECTION}.{POLICY_KEY} check on every suffix it failed to name"
+        )
+    suffixes = _validated_suffixes(section[PYTHON_SUFFIX_KEY], origin)
+    logger.debug("loaded %d Python write suffix(es) from %s", len(suffixes), path)
+    return suffixes
 
 
 def prohibited_symbol_findings(tree: ast.Module, prohibited: Sequence[str]) -> list[ProhibitedSymbol]:
@@ -303,23 +177,11 @@ def prohibited_symbol_findings(tree: ast.Module, prohibited: Sequence[str]) -> l
 
     ``prohibited`` is re-validated here rather than trusted from the caller, so
     a direct caller that assembles its own list fails closed on the same three
-    shapes :func:`load_prohibited_symbols` refuses.
+    shapes :func:`load_prohibited_symbols` refuses. Validating at this boundary
+    rather than inside ``code_symbols`` is what lets that half take its list as
+    given: there is one door, and everything past it has already been checked.
     """
-    symbols = _validated_symbols(prohibited, "prohibited symbol list")
-    bindings = _import_bindings(tree, symbols)
-    found = [*_import_findings(tree, symbols), *_reference_findings(tree, symbols, bindings)]
-
-    # One entry, one line: `from subprocess import run` matches the `subprocess`
-    # entry through both the module and the qualified alias, and a denial that
-    # says so twice reads as two defects.
-    seen: set[tuple[str, int]] = set()
-    unique: list[ProhibitedSymbol] = []
-    for finding in sorted(found, key=lambda item: (item.lineno, item.policy_entry)):
-        if (finding.policy_entry, finding.lineno) not in seen:
-            seen.add((finding.policy_entry, finding.lineno))
-            unique.append(finding)
-    logger.debug("prohibited-symbol scan produced %d finding(s): %s", len(unique), unique)
-    return unique
+    return symbol_findings(tree, _validated_symbols(prohibited, "prohibited symbol list"))
 
 
 def _describe(finding: ProhibitedSymbol) -> str:
@@ -347,11 +209,14 @@ def prohibited_symbol_denial(tree: ast.Module, policy_path: Path | None = None) 
 
 __all__ = [
     "BUILTINS_NAMESPACE",
+    "DEFAULT_PYTHON_WRITE_SUFFIXES",
     "POLICY_KEY",
     "POLICY_SECTION",
+    "PYTHON_SUFFIX_KEY",
     "ProhibitedSymbol",
     "ProhibitedSymbolPolicyError",
     "load_prohibited_symbols",
+    "load_python_write_suffixes",
     "prohibited_symbol_denial",
     "prohibited_symbol_findings",
 ]
