@@ -108,10 +108,20 @@ TOOL_FORMS: Mapping[str, ToolForm] = MappingProxyType(
             subcommands=frozenset({"check", "format", "rule", "linter", "clean", "version"}),
             mutating_subcommands=frozenset({"format"}),
             mutating_flags=frozenset({"--fix", "--fix-only", "--unsafe-fixes"}),
-            neutralising_flags=frozenset({"--check", "--diff", "--no-fix", "--statistics"}),
+            # Probed, not assumed. `ruff check --fix --statistics a.py` rewrites
+            # the file: `--statistics` changes the report, not the fixing, so
+            # treating it as neutralising would have reopened this bypass for
+            # anyone who passed it (Copilot review on PR #122). `--diff`,
+            # `--no-fix` and `--check` each leave the file byte-identical.
+            neutralising_flags=frozenset({"--check", "--diff", "--no-fix"}),
         ),
         "eslint": ToolForm(
             default_action="test_execute",
+            # `--fix-type` needs `--fix` to have any effect, so listing it is
+            # deliberately over-strict: an unnecessary denial is recoverable and
+            # is measured by `denial_rate.py`, a missed rewrite is not. Unlike
+            # the ruff rows these were not probed -- eslint is not installed
+            # here -- which is itself the reason to keep them conservative.
             mutating_flags=frozenset({"--fix", "--fix-type"}),
             neutralising_flags=frozenset({"--fix-dry-run"}),
         ),

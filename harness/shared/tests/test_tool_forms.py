@@ -150,3 +150,47 @@ class TestTableIsWellFormed:
         known = {a for agent in _AGENT_POLICY["agents"] for a in agent["allowed_actions"]}
         known |= set(_AGENT_POLICY["high_risk_actions"])
         assert declared <= known, declared - known
+
+
+class TestNeutralisingFlagsWereProbedNotAssumed:
+    """Copilot review on PR #122: `--statistics` was listed as neutralising.
+
+    It is not. Every row below was probed against the real binary on a file
+    whose md5 was compared before and after, because a neutralising flag that
+    does not actually neutralise reopens exactly the bypass this module closes.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "ruff check --fix --statistics .",
+            "ruff check --fix-only .",
+            "ruff check --fix --unsafe-fixes .",
+        ],
+    )
+    def test_a_flag_that_does_not_stop_the_rewrite_is_not_neutralising(self, command: str) -> None:
+        """Probed REWRITTEN: the file changed on disk, so these must not inspect."""
+        assert classify(command).action == UNCLASSIFIED_ACTION
+
+    def test_a_non_neutralising_flag_still_yields_write_over_named_files(self) -> None:
+        """Bounded, so the write policy gets the target rather than a blanket denial."""
+        assert classify("ruff check --fix --statistics a.py").action == "write"
+        assert write_targets("ruff check --fix --statistics a.py") == ["a.py"]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "ruff check --fix --diff .",
+            "ruff check --fix --no-fix .",
+            "ruff format --check .",
+            "ruff format --diff .",
+        ],
+    )
+    def test_a_flag_that_does_stop_the_rewrite_is_neutralising(self, command: str) -> None:
+        """Probed UNCHANGED: the file was byte-identical after the run."""
+        assert classify(command).action == "test_execute"
+
+    def test_statistics_is_not_in_any_neutralising_set(self) -> None:
+        """Pins the finding itself, so re-adding it anywhere turns this red."""
+        for name, form in TOOL_FORMS.items():
+            assert "--statistics" not in form.neutralising_flags, name

@@ -245,6 +245,18 @@ class _Section:
             raise PolicyError(f"policy {self._name}.{key} must be a number, got {value!r}")
         return float(value)
 
+    def declared(self) -> bool:
+        """Whether this deployment states the block at all.
+
+        Distinct from ``backed``, which is about the policy *file*. A file that
+        predates a newly added block is a real and supported state: the block is
+        absent, so the deployment declares nothing, and an accessor may return
+        its built-in defaults. A block that is *present* still owes every key it
+        reads -- that is what ``_value`` enforces -- so this widens nothing for
+        a policy that has adopted the block.
+        """
+        return bool(self._data)
+
     def optional(self, key: str, default: object) -> object:
         """A key whose *absence* is part of the schema, not a hole in it.
 
@@ -462,7 +474,16 @@ def gate_floors(policy_path: Path | None = None) -> GateFloors:
     is a PolicyError for every adopter policy that predates it.
     """
     section = _section("gates", policy_path)
-    resolved: GateFloors = {
+    if not section.declared():
+        # A policy file that predates this block declares no floor. Refusing
+        # here would break every adopter policy written before the block
+        # existed -- the DEC-043 hazard a new top-level block was chosen to
+        # avoid, which `_section` alone does not avoid because it marks any
+        # present *file* as backed (Copilot review on PR #122).
+        resolved: GateFloors = {"dedup_min_scripts": 0, "py_compat_min_files": 0}
+        _log_resolution("gates", resolved, policy_path)
+        return resolved
+    resolved = {
         "dedup_min_scripts": section.int("dedup_min_scripts", 0),
         "py_compat_min_files": section.int("py_compat_min_files", 0),
     }

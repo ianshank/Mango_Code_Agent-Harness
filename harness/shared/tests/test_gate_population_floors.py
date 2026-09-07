@@ -26,6 +26,8 @@ that declaration from being quietly zeroed.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -306,3 +308,40 @@ def test_the_real_repository_clears_its_own_floors() -> None:
         f"check_py_compat discovers {discovered} file(s), below the declared floor "
         f"of {floors['py_compat_min_files']}; raise the population or review the floor"
     )
+
+
+class TestPolicyPredatingTheBlock:
+    """Copilot review on PR #122: a present policy file with no `gates` block
+    raised PolicyError, so every adopter policy written before the block existed
+    broke. That is the DEC-043 hazard a new top-level block was chosen to avoid,
+    and `_section` alone does not avoid it: it marks any present *file* as
+    backed, so a missing key in an absent block still refused.
+    """
+
+    def test_a_policy_predating_the_block_declares_no_floor(self, tmp_path: Path) -> None:
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps({"schema_version": "1.0", "coverage": {"lines": 90}}), encoding="utf-8")
+        assert policy_loader.gate_floors(policy) == {"dedup_min_scripts": 0, "py_compat_min_files": 0}
+
+    def test_a_present_block_still_owes_every_key(self, tmp_path: Path) -> None:
+        """The fix must not widen a block that has been adopted."""
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps({"gates": {"dedup_min_scripts": 5}}), encoding="utf-8")
+        with pytest.raises(policy_loader.PolicyError):
+            policy_loader.gate_floors(policy)
+
+    def test_both_gates_run_against_a_repo_whose_policy_predates_the_block(self, tmp_path: Path) -> None:
+        """End to end: the adopter upgrade path, not just the accessor."""
+        shared = tmp_path / "harness" / "shared"
+        shared.mkdir(parents=True)
+        shipped = json.loads((REPO / POLICY_RELPATH).read_text(encoding="utf-8"))
+        shipped.pop("gates", None)
+        shipped.pop("denial_rate", None)
+        (shared / "governance-policy.json").write_text(json.dumps(shipped, indent=2), encoding="utf-8")
+        for gate in ("check_dedup", "check_py_compat"):
+            result = subprocess.run(
+                [sys.executable, str(REPO / "harness" / "shared" / f"{gate}.py"), "--repo-root", str(tmp_path)],
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0, f"{gate}: {result.stderr}"
