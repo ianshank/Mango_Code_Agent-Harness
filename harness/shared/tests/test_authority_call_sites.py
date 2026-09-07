@@ -18,18 +18,19 @@ specific way a scan of that property passes for the wrong reason:
   has a companion test pinning a shape that must stay clean, because a check
   nobody can leave on is a check nobody has.
 
-This module tests ``authority_call_sites`` and the analysis half it rests on,
-``authority_call_analysis``; ``test_authority_graph.py`` carries the surface,
-high-risk and boundary halves of the same spec. Fixtures are written into
-``tmp_path`` and analysed by the function that reads the real tree -- no test
-here edits a source file.
+This module tests what the scan *reports*: ``authority_call_sites`` and the
+analysis half it rests on, ``authority_call_analysis``. ``test_authority_graph.py``
+carries the surface, high-risk and boundary halves of the same spec, and with
+them the assertions about the shape of these modules -- the one-way split and
+the vocabulary both halves share. Fixtures are written into ``tmp_path`` and
+analysed by the function that reads the real tree -- no test here edits a source
+file.
 
 Spec: ``docs/specs/graph-engineering-adoption.md``.
 """
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
@@ -204,6 +205,92 @@ class TestTheApprovalFlagIsUnreachable:
         )
         (witness,) = approval_flag_reachability([path])
         assert APPROVAL_FLAG in witness.reason
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                """def run(broker, command, role, caller_value):
+    context = {"agent_id": role}
+    add_approval(context, caller_value)
+    return broker.execute_command(command, context)""",
+                id="positional_argument",
+            ),
+            pytest.param(
+                """def run(broker, command, role, caller_value):
+    context = {"agent_id": role}
+    add_approval(target=context, value=caller_value)
+    return broker.execute_command(command, context)""",
+                id="keyword_argument",
+            ),
+            pytest.param(
+                """def run(broker, command, role, caller_value):
+    context = {"agent_id": role}
+    result = broker.execute_command(command, context)
+    add_approval(context, caller_value)
+    return result""",
+                id="after_the_call",
+            ),
+        ],
+    )
+    def test_a_mapping_handed_to_an_unmodelled_call_is_reported(self, tmp_path: Path, source: str) -> None:
+        """``context.update(caller_value)`` was covered and ``add_approval(context,
+        caller_value)`` was not, though the callee holds the same object and can
+        add the same key. The dict literal read *clean* while a helper one line
+        above it was free to sign the request.
+
+        Position-blind, exactly as the ``.update()`` rule is: the broker keeps
+        the mapping it is handed, so a helper that reaches it after the call is
+        not obviously later than every read of it.
+        """
+        found = approval_flag_reachability([_fixture(tmp_path, "escaped_context", source)])
+        assert found, source
+        assert all(APPROVAL_FLAG in w.reason for w in found), found
+        assert all("does not model" in w.reason for w in found), found
+
+    def test_a_mapping_handed_only_to_the_broker_is_not_reported(self, tmp_path: Path) -> None:
+        """The broker call is the call under analysis, not an escape. A rule that
+        counted it would report every site it exists to read."""
+        path = _fixture(
+            tmp_path,
+            "handed_to_the_broker",
+            "def run(broker, command, role):\n"
+            '    context = {"agent_id": role}\n'
+            "    return broker.execute_command(command, context)\n",
+        )
+        assert approval_flag_reachability([path]) == []
+
+    def test_a_mapping_unpacked_into_a_call_is_not_reported(self, tmp_path: Path) -> None:
+        """``audit(**context)`` builds a fresh dict for the callee, so nothing it
+        does reaches the caller's mapping. Tainting the unpacked forms would fire
+        on ``execute_run_command``'s own ``**kwargs`` forwarding."""
+        path = _fixture(
+            tmp_path,
+            "unpacked_context",
+            "def run(broker, command, role, items):\n"
+            '    context = {"agent_id": role}\n'
+            "    audit(**context)\n"
+            "    audit(*items, timeout=None)\n"
+            "    return broker.execute_command(command, context)\n",
+        )
+        assert approval_flag_reachability([path]) == []
+
+    def test_a_mapping_handed_to_a_closed_over_alias_is_not_reported(self, tmp_path: Path) -> None:
+        """Which calls are modelled is answered with the whole scope stack open.
+        ``invoke`` is bound one ``def`` out, so the call through it is a broker
+        call site with a literal context -- and a rule that could only see the
+        innermost scope would report this correct code instead."""
+        path = _fixture(
+            tmp_path,
+            "closure_alias",
+            "def outer(broker):\n"
+            "    invoke = broker.execute_command\n"
+            "    def inner(cmd, role):\n"
+            '        context = {"agent_id": role}\n'
+            "        return invoke(cmd, context)\n"
+            "    return inner\n",
+        )
+        assert approval_flag_reachability([path]) == []
 
     def test_a_computed_key_is_reported(self, tmp_path: Path) -> None:
         """A key the analysis cannot read could be the flag."""
@@ -453,6 +540,79 @@ class TestTheEnumerationCannotBeWalkedPast:
         assert all("without being called" in w.reason for w in found), found
         assert all(APPROVAL_FLAG in w.reason for w in found), found
 
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                """def run(broker, cmd, context):
+    return getattr(broker, "execute_command")(cmd, context)""",
+                id="called_directly",
+            ),
+            pytest.param(
+                """def run(broker, cmd, context):
+    invoke = getattr(broker, "execute_command")
+    return invoke(cmd, context)""",
+                id="bound_then_called",
+            ),
+            pytest.param(
+                """def run(broker, cmd, context):
+    return getattr(broker, "execute_command", None)(cmd, context)""",
+                id="with_a_default",
+            ),
+            pytest.param(
+                """def run(client, cmd, context):
+    return getattr(client.broker, "execute_command")(cmd, context)""",
+                id="any_receiver",
+            ),
+        ],
+    )
+    def test_a_literal_reflective_read_is_a_call_site(self, tmp_path: Path, source: str) -> None:
+        """``getattr(broker, "execute_command")`` names the method as plainly as
+        the dot does, and the scan found *no call and no reference* for it: not a
+        site read clean, an absent one, which on a real corpus is silent while the
+        five direct sites keep the non-empty guard green. Both positions the
+        alias rule already distinguishes are covered -- called on the spot, and
+        bound to a name first."""
+        (witness,) = approval_flag_reachability([_fixture(tmp_path, "reflective", source)])
+        assert witness.expression == "context", source
+        assert "is a parameter of" in witness.reason, source
+
+    def test_a_literal_reflective_read_that_is_not_called_is_reported(self, tmp_path: Path) -> None:
+        """The witness scan sees it too: read as a value, the method leaves this
+        scan by the same door ``broker.execute_command`` does."""
+        path = _fixture(
+            tmp_path,
+            "reflective_escape",
+            'def run(broker, register):\n    register(getattr(broker, "execute_command"))\n',
+        )
+        (witness,) = approval_flag_reachability([path])
+        assert "without being called" in witness.reason
+        assert witness.expression == "getattr(broker, 'execute_command')"
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                "def run(broker, cmd, context, chosen):\n    return getattr(broker, chosen)(cmd, context)\n",
+                id="computed_key",
+            ),
+            pytest.param(
+                'def run(broker, cmd, context):\n    return getattr(broker, "run_other")(cmd, context)\n',
+                id="another_method",
+            ),
+            pytest.param("def run(broker, cmd, context):\n    return getattr(broker)(cmd, context)\n", id="malformed"),
+        ],
+    )
+    def test_a_reflective_read_that_names_nothing_is_left_alone(self, tmp_path: Path, source: str) -> None:
+        """The stated boundary, and the control that keeps the literal rule from
+        swallowing it. A computed key has no name in the source to match, and
+        deciding it would mean knowing what ``broker`` holds -- the one thing this
+        analysis refuses to guess, so ``getattr(self, name)`` everywhere else in
+        the repository would report too, and a check that fires on correct code
+        gets switched off. The scan inspects nothing here and says so."""
+        with pytest.raises(EmptyDerivationError, match="inspected nothing"):
+            approval_flag_reachability([_fixture(tmp_path, "undecided", source)])
+
     def test_an_alias_carrying_a_literal_context_is_not_reported(self, tmp_path: Path) -> None:
         """The control that keeps the rule usable. Binding the method to a name
         is not itself the defect -- handing it a mapping the function did not
@@ -482,56 +642,3 @@ class TestTheEnumerationCannotBeWalkedPast:
             '    return broker.execute_command(cmd, {"agent_id": role})\n',
         )
         assert approval_flag_reachability([path]) == []
-
-
-class TestTheScanSplitRunsOneWay:
-    """The analysis half may not import the reporting half.
-
-    The split is what made room for the alias rule (NS-39 item 4), and it is
-    only worth anything while the dependency runs one way: the refusal
-    vocabulary is declared in the lower module so both halves and
-    ``authority_graph`` import it downwards. A cycle here would mean the
-    resolver could ask the reporter what a mapping means, which is the
-    dependency this seam exists to forbid.
-    """
-
-    def test_the_analysis_half_imports_nothing_above_it(self) -> None:
-        """By ``ast``: the analysis module's own docstring names the reporting
-        one, so a text search would fail on prose rather than on an import."""
-        tree = ast.parse((SHARED / "authority_call_analysis.py").read_text(encoding="utf-8"))
-        imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} | {
-            node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
-        }
-        assert imported, "the analysis module imports nothing at all; the parse read the wrong file"
-        assert not [name for name in imported if "authority" in name], (
-            f"the analysis half imports {sorted(imported)}; the vocabulary it declares is the reason "
-            "the dependency runs one way, and an upward edge would close the cycle"
-        )
-
-    def test_both_halves_share_one_refusal_vocabulary(self) -> None:
-        """One class object, not two with the same name: a caller that catches
-        ``AuthorityGraphError`` from ``authority_graph`` must catch what the
-        scan raises."""
-        from harness.shared import authority_call_analysis, authority_call_sites, authority_graph
-
-        assert authority_call_sites.EmptyDerivationError is authority_call_analysis.EmptyDerivationError
-        assert authority_graph.EmptyDerivationError is authority_call_analysis.EmptyDerivationError
-        assert issubclass(authority_call_analysis.EmptyDerivationError, authority_graph.AuthorityGraphError)
-
-    def test_the_public_surface_survived_the_split(self) -> None:
-        """``authority_graph`` re-exports the scan so R-GEA-2's named module
-        carries the API, and the split must not move a name out from under a
-        caller. Checked against ``__all__`` rather than an import list, because
-        the promise is what the module says it exports."""
-        from harness.shared import authority_call_sites, authority_graph
-
-        assert set(authority_call_sites.__all__) == {
-            "APPROVAL_FLAG",
-            "BROKER_ENTRY_POINTS",
-            "CONTEXT_PARAMETER",
-            "ApprovalWitness",
-            "AuthorityGraphError",
-            "EmptyDerivationError",
-            "approval_flag_reachability",
-        }
-        assert authority_graph.approval_flag_reachability is authority_call_sites.approval_flag_reachability

@@ -33,9 +33,24 @@ analysed like any other (:meth:`authority_call_analysis.Scope.bind`). A
 reference to the method that is **not** called here -- handed to a function,
 returned, stored on an object or in a container -- is reported where it leaves,
 because it is called somewhere this scan cannot see with a context it cannot
-read. What is deliberately not chased is a method fetched by a computed name
-(``getattr(broker, chosen)``): there is no name in the source to match, and the
-boundary is stated here rather than left for a later reader to discover.
+read. Both rules read the reflective spelling too: ``getattr(broker,
+"execute_command")`` is the method under a string literal, and a scan that could
+not match it found *no call and no reference* for that line rather than a site
+it read clean. What is deliberately not chased is a method fetched by a
+*computed* name (``getattr(broker, chosen)``): there is no name in the source to
+match, and :func:`authority_call_analysis.names_entry_point` states why the two
+halves of that sentence are different questions.
+
+**A mapping can leave without being rebound.** The key-adding rules read the
+shapes that mutate a name in place -- ``.update()``, a subscript, a rebinding --
+and a plain helper is none of them while doing the same thing:
+``add_approval(context, value)`` hands the callee the object, and the callee is
+not read here. So a tracked name handed to a call this scan does not model is
+recorded as escaped (:meth:`authority_call_analysis.Scope.escape_arguments`).
+The call *under analysis* is not such a call, and the exemption is decided here
+rather than in the analysis half for a reason the closure case shows: ``invoke``
+can be bound one ``def`` out, and only :class:`_BrokerCallSites`, which holds the
+whole scope stack, can tell that call from an unmodelled one.
 
 Why so little is treated as readable: :func:`authority_call_analysis.mapping_entries`
 resolves a name only when it is bound exactly once, in the same function, *at a
@@ -219,7 +234,7 @@ class _BrokerCallSites(ast.NodeVisitor):
             return True
         return isinstance(node.func, ast.Name) and self._is_alias(node.func.id)
 
-    def _record_reference(self, node: ast.Name | ast.Attribute) -> None:
+    def _record_reference(self, node: ast.expr) -> None:
         """Report a read of the broker method that this scan cannot follow.
 
         Three shapes are not reported, checked in the order that makes the rule
@@ -228,8 +243,14 @@ class _BrokerCallSites(ast.NodeVisitor):
         side of an alias binding is followed through every call to that name.
         There is no fourth -- anything else takes the method somewhere this scan
         does not go, and is reported at the point it leaves.
+
+        ``node`` is a name chain or the ``getattr`` call that reads one: the two
+        spellings of the same reference, and the store check applies only to the
+        first because a call has no context to be stored in.
         """
-        if not isinstance(node.ctx, ast.Load) or id(node) in self._called:
+        if isinstance(node, (ast.Name, ast.Attribute)) and not isinstance(node.ctx, ast.Load):
+            return
+        if id(node) in self._called:
             return
         scope = self._scopes[-1]
         if id(node) in scope.alias_values:
@@ -254,6 +275,13 @@ class _BrokerCallSites(ast.NodeVisitor):
         self._called.add(id(node.func))
         if self._is_broker_call(node):
             self.sites.append((node, self._scopes[-1]))
+        elif names_entry_point(node):
+            # `getattr(broker, "execute_command")` is a *read* of the method
+            # written as a call, so it is judged by the rule that judges
+            # `broker.execute_command`, not by the one for an unmodelled call.
+            self._record_reference(node)
+        else:
+            self._scopes[-1].escape_arguments(node)
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:

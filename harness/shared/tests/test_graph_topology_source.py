@@ -12,6 +12,14 @@ nothing and a check that found nothing wrong are the same green line in a
 summary, so "it raised, with this message" is the assertion with the most value
 per line here. Each case goes through ``extract_topology`` rather than the
 helper it exercises, because the refusal only matters if it reaches the caller.
+
+``TestDanglingEndpoints`` is kept apart from ``TestFailsClosed`` because its
+cases are a different *kind* of refusal. Every file in it parses, resolves and
+models cleanly, and is refused only for what the assembled module says: its node
+set and its edge set disagree. The per-call refusals above can each be decided
+where the offending call is read, and the two emptiness guards decide each half
+against nothing — a graph whose halves are both non-empty and inconsistent
+passes all of them, which is why that class exists at all.
 """
 
 from __future__ import annotations
@@ -301,6 +309,174 @@ class TestFailsClosed:
         """
         with pytest.raises(TopologyExtractionError, match="conditional branch destination"):
             extract_topology(write_source(tmp_path, source))
+
+
+class TestDanglingEndpoints:
+    """An edge endpoint no ``add_node`` call declares raises (R-GEA-4).
+
+    The refusal the two emptiness guards cannot reach, and the only one this
+    module decides over the whole file rather than one call. Each case below is
+    a *readable* file — every argument resolves, every method is modelled, both
+    halves come back non-empty — whose node set and edge set nonetheless
+    disagree, which is the plausible partial answer no count can catch.
+    """
+
+    def test_an_edge_target_that_no_add_node_declares_raises(self, tmp_path: Path) -> None:
+        """The reported defect: a typo in one edge used to read as a graph.
+
+        This source returned ``nodes=('real',)`` with ``edges=(('__start__',
+        'typo'), ('real', '__end__'))``. Nothing about that looks wrong, and it
+        is not the graph the source describes: ``reachable_from('__start__')``
+        reports ``'typo'``, a node no ``add_node`` call registers, so a
+        reachability property is answered about a node that does not exist while
+        the node the author meant is unreachable. The message assertions are
+        part of the fix rather than decoration -- a refusal that does not say
+        which endpoint of which edge is wrong leaves the reader to diff the
+        graph by hand.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("real", real_node)
+                builder.add_edge(START, "typo")
+                builder.add_edge("real", END)
+        """
+        path = write_source(tmp_path, source)
+        with pytest.raises(TopologyExtractionError) as raised:
+            extract_topology(path)
+
+        message = str(raised.value)
+        assert str(path) in message, "the refusal does not name the file it refused"
+        assert "'typo'" in message, "the refusal does not name the offending endpoint"
+        assert "('__start__', 'typo')" in message, "the refusal does not name the edge the endpoint came from"
+        # Read back out of the file rather than written down here, so the
+        # assertion keeps pointing at the offending call if the fixture moves.
+        lines = path.read_text(encoding="utf-8").splitlines()
+        offending = lines.index('    builder.add_edge(START, "typo")') + 1
+        assert f"add_edge declares at line {offending}" in message, (
+            f"the refusal does not locate the call to fix (line {offending}): {message}"
+        )
+
+    def test_an_edge_source_that_no_add_node_declares_raises(self, tmp_path: Path) -> None:
+        """Both ends of an edge are endpoints; only the target is the obvious one.
+
+        A rule checking targets alone leaves ``add_edge("ghost", END)`` as a
+        supported way to attach the exit sentinel to a node that was never
+        registered, which is the same inconsistency wearing the other end.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("real", real_node)
+                builder.add_edge(START, "real")
+                builder.add_edge("ghost", END)
+        """
+        with pytest.raises(TopologyExtractionError, match="'ghost' as the source of the edge"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_a_conditional_branch_destination_that_no_add_node_declares_raises(self, tmp_path: Path) -> None:
+        """A fan-out declares one edge per branch, and every one of them has endpoints.
+
+        Not an edge case in this repository: ``graph.py`` declares six of its
+        thirteen edges through two ``add_conditional_edges`` calls, so a rule
+        that read only ``add_edge`` would leave the majority of the real graph's
+        edges as the place a typo still passes.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("real", real_node)
+                builder.add_edge(START, "real")
+                builder.add_conditional_edges("real", route, {"done": END, "again": "typo"})
+        """
+        with pytest.raises(TopologyExtractionError, match="'typo' as the target of the edge"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_an_entry_or_finish_point_naming_no_declared_node_raises(self, tmp_path: Path) -> None:
+        """The pre-sentinel spellings declare edges, so they carry endpoints too.
+
+        ``set_entry_point("typo")`` is ``add_edge(START, "typo")`` under an older
+        name. A rule attached to ``add_edge`` rather than to the collected edge
+        list would leave both spellings as ways to write a dangling endpoint and
+        keep the extractor green — the shape ``_collect_call``'s allow-list
+        already exists to refuse.
+        """
+        for method, side in (("set_entry_point", "target"), ("set_finish_point", "source")):
+            source = f"""
+                from langgraph.graph import END, START, StateGraph
+
+
+                def build():
+                    builder = StateGraph(dict)
+                    builder.add_node("real", real_node)
+                    builder.add_edge(START, "real")
+                    builder.add_edge("real", END)
+                    builder.{method}("typo")
+            """
+            with pytest.raises(TopologyExtractionError, match=f"'typo' as the {side} of the edge"):
+                extract_topology(write_source(tmp_path, source, name=f"{method}.py"))
+
+    def test_an_edge_against_a_name_add_sequence_did_not_declare_raises(self, tmp_path: Path) -> None:
+        """``add_sequence``'s own chain cannot dangle; an edge written against it can.
+
+        Every element of the list is an ``add_node``, so each chain edge names
+        endpoints the same call has just declared — the one edge-producing shape
+        the rule is vacuous over, and worth saying out loud so nobody adds a
+        redundant per-element check. What it is emphatically not vacuous over is
+        the ordinary edge a reader writes against the chain and misspells, which
+        is where the mistake actually lands.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_sequence([("beta", beta_node), ("gamma", gamma_node)])
+                builder.add_edge(START, "beta")
+                builder.add_edge("gama", END)
+        """
+        with pytest.raises(TopologyExtractionError, match="'gama' as the source of the edge"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_every_dangling_endpoint_is_named_not_only_the_first(self, tmp_path: Path) -> None:
+        """One rename strands several edges, and a reader should see them in one run.
+
+        The count is part of the claim. A refusal that names the first offender
+        and stops tells the truth one third at a time: the reader fixes what it
+        mentioned, re-runs, and meets the next one — which is the cost that gets
+        a check routed around rather than used.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("kept", kept_node)
+                builder.add_edge(START, "renamed")
+                builder.add_edge("renamed", "kept")
+                builder.add_edge("kept", END)
+        """
+        with pytest.raises(TopologyExtractionError) as raised:
+            extract_topology(write_source(tmp_path, source))
+
+        message = str(raised.value)
+        assert "declares 2 edge endpoint(s)" in message, message
+        assert "'renamed' as the target of the edge ('__start__', 'renamed')" in message, message
+        assert "'renamed' as the source of the edge ('renamed', 'kept')" in message, message
+        assert "the declared nodes are ('kept',)" in message, (
+            f"the refusal does not quote the node set the endpoint was checked against: {message}"
+        )
 
 
 def test_topology_extraction_is_source_based(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

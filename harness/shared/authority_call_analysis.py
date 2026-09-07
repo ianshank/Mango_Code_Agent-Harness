@@ -28,16 +28,29 @@ between the three cannot cycle.
 each let it report *clean* on code that is not. It read every assignment in a
 body regardless of where the assignment sat, so a literal written *after* a
 broker call laundered the value passed *to* it; and it read a parameter as
-merely unbound rather than as the caller's own value. :func:`_runs_before` and
-:func:`_parameter_names` are those two halves, each naming the shape it refuses
-(DEC-065).
+merely unbound rather than as the caller's own value.
+:func:`block_positions.runs_before` and :func:`_parameter_names` are those two
+halves, each naming the shape it refuses (DEC-065). The first of them lives one
+module down: it is a question about the shape of a source file rather than about
+a name, and ``block_positions`` imports ``ast`` alone, so the edge to it cannot
+be the upward one the split forbids.
 
 **A name can also hold the broker method itself.** ``invoke =
 broker.execute_command`` binds a callable, not a mapping, and the reporting half
 needs to know it: a call through ``invoke`` is a broker call under another name.
 :meth:`Scope.bind` records such a name in :attr:`Scope.aliases` and the
 expression it consumed in :attr:`Scope.alias_values`, which is how the reporting
-half tells a *followed* reference from one that leaves.
+half tells a *followed* reference from one that leaves. The method has a second
+spelling, and :func:`names_entry_point` reads both: a *literal*
+``getattr(broker, "execute_command")`` names it as decidably as the dot does.
+
+**A mapping can also leave without being rebound.** Handing a tracked name to a
+call that is not the one under analysis puts the object itself in a callee this
+scan does not read, and adding a key to it is what that callee is free to do.
+:attr:`Scope.escaped` is that state, filled by :meth:`Scope.escape_arguments`.
+Which calls are modelled is not decidable here -- an alias can be bound one
+``def`` out -- so the reporting half, which enumerates the sites, is what calls
+it.
 
 Spec: ``docs/specs/graph-engineering-adoption.md`` (R-GEA-2, R-GEA-4, C-GEA-1,
 C-GEA-2). Standard library only; C-GEA-1 forbids a new dependency and there is
@@ -48,8 +61,9 @@ from __future__ import annotations
 
 import ast
 import logging
-from collections.abc import Iterator
 from dataclasses import dataclass, field
+
+from harness.shared.block_positions import BLOCK_KINDS, NESTED_SCOPES, Position, own_nodes, runs_before
 
 logger = logging.getLogger(__name__)
 
@@ -64,28 +78,20 @@ BROKER_ENTRY_POINTS = frozenset({"execute_command"})
 #: merge a caller-supplied mapping, which is precisely the shape being hunted.
 KEY_ADDING_METHODS = frozenset({"update", "setdefault"})
 
-#: Where a statement sits: one ``(id(owner), field, index)`` step per nesting
-#: level from the function body down. Two statements share a block when their
-#: paths agree on every step but the last -- the only case in which source order
-#: is also execution order. Without it a binding answers "what is this name
-#: assigned *somewhere*" when the question is "what does it hold *here*".
-Position = tuple[tuple[int, str, int], ...]
+#: How Python spells "read the attribute this string names". A language fact
+#: rather than a policy value -- ``getattr`` is what CPython calls the
+#: two-argument form of ``a.b`` -- so naming it here duplicates no
+#: ``governance-policy.json`` key and states no threshold. ``code_symbols``
+#: reads the same spelling and is deliberately not shared with: it resolves the
+#: *root* of a chain through the file's imports to compare it against a policy
+#: list, and returns nothing when the base does not resolve, which is right for
+#: a write door and fail-open here -- ``getattr(get_broker(), "execute_command")``
+#: would leave the enumeration. This rule reads the leaf and never the base.
+REFLECTIVE_ACCESSOR = "getattr"
 
 #: What owns a :class:`Scope`. A ``lambda`` and a ``class`` body are absent
 #: deliberately: neither gets a scope, so a call inside one resolves nothing.
 ScopeOwner = ast.Module | ast.FunctionDef | ast.AsyncFunctionDef
-
-#: The AST field shapes holding a statement list. ``except`` handlers and
-#: ``match`` cases are here because they are *not* ``ast.stmt``: read as
-#: expression fields their assignments go unrecorded, so a name rebound only in
-#: an ``except`` branch looks singly-bound and the resolver hands back the
-#: ``try`` branch's literal as the value at the call.
-_BLOCK_KINDS = (ast.stmt, ast.excepthandler, ast.match_case)
-
-#: Statements that open a binding scope of their own. The visitor gives each
-#: its own :class:`Scope`; a binding credited to the enclosing function is how
-#: a forwarded mapping comes to look like a dict literal.
-_NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 class AuthorityGraphError(ValueError):
@@ -103,23 +109,53 @@ class EmptyDerivationError(AuthorityGraphError):
     """
 
 
-def names_entry_point(expr: ast.expr) -> bool:
-    """Whether ``expr`` reads a broker entry point by name.
+def _final_name(expr: ast.expr) -> str | None:
+    """The last name in a ``Name``/``Attribute`` chain, or ``None`` for anything else.
 
-    True for ``broker.execute_command`` and for a bare ``execute_command``,
-    whether the expression is being called, bound to a name, or handed to
-    something else -- the three cases the reporting half has to tell apart. The
-    match is on the *final* name only: this analysis does not know which object
-    a receiver holds, and a rule that demanded one would miss the receiver it
-    could not name rather than the call it could.
+    Only the last, because this analysis does not know which object a receiver
+    holds: ``self._broker.execute_command`` and ``broker.execute_command`` ask
+    the same question, and a rule that demanded a particular receiver would miss
+    the one it could not name rather than the call it could.
     """
     if isinstance(expr, ast.Attribute):
-        return expr.attr in BROKER_ENTRY_POINTS
-    return isinstance(expr, ast.Name) and expr.id in BROKER_ENTRY_POINTS
+        return expr.attr
+    return expr.id if isinstance(expr, ast.Name) else None
+
+
+def names_entry_point(expr: ast.expr) -> bool:
+    """Whether ``expr`` reads a broker entry point, dotted or reflectively.
+
+    True for ``broker.execute_command``, for a bare ``execute_command``, and for
+    ``getattr(broker, "execute_command")`` -- whether the expression is being
+    called, bound to a name, or handed to something else, the three cases the
+    reporting half has to tell apart. The match is on the final name
+    (:func:`_final_name`), of the reference and of the accessor alike.
+
+    **A literal key and a computed key are two different questions, and DEC-065
+    answered only one of them.** ``getattr(broker, chosen)`` has no name in the
+    source to match and stays out of scope, because deciding it would mean
+    knowing what ``broker`` holds -- the one thing this analysis refuses to
+    guess, so the same rule would fire on every ``getattr(self, name)`` in the
+    repository, and a check that fires on correct code gets switched off. A
+    *string literal* is statically decidable, that argument does not reach it,
+    and reading it as unmatchable produced no call **and no reference**: silently
+    absent on a real corpus while the direct sites kept the non-empty guard
+    green. The residual left is narrower and named: an accessor reached under
+    another name (``from builtins import getattr as g``) resolves through import
+    bindings, which is a question about modules rather than about what a name
+    holds at a point, and nothing here builds them.
+    """
+    if _final_name(expr) in BROKER_ENTRY_POINTS:
+        return True
+    if not isinstance(expr, ast.Call) or _final_name(expr.func) != REFLECTIVE_ACCESSOR:
+        return False
+    # Two arguments or more: `getattr(broker, "execute_command", None)` reaches
+    # the same method as the two-argument form.
+    return len(expr.args) > 1 and _literal_key(expr.args[1]) in BROKER_ENTRY_POINTS
 
 
 def _literal_key(node: ast.expr | None) -> str | None:
-    """The string a dict key or subscript is, or ``None`` when it is not one.
+    """The string a dict key, a subscript, or a ``getattr`` key is, or ``None``.
 
     ``None`` covers both a ``**`` spread inside a dict display (whose key node
     *is* ``None``) and a computed key, and both mean the same thing here: the
@@ -176,6 +212,11 @@ class Scope:
     #: reporting half can tell ``invoke = broker.execute_command`` -- followed --
     #: from ``register(broker.execute_command)``, which leaves this scan.
     alias_values: set[int] = field(default_factory=set)
+    #: Names handed to a call this scan does not model. The callee holds the
+    #: mapping itself and may add a key to it, so the name stops being readable
+    #: here -- the same conclusion :attr:`tainted` reaches by a different route,
+    #: kept apart so a refusal can say which one happened.
+    escaped: set[str] = field(default_factory=set)
 
     def bind(self, name: str, value: ast.expr, position: Position) -> None:
         """Record ``name = value``, taken to hold from ``position`` onwards.
@@ -212,6 +253,26 @@ class Scope:
             return
         self.extra_keys.setdefault(name, {})[key] = value
 
+    def escape_arguments(self, call: ast.Call) -> None:
+        """Record every name ``call`` receives as an argument as escaped.
+
+        The mutation rules above read the *shapes* that add a key --
+        ``.update()``, a subscript, a rebinding -- and a helper is none of them
+        while doing exactly the same thing: ``add_approval(context, value)``
+        hands the callee the object, and this scan does not read the callee.
+
+        Direct arguments only. ``f(**context)`` and ``f(*context)`` build a fresh
+        dict and a fresh tuple out of the mapping and hand the callee *those*, so
+        neither can reach the caller's object -- and tainting them would fire on
+        ``execute_run_command``'s own ``**kwargs`` forwarding, which is correct
+        code. A name nested inside an argument (``f({"c": context})``) is a
+        stated residual rather than a closed one, for the symmetric reason:
+        chasing it would report every mapping mentioned anywhere in a call.
+        """
+        for argument in (*call.args, *(keyword.value for keyword in call.keywords if keyword.arg is not None)):
+            if isinstance(argument, ast.Name):
+                self.escaped.add(argument.id)
+
 
 def _parameter_names(owner: ScopeOwner) -> set[str]:
     """Every name the signature binds, ``*args`` and ``**kwargs`` included.
@@ -228,24 +289,6 @@ def _parameter_names(owner: ScopeOwner) -> set[str]:
     return named | {arg.arg for arg in (args.vararg, args.kwarg) if arg is not None}
 
 
-def _runs_before(binding: Position, call: Position) -> bool:
-    """Whether ``binding`` is guaranteed to have run by the time ``call`` runs.
-
-    True only when the two paths agree on every enclosing block down to one
-    they both sit *directly* in, and the binding comes first there. A binding
-    nested deeper -- in an ``if``, a ``for``, a ``try`` -- is skipped on some
-    path, and one later in a loop body reaches the call on the next iteration.
-    With no position at all, a literal assigned *after* a broker call was read
-    as the value passed *to* it.
-    """
-    for depth, (bound, called) in enumerate(zip(binding, call, strict=False)):
-        if bound[:2] != called[:2]:
-            return False
-        if bound[2] != called[2]:
-            return bound[2] < called[2] and depth == len(binding) - 1
-    return False
-
-
 def _mutated_name(node: ast.AST) -> str | None:
     """The name a key-adding method is called on, if this node is such a call."""
     if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
@@ -253,24 +296,6 @@ def _mutated_name(node: ast.AST) -> str | None:
     if node.func.attr not in KEY_ADDING_METHODS or not isinstance(node.func.value, ast.Name):
         return None
     return node.func.value.id
-
-
-def _own_nodes(value: object) -> Iterator[ast.AST]:
-    """Every node inside one non-block field, without entering a nested scope.
-
-    A nested ``def`` gets its own :class:`Scope` from the visitor, so walking
-    into one here would attribute its bindings to the enclosing function -- and
-    a binding attributed to the wrong scope is how a forwarded mapping comes to
-    look like a dict literal. A ``lambda`` is skipped for the same reason and
-    gets no scope at all, so a call inside one resolves no name and is reported.
-    """
-    stack = [item for item in (value if isinstance(value, list) else [value]) if isinstance(item, ast.AST)]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, (*_NESTED_SCOPES, ast.Lambda)):
-            continue
-        yield node
-        stack.extend(ast.iter_child_nodes(node))
 
 
 def _record_target(scope: Scope, target: ast.expr, value: ast.expr, position: Position) -> None:
@@ -314,15 +339,15 @@ def _read_block(parent: ast.AST, field_name: str, body: list[ast.AST], prefix: P
     ``if`` test is later placed relative to the assignments around it.
     """
     for index, statement in enumerate(body):
-        if isinstance(statement, _NESTED_SCOPES):
+        if isinstance(statement, NESTED_SCOPES):
             continue
         position = (*prefix, (id(parent), field_name, index))
         _record_statement(scope, statement, position)
         for name, value in ast.iter_fields(statement):
-            if isinstance(value, list) and value and isinstance(value[0], _BLOCK_KINDS):
+            if isinstance(value, list) and value and isinstance(value[0], BLOCK_KINDS):
                 _read_block(statement, name, value, position, scope)
                 continue
-            for node in _own_nodes(value):
+            for node in own_nodes(value):
                 scope.positions[id(node)] = position
                 mutated = _mutated_name(node)
                 if mutated is not None:
@@ -360,9 +385,11 @@ def _binding_at(name: str, scope: Scope, at: Position | None) -> tuple[ast.expr 
         reason = f"`{name}` is a parameter of {scope.name}, so its value is the caller's"
     elif name in scope.tainted:
         reason = f"`{name}` is rebound or mutated in {scope.name}"
+    elif name in scope.escaped:
+        reason = f"`{name}` is handed to a call {scope.name} does not model, which could add a key to it"
     elif binding is None:
         reason = f"`{name}` is not bound to a dict literal in {scope.name}"
-    elif at is None or not _runs_before(binding.position, at):
+    elif at is None or not runs_before(binding.position, at):
         reason = f"`{name}`'s binding in {scope.name} is not guaranteed to have run at this call"
     else:
         logger.debug("Resolved `%s` in %s: its one binding precedes this call unconditionally", name, scope.name)
@@ -403,6 +430,7 @@ def mapping_entries(expr: ast.expr, scope: Scope, at: Position | None) -> tuple[
 __all__ = [
     "BROKER_ENTRY_POINTS",
     "KEY_ADDING_METHODS",
+    "REFLECTIVE_ACCESSOR",
     "AuthorityGraphError",
     "Binding",
     "EmptyDerivationError",

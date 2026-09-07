@@ -8,7 +8,10 @@ rests on:
   That half moved to ``test_authority_call_sites.py`` with the scan it tests,
   when ``authority_call_sites`` was split along the analysis/reporting seam;
   this module keeps the C-GEA-2 boundary over all three modules, because a
-  governance module importing the *lower* half would breach it just as squarely.
+  governance module importing the *lower* half would breach it just as squarely,
+  and with it the one-way split those modules rest on
+  (``TestTheScanSplitRunsOneWay``) -- the same question about module shape, asked
+  one level down.
 * **High-risk reachability is asserted on the half where it is non-vacuous**
   (AC-GEA-2b, R-GEA-2b). Three of the five ``high_risk_actions`` are declared
   by no role at all, so asserting "no high-risk action is reachable" is 60%
@@ -106,6 +109,14 @@ def _imports_the_graph(path: Path) -> list[str]:
                 found.append(module)
             found.extend(f"{module}.{alias.name}" for alias in node.names if alias.name in GRAPH_MODULES)
     return found
+
+
+def _imported_modules(path: Path) -> set[str]:
+    """Every module name ``path`` imports, by ``ast`` rather than by grep."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} | {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
 
 
 def _imported_roots(path: Path) -> set[str]:
@@ -395,3 +406,77 @@ class TestTheGovernanceLayerDoesNotDependOnTheGraph:
             assert roots, f"{name} imports nothing; the parse read the wrong file"
             outside = sorted(root for root in roots if root != "harness" and root not in sys.stdlib_module_names)
             assert outside == [], f"{name} imports {outside}, which C-GEA-1 forbids (no networkx, no new lock entry)"
+
+
+class TestTheScanSplitRunsOneWay:
+    """The analysis half may not import the reporting half.
+
+    The split is what made room for the alias rule (NS-39 item 4), and it is
+    only worth anything while the dependency runs one way: the refusal
+    vocabulary is declared in the lower module so both halves and
+    ``authority_graph`` import it downwards. A cycle here would mean the
+    resolver could ask the reporter what a mapping means, which is the
+    dependency this seam exists to forbid.
+
+    It sits here rather than with the scan's own tests because this file is
+    where the shape of the modules is kept -- the C-GEA-2 boundary above and the
+    one-way split below are the same question asked at two levels -- and because
+    ``test_authority_call_sites.py`` is about what the scan reports.
+    """
+
+    def test_the_analysis_half_imports_nothing_above_it(self) -> None:
+        """By ``ast``: the analysis module's own docstring names the reporting
+        one, so a text search would fail on prose rather than on an import.
+
+        The one first-party edge it does have is pinned by name rather than left
+        to the substring rule. ``block_positions`` holds no authority vocabulary
+        and its name carries none, so the rule below passes over it in silence --
+        and a guard a later split can slip past by choosing a name is not a
+        guard. It is checked in the direction that decides the question instead:
+        the module it points at imports nothing first-party at all, so that edge
+        cannot be half of a cycle.
+        """
+        imported = _imported_modules(SHARED / "authority_call_analysis.py")
+        assert imported, "the analysis module imports nothing at all; the parse read the wrong file"
+        assert not [name for name in imported if "authority" in name], (
+            f"the analysis half imports {sorted(imported)}; the vocabulary it declares is the reason "
+            "the dependency runs one way, and an upward edge would close the cycle"
+        )
+        assert {name for name in imported if name.startswith("harness")} == {"harness.shared.block_positions"}, (
+            f"the analysis half's first-party imports are {sorted(imported)}; every one of them is an edge "
+            "this test has to have judged, and an unnamed one is the edge nobody looked at"
+        )
+        below = _imported_modules(SHARED / "block_positions.py")
+        assert below, "block_positions imports nothing at all; the parse read the wrong file"
+        assert not [name for name in below if name.startswith("harness")], (
+            f"block_positions imports {sorted(below)}; it is the bottom of the split, and a first-party "
+            "import from it is the only way the edge above could become a cycle"
+        )
+
+    def test_both_halves_share_one_refusal_vocabulary(self) -> None:
+        """One class object, not two with the same name: a caller that catches
+        ``AuthorityGraphError`` from ``authority_graph`` must catch what the
+        scan raises."""
+        from harness.shared import authority_call_analysis, authority_call_sites, authority_graph
+
+        assert authority_call_sites.EmptyDerivationError is authority_call_analysis.EmptyDerivationError
+        assert authority_graph.EmptyDerivationError is authority_call_analysis.EmptyDerivationError
+        assert issubclass(authority_call_analysis.EmptyDerivationError, authority_graph.AuthorityGraphError)
+
+    def test_the_public_surface_survived_the_split(self) -> None:
+        """``authority_graph`` re-exports the scan so R-GEA-2's named module
+        carries the API, and the split must not move a name out from under a
+        caller. Checked against ``__all__`` rather than an import list, because
+        the promise is what the module says it exports."""
+        from harness.shared import authority_call_sites, authority_graph
+
+        assert set(authority_call_sites.__all__) == {
+            "APPROVAL_FLAG",
+            "BROKER_ENTRY_POINTS",
+            "CONTEXT_PARAMETER",
+            "ApprovalWitness",
+            "AuthorityGraphError",
+            "EmptyDerivationError",
+            "approval_flag_reachability",
+        }
+        assert authority_graph.approval_flag_reachability is authority_call_sites.approval_flag_reachability

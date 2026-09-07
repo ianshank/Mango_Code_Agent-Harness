@@ -4,7 +4,13 @@ Two halves, and the second is the one that matters. The first exercises the
 parser over small inline snippets written to ``tmp_path``, which is what keeps
 the extractor honest about forms the real ``graph.py`` does not happen to use —
 a renamed builder, a list-shaped ``path_map``, keyword arguments, the
-``set_entry_point`` spelling. The second runs the extractor over the real
+``set_entry_point`` spelling. It also carries the *legal* side of the
+dangling-endpoint rule — a node declared below the edge that names it, a
+``path_map`` key that is a router return value rather than a node — because a
+fail-closed rule that also fires on correct source is one that gets switched
+off, and only a passing case pins where its boundary sits.
+
+The second runs the extractor over the real
 ``harness/shared/langgraph/graph.py`` and pins what it recovers, because a
 parser that passes its own fixtures and mis-reads the one file the repository
 actually asserts over would be a test suite proving nothing.
@@ -245,6 +251,54 @@ class TestExtraction:
         """
         topology = extract_topology(write_source(tmp_path, source))
         assert topology.nodes == ("alpha", "beta")
+
+    def test_a_node_declared_after_the_edge_that_names_it_is_legal(self, tmp_path: Path) -> None:
+        """Declaration order is a style, which is why the endpoint rule is a whole-module one.
+
+        LangGraph resolves an edge's endpoints when the graph is compiled, not
+        when ``add_edge`` is called, so a builder may name a node above the
+        ``add_node`` that declares it and still compile. Checking each edge
+        where its own call is read would refuse this file, and a check that
+        fires on correct source gets switched off — the failure mode the
+        ``add_sequence`` reading already turns on. So the endpoint set is
+        compared with the node set once, after the whole module is collected.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_edge(START, "late")
+                builder.add_conditional_edges("late", route, {"done": END})
+                builder.add_node("late", late_node)
+        """
+        topology = extract_topology(write_source(tmp_path, source))
+        assert topology.nodes == ("late",)
+        assert topology.edges == ((START_SENTINEL, "late"), ("late", END_SENTINEL))
+
+    def test_a_conditional_branch_label_is_not_an_edge_endpoint(self, tmp_path: Path) -> None:
+        """A ``path_map`` key is the router's return value, not a node name.
+
+        ``{"finished": END}`` declares an edge to the exit sentinel and no node
+        called ``finished``. Reading the key as an endpoint would make the
+        dangling-endpoint rule refuse the ordinary spelling of a conditional
+        edge — most of what the real graph is built from — so the rule is
+        stated over endpoints rather than over everything ``resolve`` reads.
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("alpha", alpha_node)
+                builder.add_edge(START, "alpha")
+                builder.add_conditional_edges("alpha", route, {"finished": END, "retry": "alpha"})
+        """
+        topology = extract_topology(write_source(tmp_path, source))
+        assert topology.nodes == ("alpha",)
+        assert topology.edges == ((START_SENTINEL, "alpha"), ("alpha", END_SENTINEL), ("alpha", "alpha"))
 
     def test_debug_logging_names_the_builder_and_the_counts(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
