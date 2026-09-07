@@ -11,6 +11,7 @@ from harness.shared.agent_authority import execution_identity
 from harness.shared.code_safety import POLICY_KEY, POLICY_SECTION, prohibited_symbol_denial
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, _cap
 from harness.shared.governance.verdict import BROKER_BLOCKED
+from harness.shared.policy_loader import PolicyError, load_policy, policy_file_is_absent
 from harness.shared.read_policy import read_denial_reason
 from harness.shared.tool_result_format import (
     INVALID_ARGUMENTS,
@@ -29,15 +30,54 @@ if TYPE_CHECKING:
 #: filename, which is how a `-find` filepath previously graded `read`.
 WRITE_ACTION = "write"
 
-#: The suffix that makes a target Python, whatever `language` claims. `language`
-#: and `validate_syntax` are both model-supplied tool arguments, so neither may
-#: decide whether the safety check runs: a `.py` write declaring
-#: `language="markdown"` produced no parse tree and skipped the
-#: prohibited-symbol check with it. The resolved suffix is the one fact about
-#: the write the model cannot restate, because it is where the bytes land.
-PYTHON_SUFFIX = ".py"
+#: The policy key naming the suffixes that make a target Python, whatever
+#: `language` claims. Both `language` and `validate_syntax` are model-supplied
+#: tool arguments, so neither may decide whether the safety check runs; the
+#: resolved suffix is the one fact about the write the model cannot restate,
+#: because it is where the bytes land. Which suffixes count is *policy* rather
+#: than a literal, because it decides whether a write is checked at all: pinning
+#: `.py` alone closed the argument axis and left the filename axis open, and
+#: `.pyw` is executable Python. The policy rationale carries the rest.
+PYTHON_SUFFIX_KEY = "python_write_suffixes"
+
+#: Used only when *no* policy file exists -- the adopter case
+#: `policy_file_is_absent` exists to keep working. A policy that is present and
+#: has lost the key raises instead: substituting a plausible default would
+#: silently narrow a security check to whatever this constant says
+#: (`policy_loader._Section._value`).
+DEFAULT_PYTHON_WRITE_SUFFIXES = frozenset({".py", ".pyw"})
 
 logger = logging.getLogger(__name__)
+
+
+def load_python_write_suffixes(policy_path: Path | None = None) -> frozenset[str]:
+    """Read ``synthesis.python_write_suffixes``, refusing a policy that lost it.
+
+    Mirrors :func:`code_safety.load_prohibited_symbols`, which reads the sibling
+    key in the same section: the list that arms a check lives with the check,
+    not in ``policy_loader``, whose accessors are the shared numeric blocks.
+    """
+    path = active_policy_path() if policy_path is None else policy_path
+    if policy_file_is_absent(path):
+        logger.debug("no policy file at %s; using built-in Python write suffixes", path)
+        return DEFAULT_PYTHON_WRITE_SUFFIXES
+    section = load_policy(path).get(POLICY_SECTION)
+    origin = f"policy {POLICY_SECTION}.{PYTHON_SUFFIX_KEY} at {path}"
+    if not isinstance(section, dict) or PYTHON_SUFFIX_KEY not in section:
+        raise PolicyError(
+            f"{origin} is missing; refusing to guess which writes are Python, which would "
+            f"skip the {POLICY_SECTION}.{POLICY_KEY} check on every suffix it failed to name"
+        )
+    entries = section[PYTHON_SUFFIX_KEY]
+    if not isinstance(entries, list) or not entries:
+        raise PolicyError(f"{origin} must be a non-empty list, got {entries!r}")
+    suffixes = set()
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.startswith(".") or entry != entry.strip():
+            raise PolicyError(f"{origin} entries must be dotted suffixes, got {entry!r}")
+        suffixes.add(entry.lower())
+    logger.debug("loaded %d Python write suffix(es) from %s", len(suffixes), path)
+    return frozenset(suffixes)
 
 
 def _resolve_in_workspace(workspace_dir: Path, filepath: str) -> tuple[Path, Path, str | None]:
@@ -201,7 +241,7 @@ def execute_generate_code(
     # A Python target is Python whatever `language` says, because the suffix is
     # where the bytes land and `language` is a model-supplied argument.
     ext = target_path.suffix.lower()
-    is_python = ext == PYTHON_SUFFIX
+    is_python = ext in load_python_write_suffixes()
 
     # Infer language from file extension if not explicitly specified
     inferred_language = "python" if is_python else language

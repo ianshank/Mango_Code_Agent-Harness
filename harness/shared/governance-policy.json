@@ -224,7 +224,11 @@
       "importlib",
       "__import__"
     ],
-    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11)."
+    "python_write_suffixes": [
+      ".py",
+      ".pyw"
+    ],
+    "rationale": "Synthesis policy gates (INV-9..INV-15). max_repair_cycles is the budget for the repair loop (INV-12). lats_enabled must be false until ablation gate in tasks.md \u00a7Evaluation Gate is passed (INV-15). critique_schema_version pins the versioned critique schema (INV-11). python_write_suffixes names the target suffixes that make a generated write Python, and so which writes are checked against prohibited_imports at all; `language` and `validate_syntax` are model-supplied tool arguments and may not decide it. `.pyi` is deliberately excluded: a stub is never executed and legitimately names modules it only mentions in signatures. Added under DEC-065 after a review found .pyw bypassed the check (PR #120)."
   },
   "traceability": {
     "min_discovered_requirement_ids": 350,

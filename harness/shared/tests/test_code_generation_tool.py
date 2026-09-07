@@ -6,22 +6,34 @@ docs/specs/graph-engineering-adoption.md (AC-GEA-4, R-GEA-3).
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
 import pytest
 
 from harness.shared import mango_mas_orchestrator as orch_module
+from harness.shared import tool_executors as te
 from harness.shared.agent_authority import tools_for_role
 from harness.shared.governance.broker import ExecutionBroker
+from harness.shared.policy_loader import PolicyError
 from harness.shared.tool_executors import (
+    DEFAULT_PYTHON_WRITE_SUFFIXES,
     authorize_write,
     execute_generate_code,
+    load_python_write_suffixes,
 )
 from harness.shared.tool_result_format import DENIED_POLICY, tool_outcome
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 pytestmark = pytest.mark.governance
+
+#: Distinguishes "the key is absent" from "the key is present and falsy".
+_ABSENT = object()
+
+#: One prohibited shape, shared by the two classes below so a fix that only
+#: works for the payload one of them happens to use cannot look complete.
+_PROHIBITED_PAYLOAD = "import os\n\n\nos.system('id')\n"
 
 
 class TestCodeGenerationTool:
@@ -320,3 +332,127 @@ class TestNeitherToolArgumentTurnsTheCheckOff:
         assert "JSONDecodeError" in execute_generate_code(tmp_path, "bad.json", invalid_json)
         assert "Success: Generated" in execute_generate_code(tmp_path, "ok.json", invalid_json, validate_syntax=False)
         assert (tmp_path / "ok.json").read_text(encoding="utf-8") == invalid_json
+
+
+class TestTheFilenameAxisOfTheSameBypass:
+    """R-GEA-3: the suffix decides, and *which* suffixes decide is policy.
+
+    `TestNeitherToolArgumentTurnsTheCheckOff` closed the argument axis by
+    deriving Python-ness from the resolved suffix instead of from `language` or
+    `validate_syntax`. It left the filename axis open, because the suffix it
+    compared against was the literal `".py"`: `.pyw` is executable Python, so a
+    `.pyw` target declaring `language="markdown"` wrote `os.system` to disk with
+    every check nominally in place. Reported by a review bot on PR #120 and
+    reproduced before it was believed.
+
+    The fix is not "add `.pyw`". It is that the set is `synthesis.
+    python_write_suffixes` in policy, because it decides whether a write is
+    checked at all — and `test_the_suffix_set_is_policy_not_a_relocated_literal`
+    is what keeps that a fact rather than a claim.
+    """
+
+    PROHIBITED = _PROHIBITED_PAYLOAD
+    ALLOWED = "from pathlib import Path\n\n\ndef here() -> Path:\n    return Path('.')\n"
+
+    @pytest.mark.parametrize("kwargs", [{"language": "markdown"}, {"validate_syntax": False}, {}])
+    def test_a_pyw_target_is_python_whatever_the_arguments_say(self, tmp_path: Path, kwargs: dict) -> None:
+        """Each argument shape that skipped the check for `.pyw` before the fix."""
+        result = execute_generate_code(tmp_path, "payload.pyw", self.PROHIBITED, **kwargs)
+        assert tool_outcome(result) == DENIED_POLICY, f"{kwargs} wrote a prohibited .pyw: {result}"
+        assert "synthesis.prohibited_imports" in result
+        assert not (tmp_path / "payload.pyw").exists(), "the denial must land before the bytes do"
+
+    def test_the_comparison_is_case_insensitive(self, tmp_path: Path) -> None:
+        """`Path.suffix` preserves case; a case-sensitive compare is the same hole."""
+        result = execute_generate_code(tmp_path, "PAYLOAD.PYW", self.PROHIBITED, language="markdown")
+        assert tool_outcome(result) == DENIED_POLICY
+        assert not (tmp_path / "PAYLOAD.PYW").exists()
+
+    def test_a_clean_pyw_still_writes(self, tmp_path: Path) -> None:
+        """The control. Without it the assertions above pass on a closed door."""
+        assert "Success: Generated" in execute_generate_code(tmp_path, "ok.pyw", self.ALLOWED)
+        assert (tmp_path / "ok.pyw").read_text(encoding="utf-8") == self.ALLOWED
+
+    def test_a_non_python_suffix_is_not_swept_in(self, tmp_path: Path) -> None:
+        """Widening the set must not turn every write into a Python write."""
+        assert "Success: Generated" in execute_generate_code(tmp_path, "notes.md", self.PROHIBITED)
+        assert (tmp_path / "notes.md").read_text(encoding="utf-8") == self.PROHIBITED
+
+
+class TestPythonWriteSuffixPolicy:
+    """The accessor fails closed on every policy shape that cannot arm the check."""
+
+    PROHIBITED = _PROHIBITED_PAYLOAD
+
+    def _policy(self, tmp_path: Path, value: object) -> Path:
+        body = {"synthesis": {"prohibited_imports": ["os.system"]}}
+        if value is not _ABSENT:
+            body["synthesis"]["python_write_suffixes"] = value  # type: ignore[index]
+        path = tmp_path / "governance-policy.json"
+        path.write_text(json.dumps(body), encoding="utf-8")
+        return path
+
+    @pytest.mark.parametrize(
+        "value",
+        [_ABSENT, "not-a-list", [], [".py", 7], [".py", "py"], [".py", " .pyw"]],
+        ids=["missing", "not-a-list", "empty", "non-string", "undotted", "whitespace"],
+    )
+    def test_a_policy_that_cannot_arm_the_check_raises(self, tmp_path: Path, value: object) -> None:
+        """Substituting a default here would silently narrow a security check."""
+        with pytest.raises(PolicyError, match="python_write_suffixes"):
+            load_python_write_suffixes(self._policy(tmp_path, value))
+
+    def test_entries_are_case_normalised(self, tmp_path: Path) -> None:
+        assert load_python_write_suffixes(self._policy(tmp_path, [".PY", ".Pyw"])) == {".py", ".pyw"}
+
+    def test_an_absent_policy_file_falls_back_rather_than_raising(self, tmp_path: Path) -> None:
+        """The adopter case `policy_file_is_absent` exists to keep working."""
+        assert load_python_write_suffixes(tmp_path / "nothing-here.json") == DEFAULT_PYTHON_WRITE_SUFFIXES
+
+    def test_the_shipped_policy_names_both_executable_suffixes(self) -> None:
+        """`.pyi` is excluded on purpose: a stub is never executed."""
+        shipped = load_python_write_suffixes()
+        assert {".py", ".pyw"} <= shipped
+        assert ".pyi" not in shipped
+
+    def test_the_accessor_reads_a_suffix_the_module_never_mentions(self, tmp_path: Path) -> None:
+        """One half of "policy, not a relocated literal": the key drives the set.
+
+        `.pyx` appears nowhere in `tool_executors`, so a set containing it and
+        nothing else can only have come from the file. Moving `".py"` into JSON
+        and reading it straight back would look identical to leaving it in the
+        module; a suffix the module never names cannot.
+        """
+        assert load_python_write_suffixes(self._policy(tmp_path, [".pyx"])) == {".pyx"}
+
+    def test_the_write_door_decides_python_ness_by_asking_the_accessor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The other half: `execute_generate_code` consults it, not a literal.
+
+        The accessor is patched rather than the policy path, because pointing
+        `active_policy_path` at a temporary file makes the *write* policy
+        distrust it — an unpinned supplied policy is denied before the
+        prohibited-symbol check ever runs. The first draft of this test did
+        exactly that and passed on a denial it had not caused, which is the
+        vacuous green this repository keeps finding in itself. So each assertion
+        below names the denial *reason*, not merely that a denial happened.
+        """
+        monkeypatch.setattr(te, "load_python_write_suffixes", lambda *_: frozenset({".pyx"}))
+
+        refused = execute_generate_code(tmp_path, "payload.pyx", self.PROHIBITED)
+        assert tool_outcome(refused) == DENIED_POLICY
+        assert "synthesis.prohibited_imports" in refused, f"denied for the wrong reason: {refused}"
+        assert not (tmp_path / "payload.pyx").exists()
+
+        # The converse, which is what makes the first half evidence rather than
+        # a coincidence. It needs `validate_syntax=False` because there are two
+        # ways into the parse: the accessor (which always parses, and is what
+        # this test is about) and `ext_to_lang`, a separate suffix map that
+        # parses when the flag is on. With the flag on, `.py` is still caught
+        # through the second path even when the accessor excludes it — which is
+        # a defence in depth worth knowing about, but it would hide the
+        # dependency being asserted here.
+        written = execute_generate_code(tmp_path, "payload.py", self.PROHIBITED, validate_syntax=False)
+        assert "Success: Generated" in written, written
+        assert (tmp_path / "payload.py").read_text(encoding="utf-8") == self.PROHIBITED
