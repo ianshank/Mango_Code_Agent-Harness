@@ -23,7 +23,7 @@ if str(_SHARED) not in sys.path:
 try:
     import decision_records as dr
 except ImportError:  # package import path (pytest)
-    from harness.shared import decision_records as dr  # type: ignore
+    from harness.shared import decision_records as dr
 
 
 def main(workspace: Path = Path(".")) -> None:

@@ -2,22 +2,19 @@
 # live in requirements.txt, included below so `pip install -r requirements-dev.txt`
 # keeps installing both, unchanged from before this split.
 -r requirements.txt
-# pytest 8.4.2 carries PYSEC-2026-1845; the fix release (9.0.3) requires
-# Python >=3.10, so the pin forks on the interpreter and the universal lock
-# carries both. The 3.9 leg keeps 8.4.2 and its dependency-audit job reports
-# the advisory as a finding (that leg is continue-on-error); it goes away with
-# the 3.9 floor (DEC-028).
-pytest==9.0.3; python_version >= "3.10"
-pytest==8.4.2; python_version < "3.10"
+# pytest 8.4.2 carried PYSEC-2026-1845, fixed in 9.0.3; that release requires
+# Python >=3.10, which forked this pin until the floor moved
+# (docs/specs/python-floor-310.md, superseding DEC-028). One pin now that
+# every supported interpreter satisfies the >=3.10 requirement.
+pytest==9.0.3
 pytest-cov==7.1.0
 pytest-mock==3.15.1
 # Order randomisation (audit H8): `make test-python`/`coverage-python` pass
 # `-p randomly`, so every run shuffles under a seed printed in the header and an
-# order coupling reproduces with `--randomly-seed=N`. The pin forks on the
-# interpreter like pytest's: 4.0 raised the floor to Python >=3.10, so the 3.9
-# leg keeps 3.16.0 until the floor moves (DEC-028).
-pytest-randomly==5.0.0; python_version >= "3.10"
-pytest-randomly==3.16.0; python_version < "3.10"
+# order coupling reproduces with `--randomly-seed=N`. 4.0 raised this pin's own
+# floor to Python >=3.10, which forked it the same way as pytest's above until
+# the repository floor caught up (DEC-028).
+pytest-randomly==5.0.0
 # Parallel runs (audit H8): both Python runners pass `-n auto`. Enabled on the
 # coverage run only after measuring that pytest-cov combines the workers' data
 # and that INV-2's skip evidence stays complete under xdist (see the Makefile).
@@ -39,10 +36,13 @@ numpy>=2.0.2,<3
 pip-audit==2.9.0
 # tomllib entered the stdlib in 3.11; tomli is its backport. The
 # configuration-liveness gates read pyproject.toml, so without this they would
-# fail to import on the 3.9 and 3.10 matrix legs.
+# fail to import on the 3.10 matrix leg.
 tomli==2.4.1; python_version < "3.11"
 ruff==0.16.5
-mypy==1.11.2
+# 1.11.2 was frozen here because mypy 2.x dropped the `--python-version 3.9`
+# flag (DEC-046); the floor bump to 3.10 (docs/specs/python-floor-310.md)
+# removes the reason to stay behind.
+mypy==2.3.1
 # Dead-code gate in `make lint-python` (tech-debt-hardening-plan R-TDH-17);
 # framework-registered symbols it cannot see are listed in vulture_whitelist.py.
 vulture==2.16

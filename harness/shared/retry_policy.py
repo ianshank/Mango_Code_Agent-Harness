@@ -26,9 +26,8 @@ import random
 import socket
 import time
 import urllib.error
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Callable
 
 # Documented fallbacks, mirroring the bridge's existing constant style. Each is
 # overridable through the mapping passed to ``from_mapping`` (NEMOTRON_* keys),

@@ -33,7 +33,7 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-025](DEC-025.md) | 2026-09-02 | accepted | Constant triage: every operational constant the audit found unlinked is now a policy value (`process |
 | [DEC-026](DEC-026.md) | 2026-09-02 | accepted | Python skip accounting: `conftest.py` writes every pytest skip to a TSV that `make verify-zero-skips |
 | [DEC-027](DEC-027.md) | 2026-09-02 | accepted | `autonomous_healing.py` and `lats_optimizer.py` parked under `harness/shared/experimental/` (unchang |
-| [DEC-028](DEC-028.md) | 2026-09-02 | accepted | The Python 3.9 floor stays |
+| [DEC-028](DEC-028.md) | 2026-09-02 | superseded | The Python 3.9 floor stays |
 | [DEC-029](DEC-029.md) | 2026-09-02 | superseded | DEC-020 stands: `harness/shared/` is not regrouped (cyclic on the real import graph |
 | [DEC-030](DEC-030.md) | 2026-09-02 | accepted | The Python skip-evidence hooks (DEC-026) and the langgraph deselection live in the repository-root ` |
 | [DEC-031](DEC-031.md) | 2026-09-02 | accepted | Dependabot PRs #38–#46 closed as superseded by the universal lock and the Phase 1 toolchain bump (ev |
@@ -69,3 +69,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-061](DEC-061.md) | 2026-09-05 | accepted | Windows-platform skips for GNU Make-dependent and POSIX-shell stub tests approved |
 | [DEC-062](DEC-062.md) | 2026-09-05 | accepted | Windows portability: asyncio/Starlette self-pipe requires enable_socket under pytest-socket |
 | [DEC-063](DEC-063.md) | 2026-09-05 | accepted | Windows-platform skip for AF_UNIX egress-floor proof approved |
+| [DEC-064](DEC-064.md) | 2026-09-07 | accepted | The Python floor moves to 3.10, retiring the 3.9 carve-outs DEC-017 and DEC-028 recorded |

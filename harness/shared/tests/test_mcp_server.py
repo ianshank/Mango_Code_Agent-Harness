@@ -7,9 +7,9 @@ import contextlib
 import logging
 import sys
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

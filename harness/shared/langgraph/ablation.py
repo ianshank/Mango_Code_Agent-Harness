@@ -40,7 +40,7 @@ class AblationChannel:
         hypothetical = copy.deepcopy(self.base_state)
         # Traverse up to collect diffs
         path = []
-        current: Optional[AblationNode] = node
+        current: AblationNode | None = node
         while current:
             path.append(current)
             current = current.parent

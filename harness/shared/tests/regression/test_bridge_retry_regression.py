@@ -71,7 +71,7 @@ class TestRetryPredicate:
         defect on the 3.9 leg of the CI matrix, which is where it bit.
         """
         assert socket.timeout in RETRYABLE_CONNECTION_ERRORS
-        assert is_retryable_connection_error(socket.timeout())
+        assert is_retryable_connection_error(TimeoutError())
 
     def test_http_error_is_not_a_connection_error(self) -> None:
         """HTTPError subclasses URLError; status codes, not transport, decide."""

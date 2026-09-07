@@ -15,16 +15,17 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
 
 from harness.shared.tests._helpers import REPO
 
-try:
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 uses the backport
-    import tomli as tomllib  # type: ignore[no-redef]
+else:  # pragma: no cover - exercised on the 3.10 matrix leg
+    import tomli as tomllib
 
 README = REPO / "README.md"
 GITIGNORE = REPO / ".gitignore"

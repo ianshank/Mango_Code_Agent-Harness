@@ -54,7 +54,8 @@ def _read_preserving_newlines(target_path: Path) -> str:
     LF and is written back as LF: a one-word patch silently rewrites every line
     in the file. ``newline=""`` disables the translation in both directions, and
     the ``newline=`` keyword on ``Path.read_text`` itself is 3.13+, above this
-    repository's 3.9 floor (R-RPT-7).
+    repository's Python floor (3.10 as of DEC-064; still true against the
+    prior 3.9 floor too) (R-RPT-7).
     """
     with open(target_path, encoding="utf-8", newline="") as handle:
         return handle.read()
