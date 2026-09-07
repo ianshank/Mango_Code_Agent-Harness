@@ -21,6 +21,8 @@ import re
 import shlex
 import typing
 
+from harness.shared.governance.tool_forms import classify_argv
+
 logger = logging.getLogger(__name__)
 
 #: Write-redirect operators, longest first so ``>>`` / ``>|`` beat a lone ``>``.
@@ -79,6 +81,21 @@ WRITE_TARGET_PROGRAMS: typing.Mapping[str, int] = {
 }
 
 
+def _tool_form_targets(argv: typing.Sequence[str]) -> tuple[str, ...]:
+    """Files a rewriting tool invocation names, e.g. ``ruff format a.py``.
+
+    An in-place formatter presents no redirect, so without this the broker's
+    write-policy loop never sees the files it rewrites (DEC-066). An invocation
+    whose targets are not enumerable contributes nothing here and is denied by
+    ``classify`` instead, so the failure mode of missing one stays a denial.
+
+    ``"write"`` is passed as the unmodelled action only to satisfy the shared
+    signature: this module decides set membership, never an action.
+    """
+    invocation = classify_argv(argv, "write")
+    return invocation.write_targets if invocation is not None else ()
+
+
 def write_targets(command: str) -> list[str]:
     """Paths ``command`` would create or overwrite, best effort.
 
@@ -126,6 +143,7 @@ def write_targets(command: str) -> list[str]:
     if start is not None:
         operands = [a for a in argv[1:] if not a.startswith("-") and not _REDIRECT.search(a)]
         targets.extend(operands[start:] if start else operands)
+    targets.extend(_tool_form_targets(argv))
     if targets and logger.isEnabledFor(logging.DEBUG):
         # Counts only — never argv / program / command / path text (model-
         # supplied; may carry secrets). Basename length is a coarse shape hint

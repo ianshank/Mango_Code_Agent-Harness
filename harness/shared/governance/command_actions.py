@@ -34,6 +34,7 @@ from harness.shared.governance.shell_words import (
     WordListNotEnumerable,
     credential_word_reason,
 )
+from harness.shared.governance.tool_forms import classify_argv
 from harness.shared.policy_loader import orchestrator_defaults
 from harness.shared.read_policy import CREDENTIAL_FILENAME_ALTERNATION
 
@@ -432,6 +433,13 @@ def _classify_program(text: str) -> Classification:
     delegation = delegated_argv(argv)
     if delegation is not None:
         return _classify_delegated(*delegation)
+
+    # A tool whose action depends on its invocation form is graded there, so
+    # `ruff format .` cannot keep the `test_execute` its program name earned
+    # while it rewrites protected files (DEC-066, R-AEI-1).
+    invocation = classify_argv(argv, UNCLASSIFIED_ACTION)
+    if invocation is not None:
+        return Classification(invocation.action, invocation.reason)
 
     by_sub = _BY_SUBCOMMAND.get((program, subcommand))
     if by_sub is not None:
