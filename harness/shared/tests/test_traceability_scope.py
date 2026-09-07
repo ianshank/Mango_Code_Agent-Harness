@@ -44,6 +44,17 @@ ct = importlib.import_module("harness.shared.governance.check_traceability")
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NODE_STACK = REPO_ROOT / "harness" / "node"
 
+#: The highest value `traceability.max_uncited_contract_requirement_ids` has ever been
+#: accepted at (DEC-065). This is deliberately a *second, independent* copy of that
+#: number rather than a read of the policy, and that duplication is the whole control:
+#: with enforcement and its own test both reading the policy, raising the policy from
+#: 223 to 224 while adding another uncited requirement stayed green, so "may only be
+#: lowered" was prose that nothing checked. Lowering the policy is a one-file edit and
+#: passes freely; raising it above this line fails, and raising this line is a visible
+#: edit to an accepted decision's recorded high-water mark rather than a threshold tweak.
+#: Found by review on PR #120.
+ACCEPTED_RATCHET_CEILING = 223
+
 pytestmark = pytest.mark.governance
 
 
@@ -486,3 +497,36 @@ def test_the_logger_degrades_instead_of_failing_the_gate(monkeypatch: pytest.Mon
     assert isinstance(degraded, logging.Logger)
     assert degraded.propagate is False
     degraded.debug("must not raise")
+
+
+def test_the_ratchet_may_only_be_lowered(policy: dict[str, Any]) -> None:
+    """The configured ratchet may never exceed the accepted high-water mark (C-GEA-4).
+
+    Without this, `max_uncited_contract_requirement_ids` is a configurable ceiling and
+    not a ratchet: the gate and every test that exercises it read the same policy key,
+    so raising the key alongside a new uncited requirement keeps the suite green and the
+    backlog grows behind a number that moved to accommodate it. DEC-065 claims the value
+    "may only be lowered"; this is what makes that claim enforceable rather than stated.
+    """
+    configured = int(ct._policy_value(policy, "max_uncited_contract_requirement_ids"))
+    assert configured <= ACCEPTED_RATCHET_CEILING, (
+        f"traceability.max_uncited_contract_requirement_ids is {configured}, above the accepted "
+        f"high-water mark of {ACCEPTED_RATCHET_CEILING} recorded here and in DEC-065. The ratchet "
+        "may only be lowered as citations land. Raising it means accepting a larger backlog, which "
+        "is a decision to record, not a threshold to edit."
+    )
+
+
+def test_the_ceiling_is_not_slack(policy: dict[str, Any]) -> None:
+    """A ceiling far above the configured value would make the guard above unfalsifiable.
+
+    The two numbers are meant to move together downward. If the policy is lowered and this
+    ceiling is not, the guard still passes but stops constraining anything real, which is
+    the stale-waiver shape C-GEA-4 is about — so the drift itself is the finding.
+    """
+    configured = int(ct._policy_value(policy, "max_uncited_contract_requirement_ids"))
+    assert ACCEPTED_RATCHET_CEILING - configured <= 0, (
+        f"the accepted ceiling ({ACCEPTED_RATCHET_CEILING}) now sits above the configured ratchet "
+        f"({configured}); lower ACCEPTED_RATCHET_CEILING to match, so the guard keeps constraining "
+        "the value it is meant to constrain."
+    )

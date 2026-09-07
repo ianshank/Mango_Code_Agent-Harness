@@ -83,6 +83,7 @@ TRIAGE: tuple[Row, ...] = (
         policy_key="orchestrator.tool_timeout_sec",
     ),
     # accepted by decision
+    Row("harness.shared.tests.test_traceability_scope", "ACCEPTED_RATCHET_CEILING", decision="DEC-065"),
     Row("harness.shared.retry_policy", "DEFAULT_BASE_SEC", decision="DEC-025"),
     Row("harness.shared.retry_policy", "DEFAULT_MAX_SEC", decision="DEC-025"),
     Row("harness.shared.retry_policy", "DEFAULT_JITTER_RATIO", decision="DEC-025"),

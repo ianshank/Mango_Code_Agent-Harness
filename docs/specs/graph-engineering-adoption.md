@@ -1,6 +1,6 @@
 # Spec: graph-engineering adoption
 
-> **Status:** DRAFT, revision 2. Contract for adopting graph representations of this
+> **Status:** DRAFT, revision 3. Contract for adopting graph representations of this
 > repository's governance chain, generated code, and orchestration topology, as reviewed in
 > [`docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`](../reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md).
 > Every design decision below is argued **Thesis → Counter-Argument → Rebuttal**, where the
@@ -428,9 +428,12 @@ later requirement ID is closed first.
 
 ## Files touched
 
-No path below matches `protected_paths` in `governance-policy.json`, so this spec's own landing
-needs no `infra-reviewed` attestation. Steps 1, 5, and 7 do touch protected paths and are called
-out.
+Rows marked **protected** match `protected_paths` in `governance-policy.json` and each needs a
+row in the PR's `infra-reviewed` attestation table. *Revision 3: revision 2 opened this section
+with "No path below matches `protected_paths` … so this spec's own landing needs no
+`infra-reviewed` attestation", which was false of its own list — four rows below were already
+marked protected, and the PR carries seven attestation rows. The sentence was written when the
+plan expected to touch only documentation and was not revised when the implementation landed.*
 
 - `docs/specs/graph-engineering-adoption.md` (this document)
 - `docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`
