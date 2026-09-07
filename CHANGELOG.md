@@ -156,6 +156,18 @@ attestations each time — and the report that proposed one priced none of it.
   deleted, because the deletion would lose the fact that the boundary was drawn in
   the wrong place once. Prose is as capable of that gap as code, with less to catch
   it: no gate runs over a decision record.
+- **A fifth module, and the split that keeps the dependency one-way.**
+  `block_positions.py` carries the statement-position analysis (`Position`,
+  `runs_before`, `own_nodes`) that both the dominance check and the new taint rule
+  need. It imports `ast` and nothing first-party, and the module-shape test was
+  *strengthened* rather than relaxed to admit it: it now asserts the analysis
+  half's first-party imports are exactly `{block_positions}` and that
+  `block_positions` has none at all. Two AST resolvers that look alike are
+  deliberately still not shared — `code_symbols` resolves a reflective read from
+  its **base** through the file's imports and returns nothing when that base does
+  not resolve (right for a write door, fail-*open* for a reachability scan), while
+  the authority scan reads the **leaf** and never resolves the receiver. They share
+  a shape, not a contract.
 - **Generated code was parsed and the parse thrown away.** `execute_generate_code`
   ran `ast.parse` to answer "does it parse", then wrote.
   `synthesis.prohibited_imports` declares five entries the same tree can decide
