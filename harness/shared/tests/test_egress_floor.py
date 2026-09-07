@@ -64,7 +64,10 @@ def test_a_unix_socketpair_is_permitted_while_tcp_still_raises() -> None:
     present. A skip here does NOT weaken the floor -- the socket guard still
     blocks TCP (test_the_socket_guard_is_actually_active) on every platform.
     """
-    _AF_UNIX = socket.AF_UNIX  # type: ignore[attr-defined]  # guarded by skipif above
+    # AddressFamily enum member: typed on every platform mypy knows, unlike
+    # ``socket.AF_UNIX`` which needs a Linux-only ignore that becomes unused
+    # under warn_unused_ignores (DEC-064 / mypy 2.x) on CI.
+    _AF_UNIX = socket.AddressFamily.AF_UNIX
     left, right = socket.socketpair(_AF_UNIX, socket.SOCK_STREAM)
     try:
         assert left.fileno() >= 0 and right.fileno() >= 0
