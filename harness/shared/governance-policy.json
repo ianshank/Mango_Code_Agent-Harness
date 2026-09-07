@@ -248,6 +248,10 @@
     "planner_gap_limit": 10,
     "reasoner_hypothesis_limit": 10,
     "reasoner_hypothesis_budget_tokens": 1500
+  },
+  "denial_rate": {
+    "max_denial_rate": 0.0,
+    "min_corpus_commands": 36,
+    "rationale": "Ceiling and population floor for harness/shared/governance/denial_rate.py (DEC-066, docs/specs/attested-execution-isolation.md R-AEI-2). The ceiling is a ratchet: it may be lowered as denials are closed, never raised. It stands at 0.0 because DEC-066 closed every false denial the corpus held -- 13 of 36 before it, including the python -m ruff and python -m mypy forms CLAUDE.md mandates under DEC-013. The floor stops the rate being driven down by deleting corpus entries; the corpus is a protected path for the same reason. A new top-level block rather than a key inside an adopted one, because DEC-043 makes an absent key in an adopted block a PolicyError for every adopter policy that predates it."
   }
 }
-
