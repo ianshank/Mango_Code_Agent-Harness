@@ -25,6 +25,13 @@ pytest-xdist==3.8.0
 # Egress floor (R-EGF-1): sockets are disabled by default in addopts so an
 # attempted connection fails the test instead of succeeding quietly.
 pytest-socket==0.7.0
+# Seed-clamp regression pin (test_randomly_numpy_seed_clamp_regression +
+# conftest.pytest_configure): thinc's pytest_randomly.random_seeder forwards
+# hashed seeds into numpy.random.seed unclamped. Numpy is not a runtime
+# harness dependency, but CI must install it so the pin runs rather than
+# soft-skipping under INV-2 / verify-zero-skips-python (importorskip without
+# a DEC-backed waiver). Universal lock keeps per-interpreter wheels.
+numpy>=2.0.2,<3
 # The audit gate's scanner (audit M15). Declared here rather than installed by
 # name in the workflow so it lands in the hashed lock and installs with
 # `--require-hashes` like every other tool; the Makefile reads this pin back as

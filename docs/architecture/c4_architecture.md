@@ -13,7 +13,7 @@
 > `1564 tests` label is dropped (the README carries the current count), and the
 > version below is this file's, not the snapshot's 2.1.9.
 
-**Version:** 2.5.0 (C4 model updated 2026-09-06 — Origin Sync, Hypothesis Surfacing, Context Budgets)
+**Version:** 2.4.0 (C4 model updated 2026-09-06 — Origin Sync, Hypothesis Surfacing, Context Budgets)
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`) (INV-1..INV-16)
 
