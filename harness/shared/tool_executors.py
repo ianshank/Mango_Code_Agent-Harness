@@ -247,7 +247,11 @@ def execute_generate_code(
     inferred_language = "python" if is_python else language
     if not inferred_language:
         ext_to_lang = {
+            # `.pyw` is Python here too. This map is reached only when the
+            # policy set did not already say so, and widens what is parsed
+            # rather than narrowing it. Kept from c331e47.
             ".py": "python",
+            ".pyw": "python",
             ".json": "json",
             ".yaml": "yaml",
             ".yml": "yaml",

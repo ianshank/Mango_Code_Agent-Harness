@@ -9,24 +9,21 @@ a renamed builder, a list-shaped ``path_map``, keyword arguments, the
 parser that passes its own fixtures and mis-reads the one file the repository
 actually asserts over would be a test suite proving nothing.
 
-Every fail-closed path gets its own case (R-GEA-4). That is deliberate
-over-coverage of the error branches: an extractor's failure modes are exactly
-where a vacuous pass comes from, so "it raised" is the assertion with the most
-value per line here. ``test_topology_extraction_is_source_based`` (AC-GEA-11)
-is the INV-2 half — it proves the extractor neither imports ``langgraph`` nor
-changes its answer with the deselect environment set, which is what lets this
-suite run unconditionally on every interpreter instead of behind a ``skipif``.
+What the extractor *refuses* lives next door in
+``test_graph_topology_source.py``, which was split from this file when
+``graph_topology`` split into a graph half and a ``graph_topology_source``
+half — one case per fail-closed path (R-GEA-4), plus the AC-GEA-11 proof that
+the answer never depends on ``langgraph`` being importable. It imports
+``write_source`` and ``GRAPH_SOURCE`` from here, so the two files describe the
+same fixtures rather than two drifting copies of them.
 """
 
 from __future__ import annotations
 
 import ast
 import logging
-import sys
 import textwrap
 from pathlib import Path
-from types import ModuleType
-from typing import cast
 
 import pytest
 
@@ -34,13 +31,11 @@ from harness.shared.graph_topology import (
     END_SENTINEL,
     START_SENTINEL,
     Topology,
-    TopologyExtractionError,
     extract_topology,
 )
 from harness.shared.tests._helpers import REPO
 
 GRAPH_SOURCE = REPO / "harness" / "shared" / "langgraph" / "graph.py"
-EXTRACTOR_SOURCE = REPO / "harness" / "shared" / "graph_topology.py"
 
 #: A miniature of ``graph.py``'s shape: a sentinel entry edge, a conditional
 #: fan-out whose map mixes a string key with an ``END`` name, a terminal edge,
@@ -254,8 +249,14 @@ class TestExtraction:
     def test_debug_logging_names_the_builder_and_the_counts(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The log line is the only account of what was read when an assertion fails."""
-        with caplog.at_level(logging.DEBUG, logger="harness.shared.graph_topology"):
+        """The log line is the only account of what was read when an assertion fails.
+
+        Captured on the package logger rather than one module's: the builder is
+        discovered in ``graph_topology_source`` and counted in
+        ``graph_topology``, and pinning only one of the two would silently stop
+        checking half of the account after the split.
+        """
+        with caplog.at_level(logging.DEBUG, logger="harness.shared"):
             extract_topology(write_source(tmp_path, CANONICAL_SOURCE))
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert "builder variable 'builder' discovered" in messages
@@ -317,235 +318,6 @@ class TestQueries:
         topology = extract_topology(write_source(tmp_path, source))
         assert topology.reachable_from("gate") == frozenset({"gate", "clarify", "done", END_SENTINEL})
         assert topology.path_between(START_SENTINEL, "done") == [START_SENTINEL, "gate", "done"]
-
-
-class TestFailsClosed:
-    """Every way the extractor can fail to read a graph raises (R-GEA-4).
-
-    None of these may return an empty ``Topology``: an empty node set makes
-    "this node has no incoming edge" true of a node that no longer exists, and
-    an empty edge set makes every reachability property true of nothing.
-    """
-
-    def test_a_missing_file_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(TopologyExtractionError, match="cannot be read"):
-            extract_topology(tmp_path / "absent.py")
-
-    def test_unparseable_source_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(TopologyExtractionError, match="cannot be parsed"):
-            extract_topology(write_source(tmp_path, "def build(:\n"))
-
-    def test_source_with_no_state_graph_assignment_raises(self, tmp_path: Path) -> None:
-        source = """
-            def build(factories):
-                builder = factories["state_graph"](dict)
-                graphs["other"] = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-        """
-        with pytest.raises(TopologyExtractionError, match="no assignment of a StateGraph"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_two_builders_in_one_module_raise(self, tmp_path: Path) -> None:
-        """Two graphs are two graphs; the first ``StateGraph(...)`` is not evidence about both.
-
-        Taking the first assignment's target and then collecting every call on
-        that bare name across the module merged two same-named builders into one
-        topology carrying both node sets, and returned the first graph alone
-        when the second was spelled differently -- each a plausible, non-empty
-        result no emptiness guard can reject, which is the exact shape R-GEA-4
-        forbids. The refusal names the file and both builders, because a reader
-        who cannot see which two graphs collided cannot act on it.
-        """
-        for second in ("builder", "other"):
-            source = f"""
-                from langgraph.graph import START, StateGraph
-
-
-                def build_one():
-                    builder = StateGraph(dict)
-                    builder.add_node("one", one_node)
-                    builder.add_edge(START, "one")
-
-
-                def build_two():
-                    {second} = StateGraph(dict)
-                    {second}.add_node("two", two_node)
-                    {second}.add_edge(START, "two")
-            """
-            path = write_source(tmp_path, source, name=f"two_{second}.py")
-            expected = rf"found 2 StateGraph builders \('builder' at line \d+, {second!r} at line \d+\)"
-            with pytest.raises(TopologyExtractionError, match=expected) as raised:
-                extract_topology(path)
-            assert str(path) in str(raised.value), f"the {second} refusal does not name the file it refused"
-
-    def test_a_builder_with_no_nodes_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import START, StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_edge(START, "alpha")
-        """
-        with pytest.raises(TopologyExtractionError, match="no add_node call"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_builder_with_no_edges_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                return builder.compile()
-        """
-        with pytest.raises(TopologyExtractionError, match="empty edge set"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_node_name_that_is_not_a_literal_raises(self, tmp_path: Path) -> None:
-        """Dropping the declaration would leave a plausible-looking partial graph."""
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build(name):
-                builder = StateGraph(dict)
-                builder.add_node(name, alpha_node)
-        """
-        with pytest.raises(TopologyExtractionError, match="add_node name"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_add_node_without_arguments_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_node()
-        """
-        with pytest.raises(TopologyExtractionError, match="no such argument"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_an_unresolvable_edge_target_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import START, StateGraph
-
-
-            def build(target):
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                builder.add_edge(START, target)
-        """
-        with pytest.raises(TopologyExtractionError, match="add_edge target"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_conditional_edges_without_a_path_map_raises(self, tmp_path: Path) -> None:
-        """Its destinations are whatever the router returns; no parse can decide them."""
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                builder.add_conditional_edges("alpha", route)
-        """
-        with pytest.raises(TopologyExtractionError, match="without a statically readable path_map"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_path_map_built_by_unpacking_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build(extra):
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                builder.add_conditional_edges("alpha", route, {**extra})
-        """
-        with pytest.raises(TopologyExtractionError, match=r"\*\* unpacking"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_an_unmodelled_builder_method_raises(self, tmp_path: Path) -> None:
-        """The general shape: a topology-declaring call this module does not read.
-
-        ``set_conditional_entry_point`` declares an edge from the entry sentinel
-        and is in neither the modelled set nor the known-inert one. Skipping it
-        — what an unknown method used to get — would drop that edge and return a
-        graph in which the entry reaches nothing, with nothing about the result
-        looking wrong. An allow-list is the only shape that fails closed here; a
-        skip-list's missing entry is by definition the one nobody wrote down.
-        """
-        source = """
-            from langgraph.graph import END, StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                builder.add_edge("alpha", END)
-                builder.set_conditional_entry_point(route, {"alpha": "alpha"})
-        """
-        with pytest.raises(TopologyExtractionError, match="'set_conditional_entry_point' is not modelled"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_sequence_of_bare_callables_raises(self, tmp_path: Path) -> None:
-        """LangGraph names such a node from ``__name__`` at runtime.
-
-        A decorator or a ``functools.partial`` makes that anything, so the name
-        is not decidable from this module's source — the same rule an
-        unresolvable ``add_node`` argument already follows.
-        """
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_sequence([beta_node, gamma_node])
-        """
-        with pytest.raises(TopologyExtractionError, match="add_sequence node name"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_sequence_that_is_not_a_literal_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build(steps):
-                builder = StateGraph(dict)
-                builder.add_sequence(steps)
-        """
-        with pytest.raises(TopologyExtractionError, match="add_sequence was called without"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_an_empty_sequence_raises(self, tmp_path: Path) -> None:
-        """LangGraph itself rejects it; extracting nothing from it would not."""
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build():
-                builder = StateGraph(dict)
-                builder.add_sequence([])
-        """
-        with pytest.raises(TopologyExtractionError, match="non-empty sequence"):
-            extract_topology(write_source(tmp_path, source))
-
-    def test_a_path_map_destination_that_is_not_a_literal_raises(self, tmp_path: Path) -> None:
-        source = """
-            from langgraph.graph import StateGraph
-
-
-            def build(destination):
-                builder = StateGraph(dict)
-                builder.add_node("alpha", alpha_node)
-                builder.add_conditional_edges("alpha", route, {"next": destination})
-        """
-        with pytest.raises(TopologyExtractionError, match="conditional branch destination"):
-            extract_topology(write_source(tmp_path, source))
 
 
 def expected_node_count() -> int:
@@ -635,56 +407,3 @@ class TestTheRealGraph:
         """
         assert real_graph.path_between(START_SENTINEL, "implementer") is not None
         assert real_graph.path_between(START_SENTINEL, "implementer", avoiding=frozenset({"plan_gate"})) is None
-
-
-def test_topology_extraction_is_source_based(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """AC-GEA-11: the answer does not depend on ``langgraph`` being importable.
-
-    Three claims, because the acceptance criterion is really about INV-2: a
-    check whose result depends on an optional import is a check that has to be
-    skipped somewhere, and a skipped check reports nothing while looking like a
-    pass.
-
-    1. The extractor's own source imports nothing from ``langgraph`` — the
-       structural reason no ``skipif`` can ever be needed.
-    2. The recovered node and edge sets are identical with the deselect
-       environment variable set, and with ``import langgraph`` forced to fail.
-    3. Renaming the builder binding raises rather than reporting an empty
-       topology, so the "no ``langgraph``" path cannot degrade into a silent
-       pass either (R-GEA-4).
-    """
-    imported = {
-        alias.name.split(".")[0]
-        for node in ast.walk(ast.parse(EXTRACTOR_SOURCE.read_text(encoding="utf-8")))
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        for alias in node.names
-    }
-    imported |= {
-        node.module.split(".")[0]
-        for node in ast.walk(ast.parse(EXTRACTOR_SOURCE.read_text(encoding="utf-8")))
-        if isinstance(node, ast.ImportFrom) and node.module
-    }
-    assert "langgraph" not in imported, (
-        "graph_topology.py imports langgraph; a compiled-graph check needs a skipif on the optional extra, "
-        "which INV-2 forbids (R-GEA-6c)"
-    )
-
-    baseline = extract_topology(GRAPH_SOURCE)
-    monkeypatch.setenv("MANGO_CI_DESELECT_LANGGRAPH", "1")
-    # ``None`` in ``sys.modules`` makes ``import langgraph`` raise ImportError
-    # even on a leg where the extra *is* installed, so this half of the
-    # assertion is not satisfied merely by the library being absent here. The
-    # cast says that to the type checker, which types the mapping as
-    # ``str -> ModuleType``.
-    monkeypatch.setitem(sys.modules, "langgraph", cast(ModuleType, None))
-    with pytest.raises(ImportError):
-        import langgraph  # noqa: F401
-    deselected = extract_topology(GRAPH_SOURCE)
-    assert (deselected.nodes, deselected.edges) == (baseline.nodes, baseline.edges)
-
-    unrecognisable = GRAPH_SOURCE.read_text(encoding="utf-8").replace(
-        "builder = StateGraph(MangoState)", "container = _make_builder(MangoState)"
-    )
-    assert "container = _make_builder" in unrecognisable, "graph.py no longer spells its builder assignment that way"
-    with pytest.raises(TopologyExtractionError, match="no assignment of a StateGraph"):
-        extract_topology(write_source(tmp_path, unrecognisable, name="renamed_graph.py"))

@@ -70,8 +70,10 @@ TOPOLOGY_TARGET = re.compile(r"topolog|state-?graph", re.IGNORECASE)
 #: The extractor invoked as a command — the shape a gate would take. Deliberately
 #: not a bare search for `graph_topology`: a recipe naming
 #: `test_graph_topology.py` is a *test* being run, which D-5 permits and this
-#: file is itself an instance of.
-TOPOLOGY_GATE_COMMAND = re.compile(r"-m\s+harness\.shared\.graph_topology|harness/shared/graph_topology\.py")
+#: file is itself an instance of. Both halves of the extractor match, because a
+#: gate built on `graph_topology_source` would be the same parked gate wearing
+#: the module the split moved the parser into.
+TOPOLOGY_GATE_COMMAND = re.compile(r"-m\s+harness\.shared\.graph_topology|harness/shared/graph_topology(_source)?\.py")
 
 
 @pytest.fixture(scope="module")
@@ -239,6 +241,10 @@ def test_the_target_detector_is_not_vacuous() -> None:
     for unrelated in ("lint", "coverage", "test-langgraph", "validate"):
         assert not TOPOLOGY_TARGET.search(unrelated), f"{unrelated} would be misreported as a topology gate"
     assert TOPOLOGY_GATE_COMMAND.search("\t$(PYTHON) -m harness.shared.graph_topology --check")
-    assert not TOPOLOGY_GATE_COMMAND.search("\t$(PYTEST) harness/shared/tests/test_graph_topology.py"), (
-        "running the topology *test* must not read as a gate; that conflation is what D-5 resolved"
+    assert TOPOLOGY_GATE_COMMAND.search("\t$(PYTHON) harness/shared/graph_topology_source.py --check"), (
+        "a gate built on the extractor's source-reading half is the same gate R-GEA-6 parks"
     )
+    for test_run in ("test_graph_topology.py", "test_graph_topology_source.py"):
+        assert not TOPOLOGY_GATE_COMMAND.search(f"\t$(PYTEST) harness/shared/tests/{test_run}"), (
+            "running the topology *test* must not read as a gate; that conflation is what D-5 resolved"
+        )
