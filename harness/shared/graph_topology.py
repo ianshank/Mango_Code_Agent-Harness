@@ -52,12 +52,13 @@ of 412). R-GEA-4 makes the rule explicit: *a derived node set or edge set that
 comes back empty is a broken extractor, not a satisfied property, and MUST
 raise rather than pass.* So `TopologyExtractionError` is raised for an
 unreadable or unparseable file, for source with no ``StateGraph(...)``
-assignment, for source with no ``add_node`` call, for source with no edge, and
-for any individual call whose arguments this module cannot resolve to node
-names. The last case matters most: silently skipping one ``add_node`` whose
-argument is a variable would drop a node from the graph while still returning a
-plausible-looking topology, which is worse than raising because nothing about
-the result would look wrong.
+assignment, for source with no ``add_node`` call, for source with no edge, for
+any individual call whose arguments this module cannot resolve to node names,
+and for any builder method it does not model. The last two matter most:
+silently skipping one ``add_node`` whose argument is a variable, or one
+``add_sequence`` whose whole chain this module never read, drops nodes and
+edges from the graph while still returning a plausible-looking topology --
+worse than raising, because nothing about the result would look wrong.
 
 Why the builder variable is discovered rather than assumed
 ----------------------------------------------------------
@@ -96,16 +97,22 @@ END_SENTINEL = "__end__"
 #: the attribute spelling (``constants.END``) resolve through this table.
 _SENTINEL_NAMES = {"START": START_SENTINEL, "END": END_SENTINEL}
 
-#: ``StateGraph`` builder methods that declare topology. ``compile``,
-#: ``add_sequence`` and anything else called on the builder is ignored on
-#: purpose: an unknown method is not evidence of an edge, whereas an
-#: unresolvable *argument* to a known method is evidence of an edge this module
-#: failed to read, which is why the two are treated differently.
+#: ``StateGraph`` builder methods this module models. Every other method called
+#: on the builder raises: see ``_collect_call`` for why an allow-list is the
+#: only shape that fails closed here.
 _ADD_NODE = "add_node"
 _ADD_EDGE = "add_edge"
 _ADD_CONDITIONAL_EDGES = "add_conditional_edges"
+_ADD_SEQUENCE = "add_sequence"
 _SET_ENTRY_POINT = "set_entry_point"
 _SET_FINISH_POINT = "set_finish_point"
+
+#: Builder methods that declare no topology, listed one at a time rather than
+#: assumed: ``compile`` builds the runnable from what is already declared, so
+#: reading it adds nothing and skipping it drops nothing. A method joins this
+#: set only once a reader has decided it declares no node and no edge, which is
+#: the whole difference between an allow-list and a skip-list.
+_NO_TOPOLOGY = frozenset({"compile"})
 
 
 class TopologyExtractionError(RuntimeError):
@@ -328,7 +335,21 @@ def _collect_call(
     nodes: list[str],
     edges: list[tuple[str, str]],
 ) -> None:
-    """Append whatever one builder call declares to ``nodes`` / ``edges``."""
+    """Append whatever one builder call declares to ``nodes`` / ``edges``.
+
+    **The defect this prevents is a topology-declaring call that is skipped.**
+    An unmodelled method used to be ignored on the reasoning that "an unknown
+    method is not evidence of an edge". It is evidence of a *declaration this
+    module did not read*: ``add_sequence`` beside one ordinary edge returned a
+    plausible non-empty topology missing every node and edge the sequence
+    declared, leaving a reachability property over the result quietly wrong
+    instead of loudly absent -- the partial result R-GEA-4 forbids, and the one
+    shape no emptiness guard can catch. So the method set is an allow-list that
+    raises on anything outside it. A skip-list cannot fail closed, because the
+    entry needing to be added is the one nobody knew to write down:
+    ``set_conditional_entry_point`` declares topology, is in neither set above,
+    and now raises instead of vanishing.
+    """
     if method == _ADD_NODE:
         nodes.append(_resolve(_argument(call, 0, "node"), source_path, call, "add_node name"))
     elif method == _ADD_EDGE:
@@ -340,10 +361,51 @@ def _collect_call(
         for label, dst in _branches(_argument(call, 2, "path_map"), source_path, call):
             logger.debug("graph_topology: conditional branch %s --[%s]--> %s", src, label, dst)
             edges.append((src, dst))
+    elif method == _ADD_SEQUENCE:
+        _collect_sequence(call, source_path, nodes, edges)
     elif method == _SET_ENTRY_POINT:
         edges.append((START_SENTINEL, _resolve(_argument(call, 0, "key"), source_path, call, "set_entry_point")))
     elif method == _SET_FINISH_POINT:
         edges.append((_resolve(_argument(call, 0, "key"), source_path, call, "set_finish_point"), END_SENTINEL))
+    elif method not in _NO_TOPOLOGY:
+        raise TopologyExtractionError(
+            f"{source_path}:{call.lineno}: builder method {method!r} is not modelled by this extractor; "
+            "an unmodelled call that declares topology would be dropped from the result, leaving a graph "
+            "that looks complete and is not"
+        )
+
+
+def _collect_sequence(call: ast.Call, source_path: Path, nodes: list[str], edges: list[tuple[str, str]]) -> None:
+    """Expand ``add_sequence([...])`` into the nodes and chain edges it declares.
+
+    Extracted rather than refused because the semantics are unambiguous: the
+    method is ``add_node`` per element plus ``add_edge`` between consecutive
+    ones, so reading it rewrites into two calls this module already models
+    rather than inventing a notion of an edge. Refusing would have been safe
+    but would fail on a graph nothing is wrong with, and a check that fires on
+    correct source gets switched off. An element is either ``("name", node)``
+    or a bare callable whose node name LangGraph takes from ``__name__`` at
+    runtime -- which a decorator or a ``functools.partial`` can make anything.
+    The second raises, on the rule an unresolvable ``add_node`` argument
+    already follows: a name this module cannot decide is not one it may guess.
+    """
+    elements = _argument(call, 0, "nodes")
+    if not isinstance(elements, (ast.List, ast.Tuple)) or not elements.elts:
+        raise TopologyExtractionError(
+            f"{source_path}:{call.lineno}: add_sequence was called without a statically readable, non-empty "
+            f"sequence (got {_describe(elements)}); the chain it declares would be decided at runtime"
+        )
+    previous: str | None = None
+    for element in elements.elts:
+        # `(name, node)` is a 2-tuple and nothing else: LangGraph reads any
+        # other element as the node itself and names it from the object.
+        named = element.elts[0] if isinstance(element, ast.Tuple) and len(element.elts) == 2 else element
+        name = _resolve(named, source_path, call, "add_sequence node name")
+        nodes.append(name)
+        if previous is not None:
+            logger.debug("graph_topology: sequence edge %s --> %s", previous, name)
+            edges.append((previous, name))
+        previous = name
 
 
 def _argument(call: ast.Call, index: int, keyword: str) -> ast.expr | None:

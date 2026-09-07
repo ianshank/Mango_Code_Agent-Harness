@@ -161,6 +161,50 @@ class TestExtraction:
         topology = extract_topology(write_source(tmp_path, source))
         assert topology.edges == ((START_SENTINEL, "alpha"), ("alpha", END_SENTINEL))
 
+    def test_add_sequence_declares_its_nodes_and_the_chain_between_them(self, tmp_path: Path) -> None:
+        """The call the extractor used to skip, beside the edges that hid the skip.
+
+        ``add_sequence`` is ``add_node`` per element plus ``add_edge`` between
+        consecutive ones. Skipping it left ``gamma`` out of ``nodes`` while
+        ``gamma -> END`` stayed in ``edges``, so the result was a non-empty,
+        entirely plausible topology that no emptiness guard could reject — and
+        every reachability property asserted over it was answered from a graph
+        missing two of its three nodes (R-GEA-4).
+        """
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("alpha", alpha_node)
+                builder.add_sequence([("beta", beta_node), ("gamma", gamma_node)])
+                builder.add_edge(START, "alpha")
+                builder.add_edge("alpha", "beta")
+                builder.add_edge("gamma", END)
+        """
+        topology = extract_topology(write_source(tmp_path, source))
+        assert topology.nodes == ("alpha", "beta", "gamma")
+        assert ("beta", "gamma") in topology.edges
+        assert topology.reachable_from(START_SENTINEL) == frozenset({"alpha", "beta", "gamma", END_SENTINEL})
+        assert topology.nodes_without_edges() == ()
+
+    def test_a_single_element_sequence_declares_a_node_and_no_edge(self, tmp_path: Path) -> None:
+        """One element is one ``add_node`` and nothing to chain it to."""
+        source = """
+            from langgraph.graph import END, START, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_sequence([("alpha", alpha_node)])
+                builder.add_edge(START, "alpha")
+                builder.add_edge("alpha", END)
+        """
+        topology = extract_topology(write_source(tmp_path, source))
+        assert topology.nodes == ("alpha",)
+        assert topology.edges == ((START_SENTINEL, "alpha"), ("alpha", END_SENTINEL))
+
     def test_calls_on_anything_but_the_builder_are_ignored(self, tmp_path: Path) -> None:
         """A same-named method on another object is not this graph's topology."""
         source = """
@@ -378,6 +422,72 @@ class TestFailsClosed:
                 builder.add_conditional_edges("alpha", route, {**extra})
         """
         with pytest.raises(TopologyExtractionError, match=r"\*\* unpacking"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_an_unmodelled_builder_method_raises(self, tmp_path: Path) -> None:
+        """The general shape: a topology-declaring call this module does not read.
+
+        ``set_conditional_entry_point`` declares an edge from the entry sentinel
+        and is in neither the modelled set nor the known-inert one. Skipping it
+        — what an unknown method used to get — would drop that edge and return a
+        graph in which the entry reaches nothing, with nothing about the result
+        looking wrong. An allow-list is the only shape that fails closed here; a
+        skip-list's missing entry is by definition the one nobody wrote down.
+        """
+        source = """
+            from langgraph.graph import END, StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_node("alpha", alpha_node)
+                builder.add_edge("alpha", END)
+                builder.set_conditional_entry_point(route, {"alpha": "alpha"})
+        """
+        with pytest.raises(TopologyExtractionError, match="'set_conditional_entry_point' is not modelled"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_a_sequence_of_bare_callables_raises(self, tmp_path: Path) -> None:
+        """LangGraph names such a node from ``__name__`` at runtime.
+
+        A decorator or a ``functools.partial`` makes that anything, so the name
+        is not decidable from this module's source — the same rule an
+        unresolvable ``add_node`` argument already follows.
+        """
+        source = """
+            from langgraph.graph import StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_sequence([beta_node, gamma_node])
+        """
+        with pytest.raises(TopologyExtractionError, match="add_sequence node name"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_a_sequence_that_is_not_a_literal_raises(self, tmp_path: Path) -> None:
+        source = """
+            from langgraph.graph import StateGraph
+
+
+            def build(steps):
+                builder = StateGraph(dict)
+                builder.add_sequence(steps)
+        """
+        with pytest.raises(TopologyExtractionError, match="add_sequence was called without"):
+            extract_topology(write_source(tmp_path, source))
+
+    def test_an_empty_sequence_raises(self, tmp_path: Path) -> None:
+        """LangGraph itself rejects it; extracting nothing from it would not."""
+        source = """
+            from langgraph.graph import StateGraph
+
+
+            def build():
+                builder = StateGraph(dict)
+                builder.add_sequence([])
+        """
+        with pytest.raises(TopologyExtractionError, match="non-empty sequence"):
             extract_topology(write_source(tmp_path, source))
 
     def test_a_path_map_destination_that_is_not_a_literal_raises(self, tmp_path: Path) -> None:

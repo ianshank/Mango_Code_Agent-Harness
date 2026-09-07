@@ -2,7 +2,7 @@
 
 **Version:** 2.4.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-07 · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and DEC-064 rollback retirement completed · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
+**Last reviewed:** 2026-09-07 · `claude/graph-engineering-mango-agent-1ic553` (PR #120) @ `dc42d4c`, DEC-065 landed at `7ff4cd7` — graph-engineering adoption: four derived checks, none of them a new `ci_required_target`; the traceability gate re-scoped from 6 to 412 requirement IDs behind a policy floor and a ratchet, and `make validate` now runs it per-stack **and** repository-scoped so the required check reads the real corpus; `.governance/**` reclassified out of the dormant protected-path set as DEC-056 predicted → what it bounded rather than fixed is **NS-39** · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and **DEC-060** rollback retirement completed (this line said DEC-064; DEC-064 is the Python 3.10 floor — the NS-17/NS-21 rollback pins were retired under DEC-060) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
 ---
 
@@ -231,6 +231,20 @@ persona names a tool the bridge does not expose. Protected path; attestation.
 **Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 3,
 implementing `reasoner-bridge-tool-parity.md`'s existing scaffold in place.
 
+**Re-measured 2026-09-07, and the drift now costs more than vocabulary.** The
+persona body still enumerates four bridge tools and omits `generate_code`, which
+NS-38 added to `NEMOTRON_TOOLS` on #116, while instructing "Always write new
+files using `write_file`". Since DEC-065 that instruction names the one write
+door that does **not** refuse Python naming a `synthesis.prohibited_imports`
+symbol: `generate_code` carries the pre-write refusal, `write_file` is unchanged
+by design (C-CGT-2). The persona therefore steers new-file writes away from the
+checked door by default. Do **not** patch the list by hand — R-RBT-2 says the
+tool inventory must stop living in `.mango/agents/` markdown at all, and a
+hand-edit to a protected path buys an attestation for a paragraph this item
+deletes. Fix it by landing R-RBT-1/R-RBT-2 so the paragraph is generated from
+`tools_for_role(...)`, and add the write-door refusal as an *operating rule*
+(R-RBT-2 keeps those in the persona) in the same change.
+
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
 **Why now.** `gate-mutation-proof` is a by-hand loop whose CHANGELOG claims are
@@ -260,6 +274,73 @@ nothing.
 
 **Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
 `required_signatures` (that clause stays gated on NS-1).
+
+### NS-39 · Close the three things DEC-065 bounded rather than fixed *(spec exists)*
+
+**Why now.** DEC-065 landed four derived checks and left three residuals **by
+name**, so they are visible now rather than discovered by a later reader who
+over-trusts a green run.
+
+1. *The traceability gate is green on a ratchet, not on a traced corpus.*
+   Re-scoping it from 6 to 412 requirement IDs did not produce a green gate, it
+   produced a backlog: **223** contract-spec IDs missing an implementation
+   citation, a test citation, or both (222 as the corpus stood, plus R-GEA-5,
+   which is deliberately unimplemented and so has nothing to cite). The number
+   lives in `traceability.max_uncited_contract_requirement_ids` and may only be
+   lowered — a bound, not a fix.
+2. *`AC-GEA-8` is the one unticked criterion in the spec.* R-GEA-5 requires a
+   recorded tokens-and-tool-calls-per-subagent-turn baseline under `docs/reports/`
+   **before** any code-property graph is built, with the build decision comparing
+   that baseline against a policy threshold rather than the imported 10× benchmark
+   measured on somebody else's corpus (D-3). Nothing records the number, so the
+   argument that would settle it cannot be had — adopting first and measuring
+   later is the DEC-024 shape.
+3. *`execute_generate_code`'s residual bypass is **closed**; this item is
+   retained only to record it.* The check once ran on a tree that existed only
+   when `validate_syntax=True` **and** the model-supplied `language` resolved to
+   Python, so either argument let the agent switch it off. Python-ness is now
+   derived from the resolved target suffix and the check runs on every Python
+   write regardless of the flag (`tool_executors.execute_generate_code`, PR #120).
+   Nothing remains to do here. The reasoning that first accepted it — that closing
+   it would widen a protected-path diff — is worth keeping in view: a diff cost is
+   not an argument about a security property, and it had been allowed to settle
+   one.
+
+**Evidence.** `python3 harness/shared/governance/check_traceability.py --workspace .`
+prints the count, the ratchet and the headroom in one line;
+`docs/decisions/DEC-065.md` §"Residual, named rather than discovered later" and
+§"Not closed here"; `docs/specs/graph-engineering-adoption.md` AC-GEA-8 unticked;
+no baseline file under `docs/reports/`; `harness/shared/tool_executors.py`
+`execute_generate_code`'s suffix-derived `is_python` gate (the residual item 3
+records as closed).
+
+**Done when.**
+
+- The ratchet is **lowered** in a reviewed policy edit with the citations that
+  earned each reduction attached. `test_traceability_gaps_are_cited_or_recorded`
+  fails when the backlog exceeds the ratchet, and
+  `test_the_repository_run_reports_the_count_and_the_headroom` names the lower
+  value on every green run — so an allowance that has stopped being needed is
+  reported without waiting for a red run · stage `make test-python` / `make validate`.
+- A baseline under `docs/reports/` names measured tokens and tool calls for at
+  least three recorded subagent turns, and AC-GEA-8's named test
+  (`test_code_graph_is_gated_on_a_recorded_baseline`, which does **not** exist
+  yet — the criterion is unticked, so `test_spec_selectors_collect.py` does not
+  judge it) is written and fails a tree holding a code-property-graph module with
+  no such baseline · stage `make test-python`.
+- ~~Either `execute_generate_code` decides the prohibited-symbol question on a
+  path no model-supplied argument can skip, or a decision record states why the
+  `validate_syntax=False` path is accepted.~~ **Done on PR #120.** The first
+  branch was taken: `is_python` derives from the resolved target suffix and the
+  check runs regardless of `validate_syntax`, with
+  `test_code_generation_tool.py::TestNeitherToolArgumentTurnsTheCheckOff` red
+  against the old behaviour across all three policy shapes. Only the first two
+  bullets of this item remain open.
+
+**Depends on.** Nothing, and **not** NS-2: none of the three touches Phase E or
+the LangGraph park. DEC-065 shipped topology verification as a plain test rather
+than a gate precisely so the orphan-reviewer defect stays watched while Phase E
+waits on the credential rotation.
 
 ### NS-29 · The program plans
 
@@ -315,7 +396,7 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 | Was | Now |
 |---|---|
-| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via DEC-064 after origin re-landed the forward feature. |
+| **Windows parity** RCA-1 -> RCA-11 | **3 417 passed, 133 expected skips, 0 failures** on Windows dev. DEC-063 (AF_UNIX), DEC-061 (make guards), DEC-062 (asyncio self-pipe). `test_windows_portability_regression.py` expanded to enterprise AQA. `pyrightconfig.json` added for IDE parity. NS-17/NS-21 temporary rollback regressions retired via **DEC-060** after origin re-landed the forward feature (this row said DEC-064; `docs/decisions/DEC-060.md` is the record that retires those pins, and DEC-064 — added later, on #118 — is the Python 3.10 floor). |
 
 **Closed 2026-09-06 (DEC-058 / hypothesis surfacing, phase 2 of DEC-057):**
 

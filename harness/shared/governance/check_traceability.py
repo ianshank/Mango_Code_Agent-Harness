@@ -222,6 +222,26 @@ def _spec_class(text: str, path: Path, policy: dict[str, Any]) -> str:
     return declared
 
 
+def _cited(req: str, text: str) -> bool:
+    """True when ``text`` cites ``req`` as a whole identifier, not as a substring.
+
+    A plain ``req in text`` scores an ID as cited whenever some *longer* ID
+    contains it: `C-GEA-4` was satisfied by the unrelated `AC-GEA-4`, and any
+    `R-X-1` is satisfied by `R-X-1b`. Discovery has always been anchored --
+    ``REQ`` is ``\\b([CR]-[A-Za-z0-9_-]+)\\b`` -- so the two halves of this gate
+    disagreed about what counts as an identifier, and the citation half was the
+    lenient one. A gate whose pass condition can be met by a different
+    requirement is passing for a reason unrelated to what it claims, which is
+    the defect class this module was rewritten to fix. Found by audit on PR #120.
+
+    ``-`` is excluded on both sides as well as ``\\w``: `\\b` alone treats a
+    hyphen as a boundary, so it would still read `C-GEA-4` out of `AC-GEA-4`
+    only by luck of the preceding character being a word character. Stating the
+    class explicitly makes the rule independent of that coincidence.
+    """
+    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(req)}(?![A-Za-z0-9_-])", text) is not None
+
+
 def _absences(requirement_ids: list[str], impl_text: str, test_text: str) -> dict[str, list[str]]:
     """Map each uncited ID to the side(s) it is absent from.
 
@@ -231,9 +251,9 @@ def _absences(requirement_ids: list[str], impl_text: str, test_text: str) -> dic
     absences: dict[str, list[str]] = {}
     for req in requirement_ids:
         absent_from = []
-        if req not in impl_text:
+        if not _cited(req, impl_text):
             absent_from.append("implementation")
-        if req not in test_text:
+        if not _cited(req, test_text):
             absent_from.append("tests")
         if absent_from:
             absences[req] = absent_from
@@ -351,16 +371,22 @@ def _enforce_repository_scope(result: TraceabilityResult, policy: dict[str, Any]
             )
             + _gap_detail(result.gaps)
         )
+    # The advice fires only when there is slack to give back. Emitting "lower the
+    # ratchet to <uncited>" at headroom 0 tells the reader to set the value it
+    # already has, and a line that says nothing on every green run is a line
+    # nobody reads on the run where it finally means something -- which would
+    # make AC-GEA-10's "a stale allowance is visible on every green run"
+    # unfalsifiable in exactly the case it exists for. Found by audit on PR #120.
+    headroom = ratchet - uncited
+    slack = (
+        f" headroom {headroom} — lower traceability.max_uncited_contract_requirement_ids to {uncited};"
+        if headroom > 0
+        else " at the ratchet exactly, no slack to reclaim;"
+    )
     print(
-        " ".join(
-            [
-                f"traceability: passed ({discovered} requirements;",
-                f"{uncited} uncited contract ID(s) against a ratchet of {ratchet},",
-                f"headroom {ratchet - uncited} — lower",
-                f"traceability.max_uncited_contract_requirement_ids to {uncited};",
-                f"{len(result.plan_only_gaps)} program-plan ID(s) reported, not required to cite)",
-            ]
-        )
+        f"traceability: passed ({discovered} requirements; {uncited} uncited contract ID(s) "
+        f"against a ratchet of {ratchet},{slack} "
+        f"{len(result.plan_only_gaps)} program-plan ID(s) reported, not required to cite)"
     )
 
 

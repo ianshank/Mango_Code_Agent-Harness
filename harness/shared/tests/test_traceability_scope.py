@@ -530,3 +530,36 @@ def test_the_ceiling_is_not_slack(policy: dict[str, Any]) -> None:
         f"({configured}); lower ACCEPTED_RATCHET_CEILING to match, so the guard keeps constraining "
         "the value it is meant to constrain."
     )
+
+
+class TestCitationIsWholeIdentifier:
+    """A longer requirement ID must not satisfy a shorter one (R-GEA-1, R-GEA-4).
+
+    Discovery has always been anchored (`REQ` is `\\b([CR]-[A-Za-z0-9_-]+)\\b`)
+    while the citation half used a plain `in`, so the two halves of this gate
+    disagreed about what an identifier is and the citation half was the lenient
+    one. Measured consequence before the fix: `C-GEA-4` scored as cited by tests
+    solely because `AC-GEA-4` appears in them. A pass condition satisfiable by a
+    *different* requirement is the defect class this module was rewritten to fix,
+    reappearing inside the fix. Found by audit on PR #120.
+    """
+
+    def test_a_longer_id_does_not_satisfy_a_shorter_one(self) -> None:
+        assert ct._cited("C-GEA-4", "see C-GEA-4 here")
+        assert not ct._cited("C-GEA-4", "see AC-GEA-4 here")
+
+    def test_a_suffixed_id_does_not_satisfy_its_prefix(self) -> None:
+        """`R-GEA-1b` is a distinct requirement from `R-GEA-1`."""
+        assert not ct._cited("R-GEA-1", "R-GEA-1b is cited here")
+        assert ct._cited("R-GEA-1b", "R-GEA-1b is cited here")
+
+    def test_ordinary_punctuation_still_counts_as_a_citation(self) -> None:
+        """The rule must not be so strict that real citations stop counting."""
+        for text in ("R-GEA-6, and more", "`R-GEA-6`", "(R-GEA-6)", "R-GEA-6.", "R-GEA-6\n"):
+            assert ct._cited("R-GEA-6", text), text
+
+    def test_absences_uses_the_anchored_match(self) -> None:
+        """The behaviour above reaches the verdict, not just the helper."""
+        absent = ct._absences(["C-GEA-4"], "AC-GEA-4 in implementation", "AC-GEA-4 in tests")
+        assert absent == {"C-GEA-4": ["implementation", "tests"]}
+        assert ct._absences(["C-GEA-4"], "C-GEA-4 here", "C-GEA-4 there") == {}

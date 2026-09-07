@@ -221,3 +221,102 @@ class TestProhibitedSymbolsNeverReachDisk:
         code = '"""Never call os.system or import subprocess here."""\n\nVALUE = 1\n'
         assert "Success: Generated" in execute_generate_code(tmp_path, "doc.py", code)
         assert (tmp_path / "doc.py").read_text(encoding="utf-8") == code
+
+    def test_the_builtins_detour_is_refused_at_the_write_door(self, tmp_path: Path) -> None:
+        """`__import__` reached through the module that holds it, end to end.
+
+        `builtins.__import__("os")` is the bare `__import__` entry under a name
+        the policy string neither equals nor prefixes, so the write door
+        admitted it until `code_safety` normalised the namespace. Asserted here
+        as well as in `test_code_safety.py` because the property that matters is
+        "zero bytes reached disk", which only this path can show.
+        """
+        code = "import builtins\n\n\nmod = builtins.__import__('os')\n"
+        result = execute_generate_code(tmp_path, "detour.py", code)
+        assert "__import__" in result
+        assert tool_outcome(result) == DENIED_POLICY
+        assert not (tmp_path / "detour.py").exists()
+
+
+class TestNeitherToolArgumentTurnsTheCheckOff:
+    """R-GEA-3: `validate_syntax` and `language` are the model's, the check is not.
+
+    Both are `generate_code` arguments the calling model fills in, so deriving
+    "is this Python, and should the prohibited-symbol check run" from either let
+    the agent whose output the check constrains switch it off in one field.
+    DEC-065 recorded the `validate_syntax` half as an accepted residual; it is
+    closed here by deciding Python from the resolved target suffix — the one
+    fact about the write no argument can restate, because it is where the bytes
+    land — and by running the check on every Python write regardless of the
+    flag. `validate_syntax` keeps the meaning it always had, syntax *reporting*.
+
+    Each case asserts the workspace is unchanged, not merely that the denial
+    text is right: "returns a denial" and "wrote nothing" are two properties and
+    the second is the one the pre-write ordering exists for.
+    """
+
+    #: One module per shape the policy key spans, so a bypass that only worked
+    #: for one of them cannot hide behind the other two.
+    PROHIBITED = (
+        "import subprocess\n\n\nsubprocess.run(['ls'])\n",
+        "import os\n\n\nos.system('rm -rf /')\n",
+        "mod = __import__('os')\n",
+    )
+
+    #: Valid Python naming nothing prohibited: the control that keeps every
+    #: assertion below a narrowing rather than a closed door.
+    ALLOWED = "from pathlib import Path\n\n\ndef here() -> Path:\n    return Path('.')\n"
+
+    def test_validate_syntax_false_still_refuses_prohibited_python(self, tmp_path: Path) -> None:
+        """The bypass DEC-065 named: one `false` skipped the parse and the check with it."""
+        for index, code in enumerate(self.PROHIBITED):
+            target = f"unvalidated_{index}.py"
+            result = execute_generate_code(tmp_path, target, code, validate_syntax=False)
+            assert tool_outcome(result) == DENIED_POLICY, f"validate_syntax=False wrote {code!r}: {result}"
+            assert "prohibited" in result
+            assert not (tmp_path / target).exists()
+
+    def test_a_python_target_declared_another_language_still_refuses(self, tmp_path: Path) -> None:
+        """`language` is a claim about the content; the suffix is where it lands."""
+        for index, code in enumerate(self.PROHIBITED):
+            target = f"mislabelled_{index}.py"
+            result = execute_generate_code(tmp_path, target, code, language="markdown")
+            assert tool_outcome(result) == DENIED_POLICY, f"language='markdown' wrote {code!r}: {result}"
+            assert not (tmp_path / target).exists()
+
+    def test_both_arguments_together_still_refuse(self, tmp_path: Path) -> None:
+        """Neither door is the other's fallback, so closing them singly proves little."""
+        result = execute_generate_code(
+            tmp_path, "both.py", self.PROHIBITED[0], language="markdown", validate_syntax=False
+        )
+        assert tool_outcome(result) == DENIED_POLICY
+        assert not (tmp_path / "both.py").exists()
+
+    def test_ordinary_python_still_writes_under_either_argument(self, tmp_path: Path) -> None:
+        """The positive control: this is a narrowing of one input class, not a closed tool."""
+        unvalidated = execute_generate_code(tmp_path, "fine_0.py", self.ALLOWED, validate_syntax=False)
+        mislabelled = execute_generate_code(tmp_path, "fine_1.py", self.ALLOWED, language="markdown")
+        for target, result in (("fine_0.py", unvalidated), ("fine_1.py", mislabelled)):
+            assert "Success: Generated" in result, result
+            assert (tmp_path / target).read_text(encoding="utf-8") == self.ALLOWED
+
+    def test_unparseable_python_with_reporting_off_is_refused_for_want_of_a_judgement(self, tmp_path: Path) -> None:
+        """A module that does not parse yields no tree, and no tree yields no findings.
+
+        Writing it would be the vacuous pass R-GEA-4 forbids — the check would
+        have reported nothing and been recorded as satisfied. The refusal names
+        the policy address rather than the syntax error, because syntax
+        reporting is exactly what the caller switched off.
+        """
+        result = execute_generate_code(tmp_path, "broken.py", "import subprocess\n(\n", validate_syntax=False)
+        assert tool_outcome(result) == DENIED_POLICY
+        assert "synthesis.prohibited_imports" in result
+        assert "SyntaxError" not in result
+        assert not (tmp_path / "broken.py").exists()
+
+    def test_a_non_python_target_is_still_governed_by_the_flag(self, tmp_path: Path) -> None:
+        """The flag keeps its meaning where the suffix does not make the file Python."""
+        invalid_json = '{"invalid": true, count: 42}'
+        assert "JSONDecodeError" in execute_generate_code(tmp_path, "bad.json", invalid_json)
+        assert "Success: Generated" in execute_generate_code(tmp_path, "ok.json", invalid_json, validate_syntax=False)
+        assert (tmp_path / "ok.json").read_text(encoding="utf-8") == invalid_json

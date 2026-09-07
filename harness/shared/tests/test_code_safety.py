@@ -136,6 +136,45 @@ class TestTheBuiltinNoImportNames:
         assert entries_in("loader = __import__\n") == ["__import__"]
 
 
+class TestTheBuiltinsNamespaceIsNotADetour:
+    """The same builtin, spelled through the module that holds it.
+
+    Every entry of the policy that names a builtin has a second spelling --
+    ``builtins.<name>`` -- which a prefix-only comparison neither equals nor is
+    prefixed by. Both forms below are two lines long and were admitted, so the
+    one entry the policy declares *because* no import statement names it was the
+    one entry two import statements could reach.
+    """
+
+    def test_the_attribute_form_resolves_to_the_bare_entry(self) -> None:
+        """``import builtins`` then ``builtins.__import__('os')``."""
+        findings = findings_for("import builtins\nbuiltins.__import__('os')\n")
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [("__import__", "builtins.__import__", 2)]
+
+    def test_the_renamed_from_import_form_resolves_to_the_bare_entry(self) -> None:
+        """``from builtins import __import__ as load`` then ``load('os')``."""
+        findings = findings_for("from builtins import __import__ as load\nload('os')\n")
+        assert [(f.policy_entry, f.reference, f.lineno) for f in findings] == [
+            ("__import__", "builtins.__import__", 1),
+            ("__import__", "load", 2),
+        ]
+
+    def test_the_namespace_itself_is_not_prohibited(self) -> None:
+        """A check that denied ``import builtins`` would deny ordinary modules.
+
+        The normalisation strips the namespace before matching; it does not add
+        ``builtins`` to the prohibited list.
+        """
+        assert findings_for("import builtins\nprint(builtins.len([1]))\n") == []
+
+    def test_the_denial_names_the_entry_and_the_spelling(self, tmp_path: Path) -> None:
+        """The author has to see both: the rule, and the name their file contains."""
+        policy = write_policy_file(tmp_path, {"prohibited_imports": list(ENTRIES)})
+        reason = prohibited_symbol_denial(ast.parse("import builtins\nbuiltins.__import__('os')\n"), policy)
+        assert reason is not None
+        assert "__import__ as builtins.__import__ (line 2)" in reason
+
+
 class TestBenignCodePasses:
     """A check that denied everything would be as useless as one that denied nothing."""
 

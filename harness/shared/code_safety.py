@@ -27,6 +27,12 @@ ever names. An import-only checker passes the last three in silence, reporting
 success against a policy it is not enforcing -- the vacuity failure arriving
 through the front door.
 
+The same entry has a second spelling, and matching it is why ``_spellings``
+exists: every builtin is also an attribute of the ``builtins`` module, so
+``builtins.__import__("os")`` reaches ``__import__`` through a name the bare
+entry neither equals nor prefixes. A checker that compares prefixes alone is
+one ``import builtins`` away from deciding nothing about that entry.
+
 Single-module decidable by construction (C-GEA-3): everything below reads the
 one ``ast.Module`` it is handed plus the policy file. Nothing consults a
 repository-wide index, an import graph, or any other file, because a write door
@@ -47,6 +53,13 @@ from harness.shared.policy_loader import POLICY_PATH, load_policy
 #: denial text and the reader all spell the policy address the same way.
 POLICY_SECTION = "synthesis"
 POLICY_KEY = "prohibited_imports"
+
+#: The namespace that gives every builtin a second, dotted spelling. This is a
+#: language fact rather than a policy value -- ``builtins`` is what CPython
+#: calls the module holding ``__import__``, in the same sense that
+#: ``encoding="utf-8"`` is a fact and not a threshold -- so naming it here
+#: duplicates no ``governance-policy.json`` key and states no limit.
+BUILTINS_NAMESPACE = "builtins"
 
 logger = logging.getLogger(__name__)
 
@@ -123,14 +136,41 @@ def load_prohibited_symbols(policy_path: Path | None = None) -> tuple[str, ...]:
     return symbols
 
 
+def _spellings(resolved: str) -> tuple[str, ...]:
+    """``resolved`` plus the equivalent name a prefix comparison would miss.
+
+    **The defect this prevents is a two-line detour through ``builtins``.**
+    ``import builtins`` then ``builtins.__import__("os")``, and ``from builtins
+    import __import__ as load`` then ``load("os")``, both resolve to
+    ``builtins.__import__`` -- a name that is neither equal to the
+    ``__import__`` entry nor prefixed by it, so a prefix-only comparison let
+    either one past the one entry the policy declares *because* no import
+    statement names it. Stripping the namespace is general rather than a case
+    for ``__import__``: it holds for every builtin a future entry might name.
+
+    The inverse -- a module that binds its own ``builtins`` and reads an
+    attribute off it -- is denied by the same rule. That is the direction a
+    write door errs in: a denial an author can read and rename around costs one
+    cycle, while admitting the bypass costs the check.
+    """
+    prefix = f"{BUILTINS_NAMESPACE}."
+    return (resolved, resolved[len(prefix) :]) if resolved.startswith(prefix) else (resolved,)
+
+
 def _matched_entry(resolved: str, prohibited: Sequence[str]) -> str | None:
     """The prohibited entry ``resolved`` falls under, most specific first.
 
     Dotted prefixes match because prohibiting a package and then admitting its
     submodules decides nothing: ``importlib.util`` is ``importlib``, and
-    ``subprocess.run`` is ``subprocess``.
+    ``subprocess.run`` is ``subprocess``. Every spelling of ``resolved`` is
+    tried, so the ``builtins.`` namespace is not a way around the comparison.
     """
-    matches = [entry for entry in prohibited if resolved == entry or resolved.startswith(f"{entry}.")]
+    matches = [
+        entry
+        for spelling in _spellings(resolved)
+        for entry in prohibited
+        if spelling == entry or spelling.startswith(f"{entry}.")
+    ]
     return max(matches, key=len) if matches else None
 
 
@@ -306,6 +346,7 @@ def prohibited_symbol_denial(tree: ast.Module, policy_path: Path | None = None) 
 
 
 __all__ = [
+    "BUILTINS_NAMESPACE",
     "POLICY_KEY",
     "POLICY_SECTION",
     "ProhibitedSymbol",
