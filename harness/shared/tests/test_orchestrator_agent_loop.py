@@ -211,6 +211,10 @@ def _set_nemotron_mode_for_live_orchestrator(request: pytest.FixtureRequest, mon
 class TestLiveOrchestrator:
     """Real-API smoke tests. Skipped unless explicitly selected with ``-m live``."""
 
+    @pytest.fixture(autouse=True)
+    def _set_nemotron_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NEMOTRON_MODE", "online")
+
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=resolve_api_key())
         assert orch.execute_agent("nemotron-reasoner", "Reply with the word: OK")
