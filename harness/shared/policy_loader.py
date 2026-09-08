@@ -214,13 +214,16 @@ class _Section:
     #: optional `policy_path`, and the tests use `tmp_path` fixtures, so "which
     #: policy?" is a real question at the moment the error is read. Reported by
     #: a review bot on this PR.
-    __slots__ = ("_data", "_name", "_backed", "_path")
+    __slots__ = ("_data", "_name", "_backed", "_path", "_declared")
 
-    def __init__(self, data: dict, name: str, backed: bool, path: Path) -> None:
+    def __init__(self, data: dict, name: str, backed: bool, path: Path, declared: bool | None = None) -> None:
         self._data = data
         self._name = name
         self._backed = backed
         self._path = path
+        # `None` infers, for a direct caller. `_section` always states it:
+        # only it can see whether the block was a key in the policy.
+        self._declared = bool(data) if declared is None else declared
 
     def _value(self, key: str, default: object) -> object:
         if key in self._data:
@@ -248,14 +251,18 @@ class _Section:
     def declared(self) -> bool:
         """Whether this deployment states the block at all.
 
-        Distinct from ``backed``, which is about the policy *file*. A file that
-        predates a newly added block is a real and supported state: the block is
-        absent, so the deployment declares nothing, and an accessor may return
-        its built-in defaults. A block that is *present* still owes every key it
-        reads -- that is what ``_value`` enforces -- so this widens nothing for
-        a policy that has adopted the block.
+        Distinct from ``backed``, which is about the policy *file*. A file
+        predating a newly added block is supported: the block is absent, so the
+        deployment declares nothing and an accessor may use its built-in
+        defaults. A block that is *present* still owes every key it reads, which
+        ``_value`` enforces.
+
+        The test is presence *as a key*, never whether the block resolved to
+        something non-empty: ``"gates": {}`` has adopted the block and stated
+        none of it, so reading it as "undeclared" would have returned defaults
+        (reported by a review bot on PR #122).
         """
-        return bool(self._data)
+        return self._declared
 
     def optional(self, key: str, default: object) -> object:
         """A key whose *absence* is part of the schema, not a hole in it.
@@ -270,10 +277,11 @@ class _Section:
 def _section(name: str, policy_path: Path | None = None) -> _Section:
     path = POLICY_PATH if policy_path is None else policy_path
     backed = not policy_file_is_absent(path)
-    data = load_policy(path).get(name, {}) if backed else {}
+    policy = load_policy(path) if backed else {}
+    data = policy.get(name, {})
     if not isinstance(data, dict):
         raise PolicyError(f"policy section {name!r} is not an object")
-    return _Section(data, name, backed, path)
+    return _Section(data, name, backed, path, declared=name in policy)
 
 
 def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:

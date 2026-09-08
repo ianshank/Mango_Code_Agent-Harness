@@ -345,3 +345,55 @@ class TestPolicyPredatingTheBlock:
                 text=True,
             )
             assert result.returncode == 0, f"{gate}: {result.stderr}"
+
+
+class TestDeclarednessIsKeyPresence:
+    """Second Copilot review on PR #122: `declared()` returned `bool(self._data)`,
+    so `"gates": {}` — a block the deployment has adopted and then stated none of
+    — read as undeclared and silently took built-in defaults. That contradicted
+    the docstring's own guarantee that a present block owes every key it reads.
+
+    The five states below are the whole contract, asserted together so a change
+    to one cannot quietly move another.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "document"),
+        [
+            ("block absent entirely", {"schema_version": "1.0"}),
+            ("block absent, other blocks present", {"coverage": {"lines": 90}}),
+        ],
+    )
+    def test_an_undeclared_block_takes_built_in_defaults(
+        self, tmp_path: Path, label: str, document: dict[str, object]
+    ) -> None:
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps(document), encoding="utf-8")
+        assert policy_loader.gate_floors(policy) == {"dedup_min_scripts": 0, "py_compat_min_files": 0}, label
+
+    @pytest.mark.parametrize(
+        ("label", "block"),
+        [
+            ("present but empty", {}),
+            ("present, one key missing", {"dedup_min_scripts": 5}),
+            ("present, the other key missing", {"py_compat_min_files": 7}),
+        ],
+    )
+    def test_a_declared_block_owes_every_key(self, tmp_path: Path, label: str, block: dict[str, object]) -> None:
+        """An empty block is an adoption, not an absence."""
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps({"gates": block}), encoding="utf-8")
+        with pytest.raises(policy_loader.PolicyError):
+            policy_loader.gate_floors(policy)
+
+    def test_a_fully_declared_block_resolves_to_its_stated_values(self, tmp_path: Path) -> None:
+        policy = tmp_path / "governance-policy.json"
+        policy.write_text(json.dumps({"gates": {"dedup_min_scripts": 5, "py_compat_min_files": 7}}), encoding="utf-8")
+        assert policy_loader.gate_floors(policy) == {"dedup_min_scripts": 5, "py_compat_min_files": 7}
+
+    def test_an_absent_policy_file_is_still_the_adopter_path(self, tmp_path: Path) -> None:
+        """`backed` and `declared` are different facts; neither may mask the other."""
+        assert policy_loader.gate_floors(tmp_path / "no-such-policy.json") == {
+            "dedup_min_scripts": 0,
+            "py_compat_min_files": 0,
+        }
