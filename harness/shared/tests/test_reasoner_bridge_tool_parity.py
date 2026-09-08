@@ -24,11 +24,24 @@ from harness.shared.tool_schemas import NEMOTRON_TOOLS, format_tools_paragraph
 pytestmark = pytest.mark.governance
 
 AGENTS = REPO / ".mango" / "agents"
-BRIDGE_NAMES = {
-    spec["function"]["name"]
-    for spec in NEMOTRON_TOOLS
-    if isinstance(spec, dict) and isinstance(spec.get("function"), dict)
-}
+
+
+def _tool_names(tools: list) -> list[str]:
+    """Function names from a bridge schema list, in schema order (R-RBT-3)."""
+    names: list[str] = []
+    for spec in tools:
+        if not isinstance(spec, dict):
+            continue
+        function = spec.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
+
+
+BRIDGE_NAMES = set(_tool_names(NEMOTRON_TOOLS))
 IDE_ONLY = frozenset({"Bash", "Read", "Grep", "Glob", "Write", "Edit"})
 _IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
 
@@ -44,7 +57,7 @@ def test_reasoner_system_prompt_tools_match_bridge(mock_workspace: Path) -> None
 
     orch = MangoMASOrchestrator(workspace_dir=mock_workspace)
     prompt = _reasoner_prompt(orch.execution_loop)
-    expected = [spec["function"]["name"] for spec in tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)]
+    expected = _tool_names(tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS))
     paragraph = format_tools_paragraph(tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS))
     assert paragraph in prompt
     for name in expected:
@@ -88,8 +101,9 @@ def test_model_call_logs_prompt_sha(mock_workspace: Path, mock_complete_chat, ca
     expected = hashlib.sha256(
         compose_system_prompt(orch.execution_loop.load_agent_prompt("nemotron-reasoner"), tools).encode("utf-8")
     ).hexdigest()
-    assert extra.prompt_sha == expected
-    assert extra.prompt_sha not in extra.getMessage()
+    prompt_sha = getattr(extra, "prompt_sha", None)
+    assert prompt_sha == expected
+    assert prompt_sha not in extra.getMessage()
     logged = " ".join(str(getattr(extra, field, "")) for field in extra.__dict__)
     assert "You are a specialized reasoning subagent" not in logged
 
