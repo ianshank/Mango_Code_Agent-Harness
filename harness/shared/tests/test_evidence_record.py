@@ -224,6 +224,25 @@ def test_sink_write_failure_keeps_the_command_result(
     assert "sink write failed" in caplog.text
 
 
+def test_policy_digest_follows_the_write_policy_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """INV-13 policy_digest is the file write_denial_reason enforced, not the default."""
+    from harness.shared.write_policy import DEFAULT_POLICY_PATH, WRITE_POLICY_PATH_ENV, policy_digest
+
+    supplied = tmp_path / "supplied.json"
+    payload = b'{"probe":true}'
+    supplied.write_bytes(payload)
+    monkeypatch.setenv(WRITE_POLICY_PATH_ENV, str(supplied))
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=_sink(tmp_path))
+    broker.set_enforcement_baseline(dict(_SOURCE_MAP))
+    result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "SUCCESS"
+    assert broker.evidence_entries
+    recorded = broker.evidence_entries[0]["policy_digest"]
+    assert recorded == policy_digest(payload)
+    assert recorded != policy_digest(DEFAULT_POLICY_PATH.read_bytes())
+
+
 def test_keyless_broker_blocks_is_logged(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.delenv(EVIDENCE_KEY_ENV, raising=False)
     backend = RecordingBackend()

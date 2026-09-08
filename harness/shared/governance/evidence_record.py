@@ -20,7 +20,7 @@ from typing import Any
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
 from harness.shared.policy_defaults import evidence_defaults
-from harness.shared.write_policy import DEFAULT_POLICY_PATH, policy_digest
+from harness.shared.write_policy import active_policy_path, policy_digest
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +56,14 @@ def evidence_max_entries(policy_path: Path | None = None) -> int | None:
 
 
 def current_policy_digest(policy_path: Path | None = None) -> str:
-    """``write_policy.policy_digest`` over the policy file bytes (R-AEI-6)."""
-    path = policy_path or DEFAULT_POLICY_PATH
+    """``write_policy.policy_digest`` over the policy file bytes (R-AEI-6).
+
+    The default is ``active_policy_path()``, the same file
+    ``write_denial_reason`` enforces. A digest of ``DEFAULT_POLICY_PATH`` while
+    ``MANGO_WRITE_POLICY_PATH`` is set would attest a policy that did not
+    decide the write.
+    """
+    path = policy_path if policy_path is not None else active_policy_path()
     return policy_digest(path.read_bytes())
 
 

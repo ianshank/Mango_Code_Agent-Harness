@@ -146,6 +146,8 @@ class ExecutionBroker:
             baseline=self._enforcement_baseline,
             backend=self._backend,
             node_ids=node_ids,
+            # Same file write_denial_reason used (R-PPP-4 / R-AEI-6).
+            policy_path=active_policy_path(),
         )
         self.evidence_entries.append(entry)
         builder = EvidenceBuilder(project_root=Path.cwd(), signing_key=self._signing_key)
