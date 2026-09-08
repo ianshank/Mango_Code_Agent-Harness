@@ -1,6 +1,6 @@
 [project]
 name = "mango-code-agent-harness"
-version = "2.4.0"
+version = "2.5.0"
 requires-python = ">=3.10"
 # Mirrors requirements.txt (single set of literals; keep both in lockstep).
 # `mcp` needed a `python_version >= "3.10"` marker before the floor moved

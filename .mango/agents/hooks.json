@@ -1,0 +1,16 @@
+{
+    "tier-a-enforcement": {
+        "PreToolUse": [
+            {
+                "type": "command",
+                "command": "./scripts/guard-forbidden-paths.sh"
+            }
+        ],
+        "PostToolUse": [
+            {
+                "type": "command",
+                "command": "./scripts/verify-tier-a.sh"
+            }
+        ]
+    }
+}

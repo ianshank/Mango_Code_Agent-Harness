@@ -32,6 +32,9 @@ MAKEFILE = REPO / "Makefile"
 CLAUDE_MD = REPO / "CLAUDE.md"
 
 # The three roles the orchestrator actually executes (planner -> reasoner -> verifier).
+# This set must match agent_authority.ACTIVE_TO_CANONICAL exactly.
+# narrow-critic and sdlc-orchestrator are workflow/orchestration agents that live
+# in .mango/workflows/, not in .mango/agents/ (the execution loop directory).
 EXPECTED_ACTIVE_ROLES = {"planner", "nemotron-reasoner", "verifier"}
 
 #: Persona frontmatter names Claude Code's tool vocabulary (`Read`, `Bash`, ...);

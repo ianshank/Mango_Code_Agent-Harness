@@ -13,7 +13,7 @@
 > `1564 tests` label is dropped (the README carries the current count), and the
 > version below is this file's, not the snapshot's 2.1.9.
 
-**Version:** 2.4.0 (C4 model updated 2026-09-06 — Origin Sync, Hypothesis Surfacing, Context Budgets)
+**Version:** 2.5.0 (C4 model updated 2026-09-06 — Origin Sync, Hypothesis Surfacing, Context Budgets)
 **Standard:** C4 Model for Visualising Software Architecture (Context, Containers, Components, Code)
 **Governing Harness:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`) (INV-1..INV-17)
 
@@ -25,7 +25,10 @@
 > - Preserved RCA-1→RCA-11 Windows portability fixes, renumbering DECs to 059, 061, 062 to avoid origin ID clashes.
 > - Fixed test matrix (Smoke, Offline, Coverage, Live e2e, Static Gates) all passing. Test suite: >4000 passed, 0 failures.
 > - `pyrightconfig.json` added (root); sets `extraPaths=["."]` for Pylance parity with pytest.
-> - `test_windows_portability_regression.py` expanded to enterprise AQA.
+> - `test_windows_portability_regression.py` expanded to enterprise AQA; added AQA-001 (`test_scripts_hook_shims.py`), AQA-002 (`test_scan_findings_windows_waiver.py`), AQA-004 (`test_gaps_memory_integrity.py`), and AQA-006 (`test_process_backend_isolation_regression.py`).
+> - Script hook shims (`scripts/verify-tier-a.sh`, `scripts/guard-forbidden-paths.sh`) wired to `.mango/agents/hooks.json`.
+> - Memory cleanup & knowledge gap truncation integrity fortified under DEC-064.
+> - Windows console charmap encoding fix (`_safe_str` backslashreplace) and DEC-026 zero-skip attribution wired across live E2E test suites.
 >
 
 ## 1. Level 1: System Context Diagram
@@ -506,7 +509,7 @@ graph TD
 
 ### 4.5.1 Policy resolution: absence is an adopter, incompleteness is a fault (`DEC-043`)
 
-```
+```text
 governance-policy.json ──▶ policy_loader._Section(data, name, backed) ──▶ accessors
                                     │
         file absent ────────────────┤──▶ built-in default   (supported: the adopter path)

@@ -1,6 +1,6 @@
 # Agentic SSD & NVIDIA Nemotron AI Platform (Mango Ecosystem)
 
-**Version:** 2.4.0 (2026 Standards)
+**Version:** 2.5.0 (2026 Standards)
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
@@ -20,6 +20,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── nemotron-reasoner.md         # NVIDIA Nemotron Ultra reasoning subagent
 │   │   ├── planner.md                   # Pre-implementation task planning subagent
 │   │   └── verifier.md                  # Strict post-change verification subagent
+│   ├── workflows/                       # SDLC & critic orchestration workflows
+│   │   ├── narrow-critic.md             # Read-only security and style critic
+│   │   └── sdlc-orchestrator.md         # End-to-end SDLC orchestrator
 │   ├── hooks/
 │   │   ├── block_dangerous.sh           # PreToolUse guard blocking destructive commands
 │   │   ├── loop_detection.sh            # Anti-loop edit cycle detector
@@ -27,17 +30,19 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── pre_completion_checklist.sh  # Pre-completion deterministic test validation
 │   │   ├── save_state_before_compact.sh # Context compaction state persistence
 │   │   └── session_start.sh             # Environment & credentials verification hook
-│   ├── skills/                          # 15 reusable skills; the only skill root
+│   ├── skills/                          # 17 reusable skills; the only skill root
 │   │   ├── agent-memory-manager/        # Persistent memory and context bridging
 │   │   ├── boundary-invariant-review/   # Cognitive/execution boundary review (INV-16)
 │   │   ├── coverage-gate/               # Coverage threshold sourced from policy
 │   │   ├── evidence-signing/            # Reusable HMAC evidence manifest skill
 │   │   ├── gate-mutation-proof/         # Prove a gate catches the defect it names
+│   │   ├── god-file-decomposer/          # Safely decompose oversized modules
 │   │   ├── harness-engineering/         # Harness inspection & extension rules
 │   │   ├── nemotron-reasoner/           # NVIDIA Nemotron AI operational cheatsheet
 │   │   ├── openspec-peer-review/        # Architecture/SDLC/QA/Product peer review
 │   │   ├── protected-path-attestation/  # Produces the per-file attestation block
 │   │   ├── repo-invariant-review/       # Predicts concrete CI failures pre-push
+│   │   ├── regression-pin-author/        # Pin regression reproductions into AQA
 │   │   ├── shadow-channel-analysis/     # UC-4 agreement/latency/token reporting
 │   │   ├── spec-authoring/              # Spec scaffolding and required sections
 │   │   ├── standards-audit/             # Yearly external-standards audit with a falsification pass
@@ -124,6 +129,10 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   └── tests/                       # Python AQA Engine (count in §3, not restated here; coverage gate from policy)
 │   │       ├── conftest.py              # Reusable Pytest fixtures
 │   │       ├── regression/              # Dedicated AQA Regression Tier
+│   │       │   ├── test_scripts_hook_shims.py        # AQA-001: Hook shim existence, bash shebang, dynamic paths
+│   │       │   ├── test_scan_findings_windows_waiver.py # AQA-002: DEC-061 waiver liveness
+│   │       │   ├── test_gaps_memory_integrity.py     # AQA-004: MEM-1 gaps.json no-stub invariant
+│   │       │   ├── test_process_backend_isolation_regression.py # AQA-006: RecordingBackend probe isolation
 │   │       │   ├── test_langgraph_regression.py      # 37 tests: StateGraph invariants, calling, reductions & fail-closed verdict
 │   │       │   ├── test_cross_platform_regression.py # 34 tests: cross-platform path/env/secret invariants
 │   │       │   ├── test_bridge_retry_regression.py   # Retry jitter & backoff invariants
@@ -141,6 +150,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │       ├── policy-artifact.json         # Committed artifact; drift-gated by the test suite
 │       └── tests/                       # Colocated control-plane suite (101 tests; R-TDH-26)
 │
+├── scripts/                             # Operational & CI hook shims
+│   ├── verify-tier-a.sh                 # Tier-A lint & static verification hook shim
+│   └── guard-forbidden-paths.sh         # Invariant protected-paths guard hook shim
 ├── .env.example                         # Environment configuration template
 ├── .gitignore                           # Git ignore rules protecting local secrets
 ├── .gitleaks.toml                       # Gitleaks security scan configuration

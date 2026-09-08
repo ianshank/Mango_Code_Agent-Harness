@@ -1,6 +1,6 @@
 # Roadmap & Next Steps: Agentic SSD & Nemotron AI Platform
 
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
 **Last reviewed:** 2026-09-07 · `claude/graph-engineering-mango-agent-1ic553` (PR #120) @ `dc42d4c`, DEC-065 landed at `7ff4cd7` — graph-engineering adoption: four derived checks, none of them a new `ci_required_target`; the traceability gate re-scoped from 6 to 412 requirement IDs behind a policy floor and a ratchet, and `make validate` now runs it per-stack **and** repository-scoped so the required check reads the real corpus; `.governance/**` reclassified out of the dormant protected-path set as DEC-056 predicted → what it bounded rather than fixed is **NS-39** · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and **DEC-060** rollback retirement completed (this line said DEC-064; DEC-064 is the Python 3.10 floor — the NS-17/NS-21 rollback pins were retired under DEC-060) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
 
@@ -55,7 +55,14 @@ skill, then `make pre-pr`.
 | PR-9 | Major | §4 Phase E still blocked on NS-31; DEC-053…056 exist on #93. | Phase E retargeted to **NS-2** before destructive slices. |
 | PR-10 | Major | NS-9 / NS-34 still treated NS-31 undecided; PARK decided (DEC-053). | NS-9 moves with park; NS-34 Depends on nothing mechanical (DECs logged). |
 | PR-11 | Product | NS-17 open on #97; Copilot: `policy_path` not plumbed into `agent_memory_defaults` / gap injection. | **Closed:** #97 landed `policy_path` + mutation + zero-bound messaging; moved to §6 with NS-34. |
-| PR-12 | Unchanged P0 | Re-queried: ruleset `[]`; tip `58490c1`; branch `5970249…`; 0 tags; `license: null`. | NS-1 / NS-2 / NS-3 / NS-30 stay P0. |
+
+### 2026-09-07 third peer-rewrite findings (verified)
+
+| ID | Severity | Finding | Effect on this file |
+|---|---|---|---|
+| PR-13 | **Blocker (architecture)** | `harness/shared/tests/test_mcp_server.py` reached 696 lines against 700 limit (4 lines headroom); `harness/shared/langgraph/nodes.py` reached 482 lines against 500 limit (18 lines headroom). | Decomposed `test_mcp_server.py` into lifecycle and dispatch modules with `_mcp_helpers.py` doubles; decomposed `nodes.py` into `node_reasons.py`, `node_executors.py`, and `nodes.py` facade. All modules now < 300 lines with > 65 lines headroom repository-wide. |
+| PR-14 | Major | Regression test pins (`test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, `test_scan_findings_windows_waiver.py`) carried silent `pytest.skip()` calls when target files were missing, violating zero-skip policy. | Replaced skips with strict assertions; added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for IDE execution. |
+| PR-15 | Minor | Agent skills for god-file decomposition and regression pin authoring lacked codification in `.mango/skills/` and `.agents/skills/`. | Authored, validated, and registered `god-file-decomposer` and `regression-pin-author` skills. |
 
 ---
 
@@ -506,6 +513,15 @@ re-litigate boxes above, only schedules what a re-measurement against
 | Was | Now |
 |---|---|
 | **Context-window budget** (parked with HITL) | **Landing on PR #110.** Policy keys `orchestrator.context_budget_tokens` / `context_chars_per_token`; pure `harness/shared/context_policy.py` group-atomic eviction; `ExecutionLoop` applies on a copy before `complete_chat` and logs `event=context_policy`. Spec: `docs/specs/context-window-budget.md`. HITL remains parked above. |
+
+**Closed 2026-09-07 (v2.5.0 Origin-Sync, Hook Shims, DEC-064 & Live E2E):**
+
+| Was | Now |
+|---|---|
+| **HOOK-1** Missing hook shim scripts | **Landed.** Created `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` with dynamic Makefile/validate_invariants delegation; tested by AQA-001 `test_scripts_hook_shims.py`. |
+| **RCA-7** RecordingBackend probe xdist isolation | **Landed.** Overrode `_probe()` in `RecordingBackend` to return `True` unconditionally, eliminating 17 spurious parallel test failures on Windows; pinned by AQA-006 `test_process_backend_isolation_regression.py`. |
+| **MEM-1 (DEC-066)** Stub corruption in gaps memory | **Landed.** Pruned 199 corrupt stub records from `.mango/memory/gaps.json`, preserving 24 substantive entries; documented in `docs/decisions/DEC-066.md` and pinned by AQA-004 `test_gaps_memory_integrity.py`. |
+| **Tier 5 Live Nemotron E2E** Real NIM verification | **Landed.** Full live E2E and smoke suites verified against live NVIDIA Nemotron NIM endpoint across Python and Node/Vitest; resolved Windows console charmap encoding and DEC-026 zero-skip governance attribution. |
 
 **Closed 2026-09-05b (this rewrite's evidence pass):**
 

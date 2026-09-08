@@ -11,11 +11,15 @@ under the unit suite.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
 
-from harness.shared.tests._helpers import REPO
+# Ensure repository root is on sys.path so direct execution or test runners without cwd on path succeed
+REPO = Path(__file__).resolve().parents[4]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 pytestmark = pytest.mark.governance
 
@@ -26,10 +30,14 @@ UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 #: regression module (not merely mentioned in a comment/string) and must not
 #: be defined anywhere under the unit suite.
 REQUIRED_REGRESSION_MODULES = {
-    "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
-    "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
     "test_context_window_budget_regression.py": "test_tool_group_survival_under_context_budget",
+    "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
+    "test_gaps_memory_integrity.py": "test_gaps_json_has_no_stub_entries",
     "test_hypothesis_surfacing_regression.py": "test_eviction_cannot_rescue_an_oversized_hypothesis_block",
+    "test_process_backend_isolation_regression.py": "test_recording_backend_with_probe_override_is_always_available",
+    "test_scan_findings_windows_waiver.py": "test_scan_findings_waiver_exists",
+    "test_scripts_hook_shims.py": "test_hook_shim_exists",
+    "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
 }
 
 
@@ -69,3 +77,7 @@ def test_required_reproduction_is_not_defined_under_the_unit_tier(basename: str)
         f"{[p.relative_to(REPO).as_posix() for p in unit_hits]}; keep the "
         "reproduction in harness/shared/tests/regression/"
     )
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))

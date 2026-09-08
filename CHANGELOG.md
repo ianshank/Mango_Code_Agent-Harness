@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Architecture hardening: god-file decomposition & regression suite hardening (2026-09-07)
+
+- **Test Suite Budget Relief (`test_mcp_server.py`)**: Decomposed monolithic `test_mcp_server.py` (696/700 lines) into `test_mcp_server.py` (199 lines; lifecycle, server run, concurrency, Windows loopback TCP guard) and `test_mcp_server_dispatch.py` (270 lines; role authorization, PDP enforcement, dispatcher registry parity, parameter schema gating, structured logging). Shared doubles and setup factories extracted to `_mcp_helpers.py`. Makefile `test-mcp` updated to run `test_mcp_server*.py`.
+- **LangGraph Nodes Modularization (`nodes.py`)**: Decomposed `harness/shared/langgraph/nodes.py` (482/500 lines) into `node_reasons.py` (115 lines; quality gate reasons, conclusive result grading, count validations), `node_executors.py` (225 lines; agent execution wrappers, budget enforcement, configurable resolution), and `nodes.py` (178 lines; gate and routing nodes with 100% backwards-compatible symbol re-exports).
+- **Regression Suite Hardening**: Removed silent skips on missing files in `test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, and `test_scan_findings_windows_waiver.py`, replacing them with strict assertions. Added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for single-click IDE test execution.
+- **Enterprise Skills Codification**: Created and registered `god-file-decomposer` and `regression-pin-author` skills under `.mango/skills/` and `.agents/skills/` with strict markdown formatting and invariant enforcement workflows.
 ### Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet (DEC-065)
 
 Spec `docs/specs/graph-engineering-adoption.md` (revision 3), from the deep peer
@@ -2039,6 +2045,47 @@ Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
   `README.md`, `NEXT_STEPS.md`, `Makefile`, `CHANGELOG.md`, the C4 document
   and `harness/node/package.json` are checked against it by
   `test_documentation_truth.py`, negative case included.
+
+## [2.5.0] - 2026-09-07
+
+### Added
+
+- `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` — hook shims
+  required by `.mango/agents/hooks.json` PostToolUse and PreToolUse enforcement
+  (HOOK-1 / RCA-1). Both shims delegate dynamically to `make lint` and
+  `validate_invariants.is_protected()` respectively; no hard-coded paths.
+- `.mango/workflows/` directory for workflow and orchestration agent definitions
+  (`narrow-critic.md`, `sdlc-orchestrator.md`) that are not execution loop roles.
+- Regression tests: `test_scripts_hook_shims.py` (AQA-001),
+  `test_scan_findings_windows_waiver.py` (AQA-002),
+  `test_gaps_memory_integrity.py` (AQA-004),
+  `test_process_backend_isolation_regression.py` (AQA-006).
+
+### Fixed
+
+- `RecordingBackend._probe()` override added to prevent real `bash` invocation
+  on Windows dev machines, fixing 17 flaky failures under `pytest-xdist`
+  parallel execution (RCA-7).
+- Windows console charmap encoding fix (`_safe_str`) in `test_mango_mas_live.py`
+  to cleanly escape Unicode symbols (e.g. `\u2192` `→`) and prevent
+  `UnicodeEncodeError` on `cp1252` consoles.
+- Skip governance attribution: wired `(DEC-026)` into `pytest.skip` and
+  `skipTest` calls across live Nemotron NIM test suites, enforcing zero
+  unapproved skips under `verify_zero_skips.py`.
+- Memory integrity (DEC-066): pruned 199 stub records from `.mango/memory/gaps.json`
+  that caused planner prompt bloat, retaining 24 substantive entries.
+- UTF-16 null-byte corruption in `.gitignore` and `.dockerignore` removed
+  (origin/main merge encoding artefact).
+- Version mirrors (`Makefile`, `harness/node/package.json`, `CHANGELOG.md`)
+  synced to `pyproject.toml` canonical source `2.5.0`.
+- `narrow-critic.md` and `sdlc-orchestrator.md` moved from `.mango/agents/`
+  (execution loop directory) to `.mango/workflows/` — these are SDLC/critic
+  workflow agents, not `planner → reasoner → verifier` loop participants.
+
+### Changed
+
+- `EXPECTED_ACTIVE_ROLES` comment in `test_agent_harness_wiring.py` clarified
+  to document the `ACTIVE_TO_CANONICAL` invariant it must match.
 
 ## [2.4.0] - 2026-09-01
 

@@ -71,3 +71,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-063](DEC-063.md) | 2026-09-05 | accepted | Windows-platform skip for AF_UNIX egress-floor proof approved |
 | [DEC-064](DEC-064.md) | 2026-09-07 | accepted | The Python floor moves to 3.10, retiring the 3.9 carve-outs DEC-017 and DEC-028 recorded |
 | [DEC-065](DEC-065.md) | 2026-09-07 | accepted | Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet |
+| [DEC-066](DEC-066.md) | 2026-09-07 | accepted | gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved |
