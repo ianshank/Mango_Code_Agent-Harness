@@ -123,6 +123,23 @@ STANDALONE_SKILLS = {
         "test_spec_selectors_collect.py catches the vacuous-selector class it found by hand -- "
         "and the rest is judgement about a report, which no per-PR target should run."
     ),
+    "god-file-decomposer": (
+        "The procedure for splitting a module that is approaching `limits.size_budget_lines` or "
+        "`limits.test_size_budget_lines`. The budget is already a gate -- validate_invariants.py "
+        "enforces both in `make validate` -- and this skill is what someone does after that gate "
+        "goes red. It cannot be wired into a target, because its output is a rewrite of source: "
+        "choosing the cohesive seams and preserving the facade re-exports is judgement, and a "
+        "`make` recipe that decomposed a file to fit a budget is a recipe that can leave the tree "
+        "rewritten."
+    ),
+    "regression-pin-author": (
+        "The authoring standard for a regression-tier reproduction: where the module lives, what it "
+        "must define, and how to register it in REQUIRED_REGRESSION_MODULES. The registration half "
+        "is already enforced -- test_regression_tier_pin.py asserts every listed module exists, "
+        "defines its named reproduction, and is not shadowed by the unit tier -- so what remains is "
+        "the judgement no gate can make: whether a defect warrants a pin at all, and what the "
+        "reproduction must assert to fail on the bug rather than on its symptom."
+    ),
 }
 
 
