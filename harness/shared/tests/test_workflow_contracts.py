@@ -641,3 +641,13 @@ class TestProtectionReport:
         assert "timeout-minutes:" in body
         assert "cat .github/rulesets/main.json" not in body
         assert "gh issue" in body
+        assert "isinstance(data, list) and not data" in body
+
+    def test_protection_report_does_not_fail_the_workflow_on_query_errors(self, drift_text: str) -> None:
+        """Scheduled jobs notify; a GitHub API blip must not paint the run red."""
+        body = job_sections(drift_text)["protection_report"]
+        assert "set -euo pipefail" not in body
+        assert "set +e" in body
+        assert "curl -sSf" not in body
+        assert 'echo "empty=0"' in body
+        assert "|| gh issue create" in body
