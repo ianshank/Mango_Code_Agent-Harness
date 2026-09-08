@@ -386,6 +386,13 @@ class TestTheInventoryIsComplete:
             )
 
 
+def test_messages_before_fallback() -> None:
+    """R-RHI-5 / AC-6: the ReAct fallback floor is the named constant, not a bare 3."""
+    from harness.shared.orchestrator.loop import MIN_MESSAGES_BEFORE_FALLBACK
+
+    assert MIN_MESSAGES_BEFORE_FALLBACK == 3
+
+
 class TestCheckerSemantics:
     """Negative cases: the checker must fail on each way a row can be wrong."""
 

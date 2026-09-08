@@ -44,7 +44,6 @@ def resolve_policy_path(policy_path: Path | None = None) -> Path:
     return policy_path if policy_path is not None else _live_policy_path()
 
 
-
 class OrchestratorLimits(TypedDict):
     """The `orchestrator` block, typed so an unknown key is a static error.
 
@@ -299,4 +298,3 @@ def _section(name: str, policy_path: Path | None = None) -> _Section:
     if not isinstance(data, dict):
         raise PolicyError(f"policy section {name!r} is not an object")
     return _Section(data, name, backed, path, declared=name in policy)
-

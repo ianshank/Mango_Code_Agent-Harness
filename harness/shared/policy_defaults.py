@@ -270,9 +270,7 @@ def execution_routing(policy_path: Path | None = None) -> str:
         return resolved
     raw = section._value("routing", "brokered")
     if raw not in EXECUTION_ROUTING_STATES:
-        raise PolicyError(
-            f"policy execution.routing must be one of {EXECUTION_ROUTING_STATES}, got {raw!r}"
-        )
+        raise PolicyError(f"policy execution.routing must be one of {EXECUTION_ROUTING_STATES}, got {raw!r}")
     resolved = str(raw)
     _log_resolution("execution", {"routing": resolved}, policy_path)
     return resolved

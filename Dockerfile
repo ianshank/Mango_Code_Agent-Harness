@@ -33,7 +33,7 @@ RUN rm -rf /app/harness/node/tests \
 
 ENV NODE_ENV=production
 
-# Non-root. Node 26 type-strips `.ts`, so the CLI runs without the `tsx`
+# Non-root. Node 26 type-strips `.ts`, so the CLI runs without a TypeScript
 # loader (a dev dependency that must not ship in the runtime command).
 USER node
 CMD ["node", "src/ai/nemotron/cli.ts", "--help"]

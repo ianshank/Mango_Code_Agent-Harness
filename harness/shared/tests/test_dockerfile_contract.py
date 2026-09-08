@@ -21,6 +21,16 @@ def _runtime_stage(text: str) -> str:
     return text[idx:]
 
 
+def _runtime_code(text: str) -> str:
+    """Runtime stage with comment lines dropped, so a mention in a comment is not a CMD."""
+    lines = []
+    for line in _runtime_stage(text).splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def test_dockerfile_from_is_digest_pinned() -> None:
     text = DOCKERFILE.read_text(encoding="utf-8")
     assert "@sha256:" in text.splitlines()[1] or any(
@@ -29,8 +39,8 @@ def test_dockerfile_from_is_digest_pinned() -> None:
 
 
 def test_dockerfile_runtime_has_user_and_no_expose_or_tsx() -> None:
-    runtime = _runtime_stage(DOCKERFILE.read_text(encoding="utf-8"))
-    assert "\nUSER " in f"\n{runtime}" or runtime.startswith("USER ") or "\nUSER " in runtime
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    runtime = _runtime_code(text)
     assert "USER node" in runtime
     assert "EXPOSE " not in runtime
     assert "tsx" not in runtime
@@ -39,7 +49,7 @@ def test_dockerfile_runtime_has_user_and_no_expose_or_tsx() -> None:
 def test_dockerfile_contract_fails_tmp_path_copies(tmp_path: Path) -> None:
     """AC-25 / AC-5: a copy missing any required property is rejected."""
     original = DOCKERFILE.read_text(encoding="utf-8")
-    runtime = _runtime_stage(original)
+    runtime = _runtime_code(original)
     assert "@sha256:" in original
     assert "USER " in runtime
     assert "EXPOSE " not in runtime

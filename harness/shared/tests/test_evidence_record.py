@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -110,12 +111,25 @@ def test_verification_with_evidence_verified(tmp_path: Path, monkeypatch: pytest
     """AC-8: real broker, evidence on, sink outside workspace → VERIFIED, bounded entries."""
     from harness.shared.governance import verification as verification_mod
 
-    monkeypatch.setattr(verification_mod.shutil, "which", lambda _name: "/usr/bin/make")
+    monkeypatch.setattr(
+        verification_mod.shutil,
+        "which",
+        lambda name: "/usr/bin/make" if name == "make" else None,
+    )
+
+    class SilentDryRun(RecordingBackend):
+        """Empty make -n stdout: a recipe name would census `command -v`, which is unmodelled."""
+
+        def _spawn(self, command: str, cwd: Path | None, timeout: int) -> subprocess.CompletedProcess[str]:
+            self.calls.append((command, cwd, timeout))
+            stdout = "" if "-n" in command else "ok\n"
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
+
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "Makefile").write_text("test-python:\n\ttrue\n", encoding="utf-8")
+    (workspace / "Makefile").write_text("test-python:\n\techo ok\n", encoding="utf-8")
     sink = tmp_path / "evidence.jsonl"
-    backend = RecordingBackend(stdout="true\n")
+    backend = SilentDryRun()
     broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=sink)
     runner = VerificationRunner(broker, "test-eval", timeout=5)
     runner.snapshot_enforcement(workspace)

@@ -293,10 +293,7 @@ class ExecutionBroker:
             return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
 
         if self._evidence_enabled and not self._signing_key:
-            reason = (
-                "BLOCKED: evidence is enabled but no signing key was injected "
-                f"and {EVIDENCE_KEY_ENV} is unset"
-            )
+            reason = f"BLOCKED: evidence is enabled but no signing key was injected and {EVIDENCE_KEY_ENV} is unset"
             return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
 
         # INV-9: no host-process fallback when the backend cannot be used.
