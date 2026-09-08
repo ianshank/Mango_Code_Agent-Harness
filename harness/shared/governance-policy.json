@@ -190,6 +190,8 @@
     "harness/shared/agent_authority.py",
     "harness/shared/debug_dump.py",
     "harness/shared/policy_loader.py",
+    "harness/shared/policy_io.py",
+    "harness/shared/policy_defaults.py",
     "harness/shared/governance_json.py",
     ".claude/settings.local.json",
     ".mango/settings.local.json",
