@@ -9,7 +9,7 @@ in place -- were graded a gate run and ran for every role holding
 ``ExecutionBroker`` as ``implementer`` rewrote
 ``harness/shared/governance/broker.py``, a path ``write_denial_reason`` refuses
 by name, and the broker returned SUCCESS. ``write_targets`` finds no redirect in
-such a command, so the write policy was never consulted (DEC-066).
+such a command, so the write policy was never consulted (DEC-067).
 
 The same table answers the question DEC-013 raises from the other side.
 ``CLAUDE.md`` mandates ``python -m ruff`` and ``python -m mypy``; both graded

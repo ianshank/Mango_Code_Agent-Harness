@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.4.0 — Root Makefile
+# Agentic SSD v2.5.0 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -44,7 +44,7 @@ PYTEST_ORDER_FLAGS ?= -p randomly
 # for `coverage-python` fell from 92s to 36s on four cores. Set
 # `PYTEST_PARALLEL_FLAGS=` to run serially, e.g. to bisect an order coupling
 # with `--randomly-seed=N` on one worker.
-PYTEST_PARALLEL_FLAGS ?= -n auto
+PYTEST_PARALLEL_FLAGS ?= -n 8
 PYTEST_RUN_FLAGS := $(PYTEST_ORDER_FLAGS) $(PYTEST_PARALLEL_FLAGS)
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
@@ -155,15 +155,21 @@ test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, 
 
 .PHONY: test-mcp
 test-mcp: ## Run Model Context Protocol (MCP) server tests
-	$(PYTEST) $(SHARED_TESTS)/test_mcp_server.py -m "not live" -v
+	$(PYTEST) $(SHARED_TESTS)/test_mcp_server*.py -m "not live" -v
 
 .PHONY: test-lats
 test-lats: ## Run LATS Optimizer and Ablation state forking tests
 	$(PYTEST) $(SHARED_TESTS)/test_lats_optimizer.py $(SHARED_TESTS)/test_ablation.py -m "not live" -v
 
 .PHONY: test-aqa
-test-aqa: ## Run AQA smoke tests and coverage-gap regression suite
-	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py $(SHARED_TESTS)/regression/test_nemotron_api_aqa.py -m "not live" -v
+test-aqa: ## Run Automated Quality Assurance (AQA) regression suite
+	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py \
+		$(SHARED_TESTS)/regression/test_nemotron_api_aqa.py \
+		$(SHARED_TESTS)/regression/test_scripts_hook_shims.py \
+		$(SHARED_TESTS)/regression/test_process_backend_isolation_regression.py \
+		$(SHARED_TESTS)/regression/test_gaps_memory_integrity.py \
+		$(SHARED_TESTS)/regression/test_scan_findings_windows_waiver.py \
+		-m "not live" -v
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest in a seeded random order across every core, then enforce lines and branches floors from governance-policy.json

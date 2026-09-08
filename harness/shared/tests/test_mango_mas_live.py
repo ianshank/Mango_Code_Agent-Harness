@@ -27,6 +27,11 @@ _TRANSIENT_NIM_ERRORS = (
 )
 
 
+def _safe_str(val: object) -> str:
+    """Return a string safe for printing on consoles with any encoding (e.g. Windows cp1252)."""
+    return repr(val).encode("ascii", "backslashreplace").decode("ascii")
+
+
 @pytest.fixture(autouse=True)
 def _set_nemotron_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set NEMOTRON_MODE only when a live test in this module actually runs.
@@ -80,14 +85,14 @@ class TestMangoMASLive:
             verification_result = orchestrator.execute_sequential_thinking_loop(task)
         except Exception as e:
             err_msg = str(e)
-            print(f"DEBUG: type(e)={type(e)}, repr(e)={repr(e)}, err_msg={repr(err_msg)}")
+            print(f"DEBUG: type(e)={type(e)}, repr(e)={_safe_str(e)}, err_msg={_safe_str(err_msg)}")
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
-                pytest.skip(f"Live NIM transient failure: {err_msg}")
+                pytest.skip(f"Live NIM transient failure (DEC-026): {_safe_str(err_msg)}")
             # Same escape as multi_file synthesis: the model may burn its budget
             # retrying a correctly denied action (e.g. `python -c`), which is not
             # a harness defect.
             if "exceeded maximum tool iterations" in err_msg or "budget" in err_msg:
-                pytest.skip(f"Live synthesis iteration limit reached: {err_msg}")
+                pytest.skip(f"Live synthesis iteration limit reached (DEC-026): {_safe_str(err_msg)}")
             raise
 
         # 1. The verifier prose must contain PASS or FAIL
@@ -131,17 +136,17 @@ class TestMangoMASLive:
             outcome = orchestrator.execute_loop(task)
         except Exception as e:
             err_msg = str(e)
-            print(f"DEBUG: type(e)={type(e)}, repr(e)={repr(e)}, err_msg={repr(err_msg)}")
+            print(f"DEBUG: type(e)={type(e)}, repr(e)={_safe_str(e)}, err_msg={_safe_str(err_msg)}")
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
-                pytest.skip(f"Live NIM transient failure: {err_msg}")
+                pytest.skip(f"Live NIM transient failure (DEC-026): {_safe_str(err_msg)}")
             if "exceeded maximum tool iterations" in err_msg or "budget" in err_msg:
-                pytest.skip(f"Live synthesis iteration limit reached: {err_msg}")
+                pytest.skip(f"Live synthesis iteration limit reached (DEC-026): {_safe_str(err_msg)}")
             raise
 
         if not outcome.verdict.is_pass and outcome.verdict.termination_reason == "verification_unavailable":
             # On host environments without GNU make (e.g. Windows dev hosts),
             # VerificationRunner.probe() returns False and outcome terminates as verification_unavailable.
-            print(f"DEBUG: verifier_message={repr(outcome.verifier_message)}")
+            print(f"DEBUG: verifier_message={_safe_str(outcome.verifier_message)}")
             assert any(
                 term in outcome.verifier_message.upper()
                 for term in ("PASS", "VERIFIED", "SUCCESS", "VALIDATOR", "SOLVER")
@@ -177,17 +182,17 @@ class TestMangoMASLive:
             outcome = orchestrator.execute_loop(task)
         except Exception as e:
             err_msg = str(e)
-            print(f"DEBUG: type(e)={type(e)}, repr(e)={repr(e)}, err_msg={repr(err_msg)}")
+            print(f"DEBUG: type(e)={type(e)}, repr(e)={_safe_str(e)}, err_msg={_safe_str(err_msg)}")
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
-                pytest.skip(f"Live NIM transient failure: {err_msg}")
+                pytest.skip(f"Live NIM transient failure (DEC-026): {_safe_str(err_msg)}")
             if "exceeded maximum tool iterations" in err_msg or "budget" in err_msg:
-                pytest.skip(f"Live synthesis iteration limit reached: {err_msg}")
+                pytest.skip(f"Live synthesis iteration limit reached (DEC-026): {_safe_str(err_msg)}")
             raise
 
         if not outcome.verdict.is_pass and outcome.verdict.termination_reason == "verification_unavailable":
             # On host environments without GNU make (e.g. Windows dev hosts),
             # VerificationRunner.probe() returns False and outcome terminates as verification_unavailable.
-            print(f"DEBUG: verifier_message={repr(outcome.verifier_message)}")
+            print(f"DEBUG: verifier_message={_safe_str(outcome.verifier_message)}")
             assert any(
                 term in outcome.verifier_message.upper() for term in ("PASS", "VERIFIED", "SUCCESS", "PRIME", "SOLVER")
             )

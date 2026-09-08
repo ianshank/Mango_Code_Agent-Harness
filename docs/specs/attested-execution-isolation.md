@@ -44,7 +44,7 @@ Reproduced through the real broker as `implementer`: `ruff format .` rewrote
 `harness/shared/governance/broker.py`, a path `write_denial_reason` refuses by
 name, and the broker returned `SUCCESS`. `write_targets` looks for a redirect,
 which an in-place formatter does not present, so the write policy was never
-consulted. Closed by DEC-066.
+consulted. Closed by DEC-067.
 
 The same table settles the opposite defect.
 `python -m ruff check .` and `python -m mypy harness` classify `destructive`,
@@ -283,7 +283,7 @@ question. Each phase is one pull request.
    committed corpus — produces `harness/shared/governance/tool_forms.py`,
    `denial_rate.py` and `command-corpus.json`; the table is a sibling module
    because `command_actions.py` stood 29 lines below `limits.size_budget_lines`
-   (AC-1, AC-2, AC-3). **Landed** as DEC-066.
+   (AC-1, AC-2, AC-3). **Landed** as DEC-067.
 2. Give the two gates a population floor — consumes
    `traceability.min_discovered_requirement_ids` as the pattern; produces the
    refusal AC-4 checks. **Landed** behind `policy_loader.gate_floors`.

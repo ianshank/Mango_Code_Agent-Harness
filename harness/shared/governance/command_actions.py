@@ -436,7 +436,7 @@ def _classify_program(text: str) -> Classification:
 
     # A tool whose action depends on its invocation form is graded there, so
     # `ruff format .` cannot keep the `test_execute` its program name earned
-    # while it rewrites protected files (DEC-066, R-AEI-1).
+    # while it rewrites protected files (DEC-067, R-AEI-1).
     invocation = classify_argv(argv, UNCLASSIFIED_ACTION)
     if invocation is not None:
         return Classification(invocation.action, invocation.reason)

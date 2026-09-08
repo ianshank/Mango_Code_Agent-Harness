@@ -3,7 +3,7 @@
 Two defects are pinned here, and each has a mutation case: reverting the fix
 under it must turn a named test red, per the ``gate-mutation-proof`` skill.
 
-* DEC-066: ``ruff format .`` was graded ``test_execute`` by program name and
+* DEC-067: ``ruff format .`` was graded ``test_execute`` by program name and
   rewrote protected files in place through the broker.
 * DEC-013: the interpreter-invoked forms ``CLAUDE.md`` mandates graded to an
   action no role holds, while the bare forms it forbids ran.
@@ -69,7 +69,7 @@ class TestInterpreterFormsAreModelled:
 
 
 class TestRewritingFormsCannotPassAsGateRuns:
-    """DEC-066: an in-place formatter presents no redirect for the write policy."""
+    """DEC-067: an in-place formatter presents no redirect for the write policy."""
 
     @pytest.mark.parametrize(
         "command",
@@ -118,7 +118,7 @@ class TestRewritingFormsCannotPassAsGateRuns:
 
 
 class TestRewriteIsRefusedEndToEnd:
-    """The reproduction DEC-066 records, run through the real broker."""
+    """The reproduction DEC-067 records, run through the real broker."""
 
     def test_a_formatter_cannot_rewrite_a_protected_file_through_the_broker(self) -> None:
         """R-AEI-1: SUCCESS here means the protected-path write policy was bypassed."""

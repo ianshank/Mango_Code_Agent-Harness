@@ -3,7 +3,7 @@
 ``command_actions.classify`` is an allowlist whose unmodelled default is an
 action no role holds. That is the right failure direction, and it has a cost
 nothing measured: every command the table does not model denies, whether or not
-anyone intended it to. The cost was real. Before DEC-066, 13 of the 36 commands
+anyone intended it to. The cost was real. Before DEC-067, 13 of the 36 commands
 in ``command-corpus.json`` resolved to an action no role holds -- including
 ``python -m ruff check .`` and ``python -m mypy harness``, the two forms
 ``CLAUDE.md`` mandates under DEC-013. The allowlist was denying the contributor

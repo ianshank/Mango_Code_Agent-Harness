@@ -85,7 +85,7 @@ def _tool_form_targets(argv: typing.Sequence[str]) -> tuple[str, ...]:
     """Files a rewriting tool invocation names, e.g. ``ruff format a.py``.
 
     An in-place formatter presents no redirect, so without this the broker's
-    write-policy loop never sees the files it rewrites (DEC-066). An invocation
+    write-policy loop never sees the files it rewrites (DEC-067). An invocation
     whose targets are not enumerable contributes nothing here and is denied by
     ``classify`` instead, so the failure mode of missing one stays a denial.
 

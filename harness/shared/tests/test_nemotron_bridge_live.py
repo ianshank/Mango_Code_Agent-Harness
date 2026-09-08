@@ -100,7 +100,7 @@ class TestCompleteChatLive(unittest.TestCase):
         except Exception as e:
             err_msg = str(e)
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
-                self.skipTest(f"Live NIM transient failure: {err_msg}")
+                self.skipTest(f"Live NIM transient failure (DEC-026): {err_msg}")
             raise
 
         # Structural assertions
@@ -158,7 +158,7 @@ class TestCompleteChatLive(unittest.TestCase):
         except Exception as e:
             err_msg = str(e)
             if any(term in err_msg for term in _TRANSIENT_NIM_ERRORS):
-                self.skipTest(f"Live NIM transient failure: {err_msg}")
+                self.skipTest(f"Live NIM transient failure (DEC-026): {err_msg}")
             raise
 
         # If we got a valid response, the wire format was accepted by the API

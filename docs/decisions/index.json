@@ -801,8 +801,20 @@
       "id": "DEC-066",
       "status": "accepted",
       "date": "2026-09-07",
-      "title": "A developer tool is graded by its invocation form; an in-place formatter is not a gate run",
+      "title": "gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved",
       "path": "docs/decisions/DEC-066.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
+    },
+    {
+      "id": "DEC-067",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "A developer tool is graded by its invocation form; an in-place formatter is not a gate run",
+      "path": "docs/decisions/DEC-067.md",
       "supersedes": [],
       "superseded_by": null,
       "owners": [

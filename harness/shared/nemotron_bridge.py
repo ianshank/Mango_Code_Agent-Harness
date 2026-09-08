@@ -288,10 +288,10 @@ def complete_chat(
             if is_retryable_connection_error(e) and retry.should_retry(attempt):
                 backoff = retry.backoff(attempt)
                 logger.warning(
-                    "Nemotron connection error (attempt %d/%d): %s; retrying in %.1fs",
+                    "Nemotron connection error (attempt %d/%d, %s); retrying in %.1fs",
                     attempt + 1,
                     retry.max_retries + 1,
-                    sanitized,
+                    type(e).__name__,
                     backoff,
                 )
                 time.sleep(backoff)
