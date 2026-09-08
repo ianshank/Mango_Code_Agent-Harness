@@ -8,18 +8,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.shared.policy_io import (
-    AgentMemoryLimits,
-    CoverageThresholds,
-    GateFloors,
-    LangGraphDefaults,
-    NemotronDefaults,
-    OrchestratorLimits,
-    PolicyError,
-    _log_resolution,
-    _section,
-    resolve_policy_path,
-)
+try:
+    from harness.shared.policy_io import (
+        AgentMemoryLimits,
+        CoverageThresholds,
+        GateFloors,
+        LangGraphDefaults,
+        NemotronDefaults,
+        OrchestratorLimits,
+        PolicyError,
+        _log_resolution,
+        _section,
+        resolve_policy_path,
+    )
+except ImportError:  # sibling import when this dir is sys.path[0]
+    from policy_io import (  # type: ignore[no-redef]
+        AgentMemoryLimits,
+        CoverageThresholds,
+        GateFloors,
+        LangGraphDefaults,
+        NemotronDefaults,
+        OrchestratorLimits,
+        PolicyError,
+        _log_resolution,
+        _section,
+        resolve_policy_path,
+    )
 
 
 def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:

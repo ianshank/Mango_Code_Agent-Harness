@@ -19,35 +19,40 @@ Spec: docs/specs/policy-single-source.md.
 
 from __future__ import annotations
 
-from harness.shared.policy_defaults import (
-    EXECUTION_ROUTING_STATES as EXECUTION_ROUTING_STATES,
-)
-from harness.shared.policy_defaults import agent_defaults as agent_defaults
-from harness.shared.policy_defaults import agent_memory_defaults as agent_memory_defaults
-from harness.shared.policy_defaults import coverage_defaults as coverage_defaults
-from harness.shared.policy_defaults import coverage_optional_extras as coverage_optional_extras
-from harness.shared.policy_defaults import evidence_defaults as evidence_defaults
-from harness.shared.policy_defaults import execution_routing as execution_routing
-from harness.shared.policy_defaults import gate_floors as gate_floors
-from harness.shared.policy_defaults import langgraph_defaults as langgraph_defaults
-from harness.shared.policy_defaults import lats_defaults as lats_defaults
-from harness.shared.policy_defaults import max_tool_calls_per_task as max_tool_calls_per_task
-from harness.shared.policy_defaults import nemotron_defaults as nemotron_defaults
-from harness.shared.policy_defaults import orchestrator_defaults as orchestrator_defaults
-from harness.shared.policy_io import POLICY_PATH as POLICY_PATH
-from harness.shared.policy_io import AgentMemoryLimits as AgentMemoryLimits
-from harness.shared.policy_io import CoverageThresholds as CoverageThresholds
-from harness.shared.policy_io import GateFloors as GateFloors
-from harness.shared.policy_io import LangGraphDefaults as LangGraphDefaults
-from harness.shared.policy_io import NemotronDefaults as NemotronDefaults
-from harness.shared.policy_io import OrchestratorLimits as OrchestratorLimits
-from harness.shared.policy_io import PolicyError as PolicyError
-from harness.shared.policy_io import _log_resolution as _log_resolution
-from harness.shared.policy_io import _Section as _Section
-from harness.shared.policy_io import _section as _section
-from harness.shared.policy_io import load_policy as load_policy
-from harness.shared.policy_io import policy_file_is_absent as policy_file_is_absent
-from harness.shared.policy_io import resolve_policy_path as resolve_policy_path
+try:
+    from harness.shared import policy_defaults as _defaults
+    from harness.shared import policy_io as _io
+except ImportError:  # `python harness/shared/check_py_compat.py` (sys.path[0] is this dir)
+    import policy_defaults as _defaults  # type: ignore[no-redef]
+    import policy_io as _io  # type: ignore[no-redef]
+
+EXECUTION_ROUTING_STATES = _defaults.EXECUTION_ROUTING_STATES
+agent_defaults = _defaults.agent_defaults
+agent_memory_defaults = _defaults.agent_memory_defaults
+coverage_defaults = _defaults.coverage_defaults
+coverage_optional_extras = _defaults.coverage_optional_extras
+evidence_defaults = _defaults.evidence_defaults
+execution_routing = _defaults.execution_routing
+gate_floors = _defaults.gate_floors
+langgraph_defaults = _defaults.langgraph_defaults
+lats_defaults = _defaults.lats_defaults
+max_tool_calls_per_task = _defaults.max_tool_calls_per_task
+nemotron_defaults = _defaults.nemotron_defaults
+orchestrator_defaults = _defaults.orchestrator_defaults
+POLICY_PATH = _io.POLICY_PATH
+AgentMemoryLimits = _io.AgentMemoryLimits
+CoverageThresholds = _io.CoverageThresholds
+GateFloors = _io.GateFloors
+LangGraphDefaults = _io.LangGraphDefaults
+NemotronDefaults = _io.NemotronDefaults
+OrchestratorLimits = _io.OrchestratorLimits
+PolicyError = _io.PolicyError
+_log_resolution = _io._log_resolution
+_Section = _io._Section
+_section = _io._section
+load_policy = _io.load_policy
+policy_file_is_absent = _io.policy_file_is_absent
+resolve_policy_path = _io.resolve_policy_path
 
 __all__ = [
     "POLICY_PATH",

@@ -34,8 +34,10 @@ def _live_policy_path() -> Path:
     Accessors moved here in the size-budget split; looking up ``POLICY_PATH``
     on this module would ignore ``monkeypatch.setattr(policy_loader, "POLICY_PATH", ...)``.
     """
-    from harness.shared import policy_loader as facade
-
+    try:
+        from harness.shared import policy_loader as facade
+    except ImportError:
+        return POLICY_PATH
     return facade.POLICY_PATH
 
 
