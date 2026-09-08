@@ -321,3 +321,85 @@ class TestEveryReportIsIndexed:
 
     def test_the_current_audit_is_indexed(self) -> None:
         assert "2026-STANDARDS-AUDIT.md" in indexed_reports(HARNESS_README.read_text(encoding="utf-8"))
+
+
+# --- README must not name a governance file that is not there -------------------
+#
+# Two sentences were simply false and had no gate: INV-2 waivers "declared in
+# `.governance/skip-waivers.json`" (that file does not exist; the Python gate
+# reads `harness/shared/tests/skip-waivers.json`), and push targets "validated
+# against `.governance/allowed-remotes.txt`" (DEC-005: the root file's *absence*
+# is the control). The 7-tier pyramid still named Pong workloads after
+# `docs/specs/remove-pong-demo.md`. Suite headcounts were transcribed beside a
+# sentence that said transcription is not a measurement (DEC-024).
+
+
+PYTHON_SKIP_WAIVERS = "harness/shared/tests/skip-waivers.json"
+NODE_SKIP_WAIVERS = "harness/node/.governance/skip-waivers.json"
+NODE_ALLOWLIST = "harness/node/.governance/allowed-remotes.txt"
+NODE_AI_TIERS = ("unit", "integration", "functional", "e2e", "journey", "security", "sanity")
+PONG_LEFTOVERS = ("Vector Math", "Match Progression", "Autonomous Autoplay")
+TRANSCRIBED_COUNTS = (
+    r"~\s*[\d,]+\s+automated tests",
+    r"98\.91%",
+    r"4 377 passed",
+)
+
+
+def names_root_file_as_python_skip_registry(text: str) -> bool:
+    """True when prose tells the reader to declare waivers in the missing root file."""
+    return "declared in `.governance/skip-waivers.json`" in text
+
+
+def transcribed_suite_counts(text: str) -> list[str]:
+    """Patterns that match a README headcount copied out of a past run."""
+    return [pattern for pattern in TRANSCRIBED_COUNTS if re.search(pattern, text)]
+
+
+class TestReadmeGovernancePathsExist:
+    def test_the_python_skip_registry_is_named_and_exists(self) -> None:
+        text = README.read_text(encoding="utf-8")
+        assert f"`{PYTHON_SKIP_WAIVERS}`" in text
+        assert (REPO / PYTHON_SKIP_WAIVERS).is_file()
+
+    def test_the_node_skip_registry_is_named_and_exists(self) -> None:
+        text = README.read_text(encoding="utf-8")
+        assert f"`{NODE_SKIP_WAIVERS}`" in text
+        assert (REPO / NODE_SKIP_WAIVERS).is_file()
+
+    def test_readme_does_not_name_the_root_file_as_the_python_registry(self) -> None:
+        assert not names_root_file_as_python_skip_registry(README.read_text(encoding="utf-8"))
+
+    def test_a_root_skip_registry_claim_is_reported(self) -> None:
+        """The negative case: the sentence this class exists to forbid."""
+        forged = "Any temporary waiver must be formally declared in `.governance/skip-waivers.json`."
+        assert names_root_file_as_python_skip_registry(forged)
+        assert not names_root_file_as_python_skip_registry("declared in `harness/shared/tests/skip-waivers.json`.")
+
+    def test_readme_does_not_treat_the_missing_root_allowlist_as_present(self) -> None:
+        text = README.read_text(encoding="utf-8")
+        assert "validated against `.governance/allowed-remotes.txt`" not in text
+        assert f"`{NODE_ALLOWLIST}`" in text
+        assert (REPO / NODE_ALLOWLIST).is_file()
+
+    def test_named_node_ai_tier_directories_exist(self) -> None:
+        text = README.read_text(encoding="utf-8")
+        match = re.search(r"harness/node/tests/ai/` \(([^)]+)\)", text)
+        assert match, "README no longer lists the Node AI test directories"
+        named = tuple(part.strip() for part in match.group(1).split(","))
+        assert named == NODE_AI_TIERS, f"README lists {named}; expected {NODE_AI_TIERS}"
+        missing = [name for name in named if not (REPO / "harness" / "node" / "tests" / "ai" / name).is_dir()]
+        assert not missing, f"README names Node AI tiers that are not directories: {missing}"
+
+    def test_pong_workload_labels_are_gone(self) -> None:
+        text = README.read_text(encoding="utf-8")
+        leftover = [label for label in PONG_LEFTOVERS if label in text]
+        assert not leftover, f"README still names removed Pong workloads: {leftover}"
+
+    def test_readme_does_not_transcribe_a_suite_headcount(self) -> None:
+        hits = transcribed_suite_counts(README.read_text(encoding="utf-8"))
+        assert not hits, f"README still transcribes suite counts (DEC-024): {hits}"
+
+    def test_a_transcribed_headcount_is_reported(self) -> None:
+        forged = "Total Automated Tests: **~3,970 automated tests** (4 377 passed, 98.91% Lines)."
+        assert transcribed_suite_counts(forged) == list(TRANSCRIBED_COUNTS)

@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation truth: README no longer names missing files or transcribed counts (2026-09-08)
+
+- Root README cited `.governance/skip-waivers.json` (does not exist) and treated a missing root `.governance/allowed-remotes.txt` as a live allowlist (DEC-005: the absence is the control). It also kept the Pong 7-tier labels and transcribed suite/coverage headcounts beside a DEC-024 sentence. Paths now match the Python/Node registries and per-stack allowlists; counts stay with the commands that produce them. Pinned by `test_documentation_claims.TestReadmeGovernancePathsExist`. NEXT_STEPS header and AEI problem-statement item 2 catch up to PR #124 on `main`.
+
 ### INV-13 evidence, reasoner tool parity, execution protocol, CI truthfulness (2026-09-08)
 
 - **INV-13 step 3 (evidence):** `ExecutionBroker` records policy, source (digest-of-digests of the loop-start enforcement baseline), backend name+version, and test digests through `evidence_record.py`. Evidence is opt-in; a keyless evidence-enabled broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn. Sink is outside the workspace and `protected_paths`. Sandbox digest remains unattestable. The evidence cap is `policy_defaults.evidence_defaults` (one policy reader). A refuse routing BLOCKED is still recorded when a key is present. Sink I/O failures are logged and do not rewrite the command result. `policy_digest` hashes `active_policy_path()` (honouring `MANGO_WRITE_POLICY_PATH`), not a second default file.

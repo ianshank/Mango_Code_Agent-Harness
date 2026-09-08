@@ -4,7 +4,7 @@
 **Author:** Ian Cruickshank
 **Governing Standard:** Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`)
 
-A production-grade, deterministic AI & software engineering platform featuring the **Autonomous Mango Multi-Agent Ecosystem**, the **LangGraph Multi-Agent StateGraph Engine**, and the **NVIDIA Nemotron Ultra AI Reasoner**, backed by a multi-tier test matrix across Python + Node (0 unapproved skips per `verify-zero-skips`, coverage gate sourced from `governance-policy.json`) and fail-closed governance invariants (INV-1..INV-17).
+A fail-closed **policy and attestation layer** for AI coding agents — bring your own agent, bring your own model. The live loop is planner → reasoner → verifier under the Agentic SSD Gate Harness Contract v2.1 (`harness/CONTRACT.md`). The default reasoner is NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`); the client speaks the OpenAI `/chat/completions` wire protocol. LangGraph is an accepted-parked experiment (DEC-053), not the production orchestrator. Tests are gated by `verify-zero-skips` (0 unapproved skips) and coverage floors from `governance-policy.json` (INV-1..INV-17).
 
 ---
 
@@ -57,7 +57,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   ├── rca/                             # Root-cause analyses (Nemotron E2E triage)
 │   ├── releases/                        # Full release notes too long for CHANGELOG.md (v2.2.4)
 │   ├── reports/                         # Hygiene, peer-review, test and standards-audit reports (2026-STANDARDS-AUDIT.md is current)
-│   └── specs/                           # 25 Formal Traceable Specifications (+ SPEC_TEMPLATE.md)
+│   └── specs/                           # Formal traceable specifications (+ SPEC_TEMPLATE.md)
 │
 ├── harness/                             # Enterprise Governance & Multi-Stack Harness
 │   ├── api_server/                      # FastAPI Web Server & Orchestration Dashboard (:8080)
@@ -87,7 +87,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── mango_mas_orchestrator.py    # Backwards-compatible ReAct loop facade
 │   │   ├── experimental/                # Parked, unwired capabilities (DEC-027): autonomous_healing.py, lats_optimizer.py
 │   │   ├── mcp_server.py                # Model Context Protocol (MCP) STDIO server
-│   │   ├── langgraph/                   # LangGraph Multi-Agent StateGraph Engine
+│   │   ├── langgraph/                   # LangGraph StateGraph (parked, DEC-053; live loop is ExecutionLoop)
 │   │   │   ├── state.py                 # 12-Channel partitioned typed state (Accumulator vs LWW)
 │   │   │   ├── nodes.py                 # 10 active, gate, and reviewer nodes
 │   │   │   ├── graph.py                 # StateGraph builder and conditional DAG routing
@@ -224,29 +224,16 @@ environment, so a hook author should not expect `MY_TOKEN` to be visible.
 
 ---
 
-## 3. 7-Tier Test Matrix & Governance
+## 3. Test Matrix & Governance
 
-The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero unapproved test skips** (`INV-2`):
+The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero unapproved test skips** (`INV-2`).
 
-```text
-                 ▲
-                / \     Tier 7: Sanity & Stress Tests (Resilience & Concurrency)
-               /---\    Tier 6: Security & Secret Sanitization Tests (INV-1 Leak Check)
-              /-----\   Tier 5: User Journey Tests (Multi-Agent Delegation Workflows)
-             /-------\  Tier 4: E2E Tests (CLI Terminal & Autonomous Autoplay)
-            /---------\ Tier 3: Functional Tests (Match Progression & Multi-Turn Chats)
-           /-----------\Tier 2: Integration Tests (SSE Streaming & Engine Events)
-          /-------------\Tier 1: Unit Tests (Vector Math, Physics, Config, SecretMasker)
-```
+The Node AI suite still uses a seven-directory layout under `harness/node/tests/ai/` (unit, integration, functional, e2e, journey, security, sanity). Python is selected by path and pytest markers (`governance`, `security`, `neurosym`, `langgraph`, `live`), not by that pyramid. The Pong demo those tier labels used to name was removed (`docs/specs/remove-pong-demo.md`).
 
-- **Total Automated Tests:** **~3,970 automated tests** (123 Vitest + ~3,847 Pytest across 7 tiers, measured 2026-09-05).
-  New since last count: `test_ns21_rollback_regression.py` (10 tests), `test_ns17_rollback_regression.py` (9 tests),
-  and `test_windows_portability_regression.py` expanded from 7 to ~35 tests (enterprise AQA).
-  `pytest --collect-only` is the authoritative source — a carried-forward figure is a claim, not a measurement (DEC-024).
-- **Node Code Coverage (V8):** **≥90% Statements | ≥80% Branches | ≥90% Functions | ≥90% Lines**
-- **Python AQA Coverage:** **98.91% Lines | 97.07% Branches** across `harness/shared`, `harness/api_server`, and `harness/control-plane`, over a measured set of 93 files with all 90 gated files meeting the per-file floor and **none waived**. Measured 2026-09-07 on Python 3.11 with the `langgraph` extra installed — the configuration `build-full` runs, re-measured after the graph-engineering checks were added rather than carried forward: `make coverage-python`'s pytest invocation and `coverage_gate.py` on a clean checkout of `296b085` (4 377 passed, 47 skipped, 7 deselected, 0 failures). The three files in the measured set that are not gated are the zero-statement `__init__.py` files, which `check_per_file` skips rather than waives. The earlier note about a 3.9 leg unable to install `langgraph` (`Requires-Python >=3.10`) no longer describes this repository: DEC-064 moved the floor (`docs/specs/python-floor-310.md`, superseding DEC-028) and the matrix is `["3.10", "3.12", "3.14"]`, so the extra installs on every leg and `coverage.optional_extras.langgraph.deselect_env` survives as a key no leg now sets. The per-file waiver for those modules still needs *both* `MANGO_CI_DESELECT_LANGGRAPH` and a failing import, so setting the variable on a host where the extra is present waives nothing — verified by running exactly that. The measured *set* is bounded too — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree, so an `omit` entry cannot drop a file from the per-file floor
-- **Windows Platform Parity:** **3 417 passed, 133 expected skips, 0 failures** (DEC-061 make-guards, DEC-062 asyncio guards, DEC-063 AF_UNIX on Windows dev). Expected skip count is **0 on Linux CI** where `make` and `AF_UNIX` are available.
-- **Requirements Traceability:** **412 requirement IDs** read from `docs/specs/` by a repository-scoped `check_traceability.py --workspace .`. Before DEC-065 the gate resolved its config and every glob against the process CWD and `make validate` ran it from `harness/node`, so it read 6 IDs sharing not one member with those 412 and printed `traceability: passed`. Re-scoping it produces a backlog rather than a green gate, and the backlog is bounded rather than waived: `traceability.min_discovered_requirement_ids` is an anti-vacuity floor a repository-scoped run must clear, and `traceability.max_uncited_contract_requirement_ids` is a ratchet over the contract-spec IDs still missing an implementation citation, a test citation, or both — it may only be lowered as citations land, and a passing run prints the count and the headroom. Per-stack configs declare no `scope` and are unaffected
+- **Suite size:** do not transcribe a headcount here. `pytest --collect-only` (Python) and `pnpm vitest run` (Node) are the measurement; a carried-forward figure is a claim, not a measurement (DEC-024).
+- **Coverage floors:** `governance-policy.json` → `coverage` (lines, statements, branches, functions, per-file). Python applies lines and branches (plus per-file lines) via `coverage_gate.py`; Node applies the same keys via vitest. The measured *set* is bounded — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree. Zero-statement `__init__.py` files are skipped by `check_per_file` rather than waived. The CI matrix is `["3.10", "3.12", "3.14"]` (DEC-064).
+- **Windows Platform Parity:** DEC-061 (make-guards), DEC-062 (asyncio), DEC-063 (AF_UNIX). Linux CI has no unapproved skips where `make` and `AF_UNIX` are available; Windows expected skips live in `harness/shared/tests/skip-waivers.json`, not as a number copied into this file.
+- **Requirements Traceability:** `python harness/shared/governance/check_traceability.py --workspace .` prints the discovered count, the uncited ratchet and the headroom. Before DEC-065 the gate ran from `harness/node` and read 6 IDs disjoint from the root corpus. The backlog is bounded rather than waived: `traceability.min_discovered_requirement_ids` is an anti-vacuity floor, and `traceability.max_uncited_contract_requirement_ids` may only be lowered. Per-stack configs declare no `scope` and are unaffected. Live numbers are what the command prints — do not restate them here.
 - **Governance Drift Gate:** `check_dedup.py` — fails CI when per-stack scripts copy instead of delegate to `harness/shared`
 - **Compatibility Gate:** `check_py_compat.py` — fails CI if any source uses syntax newer than the lowest interpreter in the CI matrix, resolved from the workflow rather than hard-coded; that is **3.10** since `docs/specs/python-floor-310.md` moved the floor and the matrix became `["3.10", "3.12", "3.14"]`
 
@@ -311,7 +298,7 @@ make test-regression # Run regression/AQA tier only (reproductions + rollback pi
 make test-governance # Governance-specific tests in isolation (broker, evidence, invariants)
 make test-neurosym   # Neuro-symbolic synthesis tests (pytest -m neurosym)
 make validate        # Governance invariants (adoption, policy, remotes, traceability)
-make verify-skip-waivers  # Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-058/059)
+make verify-skip-waivers  # Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-061/062)
 make check-dedup     # Drift gate: per-stack scripts must delegate to harness/shared
 make lint-node       # ESLint + Prettier + Knip (a `ci` prerequisite; never `ci-python`, whose legs have no pnpm)
 make audit           # Dependency vulnerability scan (pip-audit + delegated Node osv-scanner)
@@ -339,12 +326,10 @@ that Pylance resolves `harness.*` imports without a `pip install -e .`. This mir
 }
 ```
 
-Expected Windows skip counts (DEC-058/059 waivers, all approved):
-
-| Runner | Expected skips | Reason |
-| ------ | -------------- | ------ |
-| Linux CI | 0 (or ≤5 langgraph-deselect) | `make` available; `AF_UNIX` available |
-| Windows dev | 133 | `make` absent; asyncio TCP fallback |
+Expected Windows skips are the DEC-061/DEC-062/DEC-063 rows in
+`harness/shared/tests/skip-waivers.json` (make absent, asyncio TCP fallback,
+AF_UNIX). Linux CI has no unapproved skips where those primitives exist.
+A number copied into this file is a claim, not a measurement (DEC-024).
 
 ---
 
@@ -360,12 +345,12 @@ The `.mango/` ecosystem enables specialized subagent collaboration during develo
 2. **Deep Reasoning & Auditing (`nemotron-reasoner.md`):** Delegate architectural analysis, mathematical invariant verification, and adversarial threat modeling to NVIDIA Nemotron Ultra (`nvidia/llama-3.3-nemotron-super-49b-v1`).
 3. **Automated Verification (`verifier.md`):** Ensure every code change is validated through deterministic test runners (`pytest`, `vitest`), typecheckers (`mypy`, `tsc`), and linters (`ruff`, `eslint`) before marking work complete.
 
-### 5.2 Test-Driven Development (TDD) via the 7-Tier Pyramid
+### 5.2 Tests and traceability
 
 When introducing new features or modules:
 
-- **Write Tests Across All 7 Tiers:** Ensure coverage spans Unit, Integration, Functional, E2E, User Journey, Security, and Stress/Sanity tiers.
-- **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. Any temporary waiver must be formally declared in `.governance/skip-waivers.json` citing an approved decision from `docs/decisions/` (thin ID index still at `harness/node/.governance/decision-log.md` for `--decision-log`).
+- **Write the test that names the defect.** Node AI tests still live under the seven directories in `harness/node/tests/ai/`; Python uses path (`harness/shared/tests/regression/` for AQA reproductions) and markers. Do not invent a pyramid row that the code does not have.
+- **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. A Python waiver must be declared in `harness/shared/tests/skip-waivers.json` citing an approved decision from `docs/decisions/` (Node: `harness/node/.governance/skip-waivers.json`; thin ID index still at `harness/node/.governance/decision-log.md` for `--decision-log`). There is no root `.governance/skip-waivers.json`.
 - **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code *and* test docstrings; `python harness/shared/governance/check_traceability.py --workspace .` reads every ID in `docs/specs/` and reports each uncited one with the side it is missing from. A repository-scoped run is not required to reach zero — it must clear `traceability.min_discovered_requirement_ids` and stay at or below `traceability.max_uncited_contract_requirement_ids`, a ratchet that may only be lowered. A document whose IDs name scheduled work declares `Spec class: program-plan`; a document declaring nothing is graded strictly, so the permissive class is never the default.
 
 ### 5.3 Local Development & Gate Validation
@@ -374,7 +359,7 @@ Use the unified root `Makefile` to enforce enterprise quality gates locally prio
 
 ```bash
 make lint            # Static analysis, formatting checks, strict typing, compat gate
-make coverage        # Enforce ≥90% total coverage
+make coverage        # Coverage floors from governance-policy.json (not a literal here)
 make test-node       # Execute TypeScript/Node engine tests
 make test-governance # Governance broker, evidence, invariant tests
 make validate        # All governance invariants (adoption, policy, remotes, traceability)
@@ -390,5 +375,5 @@ make pre-pr          # Full pre-submission validation pipeline (now includes aud
 ### 5.4 Secret Sanitization & Security Scanning
 
 - **Invariant `INV-1` Enforcement:** Never output raw API tokens or credentials in logs or test assertions. Use `SecretMasker` and the native Python regex masks.
-- **Pre-Push Allowlist (`remotes.py`):** Push targets are strictly validated against `.governance/allowed-remotes.txt` to prevent code leakage to unauthorized repositories.
+- **Pre-Push Allowlist (`remotes.py`):** Agent-initiated `git push` is blocked because the repository root has **no** `.governance/allowed-remotes.txt` (DEC-005; the absence is the control). Per-stack allowlists live at `harness/node/.governance/allowed-remotes.txt` and `harness/jvm/.governance/allowed-remotes.txt`. Do not create a root allowlist without a superseding DEC (DEC-056 names the intended replacement and has not landed).
 - **Automated Gitleaks, pip-audit & OSV Scanners:** `make secrets` (gitleaks; INV-1) and `make audit` (`pip-audit` against `requirements.txt` + delegated Node `osv-scanner`) run locally and in dedicated CI jobs (`secret-scan`, `dependency-audit`) to catch hardcoded secrets and compromised third-party dependencies before code review; `make pre-pr` runs both. `.github/dependabot.yml` opens weekly update PRs for the `pip` and `npm` ecosystems.
