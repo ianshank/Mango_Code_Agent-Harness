@@ -45,6 +45,7 @@ from types import MappingProxyType
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "MUTATING_ACTION",
     "TOOL_FORMS",
     "classify_argv",
     "ToolForm",
@@ -52,6 +53,13 @@ __all__ = [
     "classify_tool_invocation",
     "interpreter_module_invocation",
 ]
+
+#: The action a rewrite over enumerable files exercises. Named rather than
+#: inlined so it is one symbol the authority model can be checked against: it
+#: was a literal inside ``_mutating_invocation``, outside ``TOOL_FORMS``, and so
+#: outside the reach of the test that asserts every action this module can
+#: return is one the PDP can decide (reported by a review bot on PR #122).
+MUTATING_ACTION: typing.Final[str] = "write"
 
 #: Characters that make a path operand name more than one file. A mutating
 #: invocation over any of these has no enumerable target set.
@@ -219,7 +227,7 @@ def _mutating_invocation(tool: str, subcommand: str, paths: Sequence[str], unmod
     named = f"{tool} {subcommand}".strip()
     if paths and all(_is_bounded_path(path) for path in paths):
         logger.debug("tool_forms: %s rewrites %d named file(s)", named, len(paths))
-        return ToolInvocation("write", f"{named} rewrites the files it names", tuple(paths))
+        return ToolInvocation(MUTATING_ACTION, f"{named} rewrites the files it names", tuple(paths))
     logger.warning("tool_forms: %s rewrites an unbounded set of files; grading it unmodelled", named)
     return ToolInvocation(
         unmodelled_action,

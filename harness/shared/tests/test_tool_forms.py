@@ -25,7 +25,7 @@ from harness.shared.governance.command_actions import (
     classify,
     write_targets,
 )
-from harness.shared.governance.tool_forms import TOOL_FORMS, classify_argv
+from harness.shared.governance.tool_forms import MUTATING_ACTION, TOOL_FORMS, classify_argv
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.tests._helpers import REPO
 
@@ -144,9 +144,15 @@ class TestTableIsWellFormed:
                 assert form.mutating_subcommands or form.mutating_flags, name
 
     def test_every_declared_action_exists_in_the_authority_model(self) -> None:
-        """A typo here would grade a command to an action the PDP cannot decide."""
+        """A typo here would grade a command to an action the PDP cannot decide.
+
+        Covers every action this module can return, not only the tabled ones:
+        the rewrite path's action lived as a literal outside ``TOOL_FORMS`` and
+        so outside this assertion, which is the gap a review bot found.
+        """
         declared = {form.default_action for form in TOOL_FORMS.values()}
         declared |= {a for form in TOOL_FORMS.values() for a in form.flag_actions.values()}
+        declared.add(MUTATING_ACTION)
         known = {a for agent in _AGENT_POLICY["agents"] for a in agent["allowed_actions"]}
         known |= set(_AGENT_POLICY["high_risk_actions"])
         assert declared <= known, declared - known
