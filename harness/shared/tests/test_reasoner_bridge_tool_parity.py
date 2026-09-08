@@ -1,4 +1,4 @@
-"""Reasoner/bridge tool parity (R-RBT-1..5)."""
+"""Reasoner/bridge tool parity (R-RBT-1, R-RBT-2, R-RBT-3, R-RBT-4, R-RBT-5, C-RBT-3)."""
 
 from __future__ import annotations
 
