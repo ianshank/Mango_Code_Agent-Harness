@@ -13,7 +13,12 @@ Two delegation styles are both accepted, so existing shims keep working:
 Nothing here is hard-coded: stacks, script names, and thresholds are all discovered from
 the repository layout and `harness/shared/governance-policy.json`.
 
-Exit codes: 0 = no drift, 1 = drift detected.
+A pass is also refused when the run checked fewer scripts than
+`gates.dedup_min_scripts`: `[PASS] 0 per-stack script(s)` is a report no reader can
+tell apart from a real pass, so the population a verdict rests on is itself gated
+(R-AEI-3).
+
+Exit codes: 0 = no drift, 1 = drift detected or the checked population is below the floor.
 """
 
 from __future__ import annotations
@@ -30,9 +35,11 @@ from pathlib import Path
 try:
     from harness.shared.governance_json import read_json_object
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
+    from harness.shared.policy_loader import PolicyError, gate_floors
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
     from governance_json import read_json_object  # type: ignore[no-redef]
     from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
+    from policy_loader import PolicyError, gate_floors  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +320,26 @@ def main(argv: list[str] | None = None) -> int:
 
     for failure in report.failures:
         logger.error("[FAIL] %s", failure)
+
+    # The population the verdict rests on, before the verdict. An empty tree
+    # produced `[PASS] 0 per-stack script(s)` and exit 0, which is what a gate
+    # pointed at the wrong root also produces (R-AEI-3). The floor is declared,
+    # never computed here; an adopter with no policy file declares none and the
+    # gate behaves exactly as it did before.
+    try:
+        floor = gate_floors(repo_root / POLICY_RELPATH)["dedup_min_scripts"]
+    except PolicyError as exc:
+        logger.error("[FAIL] %s", exc)
+        return 1
+    if len(report.checked) < floor:
+        logger.error(
+            "[FAIL] checked %d per-stack script(s), below the floor of %d "
+            "(governance-policy.json -> gates.dedup_min_scripts). A pass over a population "
+            "this small cannot be told apart from a gate that examined nothing.",
+            len(report.checked),
+            floor,
+        )
+        return 1
 
     if report.ok:
         logger.info(

@@ -808,6 +808,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-067",
+      "status": "accepted",
+      "date": "2026-09-07",
+      "title": "A developer tool is graded by its invocation form; an in-place formatter is not a gate run",
+      "path": "docs/decisions/DEC-067.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }

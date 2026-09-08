@@ -86,6 +86,13 @@ class AgentMemoryLimits(TypedDict):
     reasoner_hypothesis_budget_tokens: int
 
 
+class GateFloors(TypedDict):
+    """The `gates` block. See :class:`OrchestratorLimits` for the rationale."""
+
+    dedup_min_scripts: int
+    py_compat_min_files: int
+
+
 def _log_resolution(block: str, values: Mapping[str, object], policy_path: Path | None) -> None:
     """Record what a policy block resolved to, and which file it came from.
 
@@ -207,13 +214,16 @@ class _Section:
     #: optional `policy_path`, and the tests use `tmp_path` fixtures, so "which
     #: policy?" is a real question at the moment the error is read. Reported by
     #: a review bot on this PR.
-    __slots__ = ("_data", "_name", "_backed", "_path")
+    __slots__ = ("_data", "_name", "_backed", "_path", "_declared")
 
-    def __init__(self, data: dict, name: str, backed: bool, path: Path) -> None:
+    def __init__(self, data: dict, name: str, backed: bool, path: Path, declared: bool | None = None) -> None:
         self._data = data
         self._name = name
         self._backed = backed
         self._path = path
+        # `None` infers, for a direct caller. `_section` always states it:
+        # only it can see whether the block was a key in the policy.
+        self._declared = bool(data) if declared is None else declared
 
     def _value(self, key: str, default: object) -> object:
         if key in self._data:
@@ -238,6 +248,22 @@ class _Section:
             raise PolicyError(f"policy {self._name}.{key} must be a number, got {value!r}")
         return float(value)
 
+    def declared(self) -> bool:
+        """Whether this deployment states the block at all.
+
+        Distinct from ``backed``, which is about the policy *file*. A file
+        predating a newly added block is supported: the block is absent, so the
+        deployment declares nothing and an accessor may use its built-in
+        defaults. A block that is *present* still owes every key it reads, which
+        ``_value`` enforces.
+
+        The test is presence *as a key*, never whether the block resolved to
+        something non-empty: ``"gates": {}`` has adopted the block and stated
+        none of it, so reading it as "undeclared" would have returned defaults
+        (reported by a review bot on PR #122).
+        """
+        return self._declared
+
     def optional(self, key: str, default: object) -> object:
         """A key whose *absence* is part of the schema, not a hole in it.
 
@@ -251,10 +277,11 @@ class _Section:
 def _section(name: str, policy_path: Path | None = None) -> _Section:
     path = POLICY_PATH if policy_path is None else policy_path
     backed = not policy_file_is_absent(path)
-    data = load_policy(path).get(name, {}) if backed else {}
+    policy = load_policy(path) if backed else {}
+    data = policy.get(name, {})
     if not isinstance(data, dict):
         raise PolicyError(f"policy section {name!r} is not an object")
-    return _Section(data, name, backed, path)
+    return _Section(data, name, backed, path, declared=name in policy)
 
 
 def orchestrator_defaults(policy_path: Path | None = None) -> OrchestratorLimits:
@@ -432,4 +459,41 @@ def agent_memory_defaults(policy_path: Path | None = None) -> AgentMemoryLimits:
         "reasoner_hypothesis_budget_tokens": section.int("reasoner_hypothesis_budget_tokens", 1500),
     }
     _log_resolution("agent_memory", resolved, policy_path)
+    return resolved
+
+
+def gate_floors(policy_path: Path | None = None) -> GateFloors:
+    """Anti-vacuity population floors for the drift gates; policy `gates` block.
+
+    A gate that examined nothing prints the same ``[PASS]`` as one that examined
+    everything: ``check_dedup`` and ``check_py_compat`` both exited 0 on an empty
+    tree, reporting ``0 per-stack script(s)`` and ``0 file(s)`` (R-AEI-3). Each
+    floor is the population a run must reach before its pass carries information,
+    and is a ratchet: raise it as the population grows, never lower it to make a
+    shrinking one pass.
+
+    The built-in default is 0 -- *this deployment declares no floor* -- rather
+    than this repository's own population, which no adopter shares and which
+    would fail a smaller tree for having less code. An absent policy file is the
+    adopter path and leaves the gates exactly as they behave today; a policy that
+    carries the block and drops a key raises PolicyError, as every other accessor
+    here does. A **new** top-level block rather than a key in `dedup`/`py_compat`
+    for the DEC-043 reason recorded at R-AEI-11: a key added to an adopted block
+    is a PolicyError for every adopter policy that predates it.
+    """
+    section = _section("gates", policy_path)
+    if not section.declared():
+        # A policy file that predates this block declares no floor. Refusing
+        # here would break every adopter policy written before the block
+        # existed -- the DEC-043 hazard a new top-level block was chosen to
+        # avoid, which `_section` alone does not avoid because it marks any
+        # present *file* as backed (Copilot review on PR #122).
+        resolved: GateFloors = {"dedup_min_scripts": 0, "py_compat_min_files": 0}
+        _log_resolution("gates", resolved, policy_path)
+        return resolved
+    resolved = {
+        "dedup_min_scripts": section.int("dedup_min_scripts", 0),
+        "py_compat_min_files": section.int("py_compat_min_files", 0),
+    }
+    _log_resolution("gates", resolved, policy_path)
     return resolved

@@ -15,7 +15,13 @@ Checks (each only applies when the resolved minimum version is old enough to car
   that lacks `from __future__ import annotations`. Requires 3.10+.
 * `datetime-utc` - importing `UTC` from `datetime`. Requires 3.11+.
 
-Exit codes: 0 = compatible, 1 = incompatible construct found.
+A pass is also refused when the run discovered fewer first-party files than
+`gates.py_compat_min_files`: `[PASS] 0 file(s) compatible` is a report no reader can
+tell apart from a real pass, so the population a verdict rests on is itself gated
+(R-AEI-3).
+
+Exit codes: 0 = compatible, 1 = incompatible construct found or the discovered
+population is below the floor.
 """
 
 from __future__ import annotations
@@ -47,6 +53,7 @@ try:
         has_future_annotations as has_future_annotations,
     )
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
+    from harness.shared.policy_loader import PolicyError, gate_floors
 except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is this dir
     from ast_visitors import (  # type: ignore[no-redef]
         COMMON_TYPE_NAMES as COMMON_TYPE_NAMES,
@@ -64,6 +71,7 @@ except ImportError:  # direct `python harness/shared/<gate>.py`: sys.path[0] is 
         has_future_annotations as has_future_annotations,
     )
     from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
+    from policy_loader import PolicyError, gate_floors  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -261,13 +269,42 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = args.repo_root.resolve()
     min_version = resolve_min_version(repo_root, args.min_version)
-    report = run(repo_root, min_version)
+    # Resolved once and handed to `run`, because the floor below counts the same
+    # population `run` walks and the two must not be allowed to disagree.
+    skip_dirs = load_skip_dirs(repo_root)
+    report = run(repo_root, min_version, skip_dirs)
 
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
 
     for violation in report.violations:
         logger.error("[FAIL] %s", violation)
+
+    # The population the verdict rests on, before the verdict. An empty tree
+    # produced `[PASS] 0 file(s) compatible` and exit 0, which is what a gate
+    # pointed at the wrong root also produces (R-AEI-3). Counted over the files
+    # *discovered* rather than the files parsed, so that raising the CI matrix
+    # past 3.11 -- which legitimately leaves nothing to check and is announced in
+    # its own log line -- cannot turn this into a gate that can never go green.
+    # The floor is declared, never computed here; an adopter with no policy file
+    # declares none and the gate behaves exactly as it did before.
+    try:
+        floor = gate_floors(repo_root / POLICY_RELPATH)["py_compat_min_files"]
+    except PolicyError as exc:
+        logger.error("[FAIL] %s", exc)
+        return 1
+    if floor:
+        # Guarded, so a deployment that declares no floor pays for no second walk.
+        population = sum(1 for _ in iter_python_files(repo_root, skip_dirs))
+        if population < floor:
+            logger.error(
+                "[FAIL] discovered %d first-party Python file(s), below the floor of %d "
+                "(governance-policy.json -> gates.py_compat_min_files). A pass over a population "
+                "this small cannot be told apart from a gate that examined nothing.",
+                population,
+                floor,
+            )
+            return 1
 
     if report.ok:
         logger.info(
