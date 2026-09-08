@@ -10,7 +10,7 @@ import pytest
 
 from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.governance.evidence_manifest import EVIDENCE_KEY_ENV, EvidenceBuilder, verify_manifest
-from harness.shared.governance.evidence_record import fold_enforcement_baseline
+from harness.shared.governance.evidence_record import evidence_max_entries, fold_enforcement_baseline
 from harness.shared.governance.verdict import BROKER_BLOCKED, VERIFIED, derive_verdict
 from harness.shared.governance.verification import VerificationRunner
 from harness.shared.tests.test_governance_broker import IMPLEMENTER, RecordingBackend
@@ -148,3 +148,39 @@ def test_verification_with_evidence_verified(tmp_path: Path, monkeypatch: pytest
     assert verify_manifest(json.loads(line), _KEY)
     rel = sink.relative_to(tmp_path).as_posix()
     assert not rel.startswith("workspace/"), "sink must lie outside the agent workspace"
+
+
+def test_evidence_max_entries_missing_file_is_adopter_path(tmp_path: Path) -> None:
+    """Absent policy is the pre-block adopter path, not a hard error (DEC-043)."""
+    assert evidence_max_entries(tmp_path / "no-such-policy.json") is None
+
+
+def test_evidence_max_entries_absent_block_is_adopter_path(tmp_path: Path) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text("{}", encoding="utf-8")
+    assert evidence_max_entries(path) is None
+
+
+def test_evidence_max_entries_unreadable_path_fails_closed(tmp_path: Path) -> None:
+    """A directory forces IsADirectoryError without chmod (root CI ignores bits)."""
+    with pytest.raises(ValueError, match="unreadable"):
+        evidence_max_entries(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "payload, match",
+    [
+        ("{", "unreadable"),
+        ("[]", "not a JSON object"),
+        ('{"evidence": []}', "not an object"),
+        ('{"evidence": {}}', "positive integer"),
+        ('{"evidence": {"max_entries": 0}}', "positive integer"),
+        ('{"evidence": {"max_entries": true}}', "positive integer"),
+        ('{"evidence": {"max_entries": "256"}}', "positive integer"),
+    ],
+)
+def test_evidence_max_entries_malformed_policy_fails_closed(tmp_path: Path, payload: str, match: str) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError, match=match):
+        evidence_max_entries(path)
