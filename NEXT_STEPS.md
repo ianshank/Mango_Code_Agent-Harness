@@ -62,7 +62,7 @@ skill, then `make pre-pr`.
 |---|---|---|---|
 | PR-13 | **Blocker (architecture)** | `harness/shared/tests/test_mcp_server.py` reached 696 lines against 700 limit (4 lines headroom); `harness/shared/langgraph/nodes.py` reached 482 lines against 500 limit (18 lines headroom). | Decomposed `test_mcp_server.py` into lifecycle and dispatch modules with `_mcp_helpers.py` doubles; decomposed `nodes.py` into `node_reasons.py`, `node_executors.py`, and `nodes.py` facade. All modules now < 300 lines with > 65 lines headroom repository-wide. |
 | PR-14 | Major | Regression test pins (`test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, `test_scan_findings_windows_waiver.py`) carried silent `pytest.skip()` calls when target files were missing, violating zero-skip policy. | Replaced skips with strict assertions; added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for IDE execution. |
-| PR-15 | Minor | Agent skills for god-file decomposition and regression pin authoring lacked codification in `.mango/skills/` and `.agents/skills/`. | Authored, validated, and registered `god-file-decomposer` and `regression-pin-author` skills. |
+| PR-15 | Minor | Agent skills for god-file decomposition and regression pin authoring lacked codification in `.mango/skills/`. | Authored, validated, and registered `god-file-decomposer` and `regression-pin-author` skills. Both landed unclassified and undated and broke `main` (run 34172364840); fixed under NS-41. The original row also named `.agents/skills/`, a directory that does not exist and that `test_no_skill_directory_exists_outside_dot_mango` forbids. |
 
 ---
 

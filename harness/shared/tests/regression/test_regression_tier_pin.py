@@ -32,7 +32,11 @@ UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 REQUIRED_REGRESSION_MODULES = {
     "test_context_window_budget_regression.py": "test_tool_group_survival_under_context_budget",
     "test_coverage_gate_shadowing_regression.py": "test_the_gates_own_directory_cannot_shadow_the_extra",
-    "test_gaps_memory_integrity.py": "test_gaps_json_has_no_stub_entries",
+    # Renamed from `test_gaps_json_has_no_stub_entries`, which named a property
+    # of one machine's ambient `.mango/memory/` store -- gitignored runtime
+    # state a clean checkout never has. The reproduction now drives a stub
+    # through the real writer, so the name says what is asserted.
+    "test_gaps_memory_integrity.py": "test_the_stub_detector_is_not_vacuous",
     "test_hypothesis_surfacing_regression.py": "test_eviction_cannot_rescue_an_oversized_hypothesis_block",
     "test_process_backend_isolation_regression.py": "test_recording_backend_with_probe_override_is_always_available",
     "test_scan_findings_windows_waiver.py": "test_scan_findings_waiver_exists",
