@@ -594,3 +594,50 @@ class TestTheAttestationCheckRunsWhereItCanBeRead:
         assert "pull-requests" not in workflow_text.split("jobs:")[0], (
             "the scope belongs on the one job that fetches the description, not workflow-wide"
         )
+
+
+class TestAttestationShaBinding:
+    """R-SR-24 / R-RHI-3: the table binds to the PR head SHA, not the merge SHA."""
+
+    def test_attestation_sha_is_read_from_the_pr_head(self, jobs: dict[str, str]) -> None:
+        job = jobs["build-full"]
+        step = job.split("Verify the protected-path attestation table")[-1].split("Run unified CI")[0]
+        assert '["head"]["sha"]' in step
+        assert "HEAD_SHA=" in step
+
+    def test_attestation_sha_mismatch_fails(self, tmp_path: Path) -> None:
+        from harness.shared.governance import attestation
+
+        head, stale = "a" * 40, "b" * 40
+        body = tmp_path / "pr.md"
+        body.write_text(
+            "## Protected-path attestation\n\n"
+            f"Attested-head: {stale}\n\n"
+            "| Protected path | Why |\n| --- | --- |\n| `Makefile` | x |\n",
+            encoding="utf-8",
+        )
+        assert attestation._check(["Makefile"], body, head_sha=head) == 1
+
+    def test_attestation_sha_match_passes(self, tmp_path: Path) -> None:
+        from harness.shared.governance import attestation
+
+        head = "a" * 40
+        body = tmp_path / "pr.md"
+        body.write_text(
+            "## Protected-path attestation\n\n"
+            f"Attested-head: {head}\n\n"
+            "| Protected path | Why |\n| --- | --- |\n| `Makefile` | x |\n",
+            encoding="utf-8",
+        )
+        assert attestation._check(["Makefile"], body, head_sha=head) == 0
+
+
+class TestProtectionReport:
+    def test_protection_report_queries_branch_rules(self, drift_text: str) -> None:
+        jobs = job_sections(drift_text)
+        assert "protection_report" in jobs
+        body = jobs["protection_report"]
+        assert "/rules/branches/main" in body
+        assert "timeout-minutes:" in body
+        assert "cat .github/rulesets/main.json" not in body
+        assert "gh issue" in body

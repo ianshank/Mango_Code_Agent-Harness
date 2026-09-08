@@ -73,3 +73,4 @@ regenerate via `python harness/shared/generate_decision_index.py`.
 | [DEC-065](DEC-065.md) | 2026-09-07 | accepted | Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet |
 | [DEC-066](DEC-066.md) | 2026-09-07 | accepted | gaps.json stub corruption (MEM-1): 199 placeholder entries pruned, 24 substantive entries preserved |
 | [DEC-067](DEC-067.md) | 2026-09-07 | accepted | A developer tool is graded by its invocation form; an in-place formatter is not a gate run |
+| [DEC-068](DEC-068.md) | 2026-09-08 | accepted | MIN_MESSAGES_BEFORE_FALLBACK is a ReAct transcript-shape constant, not a policy budget |

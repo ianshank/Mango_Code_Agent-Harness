@@ -31,12 +31,21 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from harness.shared.debug_dump import redact_text
+from harness.shared.governance.evidence_manifest import EVIDENCE_KEY_ENV, EvidenceBuilder
+from harness.shared.governance.evidence_record import (
+    append_signed_jsonl,
+    build_execution_entry,
+    evidence_max_entries,
+)
+from harness.shared.governance.execution_backend import ExecutionRequest
 from harness.shared.governance_json import read_json_object
+from harness.shared.policy_loader import execution_routing
 from harness.shared.write_policy import active_policy_path, write_denial_reason
 
 from .command_actions import classify, write_targets
@@ -59,6 +68,9 @@ from .process_backend import (
 )
 from .verdict import BROKER_BLOCKED
 
+if TYPE_CHECKING:
+    from harness.shared.governance.execution_backend import ExecutionBackend
+
 logger = logging.getLogger(__name__)
 
 #: The authority model, resolved next to this package so it travels with the
@@ -72,9 +84,12 @@ class ExecutionBroker:
     def __init__(
         self,
         sandbox_available: bool | None = None,
-        backend: ProcessBackend | None = None,
+        backend: ExecutionBackend | None = None,
         agent_policy_path: Path | None = None,
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+        signing_key: str | None = None,
+        evidence_sink: Path | None = None,
+        evidence_enabled: bool | None = None,
     ) -> None:
         """``sandbox_available`` defaults to ``None``, meaning *probe the backend*.
 
@@ -82,11 +97,61 @@ class ExecutionBroker:
         sandbox was healthy, so INV-9's no-fallback branch was unreachable from
         the constructor most callers would write. An explicit bool is still
         honoured, which is what lets a test drive the unavailable path.
+
+        Evidence is opt-in: enabled when ``signing_key`` or ``evidence_sink`` is
+        passed, or when ``evidence_enabled=True``. A keyless evidence-enabled
+        broker returns BLOCKED naming ``AGENT_EVIDENCE_KEY`` before spawn
+        (R-AEI-4 / AC-7). The resolved key is injected into ``EvidenceBuilder``;
+        the broker path does not read the environment at export.
         """
         self._sandbox_available = sandbox_available
         self._backend = backend or ProcessBackend()
         self._agent_policy_path = agent_policy_path or _AGENT_POLICY_PATH
         self._max_output_bytes = max_output_bytes
+        if evidence_enabled is None:
+            evidence_enabled = signing_key is not None or evidence_sink is not None
+        self._evidence_enabled = evidence_enabled
+        resolved = signing_key
+        if self._evidence_enabled and not resolved:
+            resolved = os.environ.get(EVIDENCE_KEY_ENV)
+        self._signing_key = resolved
+        self._evidence_sink = Path(evidence_sink) if evidence_sink is not None else None
+        self._enforcement_baseline: dict[str, str] = {}
+        self.evidence_entries: list[dict[str, Any]] = []
+
+    def set_enforcement_baseline(self, digests: Mapping[str, str]) -> None:
+        """Cite the loop-start snapshot; never re-walk (R-AEI-7)."""
+        self._enforcement_baseline = dict(digests)
+
+    def _record_evidence(
+        self,
+        command: str,
+        result: ExecutionResult,
+        context: Mapping[str, Any],
+    ) -> ExecutionResult:
+        """Attach a signed evidence row after a governed result (R-AEI-4)."""
+        if not self._evidence_enabled or not self._signing_key:
+            return result
+        cap = evidence_max_entries()
+        if cap is not None and len(self.evidence_entries) >= cap:
+            return result
+        raw_ids = context.get("node_ids") or ()
+        node_ids = tuple(str(item) for item in raw_ids) if isinstance(raw_ids, (list, tuple)) else ()
+        entry = build_execution_entry(
+            command=command,
+            outcome=result.status,
+            action=result.action,
+            exit_code=result.exit_code,
+            baseline=self._enforcement_baseline,
+            backend=self._backend,
+            node_ids=node_ids,
+        )
+        self.evidence_entries.append(entry)
+        builder = EvidenceBuilder(project_root=Path.cwd(), signing_key=self._signing_key)
+        builder.add_execution_evidence(entry)
+        if self._evidence_sink is not None:
+            append_signed_jsonl(self._evidence_sink, builder)
+        return result
 
     def verify_sandbox(self) -> bool:
         """Verify the execution backend is available and healthy."""
@@ -223,23 +288,38 @@ class ExecutionBroker:
         context = context or {}
         action = classify(command).action
 
+        if execution_routing() == "refuse":
+            reason = "BLOCKED: policy execution.routing is refuse"
+            return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
+
+        if self._evidence_enabled and not self._signing_key:
+            reason = (
+                "BLOCKED: evidence is enabled but no signing key was injected "
+                f"and {EVIDENCE_KEY_ENV} is unset"
+            )
+            return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
+
         # INV-9: no host-process fallback when the backend cannot be used.
         if not self.verify_sandbox():
             # Redacted: a denial is precisely when the command is most likely to carry a
             # credential -- `git push https://user:TOKEN@host`, `curl -H "Authorization: ..."`.
             logger.warning("Backend unavailable; blocking execution of: %s", redact_text(command))
-            return ExecutionResult(
-                BROKER_BLOCKED,
-                "",
-                "BLOCKED: Sandbox unavailable; host-process execution fallback is strictly prohibited.",
-                1,
-                reason="BLOCKED: the execution backend is unavailable",
-                action=action,
+            return self._record_evidence(
+                command,
+                ExecutionResult(
+                    BROKER_BLOCKED,
+                    "",
+                    "BLOCKED: Sandbox unavailable; host-process execution fallback is strictly prohibited.",
+                    1,
+                    reason="BLOCKED: the execution backend is unavailable",
+                    action=action,
+                ),
+                context,
             )
 
         denial = self._policy_decision(command, context)
         if denial is not None:
-            return denial
+            return self._record_evidence(command, denial, context)
 
         # The write policy is a property of the broker, not of one tool handler.
         # Enforcing it only in `write_file` left `run_command` as an unguarded
@@ -254,13 +334,17 @@ class ExecutionBroker:
             write_denial = write_denial_reason(target, policy_path=active_policy_path())
             if write_denial is not None:
                 logger.warning("Denied a command writing to a governed path: %s", target)
-                return ExecutionResult(
-                    BROKER_BLOCKED,
-                    "",
-                    f"BLOCKED: {write_denial}",
-                    1,
-                    reason=f"BLOCKED: the command writes to {target}, which is denied: {write_denial}",
-                    action=action,
+                return self._record_evidence(
+                    command,
+                    ExecutionResult(
+                        BROKER_BLOCKED,
+                        "",
+                        f"BLOCKED: {write_denial}",
+                        1,
+                        reason=f"BLOCKED: the command writes to {target}, which is denied: {write_denial}",
+                        action=action,
+                    ),
+                    context,
                 )
 
         # INV-8: every execution request passes the command guard.
@@ -269,19 +353,32 @@ class ExecutionBroker:
         # when it is most likely to carry a credential -- `git push https://user:TOKEN@host`.
         if check_command(command, timeout=timeout) != 0:
             logger.warning("PreToolUse guard blocked command: %s", redact_text(command))
-            return ExecutionResult(
-                BROKER_BLOCKED,
-                "",
-                "BLOCKED: Command failed pretooluse_guard policy evaluation.",
-                2,
-                reason="BLOCKED: the command guard denied this command",
-                action=action,
+            return self._record_evidence(
+                command,
+                ExecutionResult(
+                    BROKER_BLOCKED,
+                    "",
+                    "BLOCKED: Command failed pretooluse_guard policy evaluation.",
+                    2,
+                    reason="BLOCKED: the command guard denied this command",
+                    action=action,
+                ),
+                context,
             )
 
-        result = self._backend.run(command, cwd, timeout, self._max_output_bytes)
+        result = self._backend.execute(
+            ExecutionRequest(
+                command=command,
+                workspace=cwd,
+                cwd=cwd,
+                timeout=timeout,
+                max_output_bytes=self._max_output_bytes,
+                action=action,
+            )
+        )
         if result.action != action:
             result = dataclasses.replace(result, action=action)
-        return result
+        return self._record_evidence(command, result, context)
 
 
 def _load_json(path: Path) -> dict[str, Any]:

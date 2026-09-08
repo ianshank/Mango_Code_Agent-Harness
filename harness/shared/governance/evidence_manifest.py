@@ -44,6 +44,7 @@ class EvidenceBuilder:
             "timestamp": time.time(),
             "policies": [],
             "actions": [],
+            "executions": [],
             "synthesis_results": [],
         }
     )
@@ -85,6 +86,14 @@ class EvidenceBuilder:
             }
         )
 
+    def add_execution_evidence(self, entry: dict[str, Any]) -> None:
+        """Record a digest-bearing governed execution (R-AEI-4, R-AEI-6).
+
+        Distinct from ``add_action``, which the control-plane publisher uses for
+        tool-name / arguments-hash rows that do not carry INV-13 digests.
+        """
+        self._manifest.setdefault("executions", []).append(dict(entry))
+
     def add_synthesis_result(self, run_id: str, is_accepted: bool, evaluation_score: float) -> None:
         """Record the outcome of a synthesis generation run."""
         self._manifest["synthesis_results"].append(
@@ -110,9 +119,21 @@ class EvidenceBuilder:
         key = self._resolve_key()
         data["_signature"] = hmac.new(key, content_bytes, hashlib.sha256).hexdigest()
         logger.debug(
-            "Evidence manifest exported: %d policies, %d actions, %d synthesis results",
+            "Evidence manifest exported: %d policies, %d actions, %d executions, %d synthesis results",
             len(self._manifest.get("policies", [])),
             len(self._manifest.get("actions", [])),
+            len(self._manifest.get("executions", [])),
             len(self._manifest.get("synthesis_results", [])),
         )
         return data
+
+
+def verify_manifest(manifest: dict[str, Any], signing_key: str) -> bool:
+    """Return True when ``manifest``'s HMAC matches ``signing_key`` (R-AEI-4)."""
+    signature = manifest.get("_signature")
+    if not isinstance(signature, str) or not signature:
+        return False
+    payload = {key: value for key, value in manifest.items() if key != "_signature"}
+    content_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+    expected = hmac.new(signing_key.encode("utf-8"), content_bytes, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)

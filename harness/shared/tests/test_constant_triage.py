@@ -116,6 +116,11 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.debug_dump", "MIN_ENV_CREDENTIAL_LENGTH", decision="DEC-039"),
     Row("harness.shared.tool_dispatch", "DEFAULT_HYPOTHESIS_CONFIDENCE", decision="DEC-039"),
     Row("harness.shared.agent_prompts", "TASK_LOG_PREVIEW_CHARS", decision="DEC-039"),
+    Row(
+        "harness.shared.orchestrator.loop",
+        "MIN_MESSAGES_BEFORE_FALLBACK",
+        decision="DEC-068",
+    ),
 )
 
 

@@ -203,7 +203,9 @@ jobs:
             > "$RUNNER_TEMP/pr.json"
           python -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1]))["body"] or "")' \
             "$RUNNER_TEMP/pr.json" > "$RUNNER_TEMP/pr-body.md"
-          make attestation-check FILE="$RUNNER_TEMP/pr-body.md"
+          HEAD_SHA=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["head"]["sha"])' \
+            "$RUNNER_TEMP/pr.json")
+          make attestation-check FILE="$RUNNER_TEMP/pr-body.md" HEAD_SHA="$HEAD_SHA"
 
       # Regression/AQA lives under harness/shared/tests/regression/ and is
       # already collected by `make ci` via coverage-python's SHARED_TESTS path

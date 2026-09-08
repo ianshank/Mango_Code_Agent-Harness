@@ -1,0 +1,136 @@
+"""INV-13 step 3: evidence entries on the broker path (R-AEI-4..7 / AC-5..AC-8)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from harness.shared.governance.broker import ExecutionBroker
+from harness.shared.governance.evidence_manifest import EVIDENCE_KEY_ENV, EvidenceBuilder, verify_manifest
+from harness.shared.governance.evidence_record import fold_enforcement_baseline
+from harness.shared.governance.verdict import BROKER_BLOCKED, VERIFIED, derive_verdict
+from harness.shared.governance.verification import VerificationRunner
+from harness.shared.tests.test_governance_broker import IMPLEMENTER, RecordingBackend
+
+pytestmark = pytest.mark.governance
+
+_KEY = "test-signing-key-32-bytes-long!!"
+_POLICY_SENTINEL = "POLICY_SENTINEL"
+_SOURCE_MAP = {"sentinel.py": "SOURCE_SENTINEL"}
+_BACKEND_SENTINEL = "BACKEND_SENTINEL"
+_VERSION_SENTINEL = "VERSION_SENTINEL"
+
+
+def _sink(tmp_path: Path) -> Path:
+    """A path outside the agent workspace and outside protected_paths (R-AEI-5)."""
+    return tmp_path / "off-workspace" / "evidence.jsonl"
+
+
+def test_evidence_entry_digests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """AC-5: monkeypatched digest sources appear verbatim; a recompute cannot satisfy."""
+    monkeypatch.setattr(
+        "harness.shared.governance.evidence_record.policy_digest",
+        lambda _raw: _POLICY_SENTINEL,
+    )
+    monkeypatch.setattr(
+        "harness.shared.governance.evidence_record.backend_capability_record",
+        lambda _backend: {"name": _BACKEND_SENTINEL, "version": _VERSION_SENTINEL},
+    )
+    monkeypatch.setattr(
+        "harness.shared.governance.enforcement_digest.enforcement_digests",
+        lambda *_a, **_k: dict(_SOURCE_MAP),
+    )
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=_sink(tmp_path))
+    broker.set_enforcement_baseline(dict(_SOURCE_MAP))
+    result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "SUCCESS"
+    assert broker.evidence_entries, "governed execution produced no evidence entry"
+    entry = broker.evidence_entries[0]
+    assert entry["policy_digest"] == _POLICY_SENTINEL
+    assert entry["backend_name"] == _BACKEND_SENTINEL
+    assert entry["backend_version"] == _VERSION_SENTINEL
+    assert entry["source_digest"] == fold_enforcement_baseline(_SOURCE_MAP)
+
+
+def test_baseline_cited_not_recomputed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """AC-6: execute_command cites the cached baseline and does not walk again."""
+    walks: list[Path] = []
+
+    def counting_digests(workspace: Path, policy_path: Path | None = None) -> dict[str, str]:
+        walks.append(workspace)
+        return dict(_SOURCE_MAP)
+
+    monkeypatch.setattr("harness.shared.governance.enforcement_digest.enforcement_digests", counting_digests)
+    monkeypatch.setattr("harness.shared.governance.verification.enforcement_digests", counting_digests)
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=_sink(tmp_path))
+    broker.set_enforcement_baseline(dict(_SOURCE_MAP))
+    before = len(walks)
+    broker.execute_command("echo hi", IMPLEMENTER)
+    broker.execute_command("echo hi", IMPLEMENTER)
+    assert len(walks) == before
+    assert len(broker.evidence_entries) == 2
+    expected = fold_enforcement_baseline(_SOURCE_MAP)
+    assert broker.evidence_entries[0]["source_digest"] == expected
+    assert broker.evidence_entries[1]["source_digest"] == expected
+
+
+def test_keyless_broker_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-7: keyless evidence-enabled broker blocks before spawn, naming the env var."""
+    monkeypatch.delenv(EVIDENCE_KEY_ENV, raising=False)
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, evidence_enabled=True)
+    result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == BROKER_BLOCKED
+    assert EVIDENCE_KEY_ENV in (result.reason or "")
+    assert backend.calls == [], "keyless refusal must happen before spawn, not at export()"
+
+
+def test_evidence_manifest_verifies(tmp_path: Path) -> None:
+    """AC-7: an exported digest-bearing manifest verifies under HMAC."""
+    builder = EvidenceBuilder(project_root=tmp_path, signing_key=_KEY)
+    builder.add_execution_evidence(
+        {
+            "policy_digest": "abc",
+            "source_digest": "def",
+            "backend_name": "process",
+            "backend_version": "1.0.0",
+            "test_digest": "ghi",
+        }
+    )
+    manifest = builder.export()
+    assert verify_manifest(manifest, _KEY)
+    assert not verify_manifest(manifest, "wrong-key")
+
+
+def test_verification_with_evidence_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-8: real broker, evidence on, sink outside workspace → VERIFIED, bounded entries."""
+    from harness.shared.governance import verification as verification_mod
+
+    monkeypatch.setattr(verification_mod.shutil, "which", lambda _name: "/usr/bin/make")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "Makefile").write_text("test-python:\n\ttrue\n", encoding="utf-8")
+    sink = tmp_path / "evidence.jsonl"
+    backend = RecordingBackend(stdout="true\n")
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=sink)
+    runner = VerificationRunner(broker, "test-eval", timeout=5)
+    runner.snapshot_enforcement(workspace)
+    broker.set_enforcement_baseline(runner.baseline or {})
+    check = runner.run(workspace)
+    verdict = derive_verdict(check)
+    assert verdict.status == VERIFIED, check.reason
+    assert broker.evidence_entries, "evidence write must not trip enforcement_tampered"
+    from harness.shared.governance.evidence_record import evidence_max_entries
+
+    cap = evidence_max_entries()
+    assert cap is not None
+    assert 1 <= len(broker.evidence_entries) <= cap
+    assert sink.is_file()
+    line = sink.read_text(encoding="utf-8").splitlines()[0]
+    assert verify_manifest(json.loads(line), _KEY)
+    rel = sink.relative_to(tmp_path).as_posix()
+    assert not rel.startswith("workspace/"), "sink must lie outside the agent workspace"

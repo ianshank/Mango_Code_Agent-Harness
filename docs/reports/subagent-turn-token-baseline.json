@@ -1,0 +1,31 @@
+{
+  "title": "Subagent-turn token and tool-call baseline",
+  "instrumentation": "harness-instrumented stub-model ExecutionLoop via mock complete_chat; not a live Nemotron run. Recorded so AC-GEA-8 can gate a code-property graph on a real number rather than the imported 10x benchmark.",
+  "recorded_at": "2026-09-08",
+  "turns": [
+    {
+      "role": "planner",
+      "iteration": 0,
+      "tokens": 1284,
+      "prompt_tokens": 1102,
+      "completion_tokens": 182,
+      "tool_calls": 1
+    },
+    {
+      "role": "nemotron-reasoner",
+      "iteration": 0,
+      "tokens": 2416,
+      "prompt_tokens": 1988,
+      "completion_tokens": 428,
+      "tool_calls": 4
+    },
+    {
+      "role": "verifier",
+      "iteration": 0,
+      "tokens": 972,
+      "prompt_tokens": 840,
+      "completion_tokens": 132,
+      "tool_calls": 2
+    }
+  ]
+}

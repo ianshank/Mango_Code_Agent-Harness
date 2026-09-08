@@ -127,6 +127,15 @@ PARTIALLY_ENFORCED = {
         "attempt it does not exist (see INV-11/INV-12). The clause is currently true "
         "only for want of a mechanism to violate it, which is not the same as tested."
     ),
+    "INV-13": (
+        "COVERED: four of five digests on the broker evidence path -- policy, source "
+        "(digest-of-digests of the loop-start enforcement baseline), tool-version "
+        "(backend name and version), and test (resolved verification command plus "
+        "node ids), asserted by test_evidence_record.py AC-5..AC-8. NOT COVERED: the "
+        "sandbox digest; ProcessBackend contains but does not isolate, so no result "
+        "claims the fifth digest until an isolation backend lands or C-AEI-6 records "
+        "that no available primitive enforces both filesystem and network isolation."
+    ),
 }
 
 #: Invariants nothing enforces, each with a reason. The contract line for each
@@ -152,14 +161,6 @@ DORMANT_INVARIANTS: dict[str, str] = {
         "or BLOCKED. There is no repair loop to bound. max_repair_cycles is asserted "
         "to be a bounded positive integer, which checks the policy value's shape and "
         "not any loop's behaviour. Lands with openspec Milestone 5."
-    ),
-    "INV-13": (
-        "Requires a verified result to carry policy, test, sandbox, source and "
-        "tool-version digests. The contract already states this is not currently "
-        "satisfiable: ProcessBackend contains but does not isolate -- it confines "
-        "neither the filesystem nor the network -- so there is no sandbox digest to "
-        "record, and no result claims INV-13 (DEC-010). Isolation is a later "
-        "capability profile that cannot be exercised on this repository's runners."
     ),
     "INV-14": (
         "Requires exportable traces to be redacted and marked approved training "

@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-07 · `claude/graph-engineering-mango-agent-1ic553` (PR #120) @ `dc42d4c`, DEC-065 landed at `7ff4cd7` — graph-engineering adoption: four derived checks, none of them a new `ci_required_target`; the traceability gate re-scoped from 6 to 412 requirement IDs behind a policy floor and a ratchet, and `make validate` now runs it per-stack **and** repository-scoped so the required check reads the real corpus; `.governance/**` reclassified out of the dormant protected-path set as DEC-056 predicted → what it bounded rather than fixed is **NS-39** · PR #115 merged `origin/main` (#116 DEC-059 NS-37/NS-38); Windows AF_UNIX skip renumbered to DEC-063 · H4 context-window budget moved out of parked (PR #110) · Origin Sync with hypothesis surfacing and **DEC-060** rollback retirement completed (this line said DEC-064; DEC-064 is the Python 3.10 floor — the NS-17/NS-21 rollback pins were retired under DEC-060) · prior peer rewrite against `main` @ `58490c1` (PRs #89-#95 / #93 DECs) · audit in [`docs/reports/2026-STANDARDS-AUDIT.md`](docs/reports/2026-STANDARDS-AUDIT.md) · program plan in [`docs/specs/2026-standards-remediation-plan.md`](docs/specs/2026-standards-remediation-plan.md) · peer review method in [`docs/reports/ROADMAP-PEER-REVIEW.md`](docs/reports/ROADMAP-PEER-REVIEW.md) · deep peer review of agent-memory integrity against `main` @ `6ce45d1` in [`docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md`](docs/reports/2026-DEEP-PEER-REVIEW-MEMORY-INTEGRITY.md) → NS-37 · code generation writing tool spec → NS-38
+**Last reviewed:** 2026-09-08 · post-PR #122 (`d0b6c5b`) — INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, NS-39 ratchet/citations/AC-GEA-8. PRs #121–#123 and DEC-067 are on `main`. Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. `policy_loader.py` is split (`policy_io.py` / `policy_defaults.py`). CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9). Remaining INV-13 work is capability probe + isolation backend (spec steps 6–9), not a new NEXT_STEPS row.
 
 ---
 
@@ -229,40 +229,6 @@ mainline KEEP polish.
 standalone KEEP investment ahead of the move.
 
 
-### NS-18 · Connect the reasoner persona to what the bridge exposes *(spec required)*
-
-**Why now.** `.mango/agents/nemotron-reasoner.md` names Claude Code tools
-(`Bash`, `Read`, …) and is fed verbatim to Nemotron; only `run_command` matches
-the tool bridge (audit M2). Phase B's MCP slice already serves one registry to
-both transports (R-SR-15).
-
-**Evidence.** `.mango/agents/nemotron-reasoner.md`;
-`harness/shared/orchestrator/loop.py`; `harness/shared/tool_schemas.py`;
-`docs/specs/reasoner-bridge-tool-parity.md`.
-
-**Done when.** Runtime system prompt tool paragraph is generated from
-`NEMOTRON_TOOLS`; prompt sha logged on `run_id` events; tests fail when the
-persona names a tool the bridge does not expose. Protected path; attestation.
-
-**Depends on.** Nothing (Phase B MCP parity shipped).
-
-**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 3,
-implementing `reasoner-bridge-tool-parity.md`'s existing scaffold in place.
-
-**Re-measured 2026-09-07, and the drift now costs more than vocabulary.** The
-persona body still enumerates four bridge tools and omits `generate_code`, which
-NS-38 added to `NEMOTRON_TOOLS` on #116, while instructing "Always write new
-files using `write_file`". Since DEC-065 that instruction names the one write
-door that does **not** refuse Python naming a `synthesis.prohibited_imports`
-symbol: `generate_code` carries the pre-write refusal, `write_file` is unchanged
-by design (C-CGT-2). The persona therefore steers new-file writes away from the
-checked door by default. Do **not** patch the list by hand — R-RBT-2 says the
-tool inventory must stop living in `.mango/agents/` markdown at all, and a
-hand-edit to a protected path buys an attestation for a paragraph this item
-deletes. Fix it by landing R-RBT-1/R-RBT-2 so the paragraph is generated from
-`tools_for_role(...)`, and add the write-door refusal as an *operating rule*
-(R-RBT-2 keeps those in the persona) in the same change.
-
 ### NS-35 · A mutation score instead of mutation prose *(spec required)*
 
 **Why now.** `gate-mutation-proof` is a by-hand loop whose CHANGELOG claims are
@@ -275,123 +241,37 @@ unverifiable (audit H9 / DEC-024).
 
 **Depends on.** NS-6.
 
-### NS-36 · Phase D of the plan: CI truthfulness *(spec exists)*
+### NS-36 · Phase D of the plan: CI truthfulness — `required_signatures` only *(spec exists)*
 
-**Why now.** `infra-reviewed` survives later pushes (audit H3); Dockerfile runs
-as root on an un-digested base (M17); Dependabot lacks `docker` / cooldown
-(M18).
+**Why now.** Attestation SHA binding, Dockerfile digest+USER, Dependabot
+`cooldown`, and the scheduled `/rules/branches/main` probe landed after #122.
+The remaining half of R-SR-24 is `required_signatures` on `main`, which needs
+NS-1 (the ruleset is not imported). Dependabot already has the `docker`
+ecosystem; the stale "lacks docker" wording is retired.
 
-**Evidence.** workflows; `Dockerfile`; `.github/dependabot.yml`.
+**Evidence.** `.github/rulesets/main.json` still has no `required_signatures`.
 
-**Done when.** R-SR-24 and R-SR-25 landed with AC-24 and AC-25; a PR with a
-stale SHA in its attestation table fails `build-full`.
+**Done when.** NS-1 imports the ruleset with `required_signatures` (owner).
 
-**Depends on.** NS-1 only for the `required_signatures` half of R-SR-24; the
-attestation-SHA-binding and Dockerfile/Dependabot-cooldown halves depend on
-nothing.
+**Depends on.** NS-1.
 
-**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4, minus
-`required_signatures` (that clause stays gated on NS-1).
+**Scheduled.** `docs/specs/reflection-hardening-increment.md` Step 4 remainder.
 
-### NS-39 · Close the four things DEC-065 bounded rather than fixed *(spec exists)*
+### NS-39 · Keep lowering the traceability ratchet *(spec exists)*
 
-**Why now.** DEC-065 landed four derived checks and left four residuals **by
-name**, so they are visible now rather than discovered by a later reader who
-over-trusts a green run.
+**Why now.** AC-GEA-8 (baseline + `test_code_graph_is_gated_on_a_recorded_baseline`)
+and the generate-code / size-budget residuals closed after #122. The gate is
+still green on a ratchet, not on a fully cited corpus. `R-GEA-5` stays uncited
+on purpose. Lower `traceability.max_uncited_contract_requirement_ids` in the
+same policy edit as the citations that earned it; never raise it. Live count
+is what `make validate` prints — do not restate it here.
 
-1. *The traceability gate is green on a ratchet, not on a traced corpus.*
-   Re-scoping it from 6 to 412 requirement IDs did not produce a green gate, it
-   produced a backlog: **223** contract-spec IDs missing an implementation
-   citation, a test citation, or both (222 as the corpus stood, plus R-GEA-5,
-   which is deliberately unimplemented and so has nothing to cite). The number
-   lives in `traceability.max_uncited_contract_requirement_ids` and may only be
-   lowered — a bound, not a fix.
-2. *`AC-GEA-8` is the one unticked criterion in the spec.* R-GEA-5 requires a
-   recorded tokens-and-tool-calls-per-subagent-turn baseline under `docs/reports/`
-   **before** any code-property graph is built, with the build decision comparing
-   that baseline against a policy threshold rather than the imported 10× benchmark
-   measured on somebody else's corpus (D-3). Nothing records the number, so the
-   argument that would settle it cannot be had — adopting first and measuring
-   later is the DEC-024 shape.
-3. *`execute_generate_code`'s residual bypass is **closed**; this item is
-   retained only to record it.* The check once ran on a tree that existed only
-   when `validate_syntax=True` **and** the model-supplied `language` resolved to
-   Python, so either argument let the agent switch it off. Python-ness is now
-   derived from the resolved target suffix and the check runs on every Python
-   write regardless of the flag (`tool_executors.execute_generate_code`, PR #120).
-   Nothing remains to do here. The reasoning that first accepted it — that closing
-   it would widen a protected-path diff — is worth keeping in view: a diff cost is
-   not an argument about a security property, and it had been allowed to settle
-   one.
+**Done when.** Headroom is zero after each citation batch, and the accepted
+ceiling in `test_traceability_scope.ACCEPTED_RATCHET_CEILING` moves with the
+policy (C-GEA-4).
 
-4. *The one-line-of-slack seam is **closed**; this item is retained only to
-   record what the wait cost.* Making the approval-flag scan sound took
-   `authority_call_sites.py` from 389 to 499 of `limits.size_budget_lines` = 500,
-   paid for by folding four single-caller helpers rather than by decomposing.
-   This item originally declined to split it, on the grounds that a file inside
-   the policy threshold is not a violation and splitting on personal taste
-   substitutes private judgement for `governance-policy.json`. That reasoning
-   was right and the outcome argues against waiting anyway: the **next** change
-   to each of these files was a security fix, and it arrived with no room. A
-   parallel agent's patch for the same findings is behaviourally correct and
-   cannot land, because it breached the budget on three files to make room for
-   itself. Split on the predicted seam in PR #120 — analysis versus reporting,
-   with the line counts below as they stood at that split rather than as a
-   current-state claim, which `make validate` reports live:
-   `authority_call_sites.py` 499 → **355** + `authority_call_analysis.py` 415;
-   `code_safety.py` → **222** + `code_symbols.py` 440; `graph_topology.py` →
-   **349** + `graph_topology_source.py` 306; `test_authority_graph.py` 699 →
-   **397** + `test_authority_call_sites.py` 537. Docstring content an earlier
-   squeeze had folded away is restored. Nothing remains to do here. The lesson
-   for the next bound: headroom is part of what a module owes the next change,
-   and a budget measured only at the moment of breach is measured too late.
+**Depends on.** Nothing.
 
-**Evidence.** `python3 harness/shared/governance/check_traceability.py --workspace .`
-prints the count, the ratchet and the headroom in one line;
-`docs/decisions/DEC-065.md` §"Residual, named rather than discovered later" and
-§"Not closed here"; `docs/specs/graph-engineering-adoption.md` AC-GEA-8 unticked;
-no baseline file under `docs/reports/`; `harness/shared/tool_executors.py`
-`execute_generate_code`'s suffix-derived `is_python` gate (the residual item 3
-records as closed); `make validate`'s Size Budget line, which names the closest
-file and its remaining slack on every run — read it there rather than from a
-number written down here, because the snapshot this line used to carry went
-stale the moment item 4's split landed and a reviewer had no way to tell.
-
-**Done when.**
-
-- The ratchet is **lowered** in a reviewed policy edit with the citations that
-  earned each reduction attached. `test_traceability_gaps_are_cited_or_recorded`
-  fails when the backlog exceeds the ratchet, and
-  `test_the_repository_run_reports_the_count_and_the_headroom` names the lower
-  value on every green run — so an allowance that has stopped being needed is
-  reported without waiting for a red run · stage `make test-python` / `make validate`.
-- A baseline under `docs/reports/` names measured tokens and tool calls for at
-  least three recorded subagent turns, and AC-GEA-8's named test
-  (`test_code_graph_is_gated_on_a_recorded_baseline`, which does **not** exist
-  yet — the criterion is unticked, so `test_spec_selectors_collect.py` does not
-  judge it) is written and fails a tree holding a code-property-graph module with
-  no such baseline · stage `make test-python`.
-- ~~Either `execute_generate_code` decides the prohibited-symbol question on a
-  path no model-supplied argument can skip, or a decision record states why the
-  `validate_syntax=False` path is accepted.~~ **Done on PR #120.** The first
-  branch was taken: `is_python` derives from the resolved target suffix and the
-  check runs regardless of `validate_syntax`, with
-  `test_code_generation_tool.py::TestNeitherToolArgumentTurnsTheCheckOff` red
-  against the old behaviour across all three policy shapes. Only the first two
-  bullets of this item remain open.
-- ~~`authority_call_sites.py` is split on the analysis/reporting seam, with the
-  explanatory docstrings the compaction folded restored rather than
-  re-compacted, and both halves plus their tests carry real headroom.~~
-  **Done on PR #120**, along with `code_safety.py` and `graph_topology.py`,
-  which needed the same room for the same reason · stage `make validate` (Size
-  Budget names the closest file and its slack on every run, so the number is
-  reported without waiting for a red run). Only the first two bullets of this
-  item remain open.
-
-**Depends on.** Nothing, and **not** NS-2: none of the four touches Phase E or
-the LangGraph park. DEC-065 shipped topology verification as a plain test rather
-than a gate precisely so the orphan-reviewer defect stays watched while Phase E
-waits on the credential rotation.
 
 ### NS-40 · The bot-push incident is evidence for NS-1, not a separate item *(no spec; folded)*
 
@@ -452,7 +332,7 @@ Pointer only: status is the remediation plan's boxes, read there, not here.
 `docs/specs/code-quality-tech-debt-plan.md` is closed at revision 2.
 Remediation plan is revision 3 (Phase B Done; R-SR-5 / AC-5 closed; Phase E
 gated on R-SR-2). `docs/specs/reflection-hardening-increment.md` is a ledger
-increment against the remediation plan's still-open items (NS-6, NS-18, half
+increment against the remediation plan's still-open items (NS-6, half
 of NS-36) — a spec, not a fifth program plan; it does not restate or
 re-litigate boxes above, only schedules what a re-measurement against
 `33f21044` still found true.
@@ -467,7 +347,6 @@ re-litigate boxes above, only schedules what a re-measurement against
 | **NS-19 · NIM multi-model routing / prompt-cache cost** | No spec; `complete_chat` has no provider boundary (`stream: False` hard-coded, `usage` discarded). Phase F boundary first. |
 | **HITL interrupts** | Needs an explicit non-graph design under DEC-053 PARK (in-graph interrupts stay with a revival DEC). Context-window budget (audit H4) is no longer parked — see §6 / PR #110. |
 | **LATS end-to-end wiring** | `synthesis.lats_enabled` is `false`; INV-15 needs ablation gate (DEC-027). Moves with DEC-053 park / revival. |
-| **`AC-CE-1` ProcessBackend capability profiles** | OS isolation is the permanent B4 fix; Phase B digest is containment only. |
 | **Eval harness / nightly live smoke** | Scoped `NVIDIA_API_KEY` in scheduled workflow (owner) + fixtures after openspec fold. |
 
 ---
@@ -488,6 +367,14 @@ re-litigate boxes above, only schedules what a re-measurement against
 ---
 
 ## 6. Delivered, and removed from the open list
+
+**Closed 2026-09-08 (post-#122: INV-13 evidence + protocol, NS-18):**
+
+| Was | Now |
+|---|---|
+| **NS-18 · Connect the reasoner persona to what the bridge exposes** | **Landed.** `format_tools_paragraph` is generated from `tools_for_role`; YAML frontmatter is stripped before the Nemotron prompt; `model_call` logs `prompt_sha`; `generate_code` is the write door named in the persona. Spec `docs/specs/reasoner-bridge-tool-parity.md` AC-1…AC-5. DEC-068 names `MIN_MESSAGES_BEFORE_FALLBACK`. |
+| **INV-13 steps 3–5** | **Landed.** Broker-injected signing key, digest-of-digests over the loop baseline, sink outside workspace/`protected_paths`; `ExecutionBackend` protocol + `ProcessBackend` adapter; `policy_loader` split; `execution.routing` `brokered`/`refuse`. Sandbox digest still unattestable (steps 6–9). |
+| **`AC-CE-1` ProcessBackend capability profiles** | **Retired.** Isolation spec steps 6–9 supersede the parked row. |
 
 **Closed 2026-09-07 (DEC-059 / agent-memory integrity NS-37 & code generation writing tool NS-38):**
 
