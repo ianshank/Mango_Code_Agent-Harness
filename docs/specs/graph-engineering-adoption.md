@@ -348,7 +348,7 @@ conflation D-5 had already resolved.**
 - [x] AC-GEA-7: `make lock-check` recompiles `requirements-lock.txt` with no diff after this
       change lands, and `python -m harness.shared.check_py_compat` exits 0 for every new module
       — verified by `make lock-check` · stage: `make ci` (C-GEA-1)
-- [ ] AC-GEA-8: `docs/reports/` contains a baseline naming measured tokens and tool calls per
+- [x] AC-GEA-8: `docs/reports/` contains a baseline naming measured tokens and tool calls per
       subagent turn for at least three recorded turns, and no module implementing a code-property
       graph exists in the tree until that file does — verified by
       `pytest -k test_code_graph_is_gated_on_a_recorded_baseline` · stage: `make test-python`

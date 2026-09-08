@@ -303,13 +303,13 @@ secrets-allowlist-check: ## Every .gitleaks.toml allowlist entry must still supp
 # resolved by the script from the remote's published default when unset, so an
 # adopter fork whose default branch is not `main` needs no edit here.
 .PHONY: attestation
-attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... to override)
-	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),)
+attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... HEAD_SHA=... to override)
+	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),) $(if $(HEAD_SHA),--head-sha $(HEAD_SHA),)
 
 .PHONY: attestation-check
 attestation-check: ## Verify a written attestation table against the real protected set (FILE=pr-body.md)
 	@test -n "$(FILE)" || { echo 'usage: make attestation-check FILE=<pr-body.md>'; exit 1; }
-	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),)
+	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),) $(if $(HEAD_SHA),--head-sha $(HEAD_SHA),)
 
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate

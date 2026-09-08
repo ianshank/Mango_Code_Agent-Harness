@@ -269,7 +269,14 @@ class TestPolicyResolutionLogging:
 
     @pytest.mark.parametrize(
         "accessor",
-        ["orchestrator_defaults", "nemotron_defaults", "langgraph_defaults", "coverage_defaults"],
+        [
+            "orchestrator_defaults",
+            "nemotron_defaults",
+            "langgraph_defaults",
+            "coverage_defaults",
+            "evidence_defaults",
+            "execution_routing",
+        ],
     )
     def test_every_block_accessor_records_its_resolution(self, accessor: str, caplog) -> None:
         """One instrumented accessor and three silent ones is the drift to prevent."""

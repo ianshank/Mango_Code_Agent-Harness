@@ -31,6 +31,9 @@ LAYERS = {
     # One step above the vocabulary since R-TDH-14: it compares against
     # `BROKER_BLOCKED` instead of restating the string, and imports nothing else.
     "harness.shared.tool_result_format": 1,
+    "harness.shared.governance.evidence_manifest": 1,
+    "harness.shared.governance.execution_backend": 1,
+    "harness.shared.governance.evidence_record": 2,
     "harness.shared.governance.verification": 2,
     "harness.shared.mango_mas_orchestrator": 4,
     "harness.api_server.main": 5,
@@ -119,3 +122,16 @@ class TestLayering:
                     f"{source} (layer {LAYERS[source]}) imports {target} (layer {LAYERS[target]}); "
                     "an edge that does not go downward is a cycle that has not closed yet"
                 )
+
+    def test_evidence_and_backend_modules_do_not_import_broker(self) -> None:
+        """C-AEI-5: evidence_manifest / execution_backend must not import broker."""
+        graph = _graph()
+        forbidden = "harness.shared.governance.broker"
+        for name in (
+            "harness.shared.governance.evidence_manifest",
+            "harness.shared.governance.evidence_record",
+            "harness.shared.governance.execution_backend",
+        ):
+            if name in graph:
+                assert name in LAYERS, f"{name} must be declared in LAYERS"
+                assert forbidden not in graph[name], f"{name} must not import broker"

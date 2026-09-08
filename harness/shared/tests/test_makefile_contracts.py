@@ -515,3 +515,12 @@ class TestAuditToolIsInstalledFromTheHashedLock:
         recipe = _targets().get("audit-python", "")
         assert "$(PIP_AUDIT)" in recipe
         assert re.search(r"^PIP_AUDIT\s*\?=\s*\$\(PYTHON\) -m pip_audit", _text(), re.M)
+
+
+def test_stack_audit_install_retries_go_proxy_errors() -> None:
+    """A GOPROXY stream error must not fail the required dependency-audit job."""
+    helper = "go_install_retry.sh"
+    for path in (NODE_MAKEFILE, JVM_MAKEFILE):
+        text = path.read_text(encoding="utf-8")
+        assert helper in text, f"{path.name} audit-install no longer retries go install"
+        assert "go install github.com/google/osv-scanner" not in text

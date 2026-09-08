@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import uuid
@@ -16,6 +17,8 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     TASK_LOG_PREVIEW_CHARS,
     VERIFIER_PROMPT_TEMPLATE,
+    compose_system_prompt,
+    strip_yaml_frontmatter,
 )
 from harness.shared.context_policy import ContextPolicyStats, apply_context_policy
 from harness.shared.debug_dump import write_dump
@@ -33,6 +36,10 @@ from harness.shared.tool_budget import ToolBudget
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
+
+#: Fallback to the last tool result only after this many messages (DEC-068).
+#: A true constant of the ReAct transcript shape, not a policy budget.
+MIN_MESSAGES_BEFORE_FALLBACK = 3
 
 
 class ExecutionLoop:
@@ -114,13 +121,13 @@ class ExecutionLoop:
             repo_agents_dir = Path(__file__).resolve().parent.parent.parent.parent / ".mango" / "agents"
             fallback_file = repo_agents_dir / f"{agent_name}.md"
             if fallback_file.exists():
-                return fallback_file.read_text(encoding="utf-8")
+                return strip_yaml_frontmatter(fallback_file.read_text(encoding="utf-8"))
             raise FileNotFoundError(f"Agent definition not found: {agent_file}")
-        return agent_file.read_text(encoding="utf-8")
+        return strip_yaml_frontmatter(agent_file.read_text(encoding="utf-8"))
 
     def _finalize_response(self, messages: list[dict[str, Any]], content: Any) -> str:
         final_content = str(content or "")
-        if not final_content.strip() and len(messages) > 3:
+        if not final_content.strip() and len(messages) > MIN_MESSAGES_BEFORE_FALLBACK:
             last_msg = messages[-2]
             if last_msg.get("role") == "tool":
                 final_content = f"Completed via tool execution. Last tool result: {last_msg.get('content')}"
@@ -145,12 +152,14 @@ class ExecutionLoop:
         started: float,
         response: Any,
         error: BaseException | None = None,
+        prompt_sha: str | None = None,
     ) -> None:
         """One structured event per model round-trip, on success and on failure:
         who, which turn, how long, the outcome, and the token counts the
         response reports. Never the messages. A failed request emits the same
         event with ``outcome=error`` so error rate and latency stay correlatable
-        by ``run_id`` (Copilot review on PR #86)."""
+        by ``run_id`` (Copilot review on PR #86). ``prompt_sha`` is the SHA-256
+        of the exact system prompt bytes (R-RBT-4); the body is never logged."""
         usage = response.get("usage") if isinstance(response, dict) else None
         if not isinstance(usage, dict):
             usage = {}
@@ -170,6 +179,7 @@ class ExecutionLoop:
                 "error_type": type(error).__name__ if error is not None else None,
                 "prompt_tokens": usage.get("prompt_tokens"),
                 "completion_tokens": usage.get("completion_tokens"),
+                "prompt_sha": prompt_sha,
             },
         )
 
@@ -223,13 +233,15 @@ class ExecutionLoop:
         self.hook_runner.run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 
+        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
+        system_prompt = compose_system_prompt(self.load_agent_prompt(agent_name), active_tools)
+        prompt_sha = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.load_agent_prompt(agent_name)},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": task},
         ]
         self.conversation_history.extend(messages)
 
-        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
         turn_budget = budget if budget is not None else ToolBudget(self.max_tool_calls_per_task)
 
         for iteration in range(self.max_iterations):
@@ -259,10 +271,10 @@ class ExecutionLoop:
 
                 response = self.complete_chat_fn(**kwargs)
             except Exception as e:
-                self._log_model_call(run_id, agent_name, iteration, started, None, error=e)
+                self._log_model_call(run_id, agent_name, iteration, started, None, error=e, prompt_sha=prompt_sha)
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
-            self._log_model_call(run_id, agent_name, iteration, started, response)
+            self._log_model_call(run_id, agent_name, iteration, started, response, prompt_sha=prompt_sha)
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
@@ -348,6 +360,9 @@ class ExecutionLoop:
         budget = ToolBudget(self.max_tool_calls_per_task)
         logger.debug("loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit})
         self._record_enforcement_baseline()
+        baseline = self.verification.baseline
+        if isinstance(baseline, dict):
+            self.dispatcher.broker.set_enforcement_baseline(baseline)
         open_gaps = format_gaps_for_planner(
             workspace_dir=self.workspace_dir,
             policy_path=self.policy_path,
@@ -365,7 +380,7 @@ class ExecutionLoop:
                         api_key=self.api_key,
                         model=self.model,
                         api_timeout=self.api_timeout,
-                        planner_system_prompt=self.load_agent_prompt("planner"),
+                        planner_system_prompt=compose_system_prompt(self.load_agent_prompt("planner"), []),
                         planner_user_prompt=planner_prompt,
                         task=initial_task,
                         incumbent_plan=plan,

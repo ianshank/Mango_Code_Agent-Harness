@@ -131,3 +131,21 @@ NEMOTRON_TOOLS = [
         },
     },
 ] + META_TOOLS_SCHEMA
+
+
+def format_tools_paragraph(tools: list[dict]) -> str:
+    """Render the tool inventory from the schema list passed to ``complete_chat``.
+
+    Names are derived from ``tools``, never restated. R-RBT-1 / R-RBT-3.
+    """
+    names: list[str] = []
+    for spec in tools:
+        function = spec.get("function") if isinstance(spec, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if isinstance(name, str) and name:
+            names.append(name)
+    if not names:
+        return "No tools are available on this turn."
+    lines = ["Tools available on this turn (generated from the bridge registry, not from persona markdown):"]
+    lines.extend(f"- `{name}`" for name in names)
+    return "\n".join(lines)

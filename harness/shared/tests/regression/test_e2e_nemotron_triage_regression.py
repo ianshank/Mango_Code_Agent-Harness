@@ -69,13 +69,16 @@ class TestOrchestratorAgentPromptFallback:
 
         # Should cleanly resolve standard agent prompts via fallback
         planner_prompt = orchestrator.load_agent_prompt("planner")
-        assert "planner" in planner_prompt.lower()
+        assert "planning subagent" in planner_prompt.lower()
+        assert not planner_prompt.startswith("---")
 
         reasoner_prompt = orchestrator.load_agent_prompt("nemotron-reasoner")
         assert "nemotron" in reasoner_prompt.lower()
+        assert not reasoner_prompt.startswith("---")
 
         verifier_prompt = orchestrator.load_agent_prompt("verifier")
-        assert "verifier" in verifier_prompt.lower()
+        assert "verification subagent" in verifier_prompt.lower()
+        assert not verifier_prompt.startswith("---")
 
 
 class TestCommandBrokerDiscardStreamFiltering:

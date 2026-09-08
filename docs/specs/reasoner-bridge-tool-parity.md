@@ -1,10 +1,8 @@
 # Spec: reasoner-bridge-tool-parity
 
-**Status:** Scaffolded (not implemented). Contract for NS-18.
+**Status:** Implemented (this change). Contract for NS-18.
 
-> Scaffolded for NS-18. Land on `main` via parent/`make spec NAME=reasoner-bridge-tool-parity`
-> norms if required. Implementation MUST NOT open until this spec is the contract
-> the `verifier` role checks against.
+> Implemented for NS-18. The verifier checks this spec's acceptance criteria.
 
 ## Problem statement
 
@@ -58,30 +56,30 @@ Evidence (tip after #99, `b1722713...`):
 
 ## Acceptance criteria
 
-- [ ] AC-1: For `nemotron-reasoner`, the composed system prompt's tool paragraph
+- [x] AC-1: For `nemotron-reasoner`, the composed system prompt's tool paragraph
       names exactly the function names in
       `tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)` (order may follow
       schema order) and contains none of `Bash`, `Read`, `Grep`, `Glob` as tool
       identifiers - verified by
       `pytest -k test_reasoner_system_prompt_tools_match_bridge`
       · stage: `make test-python` (R-RBT-1, C-RBT-3)
-- [ ] AC-2: Mutating a temporary persona fixture to instruct use of a
+- [x] AC-2: Mutating a temporary persona fixture to instruct use of a
       non-registry tool name (e.g. `Bash`) causes
       `pytest -k test_persona_tools_subset_of_nemotron_tools` to fail; restoring
       registry-only names passes - verified by that test's positive and negative
       cases · stage: `make test-python` (R-RBT-5)
-- [ ] AC-3: A mocked `execute_agent` / `_log_model_call` path records
+- [x] AC-3: A mocked `execute_agent` / `_log_model_call` path records
       `prompt_sha` equal to `hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()`
       on the `model_call` extra dict keyed by the same `run_id` - verified by
       `pytest -k test_model_call_logs_prompt_sha`
       · stage: `make test-python` (R-RBT-4)
-- [ ] AC-4: `git grep -nE 'tools: *(Bash|Read|Grep|Glob)' -- .mango/agents/`
+- [x] AC-4: `git grep -nE 'tools: *(Bash|Read|Grep|Glob)' -- .mango/agents/`
       returns nothing **or** those matches appear only inside YAML frontmatter
       that the runtime strip path covers; instructional body paragraphs contain
       no such tokens - verified by AC-2's scanner plus a focused strip unit test
       `pytest -k test_load_agent_prompt_strips_frontmatter`
       · stage: `make test-python` (R-RBT-2, C-RBT-3)
-- [ ] AC-5: `REASONER_PROMPT_TEMPLATE` / `PLANNER_PROMPT_TEMPLATE` /
+- [x] AC-5: `REASONER_PROMPT_TEMPLATE` / `PLANNER_PROMPT_TEMPLATE` /
       `VERIFIER_PROMPT_TEMPLATE` do not embed a hard-coded inventory of bridge
       tool names; any necessary mention is generated from schemas or omitted in
       favour of the system tool paragraph - verified by

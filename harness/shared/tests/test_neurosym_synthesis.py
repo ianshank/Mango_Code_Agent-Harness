@@ -39,6 +39,12 @@ def test_inv15_lats_disabled_by_default(synthesis_policy: dict) -> None:
 
 
 @pytest.mark.neurosym
+def test_lats_disabled(synthesis_policy: dict) -> None:
+    """AC-18 alias: synthesis.lats_enabled stays false (C-AEI-4 / INV-15)."""
+    assert synthesis_policy.get("lats_enabled") is False
+
+
+@pytest.mark.neurosym
 def test_inv11_critique_schema_version(synthesis_policy: dict) -> None:
     """INV-11: Critique schema version must be pinned."""
     assert synthesis_policy.get("critique_schema_version") == "1.0"

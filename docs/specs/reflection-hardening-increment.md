@@ -338,7 +338,7 @@ success path.
       reading both test files); `NEXT_STEPS.md`'s check-name sentence stays in
       sync, verified by the unchanged `test_ci_gate_required_checks.py`
       · stage: `make ci` (R-RHI-1, C-RHI-1) — **done**, `docs/specs/python-floor-310.md`.
-- [ ] AC-2: `pytest harness/shared/tests -k test_reasoner_system_prompt_tools_match_bridge`
+- [x] AC-2: `pytest harness/shared/tests -k test_reasoner_system_prompt_tools_match_bridge`
       passes and asserts the composed system prompt names exactly
       `tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)`'s function names,
       containing none of `Bash`, `Read`, `Grep`, `Glob` (today: this test does
@@ -349,7 +349,7 @@ success path.
       registry-only name passes it; the same run asserts no role's effective
       tool set grew relative to `agent_authority.tools_for_role` today
       · stage: `make test-python` (R-RHI-2, R-RBT-1, R-RBT-2, R-RBT-5, C-RHI-2, C-RBT-1)
-- [ ] AC-3: A mocked `execute_agent` call records `prompt_sha` on the
+- [x] AC-3: A mocked `execute_agent` call records `prompt_sha` on the
       `model_call` extra dict equal to
       `hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()`, and the
       dict never contains the prompt text itself
@@ -358,19 +358,19 @@ success path.
       contains none of the frontmatter's raw tool names, only the
       registry-derived paragraph (rejection case for C-RBT-3)
       · stage: `make test-python` (R-RHI-2, R-RBT-3, R-RBT-4, C-RBT-3)
-- [ ] AC-4: `pytest harness/shared/tests/test_workflow_contracts.py -k attestation_sha`
+- [x] AC-4: `pytest harness/shared/tests/test_workflow_contracts.py -k attestation_sha`
       fails on a `tmp_path` PR body whose attestation table names a SHA that
       is not the current head (today: no such test exists — an attestation
       naming any SHA passes silently) and passes when the table's SHA matches
       · stage: `make ci` (R-RHI-3)
-- [ ] AC-5: `pytest harness/shared/tests/test_dockerfile_contract.py` fails on
+- [x] AC-5: `pytest harness/shared/tests/test_dockerfile_contract.py` fails on
       a `tmp_path` Dockerfile missing a `@sha256:` pin, missing `USER`,
       carrying `EXPOSE`, or invoking `tsx` in the runtime `CMD`, and passes on
       the tree (today: the module does not exist; the tree fails all four
       checks); `pytest harness/shared/tests/test_dependabot_contract.py -k cooldown`
       fails when the `docker` ecosystem entry lacks `cooldown` and passes on
       the tree once added · stage: `make ci` (R-RHI-4)
-- [ ] AC-6: `pytest harness/shared/tests/test_constant_triage.py -k messages_before_fallback`
+- [x] AC-6: `pytest harness/shared/tests/test_constant_triage.py -k messages_before_fallback`
       (or the equivalent name chosen at implementation) fails on a `tmp_path`
       module carrying the bare `3` untriaged and passes on the tree once named
       · stage: `make test-python` (R-RHI-5)

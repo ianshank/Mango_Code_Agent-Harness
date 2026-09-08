@@ -116,6 +116,11 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.debug_dump", "MIN_ENV_CREDENTIAL_LENGTH", decision="DEC-039"),
     Row("harness.shared.tool_dispatch", "DEFAULT_HYPOTHESIS_CONFIDENCE", decision="DEC-039"),
     Row("harness.shared.agent_prompts", "TASK_LOG_PREVIEW_CHARS", decision="DEC-039"),
+    Row(
+        "harness.shared.orchestrator.loop",
+        "MIN_MESSAGES_BEFORE_FALLBACK",
+        decision="DEC-068",
+    ),
 )
 
 
@@ -379,6 +384,13 @@ class TestTheInventoryIsComplete:
             assert (item.module, item.symbol) in discovered, (
                 f"{item.module}.{item.symbol} is excluded but no longer discovered; remove the entry"
             )
+
+
+def test_messages_before_fallback() -> None:
+    """R-RHI-5 / AC-6: the ReAct fallback floor is the named constant, not a bare 3."""
+    from harness.shared.orchestrator.loop import MIN_MESSAGES_BEFORE_FALLBACK
+
+    assert MIN_MESSAGES_BEFORE_FALLBACK == 3
 
 
 class TestCheckerSemantics:

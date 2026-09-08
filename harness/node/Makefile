@@ -49,7 +49,7 @@ audit: ## Dependency vulnerability scan
 	@test -f $(ROOT)/pnpm-lock.yaml || { echo 'pnpm-lock.yaml missing; refusing a vacuous audit'; exit 1; }
 	$(OSV) scan --lockfile=$(ROOT)/pnpm-lock.yaml --config=$(ROOT)/osv-scanner.toml
 audit-install: ## Install pinned osv-scanner
-	go install github.com/google/osv-scanner/v2/cmd/osv-scanner@$(OSV_VERSION)
+	bash $(ROOT)/../shared/go_install_retry.sh github.com/google/osv-scanner/v2/cmd/osv-scanner@$(OSV_VERSION)
 remotes: ## Verify every configured Git push URL against the allowlist
 	PYTHONPATH=$(ROOT)/../.. python3 $(ROOT)/scripts/remotes.py --check-current-remotes --repo $(ROOT) --allowlist $(ROOT)/.governance/allowed-remotes.txt
 projections: ## Projection applicability/drift gate

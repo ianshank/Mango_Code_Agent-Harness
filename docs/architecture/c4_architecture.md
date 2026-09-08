@@ -259,7 +259,10 @@ graph TD
                 AuthorityGraph -->|re-exports approval_flag_reachability| CallSites
             end
             subgraph "governance/"
-                Broker[broker.py<br/>ExecutionBroker + ProcessBackend<br/>INV-8/9/10 — contains, does not isolate]
+                Broker[broker.py<br/>ExecutionBroker<br/>INV-8/9/10 — contains, does not isolate]
+                ExecBackend[execution_backend.py<br/>ExecutionBackend protocol + ExecutionResult]
+                ProcessBE[process_backend.py<br/>ProcessBackend adapter]
+                EvidenceRec[evidence_record.py<br/>digest-of-digests + JSONL sink<br/>does not import broker]
                 PDP[policy_decision.py<br/>In-process PDP<br/>mirrors tool_broker_reference.py]
                 Actions[command_actions.py<br/>command → declared action; allowlist,<br/>unmodelled ⇒ an action no role holds]
                 GovGuards[pretooluse_guard.py<br/>Policy Guards — resolved from the installed<br/>package; unavailability denies]
@@ -270,6 +273,10 @@ graph TD
                 Broker --> PDP
                 Broker --> Actions
                 Broker --> GovGuards
+                Broker --> ExecBackend
+                ExecBackend --> ProcessBE
+                Broker --> EvidenceRec
+                EvidenceRec --> Evidence
             end
             WritePolicy["write_policy.py<br/>protected_paths at tool-call time<br/>+ any .git segment<br/>+ credential filenames"]
             Authority[agent_authority.py<br/>per-role tool exposure, derived from agent-policy.json]
@@ -416,14 +423,24 @@ classDiagram
 
     class ExecutionBroker {
         -_agent_policy_path: Final[Path]
-        -_backend: ProcessBackend
+        -_backend: ExecutionBackend
         +execute_command(command, cwd, context, timeout, max_bytes) ExecutionResult
         -_policy_decision(action, context) str
     }
 
+    class ExecutionBackend {
+        +name: str
+        +version: str
+        +available() bool
+        +capabilities() BackendCapabilities
+        +execute(request: ExecutionRequest) ExecutionResult
+    }
+
     class ProcessBackend {
-        +is_available() bool
-        +execute(command, cwd, timeout, max_bytes, env_override) ExecutionResult
+        +available() bool
+        +capabilities() BackendCapabilities
+        +execute(request: ExecutionRequest) ExecutionResult
+        +run(command, cwd, timeout, max_bytes, env_override) ExecutionResult
         +_cap(text, max_bytes) tuple
     }
 
@@ -446,7 +463,8 @@ classDiagram
     MangoMASOrchestrator --> VerificationRunner : derives terminal verdict
     ToolExecutors --> ExecutionBroker : brokers run_command, asks the PDP for write/patch
     ToolExecutors --> CodeSafety : re-uses the parse tree, denies before the write
-    ExecutionBroker --> ProcessBackend : executes with budget & containment
+    ExecutionBroker --> ExecutionBackend : protocol execute(ExecutionRequest)
+    ProcessBackend ..|> ExecutionBackend : adapter; containment not isolation
 ```
 
 ### 3.2 NVIDIA Nemotron AI Subsystem (`harness/node/src/ai/nemotron/`)
@@ -487,6 +505,7 @@ graph TD
 
 - The terminal verdict is earned mechanically via `VerificationRunner` executing `make -f Makefile test-python` through `ExecutionBroker`.
 - Provenance is enforced by strong typing: `derive_verdict` accepts only `HarnessCheck` created by the harness itself, rejecting arbitrary agent-supplied `ExecutionResult` structures.
+- INV-13 is **four of five** on the broker evidence path when evidence is enabled: policy digest, source as a digest-of-digests of the loop-start enforcement baseline, backend name+version, and test digest over the resolved verification command plus collected node ids. **Sandbox remains unattestable** until an isolation backend lands (spec steps 8–9) or C-AEI-6 records that no available primitive enforces both filesystem and network isolation. `ExecutionResult` / `HarnessCheck` / `Verdict` do not carry digest fields; those live on the evidence entry. A keyless evidence-enabled broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn.
 
 ### 4.3 PreToolUse Command Guard (`INV-8`, `INV-9`, `INV-10`)
 
@@ -510,13 +529,14 @@ graph TD
 ### 4.5.1 Policy resolution: absence is an adopter, incompleteness is a fault (`DEC-043`)
 
 ```text
-governance-policy.json ──▶ policy_loader._Section(data, name, backed) ──▶ accessors
+governance-policy.json ──▶ policy_io._Section(data, name, backed) ──▶ policy_defaults accessors
+                                    (policy_loader is the facade)
                                     │
         file absent ────────────────┤──▶ built-in default   (supported: the adopter path)
         file present, key gone ─────┴──▶ PolicyError        (fail closed)
 ```
 
-- Every operational threshold resolves through `policy_loader`, and `_Section` carries the block's data **and whether a policy file backs it**. One call site expresses both outcomes, so no accessor restates the rule. `coverage.optional_extras` keeps a separate `.optional` accessor, because "this deployment declares no extras" is a statement while a missing threshold is a hole.
+- Every operational threshold resolves through `policy_loader` (facade over `policy_io` / `policy_defaults`), and `_Section` in `policy_io.py` carries the block's data **and whether a policy file backs it**. One call site expresses both outcomes, so no accessor restates the rule. `coverage.optional_extras` keeps a separate `.optional` accessor, because "this deployment declares no extras" is a statement while a missing threshold is a hole. New top-level `evidence` and `execution` blocks follow DEC-043 (a key inside an adopted block is `PolicyError` for every pre-block adopter).
 - `validate_invariants` states no defaults for `protected_paths` or `limits`. The former's old `[".github/**"]` fallback left one pattern matching, so the gate printed `[PASS] Protected Paths` while all three protected groups were unguarded.
 - `MAX_FILE_LINES`, `MAX_TEST_FILE_LINES` and `MAX_SHIM_LINES` may only **tighten** a budget; a loosening value is ignored and logged. Returned verbatim, they let anyone who could set an environment variable switch a gate off while it still printed its PASS line.
 - `verify_zero_skips` resolves its decision-ID grammar on first use, not at import, so a gate's fail-closed `SystemExit` stays inside the run being gated rather than inside any importer's process.
@@ -573,9 +593,9 @@ governance-policy.json ──▶ policy_loader._Section(data, name, backed) ─�
   one previously accepted input class: generated Python naming a prohibited
   symbol now returns a denial where it previously wrote the file.
 
-### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, `AC-CE-1`, `INV-9`)
+### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, isolation spec steps 6–9, `INV-9`)
 
-- **Capability Profiles**: The production `ProcessBackend` only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. Full filesystem and network isolation via fine-grained capability profiles (e.g., `network-isolated`, `read-only-fs`) are explicitly out of scope for production as defined in the code-execution spec.
+- **Capability Profiles**: The production `ProcessBackend` implements `ExecutionBackend` and only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. Full filesystem and network isolation is INV-13 steps 6–9 (`capability_probe`, isolation backend, escape corpus), not the retired `AC-CE-1` row. `execution.routing` is `brokered` or `refuse`; a third value is `PolicyError`.
 - **Violation Trapping**: In testing environments, a mock backend simulates isolation by emitting a structured `SandboxViolation` payload when a command violates assumed constraints (e.g., outbound socket I/O).
 - **Critique Normalization (`tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` payloads from `stderr` (when generated by the mock backend) and translates them into a standardized Critique schema (`failure_type`, `evidence_id`, `normalized_message`, `location: execution_broker`). This enables deterministic agent repair loops for neuro-symbolic testing.
 - **Fail-Closed Sandbox Availability (`INV-9`)**: If the backend is configured as unavailable (`sandbox_available=False`), commands are blocked immediately rather than falling back to host execution.

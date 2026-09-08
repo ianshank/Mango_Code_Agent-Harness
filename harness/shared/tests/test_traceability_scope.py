@@ -48,12 +48,12 @@ NODE_STACK = REPO_ROOT / "harness" / "node"
 #: accepted at (DEC-065). This is deliberately a *second, independent* copy of that
 #: number rather than a read of the policy, and that duplication is the whole control:
 #: with enforcement and its own test both reading the policy, raising the policy from
-#: 223 to 224 while adding another uncited requirement stayed green, so "may only be
+#: 222 to 223 while adding another uncited requirement stayed green, so "may only be
 #: lowered" was prose that nothing checked. Lowering the policy is a one-file edit and
 #: passes freely; raising it above this line fails, and raising this line is a visible
 #: edit to an accepted decision's recorded high-water mark rather than a threshold tweak.
 #: Found by review on PR #120.
-ACCEPTED_RATCHET_CEILING = 223
+ACCEPTED_RATCHET_CEILING = 203
 
 pytestmark = pytest.mark.governance
 

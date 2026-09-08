@@ -11,9 +11,8 @@ Spec class: program-plan
 ## Problem statement
 
 INV-13 requires a "verified" result to carry policy, test, sandbox, source and
-tool-version digests. `harness/CONTRACT.md` records it as **not currently
-satisfiable**, and `harness/shared/agent-policy.json` names the reason: the
-process backend contains but does not isolate.
+tool-version digests. Four of five are recordable on the broker evidence path;
+the sandbox digest remains unattestable until isolation lands or C-AEI-6.
 
 Five results measured against this branch turn that into a plan. Each was
 reproduced independently before this spec was written.
@@ -33,8 +32,9 @@ caller; `EvidenceBuilder` is constructed only by
 `harness/control-plane/publish_policy_artifact.py`, which calls
 `add_policy_snapshot` and `export`. No digest field exists anywhere on the
 verdict chain: `HarnessCheck`, `Verdict` and `ExecutionResult` all lack one.
-INV-13 is **zero of five**. A sandbox digest cannot be added to a record that
-does not exist, which is why this plan orders the work as it does.
+INV-13 is **four of five** on the execution path once step 3 lands. A sandbox
+digest cannot be added until an isolation backend exists, which is why this
+plan orders the work as it does.
 
 **3. The classifier graded a rewrite as a gate run, and was opposed to
 `CLAUDE.md`.** `ruff` and `eslint` were graded `test_execute` by program name in
@@ -207,34 +207,34 @@ or is recorded as unattestable under C-AEI-6.
       population one below the floor fails and one at the floor passes; and
       `test_both_gates_still_run_without_a_policy_file` pins the adopter
       boundary rather than leaving it incidental · stage: `make ci` (R-AEI-3)
-- [ ] AC-5: `pytest -k test_evidence_entry_digests` monkeypatches
+- [x] AC-5: `pytest -k test_evidence_entry_digests` monkeypatches
       `enforcement_digests`, `policy_digest` and the backend capability record
       to return sentinels and asserts each sentinel appears verbatim in the
       entry, so a local recomputation cannot satisfy it · stage:
       `make coverage` (R-AEI-6)
-- [ ] AC-6: `pytest -k test_baseline_cited_not_recomputed` asserts the walk
+- [x] AC-6: `pytest -k test_baseline_cited_not_recomputed` asserts the walk
       runs once per loop regardless of execution count, and fails if a second
       execution triggers a second walk · stage: `make coverage` (R-AEI-7)
-- [ ] AC-7: `pytest -k test_keyless_broker_blocks` asserts a broker
+- [x] AC-7: `pytest -k test_keyless_broker_blocks` asserts a broker
       constructed without a signing key returns `BLOCKED` with a reason naming
       `AGENT_EVIDENCE_KEY`, and `test_evidence_manifest_verifies` asserts an
       exported manifest verifies under HMAC · stage: `make coverage` (R-AEI-4)
-- [ ] AC-8: `pytest -k test_verification_with_evidence_verified` runs
+- [x] AC-8: `pytest -k test_verification_with_evidence_verified` runs
       `VerificationRunner.run` against a real broker with evidence enabled and
       asserts `VERIFIED`, a non-empty entry list, and an entry count at or
       below a policy-sourced bound, so an evidence write that trips
       `enforcement_tampered` or a per-command walk both go red · stage:
       `make coverage` (R-AEI-5, R-AEI-7)
-- [ ] AC-9: `python -m mypy harness` exits 0 with a module-level
+- [x] AC-9: `python -m mypy harness` exits 0 with a module-level
       `_: ExecutionBackend = ProcessBackend()` binding in `process_backend.py`,
       and `pytest -k test_protocol_rejects_wrong_signature` asserts a stub with
       correct attribute names and wrong signatures is rejected · stage:
       `make lint` (R-AEI-8, R-AEI-9)
-- [ ] AC-10: `pytest -k test_capabilities_three_state` asserts a backend that
+- [x] AC-10: `pytest -k test_capabilities_three_state` asserts a backend that
       requested network isolation on a host that could not apply it reports
       `network_isolation` unenforced, driven by an injected probe result
       · stage: `make coverage` (R-AEI-10, R-AEI-15)
-- [ ] AC-11: `pytest -k test_routing_block` asserts a policy predating the new
+- [x] AC-11: `pytest -k test_routing_block` asserts a policy predating the new
       block still loads, that the block present with its key absent raises
       `PolicyError`, and that a third routing value is refused · stage:
       `make validate` (R-AEI-11, R-AC-12)
@@ -260,12 +260,12 @@ or is recorded as unattestable under C-AEI-6.
       policy-compilation failure and an attestation failure each return
       `BLOCKED`, and that no path reaches `ProcessBackend` afterwards · stage:
       `make coverage` (C-AEI-3)
-- [ ] AC-17: `pytest -k test_governance_no_direct_spawn` asserts by AST scan
+- [x] AC-17: `pytest -k test_governance_no_direct_spawn` asserts by AST scan
       that no module under `harness/shared/governance/` except the backends and
       the probe references `subprocess` or `os.exec`, and
       `test_import_direction` asserts the new modules are in `LAYERS` and that
       neither imports `broker` · stage: `make validate` (C-AEI-5, C-AEI-1)
-- [ ] AC-18: `python harness/shared/validate_invariants.py --workspace .` exits
+- [x] AC-18: `python harness/shared/validate_invariants.py --workspace .` exits
       0, and `pytest -k test_lats_disabled` asserts `synthesis.lats_enabled` is
       false · stage: `make validate` (C-AEI-4)
 - [ ] AC-19: when the probe reports no primitive enforcing both dimensions,
@@ -289,15 +289,17 @@ question. Each phase is one pull request.
    refusal AC-4 checks. **Landed** behind `policy_loader.gate_floors`.
 3. Add the evidence entry, its sink and the test digest — consumes the
    loop-start baseline and `write_policy.policy_digest`; produces the record
-   AC-5 through AC-8 check. INV-13 reaches four of five here.
+   AC-5 through AC-8 check. INV-13 reaches four of five here. **Landed.**
 4. Extract the `ExecutionBackend` protocol, `ExecutionRequest` and
    `BackendCapabilities`; adapt `ProcessBackend` behind them — touches the four
    construction sites in `mcp_server.py`, `mango_mas_orchestrator.py`,
-   `experimental/autonomous_healing.py` and the broker default (AC-9, AC-10,
-   AC-17).
+  `experimental/autonomous_healing.py` and the broker default (AC-9, AC-10,
+  AC-17). **Landed.**
 5. Add the routing block to `governance-policy.json` and its accessor in
    `policy_loader` — produces the two-state selector AC-11 checks and
-   discharges R-AC-12.
+   discharges R-AC-12. **Landed.** (`policy_loader.py` was split into
+   `policy_io.py` / `policy_defaults.py` first so the accessor could land
+   under the size budget.)
 6. Run the capability probe on every matrix leg — produces the measurement
    step 7 consumes (AC-12).
 7. Record the backend decision under `docs/decisions/` and run

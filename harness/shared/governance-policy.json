@@ -190,6 +190,8 @@
     "harness/shared/agent_authority.py",
     "harness/shared/debug_dump.py",
     "harness/shared/policy_loader.py",
+    "harness/shared/policy_io.py",
+    "harness/shared/policy_defaults.py",
     "harness/shared/governance_json.py",
     ".claude/settings.local.json",
     ".mango/settings.local.json",
@@ -237,11 +239,11 @@
   },
   "traceability": {
     "min_discovered_requirement_ids": 350,
-    "max_uncited_contract_requirement_ids": 223,
+    "max_uncited_contract_requirement_ids": 203,
     "default_spec_class": "contract",
     "program_plan_class": "program-plan",
     "spec_class_marker": "Spec class:",
-    "rationale": "Scope and ratchet for harness/shared/governance/check_traceability.py (DEC-065, docs/specs/graph-engineering-adoption.md R-GEA-1/R-GEA-1b). The gate resolved its config and globs against the process CWD and ran from harness/node, so it read 6 requirement IDs while docs/specs held 412 sharing none of them, and printed 'traceability: passed'. min_discovered_requirement_ids is the anti-vacuity floor a repository-scoped run must clear, so 'the gate is pointed at the wrong corpus' fails instead of passing; it applies only where a traceability config declares scope 'repository', leaving per-stack configs unchanged. max_uncited_contract_requirement_ids is a ratchet over contract-spec IDs missing an implementation or test citation: it may be lowered as citations land and never raised, so the backlog is visible and cannot grow. Its value is 223, measured, and the composition is stated because the number is the whole control: 222 is the corpus as it stood before this change, and the +1 is R-GEA-5 -- graph-engineering-adoption's own requirement that a tokens-per-turn baseline be recorded before any code-property graph is built. That requirement is deliberately unimplemented, so it has nothing to cite, and pretending otherwise by citing it somewhere convenient is the failure this gate exists to catch. Every other requirement that spec declares is cited on both sides. SPEC_TEMPLATE.md is excluded from the corpus, matching validate_specs.py and validate_plan.py, so all three gates read one corpus. program_plan_class names the class a document declares via spec_class_marker when its requirement IDs are scheduled work with nothing yet to cite; default_spec_class is the strict branch a document with no declaration falls into."
+    "rationale": "Scope and ratchet for harness/shared/governance/check_traceability.py (DEC-065, docs/specs/graph-engineering-adoption.md R-GEA-1/R-GEA-1b). The gate resolved its config and globs against the process CWD and ran from harness/node, so it read 6 requirement IDs while docs/specs held 412 sharing none of them, and printed 'traceability: passed'. min_discovered_requirement_ids is the anti-vacuity floor a repository-scoped run must clear, so 'the gate is pointed at the wrong corpus' fails instead of passing; it applies only where a traceability config declares scope 'repository', leaving per-stack configs unchanged. max_uncited_contract_requirement_ids is a ratchet over contract-spec IDs missing an implementation or test citation: it may be lowered as citations land and never raised, so the backlog is visible and cannot grow. Its value is 203, measured after NS-39 both-side citations; the high-water mark may only fall, and the composition is stated because the number is the whole control: 222 is the corpus as it stood before this change, and the +1 is R-GEA-5 -- graph-engineering-adoption's own requirement that a tokens-per-turn baseline be recorded before any code-property graph is built. That requirement is deliberately unimplemented, so it has nothing to cite, and pretending otherwise by citing it somewhere convenient is the failure this gate exists to catch. Every other requirement that spec declares is cited on both sides. SPEC_TEMPLATE.md is excluded from the corpus, matching validate_specs.py and validate_plan.py, so all three gates read one corpus. program_plan_class names the class a document declares via spec_class_marker when its requirement IDs are scheduled work with nothing yet to cite; default_spec_class is the strict branch a document with no declaration falls into."
   },
   "lats": {
     "max_budget": 10,
@@ -258,5 +260,13 @@
     "max_denial_rate": 0.0,
     "min_corpus_commands": 36,
     "rationale": "Ceiling and population floor for harness/shared/governance/denial_rate.py (DEC-067, docs/specs/attested-execution-isolation.md R-AEI-2). The ceiling is a ratchet: it may be lowered as denials are closed, never raised. It stands at 0.0 because DEC-067 closed every false denial the corpus held -- 13 of 36 before it, including the python -m ruff and python -m mypy forms CLAUDE.md mandates under DEC-013. The floor stops the rate being driven down by deleting corpus entries; the corpus is a protected path for the same reason. A new top-level block rather than a key inside an adopted one, because DEC-043 makes an absent key in an adopted block a PolicyError for every adopter policy that predates it."
+  },
+  "evidence": {
+    "max_entries": 256,
+    "rationale": "Bound on in-memory / JSONL evidence entries produced by a governed ExecutionBroker (docs/specs/attested-execution-isolation.md R-AEI-4, R-AEI-6, AC-8, C-AEI-2). A new top-level block rather than a key inside an adopted one, because DEC-043 makes an absent key in an adopted block a PolicyError for every adopter policy that predates it. The sink must lie outside the agent workspace and outside protected_paths (R-AEI-5)."
+  },
+  "execution": {
+    "routing": "brokered",
+    "rationale": "Two-state selector for governed execution (docs/specs/attested-execution-isolation.md R-AEI-11, AC-11). brokered runs commands through ExecutionBroker; refuse returns BLOCKED before spawn. A new top-level block rather than a key inside an adopted one, because DEC-043 makes an absent key in an adopted block a PolicyError for every adopter policy that predates it. Absent block (adopter policies that predate it) defaults to brokered."
   }
 }
