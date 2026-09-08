@@ -228,7 +228,7 @@ environment, so a hook author should not expect `MY_TOKEN` to be visible.
 
 The platform enforces the **Agentic SSD Gate Harness Contract v2.1** with **zero unapproved test skips** (`INV-2`).
 
-The Node AI suite still uses a seven-directory layout under `harness/node/tests/ai/` (unit, integration, functional, e2e, journey, security, sanity). Python is selected by path and pytest markers (`governance`, `security`, `neurosym`, `langgraph`, `live`), not by that pyramid. The Pong demo those tier labels used to name was removed (`docs/specs/remove-pong-demo.md`).
+The Node AI suite still uses an eight-directory layout under `harness/node/tests/ai/` (unit, integration, functional, e2e, journey, smoke, security, sanity). Python is selected by path and pytest markers (`governance`, `security`, `neurosym`, `langgraph`, `live`), not by that pyramid. The Pong demo those tier labels used to name was removed (`docs/specs/remove-pong-demo.md`).
 
 - **Suite size:** do not transcribe a headcount here. `pytest --collect-only` (Python) and `pnpm vitest run` (Node) are the measurement; a carried-forward figure is a claim, not a measurement (DEC-024).
 - **Coverage floors:** `governance-policy.json` → `coverage` (lines, statements, branches, functions, per-file). Python applies lines and branches (plus per-file lines) via `coverage_gate.py`; Node applies the same keys via vitest. The measured *set* is bounded — `coverage_scope.check_measured_set` fails closed if the report and the on-disk first-party sources disagree. Zero-statement `__init__.py` files are skipped by `check_per_file` rather than waived. The CI matrix is `["3.10", "3.12", "3.14"]` (DEC-064).
@@ -349,7 +349,7 @@ The `.mango/` ecosystem enables specialized subagent collaboration during develo
 
 When introducing new features or modules:
 
-- **Write the test that names the defect.** Node AI tests still live under the seven directories in `harness/node/tests/ai/`; Python uses path (`harness/shared/tests/regression/` for AQA reproductions) and markers. Do not invent a pyramid row that the code does not have.
+- **Write the test that names the defect.** Node AI tests still live under the eight directories in `harness/node/tests/ai/`; Python uses path (`harness/shared/tests/regression/` for AQA reproductions) and markers. Do not invent a pyramid row that the code does not have.
 - **Fail-Closed Zero Skips (`INV-2`):** Tests cannot be arbitrarily skipped. A Python waiver must be declared in `harness/shared/tests/skip-waivers.json` citing an approved decision from `docs/decisions/` (Node: `harness/node/.governance/skip-waivers.json`; thin ID index still at `harness/node/.governance/decision-log.md` for `--decision-log`). There is no root `.governance/skip-waivers.json`.
 - **Bidirectional Traceability:** Add requirement tags (e.g. `R-FEATURE-1`, `C-SEC-1`) to code *and* test docstrings; `python harness/shared/governance/check_traceability.py --workspace .` reads every ID in `docs/specs/` and reports each uncited one with the side it is missing from. A repository-scoped run is not required to reach zero — it must clear `traceability.min_discovered_requirement_ids` and stay at or below `traceability.max_uncited_contract_requirement_ids`, a ratchet that may only be lowered. A document whose IDs name scheduled work declares `Spec class: program-plan`; a document declaring nothing is graded strictly, so the permissive class is never the default.
 

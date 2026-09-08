@@ -337,7 +337,7 @@ class TestEveryReportIsIndexed:
 PYTHON_SKIP_WAIVERS = "harness/shared/tests/skip-waivers.json"
 NODE_SKIP_WAIVERS = "harness/node/.governance/skip-waivers.json"
 NODE_ALLOWLIST = "harness/node/.governance/allowed-remotes.txt"
-NODE_AI_TIERS = ("unit", "integration", "functional", "e2e", "journey", "security", "sanity")
+NODE_AI_TIERS = ("unit", "integration", "functional", "e2e", "journey", "smoke", "security", "sanity")
 PONG_LEFTOVERS = ("Vector Math", "Match Progression", "Autonomous Autoplay")
 TRANSCRIBED_COUNTS = (
     r"~\s*[\d,]+\s+automated tests",

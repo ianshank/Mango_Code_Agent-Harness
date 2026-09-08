@@ -20,7 +20,8 @@ Product) are applied in §9.
 > **Scope note.** This is a review of a strategy dump, not a new programme plan.
 > It does not open a competing spec, does not choose a licence, and does not
 > implement an isolation backend. `make ci` was **not** run for this
-> markdown-only change; per DEC-024 nothing here is a passing-gate claim.
+> documentation-and-test change; per DEC-024 nothing here is a passing-gate
+> claim.
 > GitHub settings that the tree cannot prove about itself were re-queried on
 > 2026-09-08: `licenseInfo: null`, description `"A custom built version of
 > Claude Code"`.
