@@ -80,9 +80,10 @@ STANDALONE_SKILLS = {
         "so wiring it into a target would just print prose during CI."
     ),
     "evidence-signing": (
-        "Documents the HMAC evidence manifest contract described in harness/CONTRACT.md. The "
-        "fail-closed behaviour is enforced by test_evidence_manifest.py; the skill covers key "
-        "handling, which is an operational procedure rather than a build step."
+        "Documents the HMAC evidence manifest contract described in harness/CONTRACT.md. "
+        "Fail-closed export is enforced by test_evidence_manifest.py; the broker path "
+        "(keyless BLOCK before spawn, digest-of-digests, off-workspace sink) by "
+        "test_evidence_record.py. The skill is the operational procedure, not a Make target."
     ),
     "harness-engineering": (
         "House rules for extending the harness itself -- shim budgets, the shared-kernel rule, "

@@ -134,6 +134,7 @@ class ExecutionBroker:
             return result
         cap = evidence_max_entries()
         if cap is not None and len(self.evidence_entries) >= cap:
+            logger.warning("Evidence entry cap reached (%s); dropping further records", cap)
             return result
         raw_ids = context.get("node_ids") or ()
         node_ids = tuple(str(item) for item in raw_ids) if isinstance(raw_ids, (list, tuple)) else ()
@@ -150,7 +151,11 @@ class ExecutionBroker:
         builder = EvidenceBuilder(project_root=Path.cwd(), signing_key=self._signing_key)
         builder.add_execution_evidence(entry)
         if self._evidence_sink is not None:
-            append_signed_jsonl(self._evidence_sink, builder)
+            try:
+                append_signed_jsonl(self._evidence_sink, builder)
+            except OSError as exc:
+                # Command already ran; mutating the result would lie about spawn.
+                logger.warning("Evidence sink write failed: %s", exc)
         return result
 
     def verify_sandbox(self) -> bool:
@@ -290,10 +295,19 @@ class ExecutionBroker:
 
         if execution_routing() == "refuse":
             reason = "BLOCKED: policy execution.routing is refuse"
-            return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
+            logger.warning("Execution refused by policy execution.routing")
+            return self._record_evidence(
+                command,
+                ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action),
+                context,
+            )
 
         if self._evidence_enabled and not self._signing_key:
             reason = f"BLOCKED: evidence is enabled but no signing key was injected and {EVIDENCE_KEY_ENV} is unset"
+            logger.warning(
+                "Evidence enabled without a signing key; blocking before spawn (%s unset)",
+                EVIDENCE_KEY_ENV,
+            )
             return ExecutionResult(BROKER_BLOCKED, "", reason, 1, reason=reason, action=action)
 
         # INV-9: no host-process fallback when the backend cannot be used.

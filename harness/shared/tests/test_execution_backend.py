@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -142,6 +143,33 @@ def test_refuse_routing_blocks_before_spawn(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.status == BROKER_BLOCKED
     assert "refuse" in (result.reason or "")
     assert backend.calls == []
+
+
+def test_refuse_routing_records_evidence_when_keyed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A keyed evidence broker still attests a refuse BLOCKED (R-AEI-4)."""
+    from harness.shared.governance.broker import ExecutionBroker
+    from harness.shared.governance.verdict import BROKER_BLOCKED
+    from harness.shared.tests.test_governance_broker import IMPLEMENTER, RecordingBackend
+
+    monkeypatch.setattr("harness.shared.governance.broker.execution_routing", lambda: "refuse")
+    backend = RecordingBackend()
+    sink = tmp_path / "off-workspace" / "evidence.jsonl"
+    broker = ExecutionBroker(
+        backend=backend,
+        signing_key="test-signing-key-32-bytes-long!!",
+        evidence_sink=sink,
+    )
+    broker.set_enforcement_baseline({"sentinel.py": "abc"})
+    with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
+        result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == BROKER_BLOCKED
+    assert backend.calls == []
+    assert broker.evidence_entries, "refuse must still produce an evidence row when keyed"
+    assert broker.evidence_entries[0]["outcome"] == BROKER_BLOCKED
+    assert "execution.routing" in caplog.text
+    assert sink.is_file()
 
 
 def test_governance_no_direct_spawn() -> None:

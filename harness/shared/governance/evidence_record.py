@@ -19,11 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
+from harness.shared.policy_defaults import evidence_defaults
 from harness.shared.write_policy import DEFAULT_POLICY_PATH, policy_digest
 
 logger = logging.getLogger(__name__)
-
-POLICY_BLOCK = "evidence"
 
 
 def fold_enforcement_baseline(digests: Mapping[str, str]) -> str:
@@ -48,30 +47,12 @@ def test_digest(command: str, node_ids: Sequence[str]) -> str:
 
 
 def evidence_max_entries(policy_path: Path | None = None) -> int | None:
-    """Policy-sourced cap, or None when the block is undeclared (adopter path).
+    """Policy-sourced cap via the single reader (C-AEI-2, DEC-043).
 
-    Read here rather than through ``policy_loader`` so step 3 does not grow
-    that module (499/500). A present block with a missing or non-positive
-    ``max_entries`` fails closed.
+    ``None`` when the ``evidence`` block is undeclared. A present block with a
+    missing or non-positive ``max_entries`` is ``PolicyError``.
     """
-    path = policy_path or DEFAULT_POLICY_PATH
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError) as exc:
-        raise ValueError(f"governance policy at {path} is unreadable: {exc}") from exc
-    if not isinstance(loaded, dict):
-        raise ValueError(f"governance policy at {path} is not a JSON object")
-    if POLICY_BLOCK not in loaded:
-        return None
-    block = loaded[POLICY_BLOCK]
-    if not isinstance(block, dict):
-        raise ValueError(f"policy {POLICY_BLOCK} is not an object")
-    value = block.get("max_entries")
-    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise ValueError(f"policy {POLICY_BLOCK}.max_entries must be a positive integer, got {value!r}")
-    return value
+    return evidence_defaults(policy_path)
 
 
 def current_policy_digest(policy_path: Path | None = None) -> str:
@@ -116,7 +97,6 @@ def append_signed_jsonl(sink: Path, builder: EvidenceBuilder) -> None:
 
 
 __all__ = [
-    "POLICY_BLOCK",
     "append_signed_jsonl",
     "backend_capability_record",
     "build_execution_entry",

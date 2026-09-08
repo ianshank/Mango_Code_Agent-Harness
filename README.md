@@ -117,10 +117,12 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │   ├── ast_visitors.py              # AST visitor rules the compatibility gate applies
 │   │   ├── governance/                  # Extracted fail-closed policy mechanisms
 │   │   │   ├── broker.py                # ExecutionBroker — INV-8/9/10 on the live path
-│   │   │   ├── process_backend.py       # Decoupled subprocess execution & byte-capping
+│   │   │   ├── execution_backend.py     # ExecutionBackend protocol, request, capabilities, result
+│   │   │   ├── process_backend.py       # ProcessBackend adapter — containment, not isolation
 │   │   │   ├── command_actions.py       # Command → declared policy action (fails closed)
 │   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
+│   │   │   ├── evidence_record.py       # INV-13 digest-of-digests + JSONL sink (does not import broker)
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation, tamper-refusing
 │   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
@@ -142,7 +144,9 @@ A production-grade, deterministic AI & software engineering platform featuring t
 │   │       ├── test_orchestrator_hooks.py      # Pre/post lifecycle hooks
 │   │       ├── test_orchestrator_agent_loop.py # ReAct execution loop & budget limits
 │   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
-│   │       ├── test_governance_broker.py       # 68 tests: INV-8/9/10, in-process PDP, ProcessBackend
+│   │       ├── test_evidence_record.py         # INV-13 AC-5…AC-8 broker evidence path
+│   │       ├── test_execution_backend.py       # protocol, ProcessBackend adapter, execution.routing
+│   │       ├── test_governance_broker.py       # INV-8/9/10, in-process PDP, ProcessBackend
 │   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files
 │   │
 │   └── control-plane/                   # Policy bundles, digests & external verifier
@@ -192,7 +196,7 @@ A production-grade, deterministic AI & software engineering platform featuring t
 
 ### 2.3 Governance Kernel (`harness/shared/governance/`)
 
-- **`ExecutionBroker`** (`broker.py`): the approved execution path INV-8 names, reached from the orchestrator's `run_command`. `execute_command` derives the action from the command (`command_actions.classify`), obtains an in-process policy verdict (`policy_decision.decide`, mirroring `tool_broker_reference.py` and pinned by `test_policy_decision.py`), runs `check_command()`, then executes via `ProcessBackend` with a pinned working directory, a timeout and a byte-capped output. `sandbox_available` defaults to probing the backend; an unavailable backend returns `BLOCKED` and never falls through (INV-9), and a denial is terminal (INV-10). **The backend contains but does not isolate** — it confines neither the filesystem nor the network — so INV-13's sandbox digest is not yet satisfiable (DEC-010).
+- **`ExecutionBroker`** (`broker.py`): the approved execution path INV-8 names, reached from the orchestrator's `run_command`. `execute_command` derives the action from the command (`command_actions.classify`), obtains an in-process policy verdict (`policy_decision.decide`, mirroring `tool_broker_reference.py` and pinned by `test_policy_decision.py`), runs `check_command()`, then executes via an `ExecutionBackend` (default `ProcessBackend`) with a pinned working directory, a timeout and a byte-capped output. `sandbox_available` defaults to probing the backend; an unavailable backend returns `BLOCKED` and never falls through (INV-9), and a denial is terminal (INV-10). **The default backend contains but does not isolate** — it confines neither the filesystem nor the network — so INV-13's sandbox digest is not yet satisfiable (DEC-010). Four of five INV-13 digests are recordable on the opt-in evidence path (`evidence_record.py`). An evidence-enabled keyless broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn. `execution.routing` of `refuse` is BLOCKED before spawn and, when a key is present, still written to evidence.
 - **`command_actions.py`**: classifies a command into a declared policy action. An allowlist, not a denylist: anything unmodelled resolves to an action no role holds, so an unrecognised command denies for every agent.
 - **`policy_decision.py`**: the verdict, in process. Replaces a host subprocess that ran *before* the command guard, from a path inside the agent's workspace (DEC-009).
 - **`write_policy.py`**: enforces `protected_paths` on the agent's write tool at tool-call granularity, plus any `.git` directory segment and any credential-bearing filename (`.env*`, `.netrc`, `.npmrc`, `.pypirc`, `id_[rd]sa`, `*.pem`) — three classes `validate_invariants` structurally cannot see, the last because `.env` is untracked and so matched no `protected_paths` pattern at all (DEC-007, DEC-042).
@@ -201,7 +205,8 @@ A production-grade, deterministic AI & software engineering platform featuring t
 - **`authority_graph.py` / `authority_call_sites.py`**: a **derived** view of that same chain — recomputed on every query from the functions the broker calls, and never stored, because a persisted copy of governance state is a cache whose staleness has a security consequence. It models the two grant surfaces separately, since they deliberately disagree (`planner` holds `spec_write` while executing as `orchestrator`, which lacks it), and a query that names neither surface raises rather than confidently answering the other question. Its second half machine-checks what was previously true only by construction: across all 114 first-party non-test modules there are 5 callers of `ExecutionBroker.execute_command` and **0** that could supply `policy_decision.decide`'s `human_approved` (DEC-065).
 - **`code_safety.py`**: the `generate_code` write door's second question of one parse tree. `execute_generate_code` already ran `ast.parse` to answer *does it compile*; the same tree now answers *does this name a `synthesis.prohibited_imports` symbol*, and a match denies the write before any byte reaches disk. It resolves aliases, attribute targets and `__import__`, because that policy key's five entries span three shapes and an import-only checker would decide two of them while reporting success.
 - **`graph_topology.py`**: recovers the LangGraph `StateGraph` node and edge sets from `graph.py`'s **source** via `ast`, importing nothing from `langgraph` — so the check needs no `skipif` on an optional extra and cannot become a skip hunting an INV-2 waiver. It is what lets an ordinary test pin `peer_reviewer` and `security_reviewer` as edgeless *and* pin that this is DEC-052's recorded state, while DEC-053's park keeps the topology **gate** unbuilt.
-- **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. Raises `ValueError` (fail-closed) when key is absent. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
+- **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. On the control-plane publisher, `export()` raises `ValueError` (fail-closed) when the key is absent. On the broker path the key is injected at construction; a keyless evidence-enabled broker never reaches `export()`. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
+- **`evidence_record.py`**: folds the loop-start enforcement snapshot into one digest-of-digests, names policy/backend/test digests, and appends signed JSONL. Does not import `broker` (C-AEI-5) and does not re-walk `enforcement_digests` (R-AEI-7). The entry cap is `policy_defaults.evidence_defaults` (C-AEI-2).
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
 - **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in the lowest interpreter the CI matrix declares (`datetime.UTC`, and PEP 604 unions / unannotated `AnnAssign` below 3.10). The floor is *resolved from the workflow matrix*, not written down here, so moving the matrix moves the gate; it is 3.10 today (`docs/specs/python-floor-310.md`). Run via `make check-compat`.
 

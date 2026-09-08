@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from harness.shared.governance.evidence_manifest import EVIDENCE_KEY_ENV, Eviden
 from harness.shared.governance.evidence_record import evidence_max_entries, fold_enforcement_baseline
 from harness.shared.governance.verdict import BROKER_BLOCKED, VERIFIED, derive_verdict
 from harness.shared.governance.verification import VerificationRunner
+from harness.shared.policy_loader import PolicyError
 from harness.shared.tests.test_governance_broker import IMPLEMENTER, RecordingBackend
 
 pytestmark = pytest.mark.governance
@@ -162,8 +164,8 @@ def test_evidence_max_entries_absent_block_is_adopter_path(tmp_path: Path) -> No
 
 
 def test_evidence_max_entries_unreadable_path_fails_closed(tmp_path: Path) -> None:
-    """A directory forces IsADirectoryError without chmod (root CI ignores bits)."""
-    with pytest.raises(ValueError, match="unreadable"):
+    """A directory forces a non-file PolicyError without chmod (root CI ignores bits)."""
+    with pytest.raises(PolicyError, match="regular file"):
         evidence_max_entries(tmp_path)
 
 
@@ -172,15 +174,62 @@ def test_evidence_max_entries_unreadable_path_fails_closed(tmp_path: Path) -> No
     [
         ("{", "unreadable"),
         ("[]", "not a JSON object"),
-        ('{"evidence": []}', "not an object"),
-        ('{"evidence": {}}', "positive integer"),
+        ('{"evidence": []}', "is not an object"),
+        ('{"evidence": {}}', "max_entries"),
         ('{"evidence": {"max_entries": 0}}', "positive integer"),
-        ('{"evidence": {"max_entries": true}}', "positive integer"),
-        ('{"evidence": {"max_entries": "256"}}', "positive integer"),
+        ('{"evidence": {"max_entries": true}}', "must be an integer"),
+        ('{"evidence": {"max_entries": "256"}}', "must be an integer"),
     ],
 )
 def test_evidence_max_entries_malformed_policy_fails_closed(tmp_path: Path, payload: str, match: str) -> None:
     path = tmp_path / "policy.json"
     path.write_text(payload, encoding="utf-8")
-    with pytest.raises(ValueError, match=match):
+    with pytest.raises(PolicyError, match=match):
         evidence_max_entries(path)
+
+
+def test_evidence_cap_drops_further_records(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A reached cap keeps the command result and logs; it does not grow the list."""
+    monkeypatch.setattr("harness.shared.governance.broker.evidence_max_entries", lambda: 1)
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=_sink(tmp_path))
+    broker.set_enforcement_baseline(dict(_SOURCE_MAP))
+    with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
+        first = broker.execute_command("echo hi", IMPLEMENTER)
+        second = broker.execute_command("echo hi", IMPLEMENTER)
+    assert first.status == "SUCCESS"
+    assert second.status == "SUCCESS"
+    assert len(broker.evidence_entries) == 1
+    assert "cap reached" in caplog.text
+
+
+def test_sink_write_failure_keeps_the_command_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Sink I/O must not rewrite a SUCCESS after spawn (best-effort JSONL)."""
+
+    def boom(_sink: Path, _builder: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("harness.shared.governance.broker.append_signed_jsonl", boom)
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, signing_key=_KEY, evidence_sink=_sink(tmp_path))
+    broker.set_enforcement_baseline(dict(_SOURCE_MAP))
+    with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
+        result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == "SUCCESS"
+    assert broker.evidence_entries, "in-memory entry must survive a sink failure"
+    assert "sink write failed" in caplog.text
+
+
+def test_keyless_broker_blocks_is_logged(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.delenv(EVIDENCE_KEY_ENV, raising=False)
+    backend = RecordingBackend()
+    broker = ExecutionBroker(backend=backend, evidence_enabled=True)
+    with caplog.at_level(logging.WARNING, logger="harness.shared.governance.broker"):
+        result = broker.execute_command("echo hi", IMPLEMENTER)
+    assert result.status == BROKER_BLOCKED
+    assert EVIDENCE_KEY_ENV in caplog.text
+    assert backend.calls == []

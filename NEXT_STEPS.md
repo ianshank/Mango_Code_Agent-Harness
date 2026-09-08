@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-08 · post-PR #122 (`d0b6c5b`) — INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, NS-39 ratchet/citations/AC-GEA-8. PRs #121–#123 and DEC-067 are on `main`. Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. `policy_loader.py` is split (`policy_io.py` / `policy_defaults.py`). CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9). Remaining INV-13 work is capability probe + isolation backend (spec steps 6–9), not a new NEXT_STEPS row.
+**Last reviewed:** 2026-09-08 · `origin/main` is PR #122 (`d0b6c5b`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 land on **open PR #124** (`cursor/inv13-evidence-record-3013`), not yet on `main`. PRs #121–#123 and DEC-067 are on `main`. Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. Remaining INV-13 work after #124 merges is capability probe + isolation backend (spec steps 6–9), not a new NEXT_STEPS row. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
 
 ---
 
@@ -244,7 +244,7 @@ unverifiable (audit H9 / DEC-024).
 ### NS-36 · Phase D of the plan: CI truthfulness — `required_signatures` only *(spec exists)*
 
 **Why now.** Attestation SHA binding, Dockerfile digest+USER, Dependabot
-`cooldown`, and the scheduled `/rules/branches/main` probe landed after #122.
+`cooldown`, and the scheduled `/rules/branches/main` probe land on PR #124.
 The remaining half of R-SR-24 is `required_signatures` on `main`, which needs
 NS-1 (the ruleset is not imported). Dependabot already has the `docker`
 ecosystem; the stale "lacks docker" wording is retired.
@@ -260,7 +260,7 @@ ecosystem; the stale "lacks docker" wording is retired.
 ### NS-39 · Keep lowering the traceability ratchet *(spec exists)*
 
 **Why now.** AC-GEA-8 (baseline + `test_code_graph_is_gated_on_a_recorded_baseline`)
-and the generate-code / size-budget residuals closed after #122. The gate is
+and the generate-code / size-budget residuals close on PR #124. The gate is
 still green on a ratchet, not on a fully cited corpus. `R-GEA-5` stays uncited
 on purpose. Lower `traceability.max_uncited_contract_requirement_ids` in the
 same policy edit as the citations that earned it; never raise it. Live count
@@ -368,12 +368,12 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 ## 6. Delivered, and removed from the open list
 
-**Closed 2026-09-08 (post-#122: INV-13 evidence + protocol, NS-18):**
+**Closed 2026-09-08 (PR #124, not yet on `main`: INV-13 evidence + protocol, NS-18):**
 
 | Was | Now |
 |---|---|
-| **NS-18 · Connect the reasoner persona to what the bridge exposes** | **Landed.** `format_tools_paragraph` is generated from `tools_for_role`; YAML frontmatter is stripped before the Nemotron prompt; `model_call` logs `prompt_sha`; `generate_code` is the write door named in the persona. Spec `docs/specs/reasoner-bridge-tool-parity.md` AC-1…AC-5. DEC-068 names `MIN_MESSAGES_BEFORE_FALLBACK`. |
-| **INV-13 steps 3–5** | **Landed.** Broker-injected signing key, digest-of-digests over the loop baseline, sink outside workspace/`protected_paths`; `ExecutionBackend` protocol + `ProcessBackend` adapter; `policy_loader` split; `execution.routing` `brokered`/`refuse`. Sandbox digest still unattestable (steps 6–9). |
+| **NS-18 · Connect the reasoner persona to what the bridge exposes** | **Lands on PR #124.** `format_tools_paragraph` is generated from `tools_for_role`; YAML frontmatter is stripped before the Nemotron prompt; `model_call` logs `prompt_sha`; `generate_code` is the write door named in the persona. Spec `docs/specs/reasoner-bridge-tool-parity.md` AC-1…AC-5. DEC-068 names `MIN_MESSAGES_BEFORE_FALLBACK`. |
+| **INV-13 steps 3–5** | **Lands on PR #124.** Broker-injected signing key, digest-of-digests over the loop baseline, sink outside workspace/`protected_paths`; `ExecutionBackend` protocol + `ProcessBackend` adapter; `policy_loader` split; `execution.routing` `brokered`/`refuse`. Sandbox digest still unattestable (steps 6–9). |
 | **`AC-CE-1` ProcessBackend capability profiles** | **Retired.** Isolation spec steps 6–9 supersede the parked row. |
 
 **Closed 2026-09-07 (DEC-059 / agent-memory integrity NS-37 & code generation writing tool NS-38):**

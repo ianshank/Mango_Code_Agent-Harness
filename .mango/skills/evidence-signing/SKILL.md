@@ -1,13 +1,15 @@
 ---
 name: evidence-signing
-Reviewed: 2026-08-28
+Reviewed: 2026-09-08
 description: >
   Reusable skill for creating tamper-evident, HMAC-signed audit trails using
   EvidenceBuilder. Use when an agent action requires an immutable evidence bundle
   linking policy verdicts, tool calls, and synthesis results to a signed manifest.
   Covers: key resolution, adding policy snapshots / actions / synthesis results,
-  export with signature verification, and error handling for missing keys.
-version: "1.0"
+  export with signature verification, error handling for missing keys, and the
+  governed broker path (key injected at construction; keyless evidence-enabled
+  brokers BLOCK before spawn).
+version: "1.1"
 validator_version: "2.1"
 compatibility: "harness/shared/governance/evidence_manifest.py >= 2.1.7"
 skill_max_age_days: 90
@@ -27,9 +29,15 @@ verifiable without access to the signing runtime.
 |----------------------|--------------------------------------|------------------------------------|
 | `AGENT_EVIDENCE_KEY` | **Yes** (or inject via constructor) | HMAC signing key; never hard-code. |
 
-> **If `AGENT_EVIDENCE_KEY` is unset and no `signing_key` is injected, `export()` raises
-> `ValueError`. Treat this as a blocking configuration error: do not execute or report
-> completion for an action that requires signed evidence until a key is configured.**
+> **Control-plane / `EvidenceBuilder.export()`:** if `AGENT_EVIDENCE_KEY` is unset
+> and no `signing_key` is injected, `export()` raises `ValueError`. Treat this as a
+> blocking configuration error for `publish_policy_artifact.py`.
+>
+> **Broker path:** an evidence-enabled `ExecutionBroker` with no constructor key and
+> no `AGENT_EVIDENCE_KEY` returns `BLOCKED` naming that env var **before spawn**
+> (R-AEI-4 / AC-7). The resolved key is injected into `EvidenceBuilder`; that path
+> does not read the environment at `export()`. A refuse `execution.routing` BLOCKED
+> is still recorded when a key is present.
 
 ## Usage Pattern
 
@@ -110,6 +118,9 @@ def verify_manifest(manifest: dict, key: str) -> bool:
   digest edited after signing fails verification. The same key resolution rules
   apply: constructor argument, then `AGENT_EVIDENCE_KEY`, then fail closed. A
   missing key is a `DENY`, never a silently unsigned artifact.
+- `ExecutionBroker` (when evidence is enabled) records INV-13 digests through
+  `harness/shared/governance/evidence_record.py` after a governed result. The
+  sink must lie outside the agent workspace and `protected_paths`.
 
 ## Non-Goals
 
@@ -119,7 +130,9 @@ def verify_manifest(manifest: dict, key: str) -> bool:
 ## Validation
 
 ```bash
-make test-governance   # pytest harness/shared/tests/test_evidence_manifest.py
+make test-governance
+# pytest harness/shared/tests/test_evidence_manifest.py
+# pytest harness/shared/tests/test_evidence_record.py
 ```
 
-Expected: **17 tests passing**, 0 failures.
+Expected: both modules collect and pass; do not restate a test count here.

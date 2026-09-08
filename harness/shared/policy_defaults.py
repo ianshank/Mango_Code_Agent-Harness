@@ -262,6 +262,8 @@ def evidence_defaults(policy_path: Path | None = None) -> int | None:
         _log_resolution("evidence", {"max_entries": None}, policy_path)
         return None
     resolved = section.int("max_entries", 256)
+    if resolved < 1:
+        raise PolicyError(f"policy evidence.max_entries must be a positive integer, got {resolved!r}")
     _log_resolution("evidence", {"max_entries": resolved}, policy_path)
     return resolved
 
