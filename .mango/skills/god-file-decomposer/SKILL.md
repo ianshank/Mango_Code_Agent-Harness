@@ -1,5 +1,6 @@
 ---
 name: god-file-decomposer
+Reviewed: 2026-09-08
 description: |
   Identifies, plans, and executes the decomposition of monolithic "god files"
   that approach or exceed the repository size budgets (500 lines for production
@@ -57,7 +58,10 @@ for p in sorted(Path('harness').glob('**/*.py')):
 4. **Verification Gate:**
    - Verify size budget: `python harness/shared/validate_invariants.py`
    - Run full unit & regression suite: `make test-python` or `python -m pytest <affected>`
-   - Verify lint & type safety: `make lint` and `make type-check`
+   - Verify lint & type safety: `make lint` (ruff check, ruff format --check, mypy,
+     vulture) and then `make lint-cold`, the no-cache typecheck CI runs. The cold
+     pass is not optional here: mypy's incremental cache is keyed on module paths,
+     so moving symbols between modules is exactly the change a warm cache can hide.
 
 ## Safety Invariants
 

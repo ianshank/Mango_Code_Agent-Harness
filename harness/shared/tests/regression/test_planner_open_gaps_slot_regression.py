@@ -11,6 +11,9 @@ This pin fails at import/format time if either slot is removed again.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from harness.shared.agent_prompts import PLANNER_PROMPT_TEMPLATE, REASONER_PROMPT_TEMPLATE
@@ -35,12 +38,49 @@ def test_reasoner_prompt_template_keeps_open_hypotheses_slot() -> None:
     assert "provisional" in rendered
 
 
-def test_langgraph_planner_node_passes_open_gaps() -> None:
-    """The experimental graph must not call ``.format(task=...)`` alone — KeyError."""
-    import inspect
+def test_langgraph_planner_node_injects_open_gaps(tmp_path: Path) -> None:
+    """A gap in the store must reach the prompt the orchestrator is handed.
 
+    The defect this pins is the one in the module docstring: `.format(task=...)`
+    without `open_gaps=` silently drops the kwarg, so gaps are computed and never
+    injected. That is a fact about the *rendered prompt*, and this asserts it
+    end to end — seed a gap, run the node, read what the orchestrator received.
+
+    The previous version asserted `"format_gaps_for_planner" in
+    inspect.getsource(nodes)`. That is a proxy for the property, not the
+    property: it went red when `nodes.py` became a facade over
+    `node_executors.py` with no behavioural change whatsoever, and it would
+    equally have stayed green if the helper were imported and its result thrown
+    away. A source-text check answers "does this name appear in this module",
+    which is a narrower question than the one the caller is asking.
+    """
     from harness.shared.langgraph import nodes
 
-    source = inspect.getsource(nodes.planner_node)
-    assert "open_gaps=" in source or "open_gaps =" in source
-    assert "format_gaps_for_planner" in inspect.getsource(nodes)
+    memory = tmp_path / ".mango" / "memory"
+    memory.mkdir(parents=True)
+    (memory / "gaps.json").write_text(
+        json.dumps([{"question": "GAP-SENTINEL-Q", "what_needed": "GAP-SENTINEL-NEED", "status": "open"}]),
+        encoding="utf-8",
+    )
+
+    captured: dict[str, str] = {}
+
+    class _CapturingOrchestrator:
+        """Minimal stand-in: the node needs a workspace and somewhere to send the prompt."""
+
+        workspace_dir = tmp_path
+
+        def execute_agent(self, role: str, prompt: str, tools: list | None = None) -> str:
+            captured[role] = prompt
+            return "[PLAN] stub"
+
+    result = nodes.planner_node(
+        {"task": "ship the thing"},
+        {"configurable": {"orchestrator": _CapturingOrchestrator()}},
+    )
+
+    assert "errors" not in result, f"planner_node raised rather than planning: {result}"
+    prompt = captured.get("planner", "")
+    assert prompt, "the orchestrator was never handed a planner prompt"
+    assert "GAP-SENTINEL-Q" in prompt, f"the open gap never reached the prompt:\n{prompt}"
+    assert "GAP-SENTINEL-NEED" in prompt

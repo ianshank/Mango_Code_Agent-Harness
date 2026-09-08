@@ -1,5 +1,6 @@
 ---
 name: regression-pin-author
+Reviewed: 2026-09-08
 description: |
   Guides the authoring of standalone defect reproduction test modules in the
   regression tier (harness/shared/tests/regression/) and pins them in
@@ -54,7 +55,8 @@ A regression pin module must:
 
 ### 2. Registration in Regression Tier Pin
 
-Register the module in [`test_regression_tier_pin.py`](file:///e:/Coding_Projects/Harness_TEST/harness/shared/tests/regression/test_regression_tier_pin.py):
+Register the module in
+[`harness/shared/tests/regression/test_regression_tier_pin.py`](../../../harness/shared/tests/regression/test_regression_tier_pin.py):
 
 ```python
 REQUIRED_REGRESSION_MODULES = {

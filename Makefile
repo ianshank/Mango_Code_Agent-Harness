@@ -44,7 +44,7 @@ PYTEST_ORDER_FLAGS ?= -p randomly
 # for `coverage-python` fell from 92s to 36s on four cores. Set
 # `PYTEST_PARALLEL_FLAGS=` to run serially, e.g. to bisect an order coupling
 # with `--randomly-seed=N` on one worker.
-PYTEST_PARALLEL_FLAGS ?= -n 8
+PYTEST_PARALLEL_FLAGS ?= -n auto
 PYTEST_RUN_FLAGS := $(PYTEST_ORDER_FLAGS) $(PYTEST_PARALLEL_FLAGS)
 RUFF     ?= $(PYTHON) -m ruff
 MYPY     ?= $(PYTHON) -m mypy
