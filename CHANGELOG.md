@@ -10,6 +10,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### INV-13 steps 7–9: Landlock isolation backend (2026-09-09)
+
+- **DEC-069:** GHA `ubuntu-latest` (PR #128 head, all three Python legs) reports Landlock ABI 7; this agent VM reports ABI 6. Both meet `landlock_restrict.MIN_ABI_FOR_NET` (UAPI floor 4, not a policy key). C-AEI-6 is not the close of this measurement. Broker default stays `ProcessBackend()`.
+- `sandbox_policy.py` compiles allow/deny in memory from `governance-policy.json` and `agent-policy.json` at backend start (R-AEI-14). No derived artifact is committed. Mismatch or parse failure is BLOCKED.
+- `landlock_backend.py` implements `ExecutionBackend`. Filesystem is confined to `ExecutionRequest.workspace`; TCP bind/connect is default-denied in the child `preexec_fn`. Missing workspace, probe failure, compile failure, and attestation failure return BLOCKED with no `ProcessBackend` fallback (C-AEI-3). The child shell name is `ProcessBackend.shell`, not a second literal.
+- Isolation tests build `ExecutionRequest` through `_isolation_request.isolation_request`, which reads `orchestrator.tool_timeout_sec` / `orchestrator.max_output_bytes` via `ProcessBackend` defaults (C-AEI-2).
+- Escape corpus (`pytest -m security -k escape_corpus`): each route is open on `ProcessBackend` and closed or BLOCKED on Landlock. TCP cases use an in-process loopback listener and `@pytest.mark.enable_socket` on those tests only. Commands use `sys.executable -c` (not `cat`/`printf`). Copilot's `POSIX_ONLY` skip is declined: AC-15 / INV-2 require a determination. When `ProcessBackend.available()` is false (no bash), the process side is asserted non-success rather than skipped.
+- Evidence: `sandbox_digest` is recorded only when the backend name is `landlock` and both filesystem and network isolation were applied. `ProcessBackend` cannot claim INV-13 complete.
+
 ### INV-13 step 6: host capability probe (2026-09-09)
 
 - Stdlib-only `capability_probe.py` prints LSM, Landlock ABI, unprivileged userns, and container runtimes as `enforced` / `absent` / `undetermined`. `make validate` runs it with `--json` so every matrix leg emits loadable JSON. Absence is a determination (exit 0); undetermined is the only non-zero exit. Spawn-free; the VERSION-flag Landlock query never calls `landlock_restrict_self`. Probe output is not a `BackendCapabilities` record and is not passed into `ProcessBackend`. Sandbox digest remains unattestable until steps 7–9. GitHub Actions inventory is still unmeasured until this prints on the matrix.

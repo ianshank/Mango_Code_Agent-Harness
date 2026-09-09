@@ -21,11 +21,12 @@ pytestmark = pytest.mark.governance
 
 GOVERNANCE = REPO / "harness" / "shared" / "governance"
 
-#: Existing spawners plus the process backend. New modules must not join this set
-#: until they are the isolation backend or the capability probe (AC-17).
+#: Existing spawners plus the isolation backend. The capability probe must not
+#: join this set: it is stdlib-only and spawn-free (AC-17).
 _SPAWN_ALLOWLIST = frozenset(
     {
         "process_backend.py",
+        "landlock_backend.py",
         "attestation.py",
         "remotes.py",
         "pretooluse_guard.py",
@@ -185,6 +186,8 @@ def test_governance_no_direct_spawn() -> None:
         "evidence_manifest.py",
         "evidence_record.py",
         "capability_probe.py",
+        "sandbox_policy.py",
+        "landlock_restrict.py",
     ):
         assert (GOVERNANCE / required).is_file(), required
         tree = ast.parse((GOVERNANCE / required).read_text(encoding="utf-8"))

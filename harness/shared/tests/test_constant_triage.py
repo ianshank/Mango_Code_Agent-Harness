@@ -121,6 +121,11 @@ TRIAGE: tuple[Row, ...] = (
         "MIN_MESSAGES_BEFORE_FALLBACK",
         decision="DEC-068",
     ),
+    Row(
+        "harness.shared.governance.landlock_restrict",
+        "MIN_ABI_FOR_NET",
+        decision="DEC-069",
+    ),
 )
 
 

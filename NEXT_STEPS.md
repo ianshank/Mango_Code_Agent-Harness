@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-09 · `origin/main` is PR #127 (`3e8d69d`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 are on `main`. This change lands the capability probe (AEI step 6 / AC-12) and the AQA-007 vocabulary pin. Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. Remaining INV-13 work is the isolation decision and backend (spec steps 7–9), not a new NEXT_STEPS row. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
+**Last reviewed:** 2026-09-09 · `origin/main` is PR #127 (`3e8d69d`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 are on `main`. This change lands DEC-069 and the Landlock isolation backend (AEI steps 7–9 / AC-13–16). Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
 
 ---
 
@@ -368,11 +368,17 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 ## 6. Delivered, and removed from the open list
 
+**Closed 2026-09-09 (INV-13 steps 7–9 / DEC-069 Landlock):**
+
+| Was | Now |
+|---|---|
+| **INV-13 steps 7–9 · isolation backend** | **Landed (DEC-069).** GHA ABI 7 / agent ABI 6. `LandlockBackend` confines FS to the workspace and default-denies TCP. In-memory `sandbox_policy`. Escape corpus dual-state. Broker default remains `ProcessBackend`; sandbox digest only when Landlock applied both dimensions. C-AEI-6 not taken. |
+
 **Closed 2026-09-09 (INV-13 step 6 / AC-12 host inventory):**
 
 | Was | Now |
 |---|---|
-| **INV-13 step 6 · host capability probe** | **Landed (PR #128).** Stdlib-only `capability_probe.py`; `make validate` prints `--json`. Vocabulary is `enforced`/`absent`/`undetermined` (not `IsolationState`). Pinned by `test_capability_probe.py` and AQA-007. Remaining INV-13 work is steps 7–9. |
+| **INV-13 step 6 · host capability probe** | **Landed (PR #128).** Stdlib-only `capability_probe.py`; `make validate` prints `--json`. Vocabulary is `enforced`/`absent`/`undetermined` (not `IsolationState`). Pinned by `test_capability_probe.py` and AQA-007. |
 
 **Closed 2026-09-08 (PR #124 on `main`: INV-13 evidence + protocol, NS-18):**
 

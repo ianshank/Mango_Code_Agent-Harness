@@ -19,6 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
+from harness.shared.governance.execution_backend import (
+    ISOLATION_ENFORCED,
+    ISOLATION_UNENFORCED,
+    LANDLOCK_BACKEND_NAME,
+)
+from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_defaults import evidence_defaults
 from harness.shared.write_policy import active_policy_path, policy_digest
 
@@ -67,6 +73,45 @@ def current_policy_digest(policy_path: Path | None = None) -> str:
     return policy_digest(path.read_bytes())
 
 
+def _sandbox_fields(backend: Any, outcome: str) -> dict[str, Any]:
+    """Sandbox digest only when this command was isolated (DEC-069, AC-19).
+
+    ``ProcessBackend`` never qualifies, even if a test injects isolation-shaped
+    probe JSON (AQA-007). Unenforced capabilities are never recorded as
+    enforced. A ``BLOCKED`` outcome never claims the fifth digest: a reused
+    ``LandlockBackend`` may still report enforced capabilities from an earlier
+    spawn, and that must not leak onto a request that never ran confined.
+    """
+    if outcome == BROKER_BLOCKED:
+        return {"sandbox_attested": False}
+    name = str(getattr(backend, "name", ""))
+    caps_fn = getattr(backend, "capabilities", None)
+    filesystem: str = ISOLATION_UNENFORCED
+    network: str = ISOLATION_UNENFORCED
+    if callable(caps_fn):
+        caps = caps_fn()
+        filesystem = str(getattr(caps, "filesystem_isolation", ISOLATION_UNENFORCED))
+        network = str(getattr(caps, "network_isolation", ISOLATION_UNENFORCED))
+    attested = name == LANDLOCK_BACKEND_NAME and filesystem == ISOLATION_ENFORCED and network == ISOLATION_ENFORCED
+    if not attested:
+        return {"sandbox_attested": False}
+    payload = json.dumps(
+        {
+            "backend": name,
+            "version": str(getattr(backend, "version", "")),
+            "filesystem_isolation": filesystem,
+            "network_isolation": network,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return {
+        "sandbox_attested": True,
+        "sandbox_digest": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
+
 def build_execution_entry(
     *,
     command: str,
@@ -78,9 +123,15 @@ def build_execution_entry(
     node_ids: Sequence[str] = (),
     policy_path: Path | None = None,
 ) -> dict[str, Any]:
-    """The four INV-13 digests this phase can attest, plus the command outcome."""
+    """The four INV-13 digests, the command outcome, and optional sandbox fields.
+
+    ``sandbox_attested`` is True and ``sandbox_digest`` is present only when
+    ``outcome`` is not ``BLOCKED``, the backend name is
+    ``LANDLOCK_BACKEND_NAME``, and both filesystem and network isolation were
+    applied. The four digest fields are always recorded.
+    """
     caps = backend_capability_record(backend)
-    return {
+    entry: dict[str, Any] = {
         "command": command,
         "outcome": outcome,
         "action": action,
@@ -91,6 +142,8 @@ def build_execution_entry(
         "backend_version": caps["version"],
         "test_digest": test_digest(command, node_ids),
     }
+    entry.update(_sandbox_fields(backend, outcome))
+    return entry
 
 
 def append_signed_jsonl(sink: Path, builder: EvidenceBuilder) -> None:

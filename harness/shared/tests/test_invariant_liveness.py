@@ -128,16 +128,17 @@ PARTIALLY_ENFORCED = {
         "only for want of a mechanism to violate it, which is not the same as tested."
     ),
     "INV-13": (
-        "COVERED: four of five digests on the broker evidence path -- policy, source "
+        "COVERED: four of five digests on the default broker evidence path -- policy, source "
         "(digest-of-digests of the loop-start enforcement baseline), tool-version "
         "(backend name and version), and test (resolved verification command plus "
         "node ids), asserted by test_evidence_record.py AC-5..AC-8; AC-12 host "
         "inventory is covered by capability_probe.py (enforced|absent|undetermined) "
-        "and test_capability_probe.py, reached from make validate. NOT COVERED: the "
-        "sandbox digest; ProcessBackend contains but does not isolate, so no result "
-        "claims the fifth digest until an isolation backend lands or C-AEI-6 records "
-        "that no available primitive enforces both filesystem and network isolation. "
-        "The host probe is not confinement (AC-13)."
+        "and test_capability_probe.py, reached from make validate; AC-13..AC-16 "
+        "isolation on LandlockBackend (DEC-069) including the escape corpus. NOT COVERED: "
+        "the fifth digest on the default ProcessBackend path -- broker construction "
+        "still uses ProcessBackend, so no result produced there claims sandbox "
+        "attestation; UDP/ICMP remain residuals; process_isolation stays unenforced. "
+        "The host probe is not confinement (AC-13); C-AEI-6 is not this measurement's close."
     ),
 }
 
