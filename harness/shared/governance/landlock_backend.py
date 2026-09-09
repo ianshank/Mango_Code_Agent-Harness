@@ -120,11 +120,29 @@ class LandlockBackend:
         return ExecutionResult(BROKER_BLOCKED, "", "", 1, reason=reason, action=action)
 
     def _inside(self, path: Path, root: Path) -> bool:
+        """True when ``path`` is ``root`` or a descendant. Both must be resolved."""
         try:
-            path.resolve().relative_to(root.resolve())
-        except (OSError, ValueError):
+            path.relative_to(root)
+        except ValueError:
             return False
         return True
+
+    def _confine_paths(self, workspace: Path, cwd: Path | None, action: str) -> tuple[Path, Path] | ExecutionResult:
+        """Resolve workspace and cwd once; BLOCKED if either is unreadable or outside."""
+        try:
+            workspace_res = workspace.resolve()
+        except OSError as exc:
+            return self._blocked(f"workspace unreadable: {exc}", action)
+        if cwd is None or cwd == workspace:
+            cwd_res = workspace_res
+        else:
+            try:
+                cwd_res = cwd.resolve()
+            except OSError as exc:
+                return self._blocked(f"cwd unreadable: {exc}", action)
+        if not self._inside(cwd_res, workspace_res):
+            return self._blocked("cwd is outside the request workspace", action)
+        return workspace_res, cwd_res
 
     def _child_env(self) -> dict[str, str]:
         denied = set(credential_env_names())
@@ -149,27 +167,23 @@ class LandlockBackend:
         workspace = request.workspace
         if workspace is None or not workspace.is_dir():
             return self._blocked("isolation requires a workspace directory", action)
-        try:
-            workspace_res = workspace.resolve()
-        except OSError as exc:
-            return self._blocked(f"workspace unreadable: {exc}", action)
-        cwd = request.cwd if request.cwd is not None else workspace
-        if not self._inside(cwd, workspace_res):
-            return self._blocked("cwd is outside the request workspace", action)
+        confined = self._confine_paths(workspace, request.cwd, action)
+        if isinstance(confined, ExecutionResult):
+            return confined
+        workspace_res, cwd_res = confined
         abi = self._abi()
         if abi is None:
             return self._blocked("isolation probe failed: landlock ABI missing", action)
         apply_fn = self._apply
-        ws = workspace_res
 
         def preexec() -> None:
-            apply_fn(ws, abi)
+            apply_fn(workspace_res, abi)
 
         timeout = request.timeout if request.timeout > 0 else DEFAULT_TIMEOUT_SEC
         cap = request.max_output_bytes if request.max_output_bytes > 0 else DEFAULT_MAX_OUTPUT_BYTES
         try:
             kwargs: dict[str, Any] = {
-                "cwd": str(cwd.resolve()),
+                "cwd": str(cwd_res),
                 "capture_output": True,
                 "encoding": "utf-8",
                 "timeout": timeout,

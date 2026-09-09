@@ -110,7 +110,7 @@ def test_cwd_outside_workspace_is_blocked(tmp_path: Path) -> None:
     other.mkdir()
     result = LandlockBackend().execute(_request(workspace, "true", cwd=other))
     assert result.status == BROKER_BLOCKED
-    assert "cwd" in (result.reason or "")
+    assert "cwd is outside" in (result.reason or "")
 
 
 def test_backend_failure_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -447,7 +447,31 @@ def test_workspace_resolve_oserror_is_blocked(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(Path, "resolve", boom_resolve)
     result = backend.execute(_request(workspace, "true"))
     assert result.status == BROKER_BLOCKED
-    assert "unreadable" in (result.reason or "")
+    assert "workspace unreadable" in (result.reason or "")
+
+
+def test_cwd_resolve_oserror_is_unreadable_not_outside(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A failed cwd resolve is BLOCKED as unreadable, not 'outside' or apply-failed."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    nested = workspace / "nested"
+    nested.mkdir()
+    real_resolve = Path.resolve
+
+    def selective(self: Path, strict: bool = False) -> Path:
+        if self == nested:
+            raise OSError("cannot resolve cwd")
+        return real_resolve(self, strict=strict)
+
+    backend = LandlockBackend(apply_fn=lambda *_a, **_k: None)
+    monkeypatch.setattr(backend, "available", lambda: True)
+    monkeypatch.setattr(Path, "resolve", selective)
+    result = backend.execute(_request(workspace, "true", cwd=nested))
+    assert result.status == BROKER_BLOCKED
+    reason = result.reason or ""
+    assert "cwd unreadable" in reason
+    assert "outside" not in reason
+    assert "apply failed" not in reason
 
 
 def test_policy_error_at_construction_blocks(tmp_path: Path) -> None:
