@@ -49,7 +49,7 @@ def _dual(
     open_token: str | None = None,
     closed_token: str | None = None,
     open_check: Callable[[ExecutionResult], None] | None = None,
-) -> None:
+) -> tuple[ExecutionResult, ExecutionResult]:
     process = ProcessBackend()
     opened = process.execute(_request(workspace, command))
     assert opened.status == BROKER_SUCCESS, opened.reason or opened.stderr
@@ -60,6 +60,7 @@ def _dual(
     isolated = LandlockBackend()
     closed = isolated.execute(_request(workspace, command))
     _closed_or_blocked(closed, closed_token if closed_token is not None else open_token)
+    return opened, closed
 
 
 def test_escape_corpus_outside_read(tmp_path: Path) -> None:
@@ -68,7 +69,9 @@ def test_escape_corpus_outside_read(tmp_path: Path) -> None:
     secret = tmp_path / "out" / "secret.txt"
     secret.parent.mkdir()
     secret.write_text("SECRET\n", encoding="utf-8")
-    _dual(workspace, f"cat {shlex.quote(str(secret))}", open_token="SECRET")
+    opened, closed = _dual(workspace, f"cat {shlex.quote(str(secret))}", open_token="SECRET")
+    assert opened.status == BROKER_SUCCESS
+    assert closed.status != BROKER_SUCCESS
 
 
 def test_escape_corpus_outside_write(tmp_path: Path) -> None:
