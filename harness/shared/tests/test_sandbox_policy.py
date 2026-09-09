@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from harness.shared.agent_authority import DEFAULT_AGENT_POLICY_PATH
-from harness.shared.governance.execution_backend import ExecutionRequest
 from harness.shared.governance.landlock_backend import LandlockBackend
+from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_SEC
 from harness.shared.governance.sandbox_policy import (
     SandboxPolicyError,
     compile_sandbox_policy,
@@ -19,6 +19,7 @@ from harness.shared.governance.sandbox_policy import (
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_loader import POLICY_PATH
 from harness.shared.tests._helpers import REPO
+from harness.shared.tests._isolation_request import isolation_request
 
 pytestmark = pytest.mark.governance
 
@@ -44,6 +45,14 @@ def test_sandbox_policy_compiled_in_memory() -> None:
     assert derived == [], f"committed derived sandbox artifact: {derived}"
 
 
+def test_isolation_request_uses_policy_sourced_bounds() -> None:
+    """C-AEI-2: isolation tests must not restate orchestrator literals."""
+    request = isolation_request(None, "true")
+    assert request.timeout == DEFAULT_TIMEOUT_SEC
+    assert request.max_output_bytes == DEFAULT_MAX_OUTPUT_BYTES
+    assert request.action == "test_execute"
+
+
 def test_sandbox_policy_mismatch_blocks(tmp_path: Path) -> None:
     """A compiled view that does not match a live rebuild is BLOCKED at start."""
     live = compile_sandbox_policy()
@@ -51,16 +60,7 @@ def test_sandbox_policy_mismatch_blocks(tmp_path: Path) -> None:
     backend = LandlockBackend(policy=stale)
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    result = backend.execute(
-        ExecutionRequest(
-            command="true",
-            workspace=workspace,
-            cwd=workspace,
-            timeout=2,
-            max_output_bytes=64,
-            action="test_execute",
-        )
-    )
+    result = backend.execute(isolation_request(workspace, "true"))
     assert result.status == BROKER_BLOCKED
     assert "mismatch" in (result.reason or "")
 

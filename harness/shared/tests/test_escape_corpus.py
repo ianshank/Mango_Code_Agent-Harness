@@ -21,19 +21,13 @@ from harness.shared.governance.execution_backend import ExecutionRequest, Execut
 from harness.shared.governance.landlock_backend import LandlockBackend
 from harness.shared.governance.process_backend import ProcessBackend
 from harness.shared.governance.verdict import BROKER_BLOCKED, BROKER_SUCCESS
+from harness.shared.tests._isolation_request import isolation_request
 
 pytestmark = pytest.mark.security
 
 
 def _request(workspace: Path, command: str) -> ExecutionRequest:
-    return ExecutionRequest(
-        command=command,
-        workspace=workspace,
-        cwd=workspace,
-        timeout=8,
-        max_output_bytes=4096,
-        action="test_execute",
-    )
+    return isolation_request(workspace, command)
 
 
 def _py(script: str) -> str:

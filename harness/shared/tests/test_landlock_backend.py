@@ -16,19 +16,13 @@ from harness.shared.governance.landlock_restrict import MIN_ABI_FOR_NET, apply_l
 from harness.shared.governance.process_backend import ProcessBackend
 from harness.shared.governance.sandbox_policy import SandboxPolicyError
 from harness.shared.governance.verdict import BROKER_BLOCKED, BROKER_FAILED, BROKER_SUCCESS
+from harness.shared.tests._isolation_request import isolation_request
 
 pytestmark = pytest.mark.governance
 
 
 def _request(workspace: Path, command: str, cwd: Path | None = None) -> ExecutionRequest:
-    return ExecutionRequest(
-        command=command,
-        workspace=workspace,
-        cwd=cwd if cwd is not None else workspace,
-        timeout=8,
-        max_output_bytes=4096,
-        action="test_execute",
-    )
+    return isolation_request(workspace, command, cwd=cwd)
 
 
 def test_protocol_landlock_conforms() -> None:
@@ -63,16 +57,7 @@ def test_isolated_backend_confines(tmp_path: Path) -> None:
         assert read_result.status == BROKER_BLOCKED
         write_result = backend.execute(_request(workspace, write_cmd))
         assert write_result.status == BROKER_BLOCKED
-    missing = backend.execute(
-        ExecutionRequest(
-            command="true",
-            workspace=None,
-            cwd=None,
-            timeout=2,
-            max_output_bytes=64,
-            action="test_execute",
-        )
-    )
+    missing = backend.execute(isolation_request(None, "true"))
     assert missing.status == BROKER_BLOCKED
     assert "workspace" in (missing.reason or "")
 

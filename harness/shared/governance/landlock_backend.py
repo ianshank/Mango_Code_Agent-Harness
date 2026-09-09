@@ -26,7 +26,12 @@ from harness.shared.governance.execution_backend import (
 )
 from harness.shared.governance.landlock_restrict import MIN_ABI_FOR_NET as MIN_ABI_FOR_NET
 from harness.shared.governance.landlock_restrict import apply_landlock
-from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_SEC, _cap
+from harness.shared.governance.process_backend import (
+    DEFAULT_MAX_OUTPUT_BYTES,
+    DEFAULT_TIMEOUT_SEC,
+    ProcessBackend,
+    _cap,
+)
 from harness.shared.governance.sandbox_policy import (
     CompiledSandboxPolicy,
     SandboxPolicyError,
@@ -43,11 +48,11 @@ _CompileFn = Callable[[], CompiledSandboxPolicy]
 
 
 class LandlockBackend:
-    """Isolation backend. Available on POSIX hosts with Landlock ABI >= 4."""
+    """Isolation backend. Available on POSIX with ABI at or above ``MIN_ABI_FOR_NET``."""
 
     name = "landlock"
     version = "1.0.0"
-    shell = "bash"
+    shell = ProcessBackend.shell
 
     def __init__(
         self,
