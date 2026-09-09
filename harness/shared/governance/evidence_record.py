@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
+from harness.shared.governance.execution_backend import (
+    ISOLATION_ENFORCED,
+    ISOLATION_UNENFORCED,
+    LANDLOCK_BACKEND_NAME,
+)
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_defaults import evidence_defaults
 from harness.shared.write_policy import active_policy_path, policy_digest
@@ -81,13 +86,13 @@ def _sandbox_fields(backend: Any, outcome: str) -> dict[str, Any]:
         return {"sandbox_attested": False}
     name = str(getattr(backend, "name", ""))
     caps_fn = getattr(backend, "capabilities", None)
-    filesystem = "unenforced"
-    network = "unenforced"
+    filesystem: str = ISOLATION_UNENFORCED
+    network: str = ISOLATION_UNENFORCED
     if callable(caps_fn):
         caps = caps_fn()
-        filesystem = str(getattr(caps, "filesystem_isolation", "unenforced"))
-        network = str(getattr(caps, "network_isolation", "unenforced"))
-    attested = name == "landlock" and filesystem == "enforced" and network == "enforced"
+        filesystem = str(getattr(caps, "filesystem_isolation", ISOLATION_UNENFORCED))
+        network = str(getattr(caps, "network_isolation", ISOLATION_UNENFORCED))
+    attested = name == LANDLOCK_BACKEND_NAME and filesystem == ISOLATION_ENFORCED and network == ISOLATION_ENFORCED
     if not attested:
         return {"sandbox_attested": False}
     payload = json.dumps(
@@ -121,9 +126,9 @@ def build_execution_entry(
     """The four INV-13 digests, the command outcome, and optional sandbox fields.
 
     ``sandbox_attested`` is True and ``sandbox_digest`` is present only when
-    ``outcome`` is not ``BLOCKED``, the backend name is ``landlock``, and both
-    filesystem and network isolation were applied. The four digest fields are
-    always recorded.
+    ``outcome`` is not ``BLOCKED``, the backend name is
+    ``LANDLOCK_BACKEND_NAME``, and both filesystem and network isolation were
+    applied. The four digest fields are always recorded.
     """
     caps = backend_capability_record(backend)
     entry: dict[str, Any] = {

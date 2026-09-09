@@ -19,6 +19,9 @@ from typing import Any
 from harness.shared.debug_dump import credential_env_names
 from harness.shared.governance.capability_probe import probe
 from harness.shared.governance.execution_backend import (
+    ISOLATION_ENFORCED,
+    ISOLATION_UNENFORCED,
+    LANDLOCK_BACKEND_NAME,
     BackendCapabilities,
     ExecutionBackend,
     ExecutionRequest,
@@ -50,7 +53,7 @@ _CompileFn = Callable[[], CompiledSandboxPolicy]
 class LandlockBackend:
     """Isolation backend. Available on POSIX with ABI at or above ``MIN_ABI_FOR_NET``."""
 
-    name = "landlock"
+    name = LANDLOCK_BACKEND_NAME
     version = "1.0.0"
     shell = ProcessBackend.shell
 
@@ -106,9 +109,9 @@ class LandlockBackend:
         if self._applied is not None:
             return self._applied
         return BackendCapabilities(
-            filesystem_isolation="unenforced",
-            network_isolation="unenforced",
-            process_isolation="unenforced",
+            filesystem_isolation=ISOLATION_UNENFORCED,
+            network_isolation=ISOLATION_UNENFORCED,
+            process_isolation=ISOLATION_UNENFORCED,
             version=self.version,
         )
 
@@ -184,9 +187,9 @@ class LandlockBackend:
         except Exception as exc:  # noqa: BLE001 - isolation backend must answer every call
             return self._blocked(f"isolation execute failed: {exc}", action)
         caps = BackendCapabilities(
-            filesystem_isolation="enforced",
-            network_isolation="enforced",
-            process_isolation="unenforced",
+            filesystem_isolation=ISOLATION_ENFORCED,
+            network_isolation=ISOLATION_ENFORCED,
+            process_isolation=ISOLATION_UNENFORCED,
             version=self.version,
         )
         if self._attest is not None and not self._attest(caps):

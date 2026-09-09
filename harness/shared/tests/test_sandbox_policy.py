@@ -19,7 +19,7 @@ from harness.shared.governance.sandbox_policy import (
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_loader import POLICY_PATH
 from harness.shared.tests._helpers import REPO
-from harness.shared.tests._isolation_request import isolation_request
+from harness.shared.tests._isolation_request import TEST_EXECUTE_ACTION, isolation_request
 
 pytestmark = pytest.mark.governance
 
@@ -50,7 +50,7 @@ def test_isolation_request_uses_policy_sourced_bounds() -> None:
     request = isolation_request(None, "true")
     assert request.timeout == DEFAULT_TIMEOUT_SEC
     assert request.max_output_bytes == DEFAULT_MAX_OUTPUT_BYTES
-    assert request.action == "test_execute"
+    assert request.action == TEST_EXECUTE_ACTION == "test_execute"
 
 
 def test_sandbox_policy_mismatch_blocks(tmp_path: Path) -> None:

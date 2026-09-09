@@ -12,7 +12,7 @@ from pathlib import Path
 from harness.shared.governance.execution_backend import ExecutionRequest
 from harness.shared.governance.process_backend import DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_SEC
 
-_TEST_EXECUTE = "test_execute"
+TEST_EXECUTE_ACTION = "test_execute"
 
 
 def isolation_request(
@@ -27,5 +27,5 @@ def isolation_request(
         cwd=cwd if cwd is not None else workspace,
         timeout=DEFAULT_TIMEOUT_SEC,
         max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES,
-        action=_TEST_EXECUTE,
+        action=TEST_EXECUTE_ACTION,
     )
