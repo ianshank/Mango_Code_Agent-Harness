@@ -610,8 +610,10 @@ def test_libc_syscall_wrapper_and_abi_bits(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(ctypes, "CDLL", lambda *_a, **_k: FakeLibc())
     FakeSyscall.n = 0
     apply_landlock(workspace, 4, machine="arm64", extra_ro=(), prctl=lambda *_a, **_k: 0)
+    assert FakeSyscall.n >= 3
     FakeSyscall.n = 0
     apply_landlock(workspace, 5, machine="aarch64", extra_ro=(), prctl=lambda *_a, **_k: 0)
+    assert FakeSyscall.n >= 3
 
 
 def test_apply_prctl_from_injected_libc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -643,3 +645,4 @@ def test_apply_prctl_from_injected_libc(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(ctypes.util, "find_library", lambda _n: "libc.so.6")
     monkeypatch.setattr(ctypes, "CDLL", lambda *_a, **_k: FakeLibc())
     apply_landlock(workspace, 6, machine="x86_64", extra_ro=(), syscall=fake_syscall)
+    assert n["n"] >= 3
