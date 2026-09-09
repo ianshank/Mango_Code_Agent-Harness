@@ -114,11 +114,18 @@ def _live_landlock_abi(nr: int) -> tuple[int, int]:
     libname = ctypes.util.find_library("c")
     if not libname:
         return -1, errno.ENOSYS
-    libc = ctypes.CDLL(libname, use_errno=True)
-    libc.syscall.restype = ctypes.c_long
+    try:
+        libc = ctypes.CDLL(libname, use_errno=True)
+    except OSError:
+        return -1, errno.ENOSYS
+    try:
+        syscall = libc.syscall
+    except AttributeError:
+        return -1, errno.ENOSYS
+    syscall.restype = ctypes.c_long
     ctypes.set_errno(0)
     version_flag = 1 << 0
-    ret = libc.syscall(
+    ret = syscall(
         ctypes.c_long(nr),
         None,
         ctypes.c_size_t(0),

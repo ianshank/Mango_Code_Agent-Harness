@@ -258,6 +258,25 @@ def test_missing_libc_is_landlock_absent(monkeypatch: pytest.MonkeyPatch) -> Non
     assert capability_probe._live_landlock_abi(444) == (-1, errno.ENOSYS)
 
 
+def test_unloadable_libc_is_landlock_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(capability_probe.ctypes.util, "find_library", lambda _name: "libc.so.6")
+
+    def _raise_oserror(*_args: object, **_kwargs: object) -> object:
+        raise OSError("cannot load libc")
+
+    monkeypatch.setattr(capability_probe.ctypes, "CDLL", _raise_oserror)
+    assert capability_probe._live_landlock_abi(444) == (-1, errno.ENOSYS)
+
+
+def test_missing_syscall_symbol_is_landlock_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _NoSyscall:
+        pass
+
+    monkeypatch.setattr(capability_probe.ctypes.util, "find_library", lambda _name: "libc.so.6")
+    monkeypatch.setattr(capability_probe.ctypes, "CDLL", lambda *_args, **_kwargs: _NoSyscall())
+    assert capability_probe._live_landlock_abi(444) == (-1, errno.ENOSYS)
+
+
 def test_runtime_binary_and_socket_is_enforced(tmp_path: Path) -> None:
     sock = tmp_path / "docker.sock"
     sock.write_text("", encoding="utf-8")
