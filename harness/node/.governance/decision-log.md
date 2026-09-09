@@ -75,3 +75,4 @@ Known decision IDs:
 - DEC-066
 - DEC-067
 - DEC-068
+- DEC-069

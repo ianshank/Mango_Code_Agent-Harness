@@ -67,6 +67,41 @@ def current_policy_digest(policy_path: Path | None = None) -> str:
     return policy_digest(path.read_bytes())
 
 
+def _sandbox_fields(backend: Any) -> dict[str, Any]:
+    """Sandbox digest only when Landlock applied both FS and net (DEC-069, AC-19).
+
+    ``ProcessBackend`` never qualifies, even if a test injects isolation-shaped
+    probe JSON (AQA-007). Unenforced capabilities are never recorded as
+    enforced.
+    """
+    name = str(getattr(backend, "name", ""))
+    caps_fn = getattr(backend, "capabilities", None)
+    filesystem = "unenforced"
+    network = "unenforced"
+    if callable(caps_fn):
+        caps = caps_fn()
+        filesystem = str(getattr(caps, "filesystem_isolation", "unenforced"))
+        network = str(getattr(caps, "network_isolation", "unenforced"))
+    attested = name == "landlock" and filesystem == "enforced" and network == "enforced"
+    if not attested:
+        return {"sandbox_attested": False}
+    payload = json.dumps(
+        {
+            "backend": name,
+            "version": str(getattr(backend, "version", "")),
+            "filesystem_isolation": filesystem,
+            "network_isolation": network,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return {
+        "sandbox_attested": True,
+        "sandbox_digest": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
+
 def build_execution_entry(
     *,
     command: str,
@@ -80,7 +115,7 @@ def build_execution_entry(
 ) -> dict[str, Any]:
     """The four INV-13 digests this phase can attest, plus the command outcome."""
     caps = backend_capability_record(backend)
-    return {
+    entry: dict[str, Any] = {
         "command": command,
         "outcome": outcome,
         "action": action,
@@ -91,6 +126,8 @@ def build_execution_entry(
         "backend_version": caps["version"],
         "test_digest": test_digest(command, node_ids),
     }
+    entry.update(_sandbox_fields(backend))
+    return entry
 
 
 def append_signed_jsonl(sink: Path, builder: EvidenceBuilder) -> None:

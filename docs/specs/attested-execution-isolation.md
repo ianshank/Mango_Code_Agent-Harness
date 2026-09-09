@@ -12,7 +12,10 @@ Spec class: program-plan
 
 INV-13 requires a "verified" result to carry policy, test, sandbox, source and
 tool-version digests. Four of five are recordable on the broker evidence path;
-the sandbox digest remains unattestable until isolation lands or C-AEI-6.
+the sandbox digest is recordable on `LandlockBackend` when both filesystem
+and network isolation were applied (DEC-069). The default broker path still
+uses `ProcessBackend` and does not claim the fifth digest. C-AEI-6 remains
+the close if a future runner loses Landlock.
 
 Five results measured against this branch turn that into a plan. Each was
 reproduced independently before this spec was written.
@@ -185,8 +188,10 @@ requirements and no reviewer could check the arithmetic.
 | test | R-AEI-6 | AC-5 |
 | sandbox | R-AEI-13, R-AEI-14 | AC-12, AC-13 |
 
-Phases 1 and 2 reach four of five. The fifth lands with the isolation backend,
-or is recorded as unattestable under C-AEI-6.
+Phases 1 and 2 reach four of five on the default broker path. The fifth is
+recordable when `LandlockBackend` applies both filesystem and network
+isolation (DEC-069). C-AEI-6 remains the close if a future runner loses
+Landlock; it is not the close of this measurement.
 
 ## Acceptance criteria
 
@@ -246,21 +251,22 @@ or is recorded as unattestable under C-AEI-6.
       prints each field as enforced, absent or undetermined, exits 0 when a
       field is absent, and exits 1 only when one is undetermined · stage:
       `make validate` (R-AEI-12)
-- [ ] AC-13: `pytest -k test_isolated_backend_confines` asserts a read and a
+- [x] AC-13: `pytest -k test_isolated_backend_confines` asserts a read and a
       write outside the request workspace both fail inside the backend, and
       that a request carrying no workspace returns `BLOCKED` rather than
       inheriting a directory · stage: `make coverage` (R-AEI-13, C-AEI-3)
-- [ ] AC-14: `pytest -k test_sandbox_policy_compiled_in_memory` asserts the
+- [x] AC-14: `pytest -k test_sandbox_policy_compiled_in_memory` asserts the
       compiled policy equals a rebuild from the two JSON sources, that no
       derived artifact is committed, and that a mismatch at backend start
       returns `BLOCKED`; recorded with a kill count per the
       `gate-mutation-proof` skill · stage: `make validate` (R-AEI-14, C-AEI-2)
-- [ ] AC-15: `pytest -m security -k escape_corpus` asserts each route is open
-      on `ProcessBackend` and closed or `BLOCKED` on the isolation backend,
-      with every network route targeting a loopback listener behind a positive
-      control, and no case skipped · stage: `make coverage` (R-AEI-16,
-      R-AEI-17)
-- [ ] AC-16: `pytest -k test_backend_failure_blocks` asserts a probe failure, a
+- [x] AC-15: `pytest harness/shared/tests/test_escape_corpus.py -k escape_corpus`
+      asserts each route is open on `ProcessBackend` and closed or `BLOCKED`
+      on the isolation backend, with every network route targeting a loopback
+      listener behind a positive control, and no case skipped. Run with
+      `-m security` as well; TCP cases carry `@pytest.mark.enable_socket` on
+      those tests only · stage: `make coverage` (R-AEI-16, R-AEI-17)
+- [x] AC-16: `pytest -k test_backend_failure_blocks` asserts a probe failure, a
       policy-compilation failure and an attestation failure each return
       `BLOCKED`, and that no path reaches `ProcessBackend` afterwards · stage:
       `make coverage` (C-AEI-3)
@@ -272,11 +278,12 @@ or is recorded as unattestable under C-AEI-6.
 - [x] AC-18: `python harness/shared/validate_invariants.py --workspace .` exits
       0, and `pytest -k test_lats_disabled` asserts `synthesis.lats_enabled` is
       false · stage: `make validate` (C-AEI-4)
-- [ ] AC-19: when the probe reports no primitive enforcing both dimensions,
-      `pytest -k test_sandbox_digest_unattestable` asserts the verdict records
-      the sandbox digest as unattestable and refuses a claim of INV-13, rather
-      than recording an unenforced capability as enforced · stage:
-      `make coverage` (C-AEI-6)
+- [ ] AC-19: C-AEI-6 is **not** the outcome of step 7 (DEC-069: Landlock ABI 7
+      on GHA / ABI 6 on the agent VM enforces both dimensions). The named
+      guard `pytest -k test_sandbox_digest_unattestable` still asserts the
+      default `ProcessBackend` path never records an unenforced capability as
+      enforced and never claims INV-13 complete · stage: `make coverage`
+      (C-AEI-6, DEC-069)
 
 ## Steps
 
@@ -312,9 +319,14 @@ question. Each phase is one pull request.
 7. Record the backend decision under `docs/decisions/` and run
    `make decision-index` — consumes step 6's output; produces the vendor choice
    this spec leaves open, or the C-AEI-6 finding that none qualifies.
+   **Landed** as DEC-069 (Landlock; `MIN_ABI_FOR_NET` is a UAPI floor).
 8. Implement the isolation backend and the in-memory policy compiler —
    consumes step 7; produces the artifact AC-13, AC-14, AC-16 and AC-19 check.
+   **Landed.** (`sandbox_policy.py`, `landlock_restrict.py`,
+   `landlock_backend.py`. Broker default stays `ProcessBackend()`.)
 9. Add the escape corpus and its mutation cases — consumes step 8 (AC-15).
+   **Landed.** (`test_escape_corpus.py`; TCP cases carry `@pytest.mark.enable_socket`
+   only on those tests.)
 
 ## Files touched
 
@@ -398,16 +410,17 @@ not.
 
 ## Open questions
 
-- Which isolation primitive the backend uses is unanswered here by design.
-  Step 6 measures and step 7 records. This agent VM (2026-09-09) has Landlock
-  ABI 6 and working user+net namespaces; filesystem confinement still needs
-  `pivot_root` or Landlock `PATH_BENEATH`, and GitHub Actions remains
-  unmeasured until the probe prints on the matrix. Anthropic's sandbox
-  runtime needs the AppArmor userns restriction relaxed with root and steers
-  egress through proxy environment variables, which R-AEI-15 refuses to
-  attest. C-AEI-6 defines the outcome if none qualifies on the runners that
-  must prove it, so a probe returning "nothing works" is a completed
-  measurement rather than a failed programme.
+- Which isolation primitive the backend uses is answered by **DEC-069**.
+  Step 6 measured and step 7 recorded. GitHub Actions `ubuntu-latest` (PR #128
+  head `c2c19ee`, CI run 34298491054, all three Python legs) reports Landlock
+  ABI 7, LSM including `landlock`, and `apparmor_restrict_unprivileged_userns=1`.
+  This agent VM (2026-09-09) has Landlock ABI 6. Both meet
+  `landlock_restrict.MIN_ABI_FOR_NET` (4). User+net+mount is not the first
+  primitive on GHA because unprivileged userns is restricted. Anthropic's
+  sandbox runtime steers egress through proxy environment variables, which
+  R-AEI-15 refuses to attest. Docker is reachable on GHA and is not the first
+  primitive. C-AEI-6 remains the outcome if a future runner loses Landlock;
+  it is not the close of this measurement.
 - Publishing generated baseline figures instead of transcribed ones is DEC-024
   hygiene that advances no INV-13 digest, and it was cut from this spec after
   review. It needs its own spec, because it is the only reason this change

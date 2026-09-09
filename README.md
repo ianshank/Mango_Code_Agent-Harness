@@ -124,6 +124,9 @@ A fail-closed **policy and attestation layer** for AI coding agents — bring yo
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── evidence_record.py       # INV-13 digest-of-digests + JSONL sink (does not import broker)
 │   │   │   ├── capability_probe.py      # INV-13 AC-12 host inventory (stdlib, spawn-free)
+│   │   │   ├── sandbox_policy.py        # INV-13 in-memory isolation policy (R-AEI-14)
+│   │   │   ├── landlock_restrict.py     # Landlock apply in the child (DEC-069)
+│   │   │   ├── landlock_backend.py      # Landlock ExecutionBackend — not the broker default
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation, tamper-refusing
 │   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
@@ -148,6 +151,9 @@ A fail-closed **policy and attestation layer** for AI coding agents — bring yo
 │   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
 │   │       ├── test_evidence_record.py         # INV-13 AC-5…AC-8 broker evidence path
 │   │       ├── test_capability_probe.py        # INV-13 AC-12 host inventory
+│   │       ├── test_sandbox_policy.py          # INV-13 AC-14 in-memory compiler
+│   │       ├── test_landlock_backend.py        # INV-13 AC-13/16/19 Landlock backend
+│   │       ├── test_escape_corpus.py           # INV-13 AC-15 dual-state escape corpus
 │   │       ├── test_execution_backend.py       # protocol, ProcessBackend adapter, execution.routing
 │   │       ├── test_governance_broker.py       # INV-8/9/10, in-process PDP, ProcessBackend
 │   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files
@@ -211,6 +217,7 @@ A fail-closed **policy and attestation layer** for AI coding agents — bring yo
 - **`EvidenceBuilder`** (`evidence_manifest.py`): HMAC-SHA256 signed audit trail builder. Signing key injected via constructor or `AGENT_EVIDENCE_KEY` env var. On the control-plane publisher, `export()` raises `ValueError` (fail-closed) when the key is absent. On the broker path the key is injected at construction; a keyless evidence-enabled broker never reaches `export()`. `export()` is non-destructive and deterministic. See `.mango/skills/evidence-signing/SKILL.md`.
 - **`evidence_record.py`**: folds the loop-start enforcement snapshot into one digest-of-digests, names policy/backend/test digests, and appends signed JSONL. Does not import `broker` (C-AEI-5) and does not re-walk `enforcement_digests` (R-AEI-7). The entry cap is `policy_defaults.evidence_defaults` (C-AEI-2).
 - **`capability_probe.py`**: INV-13 AC-12 host inventory. Reports whether LSM, Landlock, unprivileged userns, and container runtimes *exist* (`enforced` / `absent` / `undetermined`). Stdlib-only and spawn-free; `make validate` prints `--json` on every matrix leg. **This is not** `ProcessBackend`'s `capability_probe=` constructor argument (AC-10 `BackendCapabilities` / `IsolationState`: `enforced` / `unenforced` / `undetermined`). Probe JSON must not be passed into `ProcessBackend`. Existence of a primitive is not confinement (AC-13).
+- **`sandbox_policy.py` / `landlock_backend.py`**: INV-13 steps 7–9 (DEC-069). In-memory compile from `governance-policy.json` and `agent-policy.json`; Landlock confines the child filesystem to the request workspace and default-denies TCP. Tests construct `LandlockBackend` directly. The broker default remains `ProcessBackend`. A sandbox digest is recorded only when Landlock applied both dimensions.
 - **`check_dedup.py`**: CI drift gate — fails when per-stack governance scripts are full copies instead of thin shims delegating to `harness/shared`. Run via `make check-dedup`.
 - **`check_py_compat.py`**: CI compatibility gate — fails when any source file uses syntax unavailable in the lowest interpreter the CI matrix declares (`datetime.UTC`, and PEP 604 unions / unannotated `AnnAssign` below 3.10). The floor is *resolved from the workflow matrix*, not written down here, so moving the matrix moves the gate; it is 3.10 today (`docs/specs/python-floor-310.md`). Run via `make check-compat`.
 

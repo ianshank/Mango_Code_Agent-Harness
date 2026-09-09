@@ -84,6 +84,7 @@ def test_host_inventory_json_must_not_be_passed_as_backend_capabilities() -> Non
     allowlist = _assigned_frozenset_strings(_BACKEND_TEST, "_SPAWN_ALLOWLIST")
     assert "capability_probe.py" not in allowlist
     assert "process_backend.py" in allowlist
+    assert "landlock_backend.py" in allowlist
 
 
 if __name__ == "__main__":
