@@ -79,8 +79,9 @@ def compile_sandbox_policy(
 
     ``governance_path`` defaults to ``policy_loader.POLICY_PATH``.
     ``agent_path`` defaults to ``agent_authority.DEFAULT_AGENT_POLICY_PATH``.
-    Parse, I/O, or semantic mismatch raises ``SandboxPolicyError`` (or
-    ``PolicyError`` from the routing reader), never a silent default.
+    Parse, I/O, semantic mismatch, or a routing-reader ``PolicyError`` raises
+    ``SandboxPolicyError`` (the ``PolicyError`` is wrapped, never leaked),
+    never a silent default.
     """
     gov_path = POLICY_PATH if governance_path is None else governance_path
     ag_path = DEFAULT_AGENT_POLICY_PATH if agent_path is None else agent_path

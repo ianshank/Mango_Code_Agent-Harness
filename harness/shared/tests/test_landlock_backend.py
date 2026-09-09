@@ -439,6 +439,16 @@ def test_backend_timeout_and_apply_oserror(monkeypatch: pytest.MonkeyPatch, tmp_
     assert blocked.status == BROKER_BLOCKED
     assert "apply failed" in (blocked.reason or "")
 
+    def decode_error(*_a: object, **_k: object) -> object:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad")
+
+    odd = LandlockBackend(apply_fn=lambda *_a, **_k: None)
+    monkeypatch.setattr(odd, "available", lambda: True)
+    monkeypatch.setattr("harness.shared.governance.landlock_backend.subprocess.run", decode_error)
+    crashed = odd.execute(_request(workspace, "true"))
+    assert crashed.status == BROKER_BLOCKED
+    assert "execute failed" in (crashed.reason or "")
+
 
 def test_probe_field_shapes_and_stale_abi(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws"
@@ -552,6 +562,43 @@ def test_sandbox_fields_ignore_non_landlock_and_unenforced() -> None:
         backend=Nameless(),
     )
     assert nameless.get("sandbox_attested") is False
+
+    class StickyLandlock:
+        name = "landlock"
+        version = "1.0.0"
+
+        def capabilities(self) -> Any:
+            return type(
+                "C",
+                (),
+                {
+                    "filesystem_isolation": "enforced",
+                    "network_isolation": "enforced",
+                    "process_isolation": "unenforced",
+                },
+            )()
+
+    reused = StickyLandlock()
+    blocked = build_execution_entry(
+        command="true",
+        outcome=BROKER_BLOCKED,
+        action="test_execute",
+        exit_code=1,
+        baseline={"a.py": "abc"},
+        backend=reused,
+    )
+    assert blocked.get("sandbox_attested") is False
+    assert "sandbox_digest" not in blocked
+    ok = build_execution_entry(
+        command="true",
+        outcome=BROKER_SUCCESS,
+        action="test_execute",
+        exit_code=0,
+        baseline={"a.py": "abc"},
+        backend=reused,
+    )
+    assert ok["sandbox_attested"] is True
+    assert ok["sandbox_digest"]
 
 
 def test_apply_workspace_add_rule_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

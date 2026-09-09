@@ -176,6 +176,8 @@ class LandlockBackend:
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return self._blocked(f"isolation apply failed: {exc}", action)
+        except Exception as exc:  # noqa: BLE001 - isolation backend must answer every call
+            return self._blocked(f"isolation execute failed: {exc}", action)
         caps = BackendCapabilities(
             filesystem_isolation="enforced",
             network_isolation="enforced",
