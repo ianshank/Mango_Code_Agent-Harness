@@ -153,7 +153,8 @@ chosen by measurement after the probe artefact exists on both hosts.
   that passes in both states: that the route is open on `ProcessBackend`, and
   that it is closed, or the backend returns `BLOCKED`, on the isolation
   backend, so the suite is green at every point in the sequence and INV-2's
-  no-unwaived-skip rule is never engaged.
+  no-unwaived-skip rule is never engaged. If `ProcessBackend.available()` is
+  false, the process side MUST be asserted non-success; it MUST NOT be skipped.
 - R-AEI-17: Every network assertion in the corpus MUST target a listener bound
   on an ephemeral loopback port inside the test process, guarded by a positive
   control asserting the test process can reach it, so an absent network cannot
@@ -263,7 +264,9 @@ Landlock; it is not the close of this measurement.
 - [x] AC-15: `pytest harness/shared/tests/test_escape_corpus.py -k escape_corpus`
       asserts each route is open on `ProcessBackend` and closed or `BLOCKED`
       on the isolation backend, with every network route targeting a loopback
-      listener behind a positive control, and no case skipped. Run with
+      listener behind a positive control, and no case skipped. When
+      `ProcessBackend.available()` is false (no bash), the process side is
+      asserted non-success rather than skipped (INV-2). Run with
       `-m security` as well; TCP cases carry `@pytest.mark.enable_socket` on
       those tests only · stage: `make coverage` (R-AEI-16, R-AEI-17)
 - [x] AC-16: `pytest -k test_backend_failure_blocks` asserts a probe failure, a
@@ -354,7 +357,9 @@ mismatch in either direction (C-AEI-1).
 ## Invariants touched
 
 - INV-2: engaged by AC-15. The corpus asserts rather than skips, so no waiver
-  in `skip-waivers.json` is needed on a host without the primitive.
+  in `skip-waivers.json` is needed on a host without the primitive. A
+  module-wide `POSIX_ONLY` skip would pre-approve future skips (R-GT-7) and
+  is refused.
 - INV-7: the evidence entry is what gives a repair attempt an immutable
   evidence ID to point at; this change produces the record, not the loop.
 - INV-8: preserved, with a stated exemption. The capability probe and the
