@@ -366,25 +366,25 @@ def test_apply_prctl_and_restrict_failures(tmp_path: Path, monkeypatch: pytest.M
 
     monkeypatch.setattr(os, "close", fake_close)
 
-    def created(*_a: object, **_k: object) -> int:
-        created.n += 1  # type: ignore[attr-defined]
-        return 11 if created.n == 1 else 0  # type: ignore[attr-defined]
+    created_n = {"n": 0}
 
-    created.n = 0  # type: ignore[attr-defined]
+    def created(*_a: object, **_k: object) -> int:
+        created_n["n"] += 1
+        return 11 if created_n["n"] == 1 else 0
+
     with pytest.raises(OSError, match="PR_SET_NO_NEW_PRIVS"):
         apply_landlock(workspace, 6, machine="x86_64", extra_ro=(), syscall=created, prctl=lambda *_a, **_k: 1)
 
-    created.n = 0  # type: ignore[attr-defined]
+    restrict_n = {"n": 0}
 
     def then_restrict(*_a: object, **_k: object) -> int:
-        then_restrict.n += 1  # type: ignore[attr-defined]
-        if then_restrict.n == 1:
+        restrict_n["n"] += 1
+        if restrict_n["n"] == 1:
             return 11
-        if then_restrict.n == 3:
+        if restrict_n["n"] == 3:
             return -1
         return 0
 
-    then_restrict.n = 0  # type: ignore[attr-defined]
     with pytest.raises(OSError, match="restrict_self"):
         apply_landlock(workspace, 6, machine="x86_64", extra_ro=(), syscall=then_restrict, prctl=lambda *_a, **_k: 0)
 
