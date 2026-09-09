@@ -26,15 +26,15 @@ writes a file outside it, and opens an outbound connection. A direct
 workspace-relative target; the identical write inside the test file is not
 denied. The control grades the command string, not the process.
 
-**2. There is no evidence record on the execution path.**
-`EvidenceBuilder.add_action` and `add_synthesis_result` have no production
-caller; `EvidenceBuilder` is constructed only by
-`harness/control-plane/publish_policy_artifact.py`, which calls
-`add_policy_snapshot` and `export`. No digest field exists anywhere on the
-verdict chain: `HarnessCheck`, `Verdict` and `ExecutionResult` all lack one.
-INV-13 is **four of five** on the execution path once step 3 lands. A sandbox
+**2. There was no evidence record on the execution path.** (Closed by
+step 3 / PR #124.) `EvidenceBuilder.add_action` and `add_synthesis_result`
+had no production caller; `EvidenceBuilder` was constructed only by
+`harness/control-plane/publish_policy_artifact.py`. No digest field existed
+on `HarnessCheck`, `Verdict` or `ExecutionResult`. **Landed:**
+`evidence_record.py` writes four of five INV-13 digests on the broker path;
+a keyless evidence-enabled broker returns `BLOCKED` before spawn. A sandbox
 digest cannot be added until an isolation backend exists, which is why this
-plan orders the work as it does.
+plan ordered evidence before the sandbox.
 
 **3. The classifier graded a rewrite as a gate run, and was opposed to
 `CLAUDE.md`.** `ruff` and `eslint` were graded `test_execute` by program name in
