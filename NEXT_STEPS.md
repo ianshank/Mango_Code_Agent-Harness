@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-08 · `origin/main` is PR #124 (`e57be11`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 are on `main`. Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. Remaining INV-13 work is capability probe + isolation backend (spec steps 6–9), not a new NEXT_STEPS row. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
+**Last reviewed:** 2026-09-09 · `origin/main` is PR #127 (`3e8d69d`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 are on `main`. This change lands the capability probe (AEI step 6 / AC-12). Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. Remaining INV-13 work is the isolation decision and backend (spec steps 7–9), not a new NEXT_STEPS row. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
 
 ---
 

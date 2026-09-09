@@ -123,6 +123,7 @@ A fail-closed **policy and attestation layer** for AI coding agents — bring yo
 │   │   │   ├── policy_decision.py       # In-process PDP; mirrors tool_broker_reference.py
 │   │   │   ├── evidence_manifest.py     # EvidenceBuilder — HMAC-signed audit trails
 │   │   │   ├── evidence_record.py       # INV-13 digest-of-digests + JSONL sink (does not import broker)
+│   │   │   ├── capability_probe.py      # INV-13 AC-12 host inventory (stdlib, spawn-free)
 │   │   │   ├── pretooluse_guard.py      # Native command-level PreToolUse guard
 │   │   │   ├── verification.py          # VerificationRunner — earned verdict evaluation, tamper-refusing
 │   │   │   ├── enforcement_digest.py    # Digest of the protected enforcement set the verdict is earned against
@@ -145,6 +146,7 @@ A fail-closed **policy and attestation layer** for AI coding agents — bring yo
 │   │       ├── test_orchestrator_agent_loop.py # ReAct execution loop & budget limits
 │   │       ├── test_evidence_manifest.py       # EvidenceBuilder signing & immutability
 │   │       ├── test_evidence_record.py         # INV-13 AC-5…AC-8 broker evidence path
+│   │       ├── test_capability_probe.py        # INV-13 AC-12 host inventory
 │   │       ├── test_execution_backend.py       # protocol, ProcessBackend adapter, execution.routing
 │   │       ├── test_governance_broker.py       # INV-8/9/10, in-process PDP, ProcessBackend
 │   │       └── test_protected_path_liveness.py # Asserts protected_paths match real files

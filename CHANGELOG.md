@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### INV-13 step 6: host capability probe (2026-09-09)
+
+- Stdlib-only `capability_probe.py` prints LSM, Landlock ABI, unprivileged userns, and container runtimes as `enforced` / `absent` / `undetermined`. `make validate` runs it with `--json` so every matrix leg emits loadable JSON. Absence is a determination (exit 0); undetermined is the only non-zero exit. Spawn-free; the VERSION-flag Landlock query never calls `landlock_restrict_self`. Probe output is not a `BackendCapabilities` record and is not passed into `ProcessBackend`. Sandbox digest remains unattestable until steps 7–9. GitHub Actions inventory is still unmeasured until this prints on the matrix.
+
 ### Documentation truth: README no longer names missing files or transcribed counts (2026-09-08)
 
 - Root README cited `.governance/skip-waivers.json` (does not exist) and treated a missing root `.governance/allowed-remotes.txt` as a live allowlist (DEC-005: the absence is the control). It also kept the Pong 7-tier labels and transcribed suite/coverage headcounts beside a DEC-024 sentence. Paths now match the Python/Node registries and per-stack allowlists; counts stay with the commands that produce them. Pinned by `test_documentation_claims.TestReadmeGovernancePathsExist`. NEXT_STEPS header and AEI problem-statement item 2 catch up to PR #124 on `main`.

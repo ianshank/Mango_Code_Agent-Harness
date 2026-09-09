@@ -274,6 +274,8 @@ validate: ## Run all governance validation scripts
 	@$(PYTHON) $(SHARED_SRC)/governance/check_traceability.py --workspace . || exit 1
 	@echo "  → governance/denial_rate.py (allowlist usability ratchet)"
 	@$(PYTHON) $(SHARED_SRC)/governance/denial_rate.py || exit 1
+	@echo "  → governance/capability_probe.py --json"
+	@$(PYTHON) $(SHARED_SRC)/governance/capability_probe.py --json || exit 1
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
