@@ -185,8 +185,10 @@ def test_escape_corpus_without_bash_is_asserted_not_skipped(
 def test_escape_corpus_module_does_not_skip() -> None:
     """AC-15 forbids skipif / skip markers on this module (INV-2)."""
     tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    offenders: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id == "POSIX_ONLY":
-            raise AssertionError("escape corpus must not use POSIX_ONLY")
+            offenders.append("POSIX_ONLY")
         if isinstance(node, ast.Attribute) and node.attr in {"skip", "skipif", "xfail"}:
-            raise AssertionError(f"escape corpus must not use pytest.{node.attr}")
+            offenders.append(f"pytest.{node.attr}")
+    assert offenders == []
