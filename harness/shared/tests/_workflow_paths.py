@@ -29,6 +29,24 @@ LOCK_NAME = LOCK.name
 RANGE_FILES = (REPO / "requirements.txt", REPO / "requirements-langgraph.txt", REPO / "requirements-dev.txt")
 
 
+def pull_request_branch_globs(workflow_text: str) -> frozenset[str]:
+    """The `on.pull_request.branches` glob list, never `on.push.branches`.
+
+    The heading is line-anchored `pull_request:` so `pull_request_target`
+    is not a match. The block ends at the workflow-level `permissions:`
+    or `jobs:` key. Missing list or missing block is an empty set;
+    callers treat that as a broken workflow rather than as "no filter".
+    """
+    heading = re.search(r"(?m)^[ \t]*pull_request:[ \t]*$", workflow_text)
+    if heading is None:
+        return frozenset()
+    block = re.split(r"\n(?:permissions:|jobs:)", workflow_text[heading.end() :], maxsplit=1)[0]
+    match = re.search(r"(?m)^[ \t]*branches:\s*\[([^\]]*)\]", block)
+    if match is None:
+        return frozenset()
+    return frozenset(entry.strip().strip("\"'") for entry in match.group(1).split(",") if entry.strip())
+
+
 def pip_install_lines(workflow_text: str) -> list[str]:
     """Every `python -m pip install …` line in a workflow, stripped."""
     return [line.strip() for line in workflow_text.splitlines() if re.match(r"^\s*python -m pip install ", line)]

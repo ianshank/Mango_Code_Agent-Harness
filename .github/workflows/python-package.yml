@@ -20,10 +20,11 @@ on:
     # commit. It does fire on title edits too, which is the accepted cost.
     types: [opened, synchronize, reopened, labeled, edited]
     # Stacked/phase branches must also be gated, otherwise a PR targeting an
-    # integration branch merges without ever running `make ci`. `claude/**` is
-    # the agent branch namespace and was missing here: a PR stacked onto one got
-    # zero check runs, which is the exact hole this list exists to close.
-    branches: ["main", "chore/**", "claude/**", "phase*/**", "feature/**"]
+    # integration branch merges without ever running `make ci`. `cursor/**` is
+    # this repository's cloud-agent namespace; `claude/**` is the earlier one.
+    # A stacked PR onto `cursor/**` got zero check runs when only `claude/**`
+    # was listed, which is the exact hole this list exists to close.
+    branches: ["main", "chore/**", "claude/**", "cursor/**", "phase*/**", "feature/**"]
 
 permissions:
   contents: read
