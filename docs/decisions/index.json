@@ -832,6 +832,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-069",
+      "status": "accepted",
+      "date": "2026-09-09",
+      "title": "INV-13 isolation backend is Landlock; MIN_ABI_FOR_NET is a UAPI floor, not a policy budget",
+      "path": "docs/decisions/DEC-069.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }

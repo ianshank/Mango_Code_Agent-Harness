@@ -127,6 +127,7 @@ def verify_manifest(manifest: dict, key: str) -> bool:
 - This skill does not manage secret storage or rotation.
 - This skill does not provide replay/reconstruction from an evidence bundle — see `harness/shared/evaluation/replay.py` (planned Milestone 4).
 - Host inventory of isolation primitives is `capability_probe.py` (AC-12), not HMAC evidence. Do not treat probe JSON as an evidence digest or a `BackendCapabilities` record.
+- A sandbox digest is emitted only when `LandlockBackend` applied filesystem and network isolation (DEC-069). The default `ProcessBackend` path does not claim INV-13 complete.
 
 ## Validation
 
