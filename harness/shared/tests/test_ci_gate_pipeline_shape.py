@@ -168,6 +168,16 @@ class TestRootPipelineShape:
             "would measure coverage without enforcing any threshold"
         )
 
+    def test_validate_runs_capability_probe_json(self, makefile):
+        """AC-12: validate must run the probe with --json. _recipe_body strips
+        comments, so a commented-out invocation cannot satisfy this pin."""
+        body = _recipe_body(makefile, "validate")
+        assert body, "root Makefile has no validate recipe"
+        assert re.search(r"capability_probe\.py\s+--json", body), (
+            "validate recipe no longer runs governance/capability_probe.py --json; "
+            "pytest would stay green while the matrix never printed the inventory"
+        )
+
     def test_digest_regen_regenerates_both_digest_layers(self, makefile):
         """The bundle has two layers: profiles[*].protected_files (refreshed by
         regenerate_bundle_digests.py) and the top-level governance/agent policy

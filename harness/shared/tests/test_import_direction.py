@@ -33,6 +33,7 @@ LAYERS = {
     "harness.shared.tool_result_format": 1,
     "harness.shared.governance.evidence_manifest": 1,
     "harness.shared.governance.execution_backend": 1,
+    "harness.shared.governance.capability_probe": 1,
     "harness.shared.governance.evidence_record": 2,
     "harness.shared.governance.verification": 2,
     "harness.shared.mango_mas_orchestrator": 4,
@@ -124,13 +125,14 @@ class TestLayering:
                 )
 
     def test_evidence_and_backend_modules_do_not_import_broker(self) -> None:
-        """C-AEI-5: evidence_manifest / execution_backend must not import broker."""
+        """C-AEI-5: evidence / backend / probe modules must not import broker."""
         graph = _graph()
         forbidden = "harness.shared.governance.broker"
         for name in (
             "harness.shared.governance.evidence_manifest",
             "harness.shared.governance.evidence_record",
             "harness.shared.governance.execution_backend",
+            "harness.shared.governance.capability_probe",
         ):
             if name in graph:
                 assert name in LAYERS, f"{name} must be declared in LAYERS"

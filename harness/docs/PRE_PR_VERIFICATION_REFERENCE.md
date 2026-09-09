@@ -26,7 +26,7 @@ truth rather than an index.
 | **INV-10** | Terminal DENY | A DENY verdict is terminal; no model may override it. | `pytest harness/shared/tests/test_invariant_liveness.py harness/shared/tests/test_governance_broker.py` |
 | **INV-11** | Critique Evidence | Every repair attempt carries a normalized critique and immutable evidence ID. | `pytest harness/shared/tests/test_evidence_manifest.py` |
 | **INV-12** | Bounded Repair | Repair loops stop at budget and produce FAILED or BLOCKED, never synthetic success. | `pytest -m neurosym` |
-| **INV-13** | Verified Digests | Four of five digests are recordable on the broker evidence path (policy, source, tool-version, test). **Sandbox remains unattestable** until an isolation backend lands or C-AEI-6 records that no available primitive enforces both filesystem and network isolation (DEC-010, `harness/CONTRACT.md`). | `pytest harness/shared/tests/test_evidence_record.py harness/shared/tests/test_execution_backend.py` |
+| **INV-13** | Verified Digests | Four of five digests are recordable on the broker evidence path (policy, source, tool-version, test). **Sandbox remains unattestable** until an isolation backend lands or C-AEI-6 records that no available primitive enforces both filesystem and network isolation (DEC-010, `harness/CONTRACT.md`). AC-12 host inventory is `capability_probe.py` (not a `BackendCapabilities` record). | `pytest harness/shared/tests/test_evidence_record.py harness/shared/tests/test_execution_backend.py harness/shared/tests/test_capability_probe.py harness/shared/tests/regression/test_capability_probe_vocabulary_regression.py` (`make validate` is the source of truth and now runs the probe with `--json`) |
 | **INV-14** | Redacted Export | Exportable traces are redacted and approved before dataset export. | `pytest -k redact` |
 | **INV-15** | LATS Disabled | LATS stays disabled until its cost-adjusted threshold is met. | `pytest -m neurosym` |
 | **INV-16** | Cognitive Boundary | No `CognitiveSignal` field reaches a control path, selects a tool/model, or alters tool exposure. | `pytest -m governance` + static scan in `test_shadow_planner.py` |
@@ -138,6 +138,8 @@ make remotes    # every configured push URL against the governance allowlist
 make secrets-install && make secrets
 
 # 4. Governance Invariant Validators
+# Source of truth: `make validate` (includes capability_probe.py --json).
+# The python -c list below is a reading aid, not a second declaration.
 python harness/shared/governance/verify_zero_skips.py --vitest-json harness/node/.governance/vitest-results.json --decision-log harness/node/.governance/decision-log.md --waivers harness/node/.governance/skip-waivers.json
 python -c "import subprocess, sys; scripts = ['validate_governance_docs.py', 'validate_policy.py', 'validate_adoption.py', 'validate_agent_policy.py', 'check_projections.py', 'governance/check_traceability.py', 'validate_invariants.py']; [subprocess.check_call([sys.executable, f'../shared/{s}'], cwd='harness/node') for s in scripts]"
 ```

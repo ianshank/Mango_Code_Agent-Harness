@@ -25,7 +25,8 @@
 > - Preserved RCA-1→RCA-11 Windows portability fixes, renumbering DECs to 059, 061, 062 to avoid origin ID clashes.
 > - Fixed test matrix (Smoke, Offline, Coverage, Live e2e, Static Gates) all passing. Test suite: >4000 passed, 0 failures.
 > - `pyrightconfig.json` added (root); sets `extraPaths=["."]` for Pylance parity with pytest.
-> - `test_windows_portability_regression.py` expanded to enterprise AQA; added AQA-001 (`test_scripts_hook_shims.py`), AQA-002 (`test_scan_findings_windows_waiver.py`), AQA-004 (`test_gaps_memory_integrity.py`), and AQA-006 (`test_process_backend_isolation_regression.py`).
+> - `test_windows_portability_regression.py` expanded to enterprise AQA; added AQA-001 (`test_scripts_hook_shims.py`), AQA-002 (`test_scan_findings_windows_waiver.py`), AQA-004 (`test_gaps_memory_integrity.py`), AQA-006 (`test_process_backend_isolation_regression.py`), and AQA-007 (`test_capability_probe_vocabulary_regression.py`).
+> - INV-13 step 6 (2026-09-09): `capability_probe.py` is drawn in the `governance/` subgraph and is **not** connected to `ProcessBackend`. Host inventory (`enforced` / `absent` / `undetermined`) is not a `BackendCapabilities` record. Isolation backend remains steps 7–9.
 > - Script hook shims (`scripts/verify-tier-a.sh`, `scripts/guard-forbidden-paths.sh`) wired to `.mango/agents/hooks.json`.
 > - Memory cleanup & knowledge gap truncation integrity fortified under DEC-064.
 > - Windows console charmap encoding fix (`_safe_str` backslashreplace) and DEC-026 zero-skip attribution wired across live E2E test suites.
@@ -263,6 +264,7 @@ graph TD
                 ExecBackend[execution_backend.py<br/>ExecutionBackend protocol + ExecutionResult]
                 ProcessBE[process_backend.py<br/>ProcessBackend adapter]
                 EvidenceRec[evidence_record.py<br/>digest-of-digests + JSONL sink<br/>does not import broker]
+                CapProbe["capability_probe.py<br/>host inventory: enforced / absent / undetermined<br/>stdlib, spawn-free; not a BackendCapabilities record"]
                 PDP[policy_decision.py<br/>In-process PDP<br/>mirrors tool_broker_reference.py]
                 Actions[command_actions.py<br/>command → declared action; allowlist,<br/>unmodelled ⇒ an action no role holds]
                 GovGuards[pretooluse_guard.py<br/>Policy Guards — resolved from the installed<br/>package; unavailability denies]
@@ -505,7 +507,7 @@ graph TD
 
 - The terminal verdict is earned mechanically via `VerificationRunner` executing `make -f Makefile test-python` through `ExecutionBroker`.
 - Provenance is enforced by strong typing: `derive_verdict` accepts only `HarnessCheck` created by the harness itself, rejecting arbitrary agent-supplied `ExecutionResult` structures.
-- INV-13 is **four of five** on the broker evidence path when evidence is enabled: policy digest, source as a digest-of-digests of the loop-start enforcement baseline, backend name+version, and test digest over the resolved verification command plus collected node ids. **Sandbox remains unattestable** until an isolation backend lands (spec steps 8–9) or C-AEI-6 records that no available primitive enforces both filesystem and network isolation. `ExecutionResult` / `HarnessCheck` / `Verdict` do not carry digest fields; those live on the evidence entry. A keyless evidence-enabled broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn.
+- INV-13 is **four of five** on the broker evidence path when evidence is enabled: policy digest, source as a digest-of-digests of the loop-start enforcement baseline, backend name+version, and test digest over the resolved verification command plus collected node ids. **Sandbox remains unattestable** until an isolation backend lands (spec steps 7–9) or C-AEI-6 records that no available primitive enforces both filesystem and network isolation. Step 6 (AC-12) has landed: `capability_probe.py` inventories host primitives and is not a `BackendCapabilities` record. `ExecutionResult` / `HarnessCheck` / `Verdict` do not carry digest fields; those live on the evidence entry. A keyless evidence-enabled broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn.
 
 ### 4.3 PreToolUse Command Guard (`INV-8`, `INV-9`, `INV-10`)
 
@@ -595,7 +597,7 @@ governance-policy.json ──▶ policy_io._Section(data, name, backed) ──�
 
 ### 4.6 Neuro-Symbolic Sandbox & Critique Normalization (`AC-NS-3`, isolation spec steps 6–9, `INV-9`)
 
-- **Capability Profiles**: The production `ProcessBackend` implements `ExecutionBackend` and only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. Full filesystem and network isolation is INV-13 steps 6–9 (`capability_probe`, isolation backend, escape corpus), not the retired `AC-CE-1` row. `execution.routing` is `brokered` or `refuse`; a third value is `PolicyError`.
+- **Capability Profiles**: The production `ProcessBackend` implements `ExecutionBackend` and only pins `cwd`, `timeout`, and `max_output_bytes` before executing the bash subprocess. INV-13 **step 6** (AC-12 host inventory, `capability_probe.py`) has landed: it reports whether LSM, Landlock, unprivileged userns, and container runtimes *exist* (`enforced` / `absent` / `undetermined`) and is **not** connected to `ProcessBackend`. Isolation backend, vendor DEC, and escape corpus remain steps 7–9. `execution.routing` is `brokered` or `refuse`; a third value is `PolicyError`.
 - **Violation Trapping**: In testing environments, a mock backend simulates isolation by emitting a structured `SandboxViolation` payload when a command violates assumed constraints (e.g., outbound socket I/O).
 - **Critique Normalization (`tool_result_format.py`)**: `format_execution_result` intercepts `SandboxViolation` payloads from `stderr` (when generated by the mock backend) and translates them into a standardized Critique schema (`failure_type`, `evidence_id`, `normalized_message`, `location: execution_broker`). This enables deterministic agent repair loops for neuro-symbolic testing.
 - **Fail-Closed Sandbox Availability (`INV-9`)**: If the backend is configured as unavailable (`sandbox_available=False`), commands are blocked immediately rather than falling back to host execution.
@@ -725,6 +727,11 @@ check raises is *which enforcement surface*, and the rule is:
 > suite, where it costs nothing new and inherits `INV-2`'s zero-skip discipline.
 > Only a check that must run outside pytest — because it shells out, or because
 > an operator needs to run it alone — earns a `make` target.
+
+The AC-12 host inventory (`capability_probe.py`) took that existing `validate`
+surface: a `--json` line inside the recipe, so `ci_required_targets` and `ci`'s
+prerequisite list stayed unchanged. Stdout is `json.loads`-able; undetermined
+fields are named on stderr.
 
 The marginal target is not free: each one costs a `ci_required_targets` entry, a
 `harness/CONTRACT.md` row, a `test_ci_gate_coverage.py` update, and

@@ -34,6 +34,7 @@ from harness.shared.tests._workflow_paths import (
     DRIFT_WORKFLOW,
     RULESET,
     WORKFLOW,
+    pull_request_branch_globs,
 )
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
 
@@ -576,6 +577,44 @@ class TestTheAttestationCheckRunsWhereItCanBeRead:
         types = {entry.strip() for entry in match.group(1).split(",")}
         assert "edited" in types, "a corrected PR description must be able to re-run the attestation check"
         assert "labeled" in types, "applying `infra-reviewed` must be able to re-run CI"
+
+    def test_stacked_prs_onto_the_cursor_agent_namespace_are_gated(self, workflow_text: str) -> None:
+        """A PR whose base is `cursor/**` must still run `make ci`.
+
+        Asserted against the parsed `pull_request.branches` list, not the
+        comment. Cloud-agent branches here use `cursor/`; `claude/**` is the
+        earlier namespace and must stay gated too. A comment-only
+        `cursor/**` would leave this green — the same mutation that left
+        `test_a_corrected_description_can_re_run_the_check` green on a
+        comment-only `edited`.
+        """
+        globs = pull_request_branch_globs(workflow_text)
+        assert "cursor/**" in globs, "a stacked PR onto the cursor/ agent namespace must still run make ci"
+        assert "claude/**" in globs
+        assert "main" in globs
+
+    def test_pull_request_branch_globs_ignore_the_push_filter(self) -> None:
+        """The helper must not return `on.push.branches` when the PR list is absent."""
+        push_only = (
+            "on:\n"
+            "  push:\n"
+            '    branches: ["main", "release/**"]\n'
+            "  pull_request:\n"
+            "    types: [opened]\n"
+            "permissions:\n"
+            "  contents: read\n"
+        )
+        both = (
+            "on:\n"
+            "  push:\n"
+            '    branches: ["main", "release/**"]\n'
+            "  pull_request:\n"
+            '    branches: ["main", "cursor/**"]\n'
+            "permissions:\n"
+            "  contents: read\n"
+        )
+        assert pull_request_branch_globs(push_only) == frozenset()
+        assert pull_request_branch_globs(both) == frozenset({"main", "cursor/**"})
 
     def test_the_description_reaches_the_script_as_data(self, jobs: dict[str, str]) -> None:
         """A PR body is author-controlled text; it must never reach the shell as code."""

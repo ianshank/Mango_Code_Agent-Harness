@@ -184,6 +184,7 @@ def test_governance_no_direct_spawn() -> None:
         "execution_backend.py",
         "evidence_manifest.py",
         "evidence_record.py",
+        "capability_probe.py",
     ):
         assert (GOVERNANCE / required).is_file(), required
         tree = ast.parse((GOVERNANCE / required).read_text(encoding="utf-8"))

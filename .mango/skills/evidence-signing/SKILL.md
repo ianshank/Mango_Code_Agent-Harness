@@ -1,6 +1,6 @@
 ---
 name: evidence-signing
-Reviewed: 2026-09-08
+Reviewed: 2026-09-09
 description: >
   Reusable skill for creating tamper-evident, HMAC-signed audit trails using
   EvidenceBuilder. Use when an agent action requires an immutable evidence bundle
@@ -126,6 +126,7 @@ def verify_manifest(manifest: dict, key: str) -> bool:
 
 - This skill does not manage secret storage or rotation.
 - This skill does not provide replay/reconstruction from an evidence bundle — see `harness/shared/evaluation/replay.py` (planned Milestone 4).
+- Host inventory of isolation primitives is `capability_probe.py` (AC-12), not HMAC evidence. Do not treat probe JSON as an evidence digest or a `BackendCapabilities` record.
 
 ## Validation
 

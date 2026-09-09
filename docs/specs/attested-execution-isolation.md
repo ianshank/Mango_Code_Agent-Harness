@@ -64,16 +64,20 @@ reached only once a config and spec files exist. The floor is still the
 pattern to copy, and the misreading is recorded here so the follow-up does not
 enshrine a crash as reference behaviour.
 
-**5. No isolation primitive spans the environments.** Probed directly, the
-agent container reports `ENOSYS` for `landlock_create_ruleset`, has no
-reachable Docker daemon, and has working user, mount and network namespaces.
-GitHub's `ubuntu-latest` is Ubuntu 24.04 on a 6.17 Azure kernel with
-passwordless `sudo`, Docker and Podman preinstalled, `bubblewrap` absent, and
-unprivileged user namespaces restricted by
-`kernel.apparmor_restrict_unprivileged_userns`. Whether Landlock is in the
-active LSM list there is undetermined from documentation. A `bool` cannot
-express that spread, which is why `sandbox_available` cannot become an
-attestation and why the primitive is chosen by measurement here.
+**5. Isolation primitives do not yet span the environments that must prove
+them.** Re-measured 2026-09-09 on this agent VM (kernel `6.12.94+` x86_64):
+`/sys/kernel/security/lsm` is `capability,landlock,selinux`;
+`landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION)` returns
+ABI 6; `unshare --user --map-root-user --net --mount` isolates the network
+(`lo` only) but still reads `/etc/passwd` (a mount namespace without
+`pivot_root` is not filesystem confinement); Docker, Podman and bubblewrap
+are unreachable; `unprivileged_userns_clone` and
+`apparmor_restrict_unprivileged_userns` are absent as files while
+`max_user_namespaces` is present. GitHub Actions (`ubuntu-latest` and the
+rest of the matrix) remains unmeasured until this probe prints on every
+`make validate` leg. A `bool` cannot express that spread, which is why
+`sandbox_available` cannot become an attestation and why the primitive is
+chosen by measurement after the probe artefact exists on both hosts.
 
 ## Requirements
 
@@ -238,7 +242,7 @@ or is recorded as unattestable under C-AEI-6.
       block still loads, that the block present with its key absent raises
       `PolicyError`, and that a third routing value is refused · stage:
       `make validate` (R-AEI-11, R-AC-12)
-- [ ] AC-12: `python harness/shared/governance/capability_probe.py --json`
+- [x] AC-12: `python harness/shared/governance/capability_probe.py --json`
       prints each field as enforced, absent or undetermined, exits 0 when a
       field is absent, and exits 1 only when one is undetermined · stage:
       `make validate` (R-AEI-12)
@@ -301,7 +305,10 @@ question. Each phase is one pull request.
    `policy_io.py` / `policy_defaults.py` first so the accessor could land
    under the size budget.)
 6. Run the capability probe on every matrix leg — produces the measurement
-   step 7 consumes (AC-12).
+   step 7 consumes (AC-12). **Landed.** (`capability_probe.py` is stdlib-only
+   and spawn-free; `make validate` prints `--json` on every `ci` /
+   `ci-python` leg. GitHub Actions inventory is the artefact, not this
+   agent VM's.)
 7. Record the backend decision under `docs/decisions/` and run
    `make decision-index` — consumes step 6's output; produces the vendor choice
    this spec leaves open, or the C-AEI-6 finding that none qualifies.
@@ -392,14 +399,14 @@ not.
 ## Open questions
 
 - Which isolation primitive the backend uses is unanswered here by design.
-  Step 6 measures and step 7 records. Every named candidate carries a known
-  cost: Anthropic's sandbox runtime needs the AppArmor userns restriction
-  relaxed with root and steers egress through proxy environment variables,
-  which R-AEI-15 refuses to attest; NVIDIA OpenShell runs standalone on a
-  Docker or Podman driver with no cluster, but has not been shown running
-  inside GitHub Actions; a namespace-only backend is the sole candidate that
-  works in both this agent container and CI. C-AEI-6 defines the outcome if
-  none qualifies, so a probe returning "nothing works" is a completed
+  Step 6 measures and step 7 records. This agent VM (2026-09-09) has Landlock
+  ABI 6 and working user+net namespaces; filesystem confinement still needs
+  `pivot_root` or Landlock `PATH_BENEATH`, and GitHub Actions remains
+  unmeasured until the probe prints on the matrix. Anthropic's sandbox
+  runtime needs the AppArmor userns restriction relaxed with root and steers
+  egress through proxy environment variables, which R-AEI-15 refuses to
+  attest. C-AEI-6 defines the outcome if none qualifies on the runners that
+  must prove it, so a probe returning "nothing works" is a completed
   measurement rather than a failed programme.
 - Publishing generated baseline figures instead of transcribed ones is DEC-024
   hygiene that advances no INV-13 digest, and it was cut from this spec after
