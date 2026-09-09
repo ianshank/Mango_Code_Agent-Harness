@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 ### INV-13 step 6: host capability probe (2026-09-09)
 
 - Stdlib-only `capability_probe.py` prints LSM, Landlock ABI, unprivileged userns, and container runtimes as `enforced` / `absent` / `undetermined`. `make validate` runs it with `--json` so every matrix leg emits loadable JSON. Absence is a determination (exit 0); undetermined is the only non-zero exit. Spawn-free; the VERSION-flag Landlock query never calls `landlock_restrict_self`. Probe output is not a `BackendCapabilities` record and is not passed into `ProcessBackend`. Sandbox digest remains unattestable until steps 7–9. GitHub Actions inventory is still unmeasured until this prints on the matrix.
+- Follow-through: AQA-007 (`test_capability_probe_vocabulary_regression.py`) pins the two vocabularies; C4 draws `capability_probe.py` in `governance/` unconnected to `ProcessBackend`; PRE_PR / README / INV-13 liveness name the probe; undetermined fields are listed on stderr. `.gitignore`, `.dockerignore`, and `.gitleaks.toml` needed no delta (the probe writes no artifacts and no secrets). `.mango/agents/**` and hooks are already wired: the verifier runs `make validate`, which now includes the probe; session_start stays dormant (DEC-003). No new skill — `validation-runner` already runs `make ci` and must not re-declare stages.
 
 ### Documentation truth: README no longer names missing files or transcribed counts (2026-09-08)
 

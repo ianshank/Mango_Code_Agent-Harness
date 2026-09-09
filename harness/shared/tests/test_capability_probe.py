@@ -277,6 +277,21 @@ def test_missing_syscall_symbol_is_landlock_absent(monkeypatch: pytest.MonkeyPat
     assert capability_probe._live_landlock_abi(444) == (-1, errno.ENOSYS)
 
 
+def test_syscall_oserror_is_landlock_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Boom:
+        def __call__(self, *_args: object, **_kwargs: object) -> int:
+            raise OSError("syscall failed")
+
+        restype = None
+
+    class _Lib:
+        syscall = _Boom()
+
+    monkeypatch.setattr(capability_probe.ctypes.util, "find_library", lambda _name: "libc.so.6")
+    monkeypatch.setattr(capability_probe.ctypes, "CDLL", lambda *_args, **_kwargs: _Lib())
+    assert capability_probe._live_landlock_abi(444) == (-1, errno.ENOSYS)
+
+
 def test_runtime_binary_and_socket_is_enforced(tmp_path: Path) -> None:
     sock = tmp_path / "docker.sock"
     sock.write_text("", encoding="utf-8")
@@ -319,3 +334,77 @@ def test_oserror_eio_on_sysfs_is_undetermined() -> None:
 
     report = _host(lsm_path=Broken())  # type: ignore[arg-type]
     assert report["lsm"]["state"] == "undetermined"
+
+
+def test_oserror_enotdir_on_sysfs_is_missing() -> None:
+    class NotDir:
+        def read_text(self, encoding: str = "utf-8") -> str:
+            raise OSError(errno.ENOTDIR, "not a directory")
+
+    report = _host(lsm_path=NotDir())  # type: ignore[arg-type]
+    assert report["lsm"]["state"] == "absent"
+
+
+def test_runtime_socket_non_access_oserror_is_absent() -> None:
+    class BrokenSock:
+        def exists(self) -> bool:
+            raise OSError(errno.EIO, "io")
+
+    report = _host(
+        which=lambda _name: "/usr/bin/docker",
+        runtime_sockets={"docker": BrokenSock()},  # type: ignore[dict-item]
+    )
+    assert report["container_runtimes"]["state"] == "absent"
+
+
+def test_runtime_reachable_plus_denied_socket_is_enforced(tmp_path: Path) -> None:
+    sock = tmp_path / "docker.sock"
+    sock.write_text("", encoding="utf-8")
+    report = _host(
+        which=lambda name: "/usr/bin/docker" if name in {"docker", "podman"} else None,
+        runtime_sockets={"docker": sock, "podman": _DeniedSock()},  # type: ignore[dict-item]
+    )
+    assert report["container_runtimes"] == {"state": "enforced", "reachable": ["docker"]}
+
+
+def test_darwin_is_not_short_circuited_to_absent() -> None:
+    report = _host(platform="darwin", machine="arm64", landlock_syscall=lambda _nr: (6, 0))
+    assert report["landlock_abi"] == {"state": "enforced", "abi": 6}
+    assert report["lsm"]["state"] == "absent"
+
+
+def test_landlock_arm64_alias_uses_known_syscall() -> None:
+    seen: list[int] = []
+
+    def capture(nr: int) -> tuple[int, int]:
+        seen.append(nr)
+        return 4, 0
+
+    report = _host(machine="arm64", landlock_syscall=capture)
+    assert seen == [444]
+    assert report["landlock_abi"]["state"] == "enforced"
+
+
+def test_undetermined_is_named_on_stderr(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _determined()
+    payload["landlock_abi"]["state"] = "undetermined"
+    monkeypatch.setattr(capability_probe, "probe", lambda: payload)
+    code = capability_probe.main(["--json"])
+    captured = capsys.readouterr()
+    loaded = json.loads(captured.out)
+    assert loaded["landlock_abi"]["state"] == "undetermined"
+    assert captured.out.lstrip().startswith("{")
+    assert "landlock_abi" in captured.err
+    assert "capability_probe:" in captured.err
+    assert code == 1
+
+
+def test_determined_report_is_silent_on_stderr(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(capability_probe, "probe", _determined)
+    code = capability_probe.main(["--json"])
+    captured = capsys.readouterr()
+    json.loads(captured.out)
+    assert captured.err == ""
+    assert code == 0

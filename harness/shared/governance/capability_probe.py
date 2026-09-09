@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 LEGAL_STATES = frozenset({"enforced", "absent", "undetermined"})
+#: Exit 0 only for these; ``undetermined`` and any illegal word fail closed.
+_DETERMINED_STATES = LEGAL_STATES - {"undetermined"}
 _FIELDS = ("lsm", "landlock_abi", "unprivileged_userns", "container_runtimes")
 
 #: asm-generic / x86_64 ``__NR_landlock_create_ruleset``. A dict so
@@ -125,12 +127,15 @@ def _live_landlock_abi(nr: int) -> tuple[int, int]:
     syscall.restype = ctypes.c_long
     ctypes.set_errno(0)
     version_flag = 1 << 0
-    ret = syscall(
-        ctypes.c_long(nr),
-        None,
-        ctypes.c_size_t(0),
-        ctypes.c_uint(version_flag),
-    )
+    try:
+        ret = syscall(
+            ctypes.c_long(nr),
+            None,
+            ctypes.c_size_t(0),
+            ctypes.c_uint(version_flag),
+        )
+    except OSError:
+        return -1, errno.ENOSYS
     return int(ret), ctypes.get_errno()
 
 
@@ -207,15 +212,28 @@ def probe(
     return report
 
 
+def _field_is_nonzero(field: object) -> bool:
+    """True when a field is missing, illegal, or undetermined."""
+    if not isinstance(field, Mapping):
+        return True
+    return field.get("state") not in _DETERMINED_STATES
+
+
+def _nonzero_fields(report: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(name for name in _FIELDS if _field_is_nonzero(report.get(name)))
+
+
 def exit_status(report: Mapping[str, Any]) -> int:
     """1 iff any field is undetermined; 0 for enforced or absent (AC-12)."""
-    for name in _FIELDS:
-        field = report.get(name)
-        if not isinstance(field, Mapping) or field.get("state") == "undetermined":
-            return 1
-        if field.get("state") not in LEGAL_STATES:
-            return 1
-    return 0
+    return 1 if _nonzero_fields(report) else 0
+
+
+def _warn_nonzero(report: Mapping[str, Any]) -> None:
+    """Name the failing fields on stderr. Stdout must stay ``json.loads``-able."""
+    names = _nonzero_fields(report)
+    if not names:
+        return
+    print(f"capability_probe: undetermined or illegal: {', '.join(names)}", file=sys.stderr)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -226,6 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = probe()
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
+    _warn_nonzero(report)
     return exit_status(report)
 
 

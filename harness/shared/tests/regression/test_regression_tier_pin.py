@@ -39,6 +39,9 @@ REQUIRED_REGRESSION_MODULES = {
     "test_gaps_memory_integrity.py": "test_the_stub_detector_is_not_vacuous",
     "test_hypothesis_surfacing_regression.py": "test_eviction_cannot_rescue_an_oversized_hypothesis_block",
     "test_process_backend_isolation_regression.py": "test_recording_backend_with_probe_override_is_always_available",
+    "test_capability_probe_vocabulary_regression.py": (
+        "test_host_inventory_json_must_not_be_passed_as_backend_capabilities"
+    ),
     "test_scan_findings_windows_waiver.py": "test_scan_findings_waiver_exists",
     "test_scripts_hook_shims.py": "test_hook_shim_exists",
     "test_session_hooks_skip_evidence_regression.py": "test_a_skip_in_each_of_two_sibling_suites_is_recorded",
