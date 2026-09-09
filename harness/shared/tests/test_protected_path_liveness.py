@@ -125,7 +125,6 @@ ARMED_BEFORE_USE = "no such file is tracked; the pattern arms the guard before a
 # file. Pointed at the shared policy it would in fact fail, since its critical
 # list still names the pre-migration `scripts/*` paths.
 DORMANT_PATTERNS = {
-    ".governance/**": "single-stack layout; this repo has harness/<stack>/.governance/",
     "agents/**": "single-stack layout; this repo has harness/<stack>/agents/",
     "docs/PROJECT-CHARTER.md": "single-stack layout; this repo has harness/<stack>/docs/",
     "**/.github/CODEOWNERS": (
@@ -430,13 +429,19 @@ class TestPortableLiveness:
             "this repository's own pattern set against its own tree must stay quiet, "
             f"got {[(f.kind, f.pattern) for f in own]}"
         )
-        assert len(DORMANT_PATTERNS) == 17, (
-            "the seventeen declared dormant patterns are accepted unchanged by the "
+        assert len(DORMANT_PATTERNS) == 16, (
+            "the sixteen declared dormant patterns are accepted unchanged by the "
             f"generalised assertion; the declaration now holds {len(DORMANT_PATTERNS)}. "
             "(Was 7: `.github/CODEOWNERS` was reclassified out of this set when a real "
             "root CODEOWNERS was added, per test_awake_patterns_reclassify's own contract; "
             "then 6; then 15 when audit B4 armed nine code-execution surfaces before use; "
-            "then 17 when the nested sitecustomize/usercustomize forms were armed.)"
+            "then 17 when the nested sitecustomize/usercustomize forms were armed; then 16 "
+            "when `.governance/**` woke. DEC-056 predicted that wake -- it says the pattern "
+            "`ceases to be a declared-dormant protected_paths pattern once the root directory "
+            "is live` -- and DEC-065 created the first tracked file under it, the "
+            "repository-scoped traceability config. Reclassification is what that decision "
+            "asks for; leaving it declared dormant while it matches would be the stale-waiver "
+            "shape test_dormant_patterns_are_still_dormant exists to catch.)"
         )
 
     def test_a_pattern_that_does_match_the_foreign_tree_is_not_reported(self, patterns):

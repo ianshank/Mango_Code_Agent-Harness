@@ -6,8 +6,9 @@ import asyncio
 import logging
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 try:
     import mcp.types as types
@@ -16,11 +17,14 @@ try:
 
     MCP_AVAILABLE = True
 except ImportError:
-    # No pragma: this arc is the Python 3.9 leg's real code path (the mcp SDK's
-    # floor is 3.10) and `test_import_failure_sets_mcp_unavailable` executes it
-    # directly, by blocking the SDK in sys.modules and re-running this module
-    # from its path. Excluding it understated the file and hid whether the
-    # fallback still leaves the module in a safe state (gate-truthfulness R-GT-3).
+    # No pragma: with the floor now Python >=3.10 (DEC-064), no CI leg lacks
+    # the mcp SDK any more, so this arc is exercised only by
+    # `test_import_failure_sets_mcp_unavailable`, which executes it directly by
+    # blocking the SDK in sys.modules and re-running this module from its path
+    # (before the floor moved, the retired 3.9 leg -- below the SDK's own
+    # 3.10 floor -- took this path for real on every run). Excluding it
+    # understated the file and hid whether the fallback still leaves the
+    # module in a safe state (gate-truthfulness R-GT-3).
     MCP_AVAILABLE = False
     types = None  # type: ignore[assignment]
     Server = None  # type: ignore[assignment,misc]

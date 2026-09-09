@@ -1,14 +1,17 @@
 [project]
 name = "mango-code-agent-harness"
-version = "2.4.0"
-requires-python = ">=3.9"
+version = "2.5.0"
+requires-python = ">=3.10"
 # Mirrors requirements.txt (single set of literals; keep both in lockstep).
+# `mcp` needed a `python_version >= "3.10"` marker before the floor moved
+# (docs/specs/python-floor-310.md, superseding DEC-028); the floor now
+# guarantees it, so the marker would be a permanently-true tautology.
 dependencies = [
     "fastapi>=0.110,<1.0",
     "uvicorn[standard]>=0.27,<1.0",
     "pydantic>=2.13.5,<3.0",
     "httpx>=0.27,<1.0",
-    "mcp>=2.0.0,<3.0; python_version >= '3.10'",
+    "mcp>=2.0.0,<3.0",
 ]
 
 # The `langgraph` extra is the library alone, mirrored by requirements-langgraph.txt
@@ -16,13 +19,15 @@ dependencies = [
 # exactly what the StateGraph tests import. The Postgres checkpointer is a separate
 # extra: nothing in harness/ imports it, and folding it into `langgraph` would make
 # every CI leg install psycopg that no gate ever scans (tech-debt-hardening-plan
-# R-TDH-4).
+# R-TDH-4). Version markers dropped with the 3.10 floor for the same reason as
+# `mcp` above: `langgraph` itself declares `Requires-Python >=3.10`, so every
+# supported interpreter installs it unconditionally now.
 [project.optional-dependencies]
 langgraph = [
-    "langgraph>=1.0.10,<2.0; python_version >= '3.10'",
+    "langgraph>=1.0.10,<2.0",
 ]
 langgraph-postgres = [
-    "langgraph-checkpoint-postgres>=3.0.1,<4.0; python_version >= '3.10'",
+    "langgraph-checkpoint-postgres>=3.0.1,<4.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -86,7 +91,9 @@ omit = [
 show_missing = true
 
 [tool.ruff]
-target-version = "py39"   # oldest supported runtime; keep in sync with the CI matrix
+# No explicit target-version: ruff derives it from `[project].requires-python`
+# above, so the two can never disagree the way the previous hard-coded "py39"
+# could (and did) drift from the CI matrix (docs/specs/python-floor-310.md).
 line-length = 120
 
 [tool.ruff.format]
@@ -140,3 +147,8 @@ explicit_package_bases = true
 ignore_missing_imports = true
 warn_return_any = true
 warn_unused_configs = true
+# mypy 2.x dropped the `--python-version 3.9` flag it never used here anyway
+# (no [tool.mypy] python_version pin exists); warn_unused_ignores is new
+# headroom now that the floor bump (docs/specs/python-floor-310.md) lets the
+# `mypy==1.11.2` pin move (DEC-046 recorded why it was frozen).
+warn_unused_ignores = true

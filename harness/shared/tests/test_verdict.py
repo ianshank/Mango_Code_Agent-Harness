@@ -511,7 +511,7 @@ class TestTheVerificationTimeoutComesFromPolicy:
         probe() calls shutil.which("make") as a pre-flight and returns immediately
         if it is absent, leaving broker.timeouts empty. These tests drive
         RecordingBroker to assert the timeout reaches the broker -- not to test
-        make availability. The same fix is applied in TestTheRunner. [DEC-058]
+        make availability. The same fix is applied in TestTheRunner. [DEC-061]
         """
         from harness.shared.governance import verification as _verification_mod
 

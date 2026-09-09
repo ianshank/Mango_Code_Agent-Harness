@@ -5,10 +5,17 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
 
 from harness.shared.debug_dump import credential_env_names
+from harness.shared.governance.execution_backend import (
+    BackendCapabilities,
+    ExecutionBackend,
+    ExecutionRequest,
+    ExecutionResult,
+    IsolationState,
+)
 from harness.shared.governance.verdict import BROKER_FAILED, BROKER_SUCCESS
 from harness.shared.policy_loader import orchestrator_defaults
 
@@ -29,22 +36,6 @@ DEFAULT_MAX_OUTPUT_BYTES: int = orchestrator_defaults()["max_output_bytes"]
 #: a bound a caller's default parameter is evaluated against, not a decision
 #: that can change mid-run.
 DEFAULT_TIMEOUT_SEC: int = orchestrator_defaults()["tool_timeout_sec"]
-
-
-@dataclass(frozen=True)
-class ExecutionResult:
-    """The outcome of an execution attempt."""
-
-    status: str  # one of verdict.BROKER_SUCCESS / BROKER_FAILED / BROKER_BLOCKED
-    stdout: str
-    stderr: str
-    exit_code: int
-    #: Why the broker reached this status. Empty for a plain command failure,
-    #: where the command's own stderr is the explanation.
-    reason: str = ""
-    #: The action the command was classified as, recorded so an evidence entry
-    #: can state what was decided rather than only what was run.
-    action: str = ""
 
 
 def _cap(text: str, limit: int) -> str:
@@ -82,8 +73,33 @@ class ProcessBackend:
     #: means the shell is wedged rather than slow, which is itself unavailable.
     probe_timeout_sec = 5
 
-    def __init__(self) -> None:
+    def __init__(self, capability_probe: Mapping[str, object] | None = None) -> None:
         self._probed: bool | None = None
+        self._capability_probe = dict(capability_probe) if capability_probe else {}
+
+    def capabilities(self) -> BackendCapabilities:
+        """ProcessBackend never isolates; requested-but-unapplied is unenforced (R-AEI-10)."""
+        return BackendCapabilities(
+            filesystem_isolation=self._dimension("filesystem_isolation"),
+            network_isolation=self._dimension("network_isolation"),
+            process_isolation=self._dimension("process_isolation"),
+            version=self.version,
+        )
+
+    def _dimension(self, name: str) -> IsolationState:
+        requested = self._capability_probe.get(f"requested_{name}")
+        host = self._capability_probe.get(name, "unenforced")
+        if requested == "enforced" and host != "enforced":
+            return "unenforced"
+        if host == "enforced":
+            return "enforced"
+        if host == "undetermined":
+            return "undetermined"
+        return "unenforced"
+
+    def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        """Adapter over ``run`` so construction sites keep their signatures (R-AEI-8)."""
+        return self.run(request.command, request.cwd, request.timeout, request.max_output_bytes)
 
     def available(self) -> bool:
         """Whether this backend can actually start a process."""
@@ -128,6 +144,10 @@ class ProcessBackend:
         stderr = _cap(completed.stderr or "", max_output_bytes)
         status = BROKER_SUCCESS if completed.returncode == 0 else BROKER_FAILED
         return ExecutionResult(status, stdout, stderr, completed.returncode)
+
+
+#: mypy proof that ProcessBackend satisfies the protocol (AC-9).
+_: ExecutionBackend = ProcessBackend()
 
 
 __all__ = [

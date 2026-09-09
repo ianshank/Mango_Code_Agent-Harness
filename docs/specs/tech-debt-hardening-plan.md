@@ -2,6 +2,10 @@
 
 > Status: PROPOSED, revision 2 (peer-reviewed) · Date: 2026-09-02 · Base: `main` @ `2555ca0`
 >
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+>
 > Revision 2 is the output of the `openspec-peer-review` step: four independent
 > reviewers (Architecture, SDLC/CI, QA, Product) with no part in writing
 > revision 1 checked every claim against the code and the decision log. What

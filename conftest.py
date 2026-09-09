@@ -3,8 +3,9 @@
 pytest scopes a conftest's per-item hooks (``pytest_runtest_logreport`` among
 them) to the directory the conftest sits in. The skip evidence that
 ``make verify-zero-skips-python`` reads (INV-2, DEC-026) and the langgraph
-deselection for the 3.9 leg (R-TDH-4) therefore have to be registered here,
-at the rootdir, or a skip under ``harness/api_server/tests`` or
+deselection mechanism (R-TDH-4; no CI leg drives it since the floor moved to
+3.10, DEC-064, but an adopter fork without the extra still can) therefore have
+to be registered here, at the rootdir, or a skip under ``harness/api_server/tests`` or
 ``harness/control-plane/tests`` goes unrecorded -- which is exactly what
 happened while they lived in ``harness/shared/tests/conftest.py``
 (tech-debt-hardening-plan R-TDH-26). The logic is in
@@ -25,6 +26,30 @@ from harness.shared.tests import _session_hooks as hooks
 # `pytester` is the fixture test_session_hooks.py uses to run a real pytest
 # session against a copy of this file. Only a rootdir conftest may declare it.
 pytest_plugins = ["pytester"]
+
+# Numpy's MT19937 accepts only seeds in ``[0, 2**32)``. pytest-randomly clamps
+# its *own* ``np.random.seed`` call, but third-party
+# ``pytest_randomly.random_seeder`` entry points (notably ``thinc.util.fix_random_seed``
+# when thinc is installed in the environment) forward the hashed per-test seed
+# unchanged. Seeds such as ``5917428844`` then raise at every fixture setup under
+# ``-p randomly`` without a pinned seed. Clamp here so the suite stays green on
+# developer machines that happen to have thinc installed.
+_NUMPY_SEED_MOD = 2**32
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    try:
+        import numpy.random as npr
+    except ImportError:  # pragma: no cover - numpy is optional for the harness
+        return
+    original = npr.seed
+
+    def seed(seed: int | None = None) -> None:
+        if isinstance(seed, int) and not (0 <= seed < _NUMPY_SEED_MOD):
+            seed = seed % _NUMPY_SEED_MOD
+        original(seed)
+
+    npr.seed = seed  # type: ignore[assignment]
 
 
 @pytest.fixture(autouse=True)

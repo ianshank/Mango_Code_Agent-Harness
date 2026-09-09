@@ -57,6 +57,15 @@ def _tool_call(
     }
 
 
+def _assistant_tools(*calls: dict[str, Any]) -> dict[str, Any]:
+    """An assistant turn requesting ``calls`` -- the head of a tool-call group.
+
+    Was defined three times over (context-policy unit suite, its regression
+    pin, the hypothesis-surfacing suite) before it lived here.
+    """
+    return {"role": "assistant", "content": None, "tool_calls": list(calls)}
+
+
 @pytest.fixture
 def mock_complete_chat(mocker):
     """Patch the Nemotron bridge inside the orchestrator; return the mock."""
@@ -65,6 +74,7 @@ def mock_complete_chat(mocker):
 
 __all__ = [
     "_POSIX",
+    "_assistant_tools",
     "_mk_agent_dirs",
     "_resp",
     "_tool_call",

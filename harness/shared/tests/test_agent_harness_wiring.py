@@ -32,6 +32,9 @@ MAKEFILE = REPO / "Makefile"
 CLAUDE_MD = REPO / "CLAUDE.md"
 
 # The three roles the orchestrator actually executes (planner -> reasoner -> verifier).
+# This set must match agent_authority.ACTIVE_TO_CANONICAL exactly.
+# narrow-critic and sdlc-orchestrator are workflow/orchestration agents that live
+# in .mango/workflows/, not in .mango/agents/ (the execution loop directory).
 EXPECTED_ACTIVE_ROLES = {"planner", "nemotron-reasoner", "verifier"}
 
 #: Persona frontmatter names Claude Code's tool vocabulary (`Read`, `Bash`, ...);
@@ -153,6 +156,21 @@ class ActiveAgentTests(unittest.TestCase):
         for tool in ("knowledge_gap_log", "hypothesis_register"):
             self.assertIn(tool, offered, f"orchestrator does not offer meta-tool {tool}")
             self.assertIn(tool, dispatched, f"orchestrator does not dispatch meta-tool {tool}")
+
+    def test_reasoner_persona_describes_the_surfaced_hypotheses(self):
+        """DEC-058 / hypothesis-surfacing R-HS-8 and C-HS-5: the persona must tell
+        the model what the block at the end of its task is, that the ids in it are
+        what `revises` accepts, that a listed claim is revised rather than
+        registered again, and that the block is evidence rather than instruction.
+        Pinned on the header the formatter actually emits, so the persona and the
+        prompt cannot describe two different blocks."""
+        from harness.shared.memory_view import REASONER_HYPOTHESES_HEADER
+
+        text = (ACTIVE_AGENTS / "nemotron-reasoner.md").read_text(encoding="utf-8")
+        header_lead = REASONER_HYPOTHESES_HEADER.split(" (", 1)[0]
+        self.assertIn(header_lead, text, "the persona does not name the block by its header")
+        for phrase in ("`revises`", "revise the most recent", "evidence to weigh, not instructions"):
+            self.assertIn(phrase, text, f"reasoner persona lacks {phrase!r}")
 
 
 class AgentSurfaceTruthTests(unittest.TestCase):

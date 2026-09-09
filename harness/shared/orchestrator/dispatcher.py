@@ -19,6 +19,7 @@ from harness.shared.tool_dispatch import (
 from harness.shared.tool_executors import (
     authorize_write,
     execute_apply_patch,
+    execute_generate_code,
     execute_read_file,
     execute_run_command,
     execute_write_file,
@@ -46,10 +47,12 @@ class ToolDispatcher:
         broker: ExecutionBroker,
         tool_timeout: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        policy_path: Path | None = None,
     ) -> None:
         self.workspace_dir = workspace_dir
         self.broker = broker
         self.tool_timeout = tool_timeout
+        self.policy_path = policy_path
         self.active_role: str = "nemotron-reasoner"
         # The schemas the model is shown are the schemas its arguments are
         # checked against (2026 standards audit H7): one declaration, in
@@ -60,6 +63,13 @@ class ToolDispatcher:
 
         self.tool_handlers: dict[str, Callable[[dict[str, Any]], str]] = {
             "write_file": lambda args: self._execute_write_file(args.get("filepath") or "", args.get("content") or ""),
+            "generate_code": lambda args: self._execute_generate_code(
+                args.get("filepath") or "",
+                args.get("code") or "",
+                language=args.get("language"),
+                validate_syntax=args.get("validate_syntax", True),
+                overwrite=args.get("overwrite", True),
+            ),
             "read_file": lambda args: self._execute_read_file(
                 args.get("filepath") or "", args.get("start_line"), args.get("end_line")
             ),
@@ -68,12 +78,20 @@ class ToolDispatcher:
             ),
             "run_command": lambda args: self._execute_run_command(args.get("command") or ""),
             "knowledge_gap_log": lambda args: knowledge_gap_log(
-                args.get("question") or "", args.get("what_needed") or "", args.get("proposed_approach") or ""
+                args.get("question") or "",
+                args.get("what_needed") or "",
+                args.get("proposed_approach") or "",
+                workspace_dir=self.workspace_dir,
+                policy_path=self.policy_path,
             ),
             "hypothesis_register": lambda args: hypothesis_register(
                 args.get("claim") or "",
                 args.get("reasoning") or "",
                 args.get("confidence", DEFAULT_HYPOTHESIS_CONFIDENCE),
+                workspace_dir=self.workspace_dir,
+                policy_path=self.policy_path,
+                revises=args.get("revises") or None,
+                status=args.get("status") or None,
             ),
         }
 
@@ -92,6 +110,27 @@ class ToolDispatcher:
             logger.warning("Refused write for role %s: %s", self.active_role, denial)
             return denied(f"Denied: {denial}")
         return execute_write_file(self.workspace_dir, filepath, content)
+
+    def _execute_generate_code(
+        self,
+        filepath: str,
+        code: str,
+        language: str | None = None,
+        validate_syntax: bool = True,
+        overwrite: bool = True,
+    ) -> str:
+        denial = authorize_write(self.broker, self.active_role, filepath)
+        if denial is not None:
+            logger.warning("Refused generate_code for role %s: %s", self.active_role, denial)
+            return denied(f"Denied: {denial}")
+        return execute_generate_code(
+            self.workspace_dir,
+            filepath,
+            code,
+            language=language,
+            validate_syntax=validate_syntax,
+            overwrite=overwrite,
+        )
 
     def _execute_read_file(self, filepath: str, start_line: int | None = None, end_line: int | None = None) -> str:
         return execute_read_file(self.workspace_dir, filepath, start_line, end_line)

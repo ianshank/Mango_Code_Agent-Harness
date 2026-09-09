@@ -6,7 +6,8 @@ Implements MCTS refinement and scoring mechanisms for planning.
 from __future__ import annotations
 
 import math
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from harness.shared.langgraph.ablation import AblationChannel, AblationNode
 from harness.shared.langgraph.state import MangoState

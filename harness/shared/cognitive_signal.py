@@ -41,6 +41,11 @@ MAX_SIGNAL_BYTES = 262_144
 # a full sink refuses further writes instead of filling the disk; the shadow
 # channel contains the rejection, leaving the incumbent path unaffected.
 MAX_SINK_BYTES = 64 * 1024 * 1024
+# Nesting ceiling independent of CPython's json recursion behaviour. Python
+# 3.14's encoder can serialize nests that used to raise RecursionError, so the
+# RecursionError→SignalValidationError translation alone is not a portable
+# guard once the matrix includes 3.14 (docs/specs/python-floor-310.md).
+MAX_PAYLOAD_DEPTH = 64
 
 SIGNAL_DIR_ENV = "MANGO_SIGNAL_DIR"
 DEFAULT_SIGNAL_SUBDIR = Path(".mango") / "memory" / "signals"
@@ -143,10 +148,37 @@ def _reject(reason: str) -> typing.NoReturn:
     raise SignalValidationError(reason)
 
 
+def _container_depth(value: typing.Any, *, limit: int = MAX_PAYLOAD_DEPTH) -> int:
+    """Return the depth of nested dict/list/tuple containers, capped at limit+1.
+
+    Scalars and empty containers are depth 0. Depth is counted only through
+    mapping/sequence containers so a long flat list does not trip the nesting
+    guard (byte size still bounds those via MAX_SIGNAL_BYTES).
+    """
+    if not isinstance(value, (dict, list, tuple)):
+        return 0
+    stack: list[tuple[typing.Any, int]] = [(value, 1)]
+    deepest = 1
+    while stack:
+        current, depth = stack.pop()
+        if depth > deepest:
+            deepest = depth
+        if deepest > limit:
+            return deepest
+        if isinstance(current, dict):
+            children = current.values()
+        else:
+            children = current
+        for child in children:
+            if isinstance(child, (dict, list, tuple)):
+                stack.append((child, depth + 1))
+    return deepest
+
+
 def _parse_iso_timestamp(value: str) -> datetime:
     """`datetime.fromisoformat` accepts a trailing "Z" only from Python 3.11
     onward (verified: rejected on 3.10, accepted on 3.11/3.12); the CI matrix
-    spans 3.9-3.12, and "Z" is the most common ISO-8601 UTC suffix an external
+    spans 3.10-3.14, and "Z" is the most common ISO-8601 UTC suffix an external
     producer would emit. Normalize it first so acceptance is interpreter-
     independent rather than a Python-version-dependent flake."""
     if value.endswith("Z"):
@@ -268,6 +300,14 @@ class CognitiveSignalSink:
         """
         as_dict = signal.to_dict()
         validate_signal_dict(as_dict)
+        # Explicit depth guard: do not rely on CPython raising RecursionError
+        # (3.14 can encode nests that earlier interpreters refused).
+        depth = _container_depth(as_dict.get("payload"))
+        if depth > MAX_PAYLOAD_DEPTH:
+            _reject(
+                f"payload nesting depth {depth} exceeds limit {MAX_PAYLOAD_DEPTH}; "
+                "not JSON-serializable under the sink's nesting ceiling"
+            )
         try:
             line = json.dumps(as_dict, allow_nan=False, ensure_ascii=True)
         except (TypeError, ValueError, RecursionError) as exc:

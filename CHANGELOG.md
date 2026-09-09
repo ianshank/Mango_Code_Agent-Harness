@@ -10,49 +10,539 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### INV-13 step 6: host capability probe (2026-09-09)
+
+- Stdlib-only `capability_probe.py` prints LSM, Landlock ABI, unprivileged userns, and container runtimes as `enforced` / `absent` / `undetermined`. `make validate` runs it with `--json` so every matrix leg emits loadable JSON. Absence is a determination (exit 0); undetermined is the only non-zero exit. Spawn-free; the VERSION-flag Landlock query never calls `landlock_restrict_self`. Probe output is not a `BackendCapabilities` record and is not passed into `ProcessBackend`. Sandbox digest remains unattestable until steps 7–9. GitHub Actions inventory is still unmeasured until this prints on the matrix.
+- Follow-through: AQA-007 (`test_capability_probe_vocabulary_regression.py`) pins the two vocabularies; C4 draws `capability_probe.py` in `governance/` unconnected to `ProcessBackend`; PRE_PR / README / INV-13 liveness name the probe; undetermined fields are listed on stderr. `.gitignore`, `.dockerignore`, and `.gitleaks.toml` needed no delta (the probe writes no artifacts and no secrets). `.mango/agents/**` and hooks are already wired: the verifier runs `make validate`, which now includes the probe; session_start stays dormant (DEC-003). No new skill — `validation-runner` already runs `make ci` and must not re-declare stages. `on.pull_request.branches` includes `cursor/**` so a stacked PR onto this cloud-agent namespace still runs `make ci` (DEC-024); `claude/**` is retained. Pinned by `test_workflow_contracts.py` against the parsed list, not the comment.
+
+### Documentation truth: README no longer names missing files or transcribed counts (2026-09-08)
+
+- Root README cited `.governance/skip-waivers.json` (does not exist) and treated a missing root `.governance/allowed-remotes.txt` as a live allowlist (DEC-005: the absence is the control). It also kept the Pong 7-tier labels and transcribed suite/coverage headcounts beside a DEC-024 sentence. Paths now match the Python/Node registries and per-stack allowlists; counts stay with the commands that produce them. Pinned by `test_documentation_claims.TestReadmeGovernancePathsExist`. NEXT_STEPS header and AEI problem-statement item 2 catch up to PR #124 on `main`.
+
+### INV-13 evidence, reasoner tool parity, execution protocol, CI truthfulness (2026-09-08)
+
+- **INV-13 step 3 (evidence):** `ExecutionBroker` records policy, source (digest-of-digests of the loop-start enforcement baseline), backend name+version, and test digests through `evidence_record.py`. Evidence is opt-in; a keyless evidence-enabled broker returns `BLOCKED` naming `AGENT_EVIDENCE_KEY` before spawn. Sink is outside the workspace and `protected_paths`. Sandbox digest remains unattestable. The evidence cap is `policy_defaults.evidence_defaults` (one policy reader). A refuse routing BLOCKED is still recorded when a key is present. Sink I/O failures are logged and do not rewrite the command result. `policy_digest` hashes `active_policy_path()` (honouring `MANGO_WRITE_POLICY_PATH`), not a second default file.
+- **INV-13 steps 4–5:** `ExecutionBackend` protocol + `ProcessBackend` adapter; `policy_loader.py` split into `policy_io.py` / `policy_defaults.py`; new top-level `execution.routing` (`brokered` \| `refuse`).
+- **NS-18:** Reasoner system prompt tool paragraph is generated from `tools_for_role`; YAML frontmatter is stripped; `model_call` logs `prompt_sha`; `generate_code` is the write door named in the persona.
+- **NS-36 minus signatures:** attestation binds to PR head SHA; Dockerfile digest-pins `node:26-alpine`, runs as `USER node`, drops `EXPOSE`/`tsx`; Dependabot docker `cooldown`; scheduled `protection_report` queries `/rules/branches/main` and stays green on query/API hiccups (`set +e`, empty-list only). `make audit-install` retries `go install` on transient GOPROXY/sum.golang.org stream errors so `dependency-audit` cannot fail the required check on a proxy blip.
+- **NS-39:** traceability ratchet 223→203; contract IDs cited on both sides in `contract_citations.py` / `test_contract_citations.py`; AC-GEA-8 baseline under `docs/reports/` with `test_code_graph_is_gated_on_a_recorded_baseline`. No CPG. The graph-engineering baseline requirement stays uncited.
+
+### Architecture hardening: god-file decomposition & regression suite hardening (2026-09-07)
+
+- **Test Suite Budget Relief (`test_mcp_server.py`)**: Decomposed monolithic `test_mcp_server.py` (696/700 lines) into `test_mcp_server.py` (199 lines; lifecycle, server run, concurrency, Windows loopback TCP guard) and `test_mcp_server_dispatch.py` (270 lines; role authorization, PDP enforcement, dispatcher registry parity, parameter schema gating, structured logging). Shared doubles and setup factories extracted to `_mcp_helpers.py`. Makefile `test-mcp` updated to run `test_mcp_server*.py`.
+- **LangGraph Nodes Modularization (`nodes.py`)**: Decomposed `harness/shared/langgraph/nodes.py` (482/500 lines) into `node_reasons.py` (115 lines; quality gate reasons, conclusive result grading, count validations), `node_executors.py` (225 lines; agent execution wrappers, budget enforcement, configurable resolution), and `nodes.py` (178 lines; gate and routing nodes with 100% backwards-compatible symbol re-exports).
+- **Regression Suite Hardening**: Removed silent skips on missing files in `test_scripts_hook_shims.py`, `test_gaps_memory_integrity.py`, and `test_scan_findings_windows_waiver.py`, replacing them with strict assertions. Added dynamic `REPO` bootstrapping and `if __name__ == "__main__":` entrypoint runners for single-click IDE test execution.
+- **Enterprise Skills Codification**: Created and registered `god-file-decomposer` and
+  `regression-pin-author` skills under `.mango/skills/`, with strict markdown formatting and
+  invariant enforcement workflows. (An earlier revision of this line also claimed registration
+  under `.agents/skills/`. That directory does not exist and must not:
+  `TestMangoIsTheOnlySkillRoot::test_no_skill_directory_exists_outside_dot_mango` asserts
+  `.mango/skills` is the only skill root over `git ls-files`. The claim was never true.)
+### Graph engineering lands as four derived checks; the traceability gate is re-scoped behind a ratchet (DEC-065)
+
+Spec `docs/specs/graph-engineering-adoption.md` (revision 3), from the deep peer
+review in `docs/reports/2026-DEEP-PEER-REVIEW-GRAPH-ENGINEERING.md`, which
+accepted the three-model diagnosis and rejected its ranking, then reviewed itself
+and found five defects in its own plan. Four properties that were argued in prose
+or held by construction are now asserted by tests that go red when reverted.
+
+**None of the four is a new CI target, and that is a decision rather than an
+omission** (spec D-5). `validate_invariants.py` already carries four unrelated
+invariants behind one `make validate` entry, and `test_constant_triage.py`
+enforces a repository-wide property from inside the ordinary pytest run with no
+target of its own — so the question was never gate-or-nothing, it was *which
+enforcement surface*. A pure function over repository state belongs in the test
+suite, where it inherits INV-2's zero-skip discipline and costs nothing new; only
+a check that must run outside pytest earns a target. `ci_required_targets`
+therefore stays at ten entries, `harness/CONTRACT.md` gains no row, and INV-5 sees
+no new entry to reconcile. The marginal gate is not free — a policy entry, a
+CONTRACT row, a `test_ci_gate_coverage.py` update and three protected-path
+attestations each time — and the report that proposed one priced none of it.
+
+- **The traceability gate was reading a different corpus, not a subset of one.**
+  `check_traceability.py` resolved `.governance/traceability.json` and every glob
+  against the process CWD while `make validate` ran it from `harness/node`, so it
+  read **6** requirement IDs from the Node stack while `docs/specs/` held **412**
+  sharing not one member with them, and reported
+  `traceability: passed (6 requirements)` with exit 0. Its own docstring
+  anticipated the failure ("the common failure where a glob is scoped to one stack
+  and silently checks nothing outside it") and it shipped scoped to one stack.
+  Both of its emptiness guards passed, because the failure mode is not "found
+  nothing" but "found the wrong two files", which no emptiness check can catch.
+  The gate now takes `--workspace`, defaulting to the CWD so every per-stack shim
+  invocation behaves byte-for-byte as before during the DEC-056 shim window;
+  `harness/node/.governance/traceability.json` is deliberately untouched, and
+  leaving it untouched is what proves the compatibility claim. A new root
+  `.governance/traceability.json` declares `"scope": "repository"`, and only a
+  repository-scoped run is subject to two policy-sourced bounds:
+  `traceability.min_discovered_requirement_ids`, an anti-vacuity floor that makes
+  "the gate is pointed at the wrong corpus" fail instead of pass, and
+  `traceability.max_uncited_contract_requirement_ids`, a ratchet that may be
+  lowered as citations land and never raised. Requirement IDs are classified per
+  document and default strict: `traceability.default_spec_class` is `contract`, a
+  document declares `Spec class: program-plan` only to say its IDs name scheduled
+  work with nothing yet to cite (five roadmap documents do; 98 IDs), and a document
+  declaring an unrecognised class raises rather than falling into the permissive
+  branch — a class inferred from a filename is a class an author acquires by
+  accident. `make validate` now runs the gate **twice** on purpose: the per-stack
+  invocation from `harness/node` is the live proof that `--workspace`'s default
+  changed nothing, and a second `--workspace .` run is the one the required
+  `traceability` check is actually for. Review on PR #120 caught that adding the
+  flag alone left the required check still reading 6 IDs in production, with the
+  real corpus exercised only by pytest — an operator reading
+  `passed (6 requirements)` off the named required check would have been reading
+  the pre-fix number. `test_traceability_scope.py`.
+- **One approval flag was guarded by construction and by nothing else.**
+  `policy_decision.decide` takes `human_approved`, the single argument that turns a
+  high-risk denial into an ALLOW; `broker.py` sources it from a `context` mapping
+  and `tool_executors.execute_run_command` builds that context as a literal dict
+  with no such key, so the agent path cannot reach it. The guarantee was real and
+  rested on one dict literal — `broker.execute_command(command, **kwargs)` makes
+  forwarding a caller-supplied context syntactically easy, and no test would have
+  gone red. `authority_graph.py` and `authority_call_sites.py` derive the
+  authorization chain and store nothing: a persisted copy of governance state is a
+  cache, and a cache of governance state is a staleness bug with a security
+  consequence. The claim is scoped precisely rather than left implicit — it is "no
+  *caller* can supply the flag" (five non-test call sites, zero witnesses across
+  114 first-party modules), not "the flag is unreachable by any path"; `broker.py`'s
+  own plumbing passes `context` onward by design, and a check that fires on correct
+  code every run is a check that gets switched off. The graph models the two grant
+  surfaces separately and **raises** when a query does not name one, because they
+  deliberately disagree (`planner` holds `spec_write` while executing as
+  `orchestrator`, which lacks it) and a default would answer the wrong question
+  with full confidence. C-GEA-2 forbids either module being imported by
+  `harness/shared/governance/`, `write_policy.py`, `read_policy.py` or
+  `agent_authority.py`: the graph reads the governance layer, never the reverse.
+  `test_authority_graph.py`.
+- **That scan's first zero was not evidence, and review caught it.** As first
+  written it read every assignment in a function body regardless of position, so a
+  dict literal written *after* a broker call resolved as the value passed *to* it,
+  and it treated a parameter as merely unreadable rather than as the caller's own
+  value. Four of the five call sites pass a literal inline and were never at risk;
+  the fifth — `execute_run_command`, the only one needing analysis — was cleared by
+  a resolver answering "is this name assigned to a literal *somewhere*" when the
+  question is "what does it hold *here*". The count is unchanged (five sites, zero
+  witnesses, 114 modules); what changed is whether the zero carries information.
+  `_runs_before` requires a binding to sit directly in a block the call also sits
+  in, ahead of it, and `_parameter_names` refuses a parameter before consulting
+  bindings at all — so `**kwargs` built two lines above and extended by
+  `kwargs["timeout"]` under an `if` still reads clean, while six shapes the old
+  scan passed are now witnesses: a literal after the call, a parameter overwritten
+  by a dominating literal, bindings under `if`/`for`/`try`, and a loop reading the
+  previous iteration. A check that inspects nothing passes vacuously; one that
+  inspects the wrong thing passes falsely, and both read green in CI.
+- **A second review round found the same defect three more times.** Reflective
+  lookup walked past the write door (`os.system("id")` refused,
+  `getattr(os, "system")("id")` written); the topology extractor found its builder
+  by bare name across the whole module, so two functions each binding `builder`
+  returned one *merged* graph and renaming one silently dropped the second; and a
+  one-line alias (`invoke = broker.execute_command`) was not a call site, so the
+  approval scan reported a clean zero over an unexamined caller. With the `.pyw`
+  suffix, that is four instances of one shape: **a resolver answering a narrower
+  question than its caller asked, and returning a confident answer anyway** — same
+  type, same shape as the true answer, with nothing in the result saying which
+  question it answered. All four are closed, each reproduced before it was
+  believed. Reflective reads now resolve through both spellings and through
+  attributes read off the result; a *computed* key is reported only where policy
+  forbids something under the resolved base, so `getattr(self, name)` still
+  passes. The extractor keeps lexical scope and raises on ambiguous builders. The
+  alias rule reports a read of the broker method that leaves the scan as a value,
+  and the five live call sites still read clean.
+- **Three modules were split because the fixes had nowhere to go.**
+  `code_safety.py` → 222 + `code_symbols.py`; `authority_call_sites.py` 499 → 355
+  + `authority_call_analysis.py`; `graph_topology.py` → 349 +
+  `graph_topology_source.py`; `test_authority_graph.py` 699 → 397 +
+  `test_authority_call_sites.py`. Docstring content an earlier budget squeeze had
+  folded away is restored. NS-39 predicted this seam and declined to act on it,
+  correctly — a file inside the policy threshold is not a violation — but the next
+  change to each was a security fix that arrived with no room, which is the
+  argument for treating headroom as something a module owes the next change.
+- **A supplied policy could disarm both write-door checks.** `load_python_write_suffixes`
+  and `load_prohibited_symbols` substituted a supplied policy's lists for the
+  harness ones, so a digest-pinned policy could drop four of the five prohibited
+  symbols and, by dropping `.py` from the suffix list, switch the
+  prohibited-symbol check off for Python output entirely. Pinning establishes
+  provenance, not benignity. `write_policy` had already settled this in the other
+  direction — a supplied policy "is unioned with the harness policy rather than
+  substituted for it" (R-PPP-1) — and these two accessors, one section over in the
+  same policy file, had not applied it. Both now union onto the harness floor, and
+  a dropped entry is reported rather than obeyed. One of the tests defending the
+  old behaviour asserted the vulnerability *as a feature*: it required the supplied
+  list to be the whole answer and cited that as proof the set came from policy
+  rather than a literal — a property tested in the wrong direction, which is worse
+  than an untested one because a reader has no reason to look again.
+- **Three more resolvers answered a narrower question than they were asked.**
+  `getattr(broker, "execute_command")(cmd, ctx)` produced no call *and* no
+  reference, so it was invisible while the five direct sites kept the emptiness
+  guard green; a literal handed to an unanalysed helper
+  (`add_approval(context, caller_value)`) stayed classified clean though the helper
+  can add the flag; and `add_edge(START, 'typo')` with no `typo` node returned an
+  internally inconsistent topology. Each is closed, each reproduced first.
+  DEC-065's own prose had the same defect — it recorded a method fetched by a
+  *computed* name as out of scope, which is true, and was read as covering the
+  statically-decidable literal, which it is not. Corrected in place rather than
+  deleted, because the deletion would lose the fact that the boundary was drawn in
+  the wrong place once. Prose is as capable of that gap as code, with less to catch
+  it: no gate runs over a decision record.
+- **A fifth module, and the split that keeps the dependency one-way.**
+  `block_positions.py` carries the statement-position analysis (`Position`,
+  `runs_before`, `own_nodes`) that both the dominance check and the new taint rule
+  need. It imports `ast` and nothing first-party, and the module-shape test was
+  *strengthened* rather than relaxed to admit it: it now asserts the analysis
+  half's first-party imports are exactly `{block_positions}` and that
+  `block_positions` has none at all. Two AST resolvers that look alike are
+  deliberately still not shared — `code_symbols` resolves a reflective read from
+  its **base** through the file's imports and returns nothing when that base does
+  not resolve (right for a write door, fail-*open* for a reachability scan), while
+  the authority scan reads the **leaf** and never resolves the receiver. They share
+  a shape, not a contract.
+- **An edge could name a node that did not exist.** `extract_topology` checked
+  only that `nodes` and `edges` were each non-empty, so a graph whose two halves
+  were individually non-empty and mutually inconsistent passed *both* emptiness
+  guards and returned a plausible topology the source does not describe —
+  `reachable_from` reporting a node no `add_node` call registers. One mistyped
+  endpoint rewired the graph instead of failing it. The check now compares the
+  collected endpoint set against the collected node set once, after the whole
+  module is read, and names the file, every offending endpoint, the edge it came
+  from and the line that declared it. Validating after collection rather than per
+  call is what makes declaration order free *and* catches `set_entry_point` /
+  `set_finish_point`, which declare edges under names containing no "edge" and
+  would have slipped a rule attached to `add_edge`. Conditional-edge *labels* are
+  deliberately excluded — a `path_map` key is a router return value, not a node,
+  and refusing those would have rejected the real graph's dominant edge form.
+  `START`/`END` stay legal and the DEC-052 orphan reviewers are the converse case:
+  a node with no edge names no endpoint, so it cannot dangle.
+- **A roadmap item was withdrawn because its mechanism was wrong.** NS-40 claimed
+  a required status check that never ran reads as *pending*, so a ruleset cannot
+  block on it. GitHub's required checks do block on an absent report, and more to
+  the point **NS-1 records that no ruleset is applied to this repository at all**
+  — so nothing was required, and the bot head read green because every gate here
+  is advisory, which is NS-1's own opening sentence. The claim was asserted with
+  no run cited: the DEC-024 shape, in an item written about the DEC-024 shape. A
+  drafted spec and verdict module were removed unlanded after four of this
+  repository's own gates rejected them (traceability ratchet, `validate_plan`,
+  mypy, `test_verdict_literals`) and all four `openspec-peer-review` personas
+  refused signoff. The withdrawal commit itself then claimed the wrong version
+  had been quoted in a decision record; `DEC-065` does not mention NS-40, and
+  that sentence was written without checking. Corrected in `NEXT_STEPS.md`
+  rather than silently dropped — it is the same failure one layer up, and the
+  third time on this PR that a claim about evidence went unchecked. The incident is now evidence under NS-1, where it argues for
+  work already known to be needed, rather than a separate item arguing for work
+  that would not have helped.
+- **Generated code was parsed and the parse thrown away.** `execute_generate_code`
+  ran `ast.parse` to answer "does it parse", then wrote.
+  `synthesis.prohibited_imports` declares five entries the same tree can decide
+  before bytes reach disk, and they span three shapes — importable modules
+  (`subprocess`, `importlib`), attribute call targets reachable through a bare
+  `import os` (`os.system`, `shutil.rmtree`), and a builtin no import statement
+  names (`__import__`) — so a checker built on `ast.Import`/`ast.ImportFrom`, the
+  obvious reading of the key's name, would decide two of five and silently pass the
+  other three. The analysis lives in the unprotected `harness/shared/code_safety.py`
+  so the wiring in `tool_executors.py` stays four lines. **This narrows
+  `execute_generate_code` deliberately:** Python naming a prohibited symbol now
+  returns a denial where it previously wrote the file. `write_file`, `apply_patch`,
+  `read_file` and `run_command` are unchanged, preserving `C-CGT-2` from
+  `docs/specs/code-generation-tool.md`.
+- **Two graph nodes were registered with no edges, and the suite asserted it.**
+  `peer_reviewer` and `security_reviewer` have no incoming or outgoing edge, so
+  `findings` is empty on every run. DEC-052 records this in prose;
+  `test_langgraph_graph.py` asserts the node *set*, which both orphans satisfy — so
+  a fix wiring them in would not have failed the test and a fix deleting them
+  would. The defect was pinned in place rather than caught. `graph_topology.py`
+  extracts nodes and edges from module **source** via `ast`, never from a compiled
+  graph object, so the check needs no `skipif` on an optional import and cannot
+  become a skip in search of an INV-2 waiver; a test pins the two reviewers as
+  edgeless *and* pins that DEC-052 records them so, failing both when they are
+  wired in without amending DEC-052 and when either is deleted silently. A second
+  test pins the absence of a topology CI *target* to DEC-053's `accepted` status
+  and does not fail merely because a topology test exists — DEC-053's park is
+  decided but unexecuted, and forbidding the gate and the plain test alike would
+  leave the defect live and unwatched for the indefinite period Phase E waits on
+  NS-2. `test_graph_topology.py`, `test_graph_topology_parked.py`.
+
+**Every new check fails closed on an empty input set** (R-GEA-4). A derived node
+set, edge set, tool set, requirement-ID set, prohibited-symbol list or scanned
+call-site set that comes back empty raises rather than reporting a satisfied
+property. This repository has been bitten by that exact shape three times —
+DEC-024's carried-forward claim, DEC-052's assertion over a channel's whole
+domain, and the traceability gate above.
+
+**A dormant protected-path pattern woke, exactly as DEC-056 predicted.** That
+decision said the root-governance pattern "ceases to be a declared-dormant
+`protected_paths` pattern once the root directory is live"; the repository-scoped
+traceability config is the first tracked file to match it. So
+`test_protected_path_liveness.py`'s `DORMANT_PATTERNS` drops from 17 entries to
+16, with the reason recorded in the assertion message — leaving a pattern declared
+dormant while it matches real files is the stale-waiver shape
+`test_dormant_patterns_are_still_dormant` exists to catch, and reclassification is
+what DEC-056 asked for rather than a surprise. Every protected path this branch
+touches carries a row in the PR's per-file `infra-reviewed` attestation table.
+
+**One thing this work found rather than shipped.** `.mango/agents/README.md` — the
+authoritative 3-active → 7-canonical mapping — listed the `nemotron-reasoner`'s
+received tools as `read_file`, `apply_patch`, `write_file`, `run_command` and the
+two meta-tools. `tools_for_role("nemotron-reasoner", NEMOTRON_TOOLS)` returns
+seven — `generate_code` entered the set when NS-38 landed on #116 and the table
+never gained it, so the row has been false ever since. The README's own contract
+says this table and `agent_authority.ACTIVE_TO_CANONICAL` "must stay in step",
+and `test_agent_harness_wiring.py` checks the canonical-role reconciliation
+and the `## Authoritative mapping` heading but not the *Tools received* column —
+which is why the drift was silent. The row is corrected here (and the `verifier`
+row's "no `write_file`/`apply_patch`" now names `generate_code` too); a test that
+derives the column from the constant is not added, because it belongs with NS-18's
+R-RBT-3.
+
+**Stated, not hidden.** The ratchet is a bound, not a fix: re-scoping the gate does
+not produce a green gate, it produces a visible backlog of **223** contract-spec
+requirement IDs missing an implementation citation, a test citation, or both —
+222 as the corpus stood before this change, plus R-GEA-5, this plan's own
+requirement that a tokens-per-turn baseline be recorded before any code-property
+graph is built, which is deliberately unimplemented and therefore has nothing to
+cite. Shipping the scope fix alone would have turned a gate that lies into a gate
+that cries wolf, and the second gets switched off; shipping it with the backlog
+silently exempted would be the waiver `CLAUDE.md` forbids. The number sits in
+policy where lowering it is a reviewed edit, and every green run reports the count
+*and* the headroom, so an allowance that has stopped being needed is visible
+without waiting for a red run. "May only be lowered" was itself prose that nothing
+checked until review on PR #120 caught it: the gate and every test exercising it
+read the same policy key, so raising the key alongside a new uncited requirement
+stayed green. `ACCEPTED_RATCHET_CEILING` in `test_traceability_scope.py` is a
+deliberate second, independent copy of the number — lowering the policy passes
+freely, raising it above the recorded high-water mark fails, and a companion
+assertion fails when the ceiling drifts *above* the configured value, because a
+ceiling with slack constrains nothing. A reader could still mistake a passing
+repository-scoped run for a fully traced corpus, so the failure message and the
+policy rationale both say the number is a backlog.
+
+**The second residual was named, then closed rather than lived with.** As first
+written, `execute_generate_code`'s prohibited-symbol check ran on a tree that
+existed only when `validate_syntax=True` **and** the model-supplied `language`
+resolved to Python — two model-supplied arguments, either of which let the agent
+whose output the check constrains switch it off, and a `.py` target declared
+`language="markdown"` did it without touching the flag. The entry argued that
+closing it would contradict R-GEA-3 and widen a protected-path diff. Review on
+PR #120 rejected that reasoning: a diff cost is not an argument about a security
+property. Python-ness is now derived from the **resolved target suffix** and the
+check runs on every Python write regardless of `validate_syntax`, which keeps its
+only defensible meaning — whether a syntax *error* is reported. One parse still
+serves both questions. `write_denial_reason`, `authorize_write` and workspace
+confinement are unchanged and still run first.
+Both residuals and the one unticked criterion (AC-GEA-8, the tokens-per-turn
+baseline R-GEA-5 requires before any code-property graph is built) are carried as
+**NS-39** in `NEXT_STEPS.md`.
+
+`governance-policy.json` gains a `traceability` block, so `policy-artifact.json`
+and the control-plane bundle were regenerated and re-verified and the
+`policy_version` moves accordingly. The four new modules import only the standard
+library and existing first-party code, so `make lock-check` recompiles unchanged
+(C-GEA-1). Record: `docs/decisions/DEC-065.md`.
+
+### Agent memory write-denial (NS-37) & code generation writing tool (NS-38, DEC-059)
+
+- **Agent Memory Integrity**: `write_policy.write_denial_reason` now denies direct raw writes to `.mango/memory/**` across `write_file`, `apply_patch`, `generate_code`, and `run_command` shell redirects under both workspace-scoped and install-root resolution modes. The denial directs callers to the sanctioned meta-tools (`hypothesis_register`, `knowledge_gap_log`), closing memory poisoning (OWASP ASI06 / MAST FM-2.6) while keeping memory stores excluded from `protected_paths` to preserve digest baseline validity.
+- **Dedicated Code Generation Tool**: Added `generate_code` to `NEMOTRON_TOOLS` and `agent_authority.TOOL_REQUIRED_ACTION` (`write`). Supports pre-write syntax validation (`ast.parse` for Python, `json.loads` for JSON), workspace confinement, write policy enforcement, overwrite guards, and structured logging. Tested via comprehensive unit and regression suites. Specs `docs/specs/agent-memory-integrity.md` and `docs/specs/code-generation-tool.md`. Record DEC-059.
+
 ### Windows portability hardening — RCA-1 through RCA-11 (2026-09-05)
 
 Full Windows test-suite parity: 3 417 passed, 133 expected skips, 0 failures.
-Eleven root causes triaged against `origin/main`; three governance decisions
-registered (DEC-057, DEC-058, DEC-059).
+Eleven root causes triaged; three governance decisions registered as DEC-063
+(AF_UNIX), DEC-061 (Make/POSIX stubs), and DEC-062 (asyncio self-pipe). The
+AF_UNIX skip was originally DEC-059 on this branch; it moved to DEC-063 after
+`origin/main` published DEC-059 for NS-37/NS-38.
 
 | RCA | Root cause | Fix |
 |-----|-----------|-----|
-| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-057 waiver |
+| RCA-1 | `socket.AF_UNIX` absent on Windows | `hasattr` guard + DEC-063 waiver |
 | RCA-2 | `fnmatch.fnmatch` case-insensitive on Windows | Switch to `fnmatch.fnmatchcase` in `is_protected` |
 | RCA-3 | Hardcoded POSIX path in log assertion | `str(path)` normalisation |
 | RCA-4 | Windows backslash separator in module names | Normalise `\\` → `.` |
 | RCA-5 | `make` absent on Windows in timeout test | `_ensure_make_on_path` autouse fixture |
-| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-058 waiver |
-| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-058 |
-| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-059 |
-| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-058 |
+| RCA-6 | POSIX `#!/bin/sh` stubs in allowlist tests | `POSIX_ONLY` mark + DEC-061 waiver |
+| RCA-7 | GNU Make dependency in forgery regression | `skipif(not shutil.which("make"))` + DEC-061 |
+| RCA-8 | asyncio self-pipe TCP fallback blocked | `enable_socket` on `win32` only + DEC-062 |
+| RCA-9 | Gate truthfulness + makefile contracts use `make` | Module/class-level make-skips + DEC-061 |
 | RCA-10 | `_sole_decision_id()` breaks with >1 DEC in registry | `_dec_for_posix_only_probes()` asserts DEC-026 |
 | RCA-11 | NTFS same-inode overwrite in tamper test | Case-insensitive assertion on `win32` |
 
-New regression tests: `test_windows_portability_regression.py` (expanded to
-enterprise AQA — anti-pattern guard, parametrized case-sensitivity, make-guard
-audit, asyncio-mark audit, security bypass regression).
+New regression tests: `test_windows_portability_regression.py`. `pyrightconfig.json`
+for IDE parity.
 
-Added `pyrightconfig.json` so Pylance resolves `harness.*` imports without a
-`pip install -e .`; mirrors pytest's `pythonpath = ["."]` setting.
+### NS-17/NS-21 temporary rollback regressions retired (DEC-060)
 
-### NS-21 rollback clarification (2026-09-05)
+`test_ns17_rollback_regression.py` and `test_ns21_rollback_regression.py`
+asserted the *absence* of workspace-scoped memory and post-turn hooks after a
+temporary CI rollback. `origin/main` re-landed the forward implementation under
+DEC-057/058; those inverted pins are retired with DEC-060.
 
-The three `post-*-run` shell scripts and `lib/record_post_run.sh` introduced by
-NS-21 are absent from this branch. The *invocation infrastructure* in `loop.py`
-(`hook_runner.run_hook(f"post-{agent_name}-run", ...)`) and `PERMITTED_HOOK_NAMES`
-derivation are **retained intact** — re-enabling NS-21 only requires adding the
-scripts back. `test_ns21_rollback_regression.py` pins this state. NS-21 is
-re-opened in `NEXT_STEPS.md` as undelivered.
+### Open hypotheses are surfaced to the reasoner prompt (DEC-058)
 
-### NS-17 rollback clarification (2026-09-05)
+Phase 2 of DEC-057. `REASONER_PROMPT_TEMPLATE` gains a trailing
+`{open_hypotheses}` slot, filled in `ExecutionLoop.execute_loop` by
+`memory_view.format_hypotheses_for_reasoner`: the workspace's **open**
+hypotheses (no `superseded_by` successors; a chain renders its head only),
+most recent first, one line each — status first, `confidence`, and the entry
+`id` verbatim, which is what `revises` accepts. A `retracted` line is shown on
+purpose: it is what stops the same claim being registered again. `reasoning`
+is not rendered (measured: it made the two bounds fight at 10–16 entries).
 
-`resolve_memory_dir`, `_fifo_trim`, `format_gaps_for_planner`, the `{open_gaps}`
-slot in `PLANNER_PROMPT_TEMPLATE`, `policy_path` in `ToolDispatcher.__init__`, and
-the `agent_memory` block in `governance-policy.json` are absent from this branch
-(simplified back to fixed `MEMORY_DIR` from `__file__`). `test_ns17_rollback_regression.py`
-pins this state and documents what must be added when NS-17 is re-implemented.
+Two new policy keys bound the block and follow the H4 loader contract (present
+policy missing a key → `PolicyError`; absent policy → built-in default):
+`agent_memory.reasoner_hypothesis_limit` (`10`) and
+`agent_memory.reasoner_hypothesis_budget_tokens` (`1500`, header included,
+measured with `context_policy.estimate_tokens` and
+`orchestrator.context_chars_per_token`). The first entry that would overflow
+stops the render — dropped whole, nothing older considered. `limit: 0` is the
+kill switch. The block is a non-group message, so eviction never touches it and
+cannot rescue an oversized one; the bound is what makes it affordable in the
+context of every call after the reasoner's first, the verifier's included.
+Empty renders `""`, so a workspace without hypotheses sends the pre-DEC-058
+prompt byte for byte. One `event=hypotheses_surfaced` log line per render
+carries `run_id`, `shown`, `open`, `total`, `tokens_estimated` and `ids` —
+never claim text.
+
+**Migration:** an adopter with a customised `agent_memory` block must add the
+two keys (same shape as H4's `orchestrator` migration), and any out-of-tree
+caller of `REASONER_PROMPT_TEMPLATE.format(...)` must pass `open_hypotheses=""`
+(the slot is required by `str.format`; the two in-tree builders do). Also from
+the post-implementation review: `orchestrator.context_chars_per_token <= 0` now
+fails closed at load with `PolicyError` instead of surfacing mid-run as a
+`ValueError` from the estimator; the `hypotheses_surfaced` event carries
+`chars_per_token`; a non-string `status`/`claim` in a hand-edited store renders
+as `?`/empty rather than verbatim; and the two defect-class pins (oversized
+block survives eviction; empty block leaves the prompt byte-identical) live in
+the regression tier (`test_hypothesis_surfacing_regression.py`, registered in
+`test_regression_tier_pin.py`). `policy-artifact.json` is rebuilt. `C-HR-2` is superseded by `C-HS-1`: prompt builders may reach the
+store only through the bounded formatter; the two pins are rewritten, not
+removed, and proven non-vacuous. The LangGraph node renders the slot empty
+(DEC-053 park). Spec: `docs/specs/hypothesis-surfacing.md`, peer-reviewed at
+revision 2 before implementation.
+
+### Feat: context-window budget on ExecutionLoop (audit H4)
+
+Policy-keyed `orchestrator.context_budget_tokens` /
+`context_chars_per_token` via `policy_loader`; pure
+`harness/shared/context_policy.py` evicts oldest tool-call groups
+atomically before each `complete_chat` while retaining full
+`conversation_history` for dumps/API. Structured `event=context_policy`
+logs include `run_id`. DEC-003 mango hooks stay dormant. Spec:
+`docs/specs/context-window-budget.md`.
+
+### hypothesis_register gains append-only revision (DEC-057)
+
+`hypothesis_register` accepts optional `revises` (a prior entry's id) and
+`status` (`provisional` default, `confirmed`, `retracted`). A revision is a new
+entry carrying the pointer; the prior entry keeps **every** field it was written
+with — claim, reasoning, confidence and status — and gains only its successor's
+id in a `superseded_by` list.
+
+Supersession is structural rather than a status. Adversarial review of the first
+implementation found that writing `status: "superseded"` onto the prior entry
+destroyed the verdict its own evidence had produced (a `confirmed` hypothesis
+read back as `superseded` once revised), and that a scalar `superseded_by` lost
+the first of two revisions of one entry. Both were silent data loss in the
+artifact the change exists to create, and both are now regression-pinned. A
+scalar left by an earlier build is migrated into the list, not discarded.
+
+Also: `confidence` is held to the 0.0–1.0 range the schema advertises (the same
+gap that makes `status` hand-checked — `tool_arg_validation` models neither
+`enum` nor `minimum`/`maximum`); refusals and supersessions log ids and statuses
+but never claim text; a dangling pointer is recorded and reported; and
+cross-record updates run inside the store lock, with the first concurrency test
+in this suite covering two writers revising one entry.
+
+Both the orchestrator dispatcher and the MCP door forward the fields through the
+shared registry. Spec: `docs/specs/hypothesis-revision.md` (R-HR-1…7). The
+sequential-thinking MCP server was evaluated and not adopted; surfacing
+hypotheses into a prompt is deferred behind the context-window budget.
+
+### Operator read path: `make memory-show`
+
+DEC-057 justifies revision by the trail it leaves for the verifier and the debug
+dump, but nothing could read that trail, so the justification was unverifiable.
+`make memory-show` prints both stores — each hypothesis with the verdict it was
+written with and its place in the revision graph. This does not reverse the
+phase-2 deferral: that is about prompt tokens, and printing on request adds none
+to any run. A test pins that no prompt builder imports the reader (C-HR-2).
+
+### Selector gate: `unittest.TestCase` subclasses are now discovered
+
+`test_spec_selectors_collect.py` verifies that every ticked acceptance criterion
+names a `pytest -k` selector that collects something. It approximated collection
+with the `Test*` class-name prefix, but pytest collects a `unittest.TestCase`
+subclass whatever it is called — so every selector aiming at a `*Tests` case
+class was reported as collecting nothing. Twenty-three tests in
+`test_agent_harness_wiring.py` were invisible to it. The scan now also descends
+into classes whose written bases include `TestCase`. It failed closed on correct
+specs, which is the direction most likely to be worked around rather than fixed.
+
+### Decomposition: memory_store.py, memory_view.py
+
+The revision path pushed `meta_tools.py` past `limits.size_budget_lines`, so the
+module now divides in three by what each layer knows: `memory_store` is how a
+store behaves (lock, malformed-file recovery, FIFO retention, and a single
+`append_locked` both writers share instead of carrying near-identical copies of
+the read-modify-write), `meta_tools` is what a record means and how the model
+writes one, and `memory_view` is how a person reads them back. The dependency
+runs one way. `MEMORY_DIR` and the path helpers stay in
+`meta_tools`: they are this repository's layout, not store mechanics, and
+relocating that constant would silently break every test that monkeypatches it.
+Every moved name is re-exported, so `meta_tools.file_lock`,
+`meta_tools._read_json_safe` and the rest resolve unchanged. The revision suite
+splits to `test_hypothesis_revision.py` at `limits.test_size_budget_lines`, and
+the three lock-timing constant-inventory rows follow the code to `memory_store`.
+
+### Docs, config and gates caught by the same review
+
+- `docs/architecture/c4_architecture.md` — the meta-tools node named only
+  `knowledge_gap_log` and was marked "Planned" although both tools have shipped
+  and are wired to all three roles; the memory store was described as "Local"
+  after NS-17 made it workspace-scoped.
+- `.mango/skills/agent-memory-manager/SKILL.md` — claimed the store resolves
+  from `__file__` (the M4 defect NS-17 fixed) and documented no record shape at
+  all; now carries both stores' shapes and the hypothesis lifecycle.
+- `docs/reports/2026-STANDARDS-AUDIT.md` — M4 marked remediated-in-part.
+- `NEXT_STEPS.md` — phase 2 recorded in §4 Parked against its real blocker.
+- `.github/dependabot.yml` — adds the `docker` ecosystem. The root `Dockerfile`'s
+  base image had no upgrade signal from any job: DEC-031 routes Python through
+  `lock-upgrade-check`, which reads the lock file, and `dependency-audit` scans
+  the lock rather than the image.
+- `test_migration_completeness_every_legacy_id_present` asserted the decision
+  index equals exactly DEC-000…056, so it failed on the first record added after
+  the NS-34 migration. It now asserts the legacy set is a subset, with the
+  reproduction in the regression tier per `harness/CONTRACT.md`.
+
+### NS-34: decision records under docs/decisions/
+
+Migrate every pipe-log entry (DEC-000…DEC-056) into `docs/decisions/DEC-XXX.md`
+with YAML frontmatter (`id`, `status`, `date`, `supersedes`, `superseded_by`,
+`owners`) and Context / Decision / Consequences sections. Generated
+`index.md` / `index.json` are the machine SoT for validators; the node
+`.governance/decision-log.md` becomes a thin ID index for `--decision-log`
+consumers; the jvm log is a pointer only (no divergent SoT).
+`validate_governance_docs.py` fails closed on missing status, unparseable
+`supersedes`, index drift, or a governance skill that restates decision
+bodies. `GOVERNANCE_SKILL.md` (node + jvm) points at `docs/decisions/`.
+`generate_decision_index.py` regenerates the index and thin log.
+Constant-triage reads record files instead of the pipe log. Roadmap: NS-34
+and NS-17 move to Delivered (NS-17 landed on #97).
+
+### Docs: NS-18 reasoner-bridge-tool-parity spec scaffold
+
+Add `docs/specs/reasoner-bridge-tool-parity.md` as the NS-18 contract
+(persona/bridge tool-inventory parity, `prompt_sha` logging, falsifying tests).
+Point `NEXT_STEPS.md` NS-18 Evidence at the spec. Docs only; no runtime change.
+
+### NS-21: post-turn hooks record status and tool-call spend
+
+Finish the already-wired `post-{planner,nemotron-reasoner,verifier}-run`
+surface. `ExecutionLoop.execute_agent` passes `status`, `run_id`, `agent`,
+`tool_calls_used`, and `tool_calls_limit` into each post-run hook. Three thin
+scripts plus shared `.mango/hooks/lib/record_post_run.sh` append JSONL under
+`.mango/.state/post-run.jsonl` (presence = enablement; not registered in
+`.mango/settings.json`). HookRunner DEBUG-logs when a permitted script is
+missing. Tests cover disk liveness for every permitted post name, success /
+budget_exceeded / timeout record contracts, allowlist parsing of `loop.py`,
+and settings-namespace partition. DEC-003 Claude hooks stay dormant.
 
 ### Docs: roadmap peer rewrite after #89-#95 / #93 (2026-09-05b)
 
@@ -77,6 +567,20 @@ logging on the new module names path *counts*, never command text. Same commit
 regenerates `policy-bundle.example.json` digests for the node/jvm shim scripts
 that NS-33 reformatted without refreshing the bundle (the related digest gate
 failure on `main`).
+
+### NS-17: agent memory retention and workspace scoping
+
+Bound `knowledge_gap_log` / `hypothesis_register` stores via policy
+`agent_memory` (FIFO trim), scope memory under `<workspace>/.mango/memory`
+when a workspace is supplied (legacy install-root path when not), and surface
+open gaps into the planner prompt (`{open_gaps}`).
+
+Plumb optional `policy_path` into agent-memory call sites
+(`knowledge_gap_log`, `hypothesis_register`, `format_gaps_for_planner`,
+`ExecutionLoop`, `ToolDispatcher`) so retention and planner-gap limits follow
+the same governance file as other budgets. Zero-bound policies now report that
+retention is disabled instead of claiming a successful log. Mutation tests pin
+`policy_path` honouring and zero-bound messaging.
 
 ### NS-11: reconcile the regression tier with CONTRACT.md
 
@@ -1563,6 +2067,47 @@ Spec: `docs/specs/tech-debt-hardening-plan.md` (peer-reviewed revision 2).
   `README.md`, `NEXT_STEPS.md`, `Makefile`, `CHANGELOG.md`, the C4 document
   and `harness/node/package.json` are checked against it by
   `test_documentation_truth.py`, negative case included.
+
+## [2.5.0] - 2026-09-07
+
+### Added
+
+- `scripts/verify-tier-a.sh` and `scripts/guard-forbidden-paths.sh` — hook shims
+  required by `.mango/agents/hooks.json` PostToolUse and PreToolUse enforcement
+  (HOOK-1 / RCA-1). Both shims delegate dynamically to `make lint` and
+  `validate_invariants.is_protected()` respectively; no hard-coded paths.
+- `.mango/workflows/` directory for workflow and orchestration agent definitions
+  (`narrow-critic.md`, `sdlc-orchestrator.md`) that are not execution loop roles.
+- Regression tests: `test_scripts_hook_shims.py` (AQA-001),
+  `test_scan_findings_windows_waiver.py` (AQA-002),
+  `test_gaps_memory_integrity.py` (AQA-004),
+  `test_process_backend_isolation_regression.py` (AQA-006).
+
+### Fixed
+
+- `RecordingBackend._probe()` override added to prevent real `bash` invocation
+  on Windows dev machines, fixing 17 flaky failures under `pytest-xdist`
+  parallel execution (RCA-7).
+- Windows console charmap encoding fix (`_safe_str`) in `test_mango_mas_live.py`
+  to cleanly escape Unicode symbols (e.g. `\u2192` `→`) and prevent
+  `UnicodeEncodeError` on `cp1252` consoles.
+- Skip governance attribution: wired `(DEC-026)` into `pytest.skip` and
+  `skipTest` calls across live Nemotron NIM test suites, enforcing zero
+  unapproved skips under `verify_zero_skips.py`.
+- Memory integrity (DEC-066): pruned 199 stub records from `.mango/memory/gaps.json`
+  that caused planner prompt bloat, retaining 24 substantive entries.
+- UTF-16 null-byte corruption in `.gitignore` and `.dockerignore` removed
+  (origin/main merge encoding artefact).
+- Version mirrors (`Makefile`, `harness/node/package.json`, `CHANGELOG.md`)
+  synced to `pyproject.toml` canonical source `2.5.0`.
+- `narrow-critic.md` and `sdlc-orchestrator.md` moved from `.mango/agents/`
+  (execution loop directory) to `.mango/workflows/` — these are SDLC/critic
+  workflow agents, not `planner → reasoner → verifier` loop participants.
+
+### Changed
+
+- `EXPECTED_ACTIVE_ROLES` comment in `test_agent_harness_wiring.py` clarified
+  to document the `ACTIVE_TO_CANONICAL` invariant it must match.
 
 ## [2.4.0] - 2026-09-01
 

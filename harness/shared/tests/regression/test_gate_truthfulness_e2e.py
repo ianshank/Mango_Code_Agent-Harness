@@ -49,9 +49,9 @@ pytestmark: pytest.MarkDecorator | list[pytest.MarkDecorator] = pytest.mark.gove
 
 # Every test in this file invokes GNU Make as a subprocess. Skip the whole
 # module on platforms where Make is absent (Windows dev machines). All tests
-# run on Linux CI where Make is always present. (DEC-058)
+# run on Linux CI where Make is always present. (DEC-061)
 if not shutil.which("make"):
-    pytestmark = [pytest.mark.governance, pytest.mark.skip(reason="GNU Make not found on this system (DEC-058)")]
+    pytestmark = [pytest.mark.governance, pytest.mark.skip(reason="GNU Make not found on this system (DEC-061)")]
 
 WORKFLOW = REPO / ".github" / "workflows" / "python-package.yml"
 ATTESTATION_STEP = "Verify the protected-path attestation table"
@@ -233,7 +233,11 @@ class TestWorkflowAttestationStepShell:
 
     def test_a_fetched_description_flows_through_to_the_check(self, tmp_path: Path, base_ref: str) -> None:
         """Happy path: curl's JSON -> the python extraction -> make -> pass for an ordinary PR."""
-        curl = "printf '%s' '{\"body\": \"## Summary\\n\\nnothing protected here\\n\"}'\n"
+        curl = (
+            "printf '%s' "
+            '\'{"body": "## Summary\\n\\nnothing protected here\\n", '
+            '"head": {"sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\'\n'
+        )
         res = _run_step(tmp_path, base_ref, curl)
         assert res.returncode == 0, res.stdout + res.stderr
         assert "no attestation is required" in res.stdout + res.stderr

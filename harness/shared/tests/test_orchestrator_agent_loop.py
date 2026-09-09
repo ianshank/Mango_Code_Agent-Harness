@@ -75,11 +75,26 @@ class TestExecuteAgent:
     ) -> None:
         calls: list[str] = []
 
-        def _fake_gap(question: str, what_needed: str, proposed_approach: str) -> str:
+        def _fake_gap(
+            question: str,
+            what_needed: str,
+            proposed_approach: str,
+            workspace_dir=None,
+            policy_path=None,
+        ) -> str:
             calls.append("gap")
             return "gap-logged"
 
-        def _fake_hyp(claim: str, reasoning: str, confidence: float) -> str:
+        def _fake_hyp(
+            claim: str,
+            reasoning: str,
+            confidence: float,
+            workspace_dir=None,
+            policy_path=None,
+            *,
+            revises=None,
+            status=None,
+        ) -> str:
             calls.append("hyp")
             return "hyp-logged"
 
@@ -178,10 +193,27 @@ class TestSequentialThinkingLoop:
 IS_LIVE = bool(resolve_api_key())
 
 
+@pytest.fixture(autouse=True)
+def _set_nemotron_mode_for_live_orchestrator(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirror ``test_mango_mas_live`` / ``test_nemotron_bridge_live``: declare online egress.
+
+    Without this, ``complete_chat`` raises ``NemotronEgressRefused`` even when
+    ``NVIDIA_API_KEY`` is present (fail-closed transport mode).
+    """
+    if request.node.get_closest_marker("live") is None:
+        return
+    monkeypatch.setenv("NEMOTRON_MODE", "online")
+
+
 @pytest.mark.live
+@pytest.mark.enable_socket
 @pytest.mark.skipif(not IS_LIVE, reason="Requires NVIDIA_API_KEY")
 class TestLiveOrchestrator:
     """Real-API smoke tests. Skipped unless explicitly selected with ``-m live``."""
+
+    @pytest.fixture(autouse=True)
+    def _set_nemotron_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NEMOTRON_MODE", "online")
 
     def test_live_execute_agent(self, mock_workspace: Path) -> None:  # pragma: no cover
         orch = MangoMASOrchestrator(workspace_dir=mock_workspace, api_key=resolve_api_key())
@@ -433,3 +465,163 @@ class TestAFailedModelCallIsStillAnEvent:
         assert getattr(event, "error_type", None) == "RuntimeError"
         assert getattr(event, "run_id", None) == orch.run_id
         assert event.levelno == logging.WARNING
+
+
+class TestExecutionLoopPlannerGapPolicyPath:
+    """Constructor policy_path must drive planner open_gaps injection (NS-17 Copilot)."""
+
+    def test_execute_loop_uses_constructor_policy_path_for_planner_injection(
+        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from harness.shared.meta_tools import knowledge_gap_log
+        from harness.shared.orchestrator.loop import ExecutionLoop
+        from harness.shared.tests._helpers import agent_memory_policy
+
+        # Copies of the shipped `agent_memory` block with one key changed, so a
+        # key added to the block later (DEC-058 added two) is carried rather
+        # than dropped -- the loader fails closed on a present policy that
+        # omits a key, and a hand-rolled three-key block did exactly that.
+        policy_path = agent_memory_policy(mock_workspace, planner_gap_limit=1)
+        seed_dir = mock_workspace / "seed"
+        seed_dir.mkdir()
+        seed_policy = agent_memory_policy(seed_dir, planner_gap_limit=10)
+        for q in ("oldest-gap", "middle-gap", "newest-gap"):
+            knowledge_gap_log(q, f"need-{q}", f"approach-{q}", workspace_dir=mock_workspace, policy_path=seed_policy)
+
+        captured: list[Any] = []
+
+        def _fake_complete_chat(**kwargs):
+            captured.append(kwargs)
+            # Planner / reasoner / verifier each get a plain text turn.
+            return _resp("ok")
+
+        loop = ExecutionLoop(
+            workspace_dir=mock_workspace,
+            agents_dir=mock_workspace / ".mango" / "agents",
+            dispatcher=MagicMock(),
+            hook_runner=MagicMock(),
+            verification=MagicMock(target=None),
+            verification_cwd=mock_workspace,
+            max_iterations=3,
+            api_timeout=5,
+            max_tool_calls_per_task=10,
+            complete_chat_fn=_fake_complete_chat,
+            policy_path=policy_path,
+        )
+        # Avoid shadow planner side effects.
+        monkeypatch.setattr(
+            "harness.shared.orchestrator.loop.shadow_planner_enabled",
+            lambda: False,
+        )
+
+        loop.execute_loop("implement feature")
+
+        assert captured, "expected at least the planner complete_chat call"
+        planner_messages = captured[0]["messages"]
+        user_msgs = [m for m in planner_messages if m.get("role") == "user"]
+        assert user_msgs, "planner user prompt missing"
+        prompt = user_msgs[0]["content"]
+        assert "newest-gap" in prompt
+        assert "middle-gap" not in prompt
+        assert "oldest-gap" not in prompt
+        assert prompt.count("- Q:") == 1
+
+
+class TestExecutionLoopHypothesisSurfacing:
+    """DEC-058 / `docs/specs/hypothesis-surfacing.md`: the block reaches one prompt, and writes nothing.
+
+    "Prompt" is the `task` each role receives; the three roles share one
+    `conversation_history`, so the reasoner's user message is in the verifier's
+    *context* by H4 design (C-HS-2 is stated over prompts, and AC-HS-7 asserts
+    the carried message is the reasoner's own, not a verifier-authored one).
+    """
+
+    @staticmethod
+    def _run(mock_workspace: Path, monkeypatch: pytest.MonkeyPatch, policy_path: Path) -> list[dict[str, Any]]:
+        from unittest.mock import MagicMock
+
+        from harness.shared.orchestrator.loop import ExecutionLoop
+
+        captured: list[dict[str, Any]] = []
+
+        def _fake_complete_chat(**kwargs: Any) -> dict[str, Any]:
+            captured.append(kwargs)
+            return _resp("ok")
+
+        monkeypatch.setattr("harness.shared.orchestrator.loop.shadow_planner_enabled", lambda: False)
+        monkeypatch.delenv("MANGO_DEBUG_DUMP", raising=False)
+        loop = ExecutionLoop(
+            workspace_dir=mock_workspace,
+            agents_dir=mock_workspace / ".mango" / "agents",
+            dispatcher=MagicMock(),
+            hook_runner=MagicMock(),
+            verification=MagicMock(target=None),
+            verification_cwd=mock_workspace,
+            max_iterations=3,
+            api_timeout=5,
+            max_tool_calls_per_task=10,
+            complete_chat_fn=_fake_complete_chat,
+            policy_path=policy_path,
+        )
+        loop.execute_loop("implement feature")
+        return captured
+
+    @staticmethod
+    def _task(messages: list[dict[str, Any]]) -> str:
+        """The `task` a role received: the last user message in its call."""
+        content: str = [m for m in messages if m.get("role") == "user"][-1]["content"]
+        return content
+
+    def test_execute_loop_surfaces_hypotheses_to_the_reasoner_prompt_only(
+        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from harness.shared.agent_prompts import PLANNER_PROMPT_TEMPLATE, VERIFIER_PROMPT_TEMPLATE
+        from harness.shared.memory_view import REASONER_HYPOTHESES_HEADER
+        from harness.shared.meta_tools import hypothesis_register
+        from harness.shared.tests._helpers import agent_memory_policy
+
+        policy_dir = mock_workspace / "policy"
+        policy_dir.mkdir()
+        policy = agent_memory_policy(policy_dir)
+        hypothesis_register("the loader caches by path", "seen twice", 0.6, workspace_dir=mock_workspace)
+
+        captured = self._run(mock_workspace, monkeypatch, policy)
+
+        assert len(captured) == 3, "planner, reasoner, verifier"
+        planner, reasoner, verifier = (call["messages"] for call in captured)
+        assert REASONER_HYPOTHESES_HEADER not in self._task(planner)
+        assert REASONER_HYPOTHESES_HEADER in self._task(reasoner)
+        assert "the loader caches by path" in self._task(reasoner)
+        assert REASONER_HYPOTHESES_HEADER not in self._task(verifier)
+        carried = [
+            m for m in verifier if isinstance(m.get("content"), str) and REASONER_HYPOTHESES_HEADER in m["content"]
+        ]
+        assert len(carried) == 1, "in the verifier's context exactly once, via the shared history"
+        assert carried[0]["role"] == "user" and carried[0]["content"] == self._task(reasoner)
+        assert "{open_hypotheses}" not in PLANNER_PROMPT_TEMPLATE
+        assert "{open_hypotheses}" not in VERIFIER_PROMPT_TEMPLATE
+
+    def test_surfacing_writes_nothing_outside_the_memory_dir(
+        self, mock_workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """C-HS-4: a run that reads the store leaves the workspace tree as it found it.
+
+        Stronger than the constraint asks: with a well-formed store the *whole*
+        tree is unchanged, `.mango/memory/` included, because reading a store
+        that parses writes nothing.
+        """
+        from harness.shared.meta_tools import hypothesis_register
+        from harness.shared.tests._helpers import agent_memory_policy, snapshot_tree
+
+        policy_dir = mock_workspace / "policy"
+        policy_dir.mkdir()
+        policy = agent_memory_policy(policy_dir)
+        hypothesis_register("a belief", "some evidence", 0.5, workspace_dir=mock_workspace)
+        before = snapshot_tree(mock_workspace)
+
+        captured = self._run(mock_workspace, monkeypatch, policy)
+
+        assert any("a belief" in self._task(call["messages"]) for call in captured), "control: the block rendered"
+        assert snapshot_tree(mock_workspace) == before

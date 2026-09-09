@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import uuid
@@ -16,10 +17,15 @@ from harness.shared.agent_prompts import (
     REASONER_PROMPT_TEMPLATE,
     TASK_LOG_PREVIEW_CHARS,
     VERIFIER_PROMPT_TEMPLATE,
+    compose_system_prompt,
+    strip_yaml_frontmatter,
 )
+from harness.shared.context_policy import ContextPolicyStats, apply_context_policy
 from harness.shared.debug_dump import write_dump
 from harness.shared.governance.verdict import LoopOutcome, Verdict, derive_verdict, not_configured, reentrant
 from harness.shared.governance.verification import VerificationRunner
+from harness.shared.memory_view import format_hypotheses_for_reasoner
+from harness.shared.meta_tools import format_gaps_for_planner
 from harness.shared.nemotron_bridge import complete_chat
 from harness.shared.orchestrator.dispatcher import ToolDispatcher
 from harness.shared.orchestrator.hook_runner import HookRunner
@@ -30,6 +36,10 @@ from harness.shared.tool_budget import ToolBudget
 from harness.shared.tool_schemas import NEMOTRON_TOOLS
 
 logger = logging.getLogger(__name__)
+
+#: Fallback to the last tool result only after this many messages (DEC-068).
+#: A true constant of the ReAct transcript shape, not a policy budget.
+MIN_MESSAGES_BEFORE_FALLBACK = 3
 
 
 class ExecutionLoop:
@@ -64,29 +74,34 @@ class ExecutionLoop:
         """
         self.workspace_dir = workspace_dir
         self.agents_dir = agents_dir
+        self.policy_path = policy_path
         self.dispatcher = dispatcher
         self.hook_runner = hook_runner
         self.verification = verification
         self.verification_cwd = verification_cwd
         self.api_key = api_key
         self.model = model
-        if max_iterations is None or api_timeout is None:
-            limits = orchestrator_defaults(policy_path)
-            logger.debug(
-                "ExecutionLoop budgets resolved from policy: max_iterations=%s api_timeout_sec=%s",
-                limits["max_iterations"],
-                limits["api_timeout_sec"],
-            )
-            if max_iterations is None:
-                max_iterations = limits["max_iterations"]
-            if api_timeout is None:
-                api_timeout = limits["api_timeout_sec"]
+        limits = orchestrator_defaults(policy_path)
+        if max_iterations is None:
+            max_iterations = limits["max_iterations"]
+        if api_timeout is None:
+            api_timeout = limits["api_timeout_sec"]
         if max_tool_calls_per_task is None:
             max_tool_calls_per_task = policy_max_tool_calls_per_task(policy_path)
-            logger.debug("ExecutionLoop tool-call budget resolved from policy: %s", max_tool_calls_per_task)
         self.max_iterations = max_iterations
         self.api_timeout = api_timeout
         self.max_tool_calls_per_task = max_tool_calls_per_task
+        self.context_budget_tokens = limits["context_budget_tokens"]
+        self.context_chars_per_token = limits["context_chars_per_token"]
+        logger.debug(
+            "ExecutionLoop budgets: max_iterations=%s api_timeout_sec=%s "
+            "max_tool_calls_per_task=%s context_budget_tokens=%s context_chars_per_token=%s",
+            self.max_iterations,
+            self.api_timeout,
+            self.max_tool_calls_per_task,
+            self.context_budget_tokens,
+            self.context_chars_per_token,
+        )
         self.conversation_history: list[dict[str, Any]] = []
         #: One identifier per `execute_loop`, carried by every structured model
         #: and tool event of that run (2026 standards audit H6). A bare
@@ -106,13 +121,13 @@ class ExecutionLoop:
             repo_agents_dir = Path(__file__).resolve().parent.parent.parent.parent / ".mango" / "agents"
             fallback_file = repo_agents_dir / f"{agent_name}.md"
             if fallback_file.exists():
-                return fallback_file.read_text(encoding="utf-8")
+                return strip_yaml_frontmatter(fallback_file.read_text(encoding="utf-8"))
             raise FileNotFoundError(f"Agent definition not found: {agent_file}")
-        return agent_file.read_text(encoding="utf-8")
+        return strip_yaml_frontmatter(agent_file.read_text(encoding="utf-8"))
 
     def _finalize_response(self, messages: list[dict[str, Any]], content: Any) -> str:
         final_content = str(content or "")
-        if not final_content.strip() and len(messages) > 3:
+        if not final_content.strip() and len(messages) > MIN_MESSAGES_BEFORE_FALLBACK:
             last_msg = messages[-2]
             if last_msg.get("role") == "tool":
                 final_content = f"Completed via tool execution. Last tool result: {last_msg.get('content')}"
@@ -137,12 +152,14 @@ class ExecutionLoop:
         started: float,
         response: Any,
         error: BaseException | None = None,
+        prompt_sha: str | None = None,
     ) -> None:
         """One structured event per model round-trip, on success and on failure:
         who, which turn, how long, the outcome, and the token counts the
         response reports. Never the messages. A failed request emits the same
         event with ``outcome=error`` so error rate and latency stay correlatable
-        by ``run_id`` (Copilot review on PR #86)."""
+        by ``run_id`` (Copilot review on PR #86). ``prompt_sha`` is the SHA-256
+        of the exact system prompt bytes (R-RBT-4); the body is never logged."""
         usage = response.get("usage") if isinstance(response, dict) else None
         if not isinstance(usage, dict):
             usage = {}
@@ -162,8 +179,47 @@ class ExecutionLoop:
                 "error_type": type(error).__name__ if error is not None else None,
                 "prompt_tokens": usage.get("prompt_tokens"),
                 "completion_tokens": usage.get("completion_tokens"),
+                "prompt_sha": prompt_sha,
             },
         )
+
+    @staticmethod
+    def _log_context_policy(
+        run_id: str,
+        agent_name: str,
+        iteration: int,
+        ctx_stats: ContextPolicyStats,
+    ) -> None:
+        """Emit structured ``event=context_policy`` logs for one budget apply.
+
+        Always logs at DEBUG. When messages were evicted, also logs at INFO
+        with the same structured fields so operators can see trimming without
+        enabling debug. Fields come from ``ContextPolicyStats`` / policy
+        resolution — never hard-coded budget literals.
+        """
+        extra = {
+            "event": "context_policy",
+            "run_id": run_id,
+            "agent": agent_name,
+            "iteration": iteration,
+            "tokens_before": ctx_stats["tokens_before"],
+            "tokens_after": ctx_stats["tokens_after"],
+            "groups_preserved": ctx_stats["groups_preserved"],
+            "messages_evicted": ctx_stats["messages_evicted"],
+        }
+        logger.debug(
+            "context policy applied for %s (iteration %d)",
+            agent_name,
+            iteration,
+            extra=extra,
+        )
+        if ctx_stats["messages_evicted"] > 0:
+            logger.info(
+                "context policy evicted messages for %s (iteration %d)",
+                agent_name,
+                iteration,
+                extra=extra,
+            )
 
     def execute_agent(
         self,
@@ -177,20 +233,32 @@ class ExecutionLoop:
         self.hook_runner.run_hook(PRE_RUN_HOOK, task=task, agent=agent_name)
         logger.info("Executing agent [%s] with task: %s...", agent_name, task[:TASK_LOG_PREVIEW_CHARS])
 
+        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
+        system_prompt = compose_system_prompt(self.load_agent_prompt(agent_name), active_tools)
+        prompt_sha = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.load_agent_prompt(agent_name)},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": task},
         ]
         self.conversation_history.extend(messages)
 
-        active_tools = tools if tools is not None else tools_for_role(agent_name, NEMOTRON_TOOLS)
         turn_budget = budget if budget is not None else ToolBudget(self.max_tool_calls_per_task)
 
         for iteration in range(self.max_iterations):
             started = time.monotonic()
             try:
+                # Budget the *current* history by estimate (or an explicit
+                # same-list usage). Never reuse the previous turn's
+                # usage.prompt_tokens — that number describes an older
+                # request and would under-count a grown history (H4).
+                budgeted_messages, ctx_stats = apply_context_policy(
+                    self.conversation_history,
+                    self.context_budget_tokens,
+                    chars_per_token=self.context_chars_per_token,
+                )
+                self._log_context_policy(run_id, agent_name, iteration, ctx_stats)
                 kwargs: dict[str, Any] = {
-                    "messages": self.conversation_history,
+                    "messages": budgeted_messages,
                     "tools": active_tools,
                     "timeout_sec": self.api_timeout,
                     "api_key": self.api_key,
@@ -203,10 +271,10 @@ class ExecutionLoop:
 
                 response = self.complete_chat_fn(**kwargs)
             except Exception as e:
-                self._log_model_call(run_id, agent_name, iteration, started, None, error=e)
+                self._log_model_call(run_id, agent_name, iteration, started, None, error=e, prompt_sha=prompt_sha)
                 logger.error("[%s] API failed: %s", agent_name, e)
                 raise RuntimeError(f"Agent {agent_name} API failed: {str(e)}") from e
-            self._log_model_call(run_id, agent_name, iteration, started, response)
+            self._log_model_call(run_id, agent_name, iteration, started, response, prompt_sha=prompt_sha)
 
             choices = response.get("choices") or [{}]
             first_choice = choices[0] if choices else {}
@@ -219,19 +287,40 @@ class ExecutionLoop:
             if not tool_calls:
                 final_content = self._finalize_response(self.conversation_history, content)
                 self._dump_debug_history(agent_name)
-                self.hook_runner.run_hook(f"post-{agent_name}-run", status="success")
+                self.hook_runner.run_hook(
+                    f"post-{agent_name}-run",
+                    status="success",
+                    run_id=run_id,
+                    agent=agent_name,
+                    tool_calls_used=turn_budget.used,
+                    tool_calls_limit=turn_budget.limit,
+                )
                 return final_content
 
             logger.info("[%s] requested %d tool calls.", agent_name, len(tool_calls))
             if not turn_budget.consume(len(tool_calls)):
-                self.hook_runner.run_hook(f"post-{agent_name}-run", status="budget_exceeded")
+                self.hook_runner.run_hook(
+                    f"post-{agent_name}-run",
+                    status="budget_exceeded",
+                    run_id=run_id,
+                    agent=agent_name,
+                    tool_calls_used=turn_budget.used,
+                    tool_calls_limit=turn_budget.limit,
+                )
                 raise RuntimeError(
                     f"Agent {agent_name} exceeded the tool-call budget "
                     f"({turn_budget.limit} per task; policy agent_defaults.max_tool_calls_per_task)."
                 )
             self.dispatcher.dispatch(self.conversation_history, tool_calls, run_id=run_id)
 
-        self.hook_runner.run_hook(f"post-{agent_name}-run", status="timeout")
+        self.hook_runner.run_hook(
+            f"post-{agent_name}-run",
+            status="timeout",
+            run_id=run_id,
+            agent=agent_name,
+            tool_calls_used=turn_budget.used,
+            tool_calls_limit=turn_budget.limit,
+        )
         raise RuntimeError(f"Agent {agent_name} exceeded maximum tool iterations.")
 
     def _harness_verdict(self) -> Verdict:
@@ -271,7 +360,14 @@ class ExecutionLoop:
         budget = ToolBudget(self.max_tool_calls_per_task)
         logger.debug("loop started", extra={"event": "loop_start", "run_id": self.run_id, "tool_budget": budget.limit})
         self._record_enforcement_baseline()
-        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task)
+        baseline = self.verification.baseline
+        if isinstance(baseline, dict):
+            self.dispatcher.broker.set_enforcement_baseline(baseline)
+        open_gaps = format_gaps_for_planner(
+            workspace_dir=self.workspace_dir,
+            policy_path=self.policy_path,
+        )
+        planner_prompt = PLANNER_PROMPT_TEMPLATE.format(task=initial_task, open_gaps=open_gaps)
         plan_started = time.monotonic()
         plan = self.execute_agent("planner", planner_prompt, tools=[], budget=budget)
         logger.info("Plan generated: %d bytes", len(plan))
@@ -284,7 +380,7 @@ class ExecutionLoop:
                         api_key=self.api_key,
                         model=self.model,
                         api_timeout=self.api_timeout,
-                        planner_system_prompt=self.load_agent_prompt("planner"),
+                        planner_system_prompt=compose_system_prompt(self.load_agent_prompt("planner"), []),
                         planner_user_prompt=planner_prompt,
                         task=initial_task,
                         incumbent_plan=plan,
@@ -294,7 +390,18 @@ class ExecutionLoop:
             except Exception:
                 logger.exception("Orchestrator-level guard caught a shadow planner failure")
 
-        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan)
+        # The reasoner's own open hypotheses, bounded by policy and measured with
+        # the same coefficient `apply_context_policy` uses below (DEC-058). This
+        # lands in the reasoner's user message, which eviction never targets, and
+        # is therefore in the context of every later call this run -- the bound
+        # is what keeps that affordable. Gaps go to the planner; beliefs come here.
+        open_hypotheses = format_hypotheses_for_reasoner(
+            workspace_dir=self.workspace_dir,
+            policy_path=self.policy_path,
+            chars_per_token=self.context_chars_per_token,
+            run_id=self.run_id,
+        )
+        reasoner_prompt = REASONER_PROMPT_TEMPLATE.format(plan=plan, open_hypotheses=open_hypotheses)
         code_output = self.execute_agent("nemotron-reasoner", reasoner_prompt, budget=budget)
         logger.info("Code generation completed via tools: %d bytes", len(code_output))
 

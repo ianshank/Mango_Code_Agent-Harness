@@ -1,6 +1,11 @@
 # Spec: Code-quality, tech-debt and hardening plan (audit round 3)
 
 > Status: CLOSED, revision 2 · Date: 2026-09-04 · Base: `main` @ `487870a` (PR #76)
+>
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+>
 > Closed 2026-09-04 at `71223f1` by `docs/specs/2026-standards-remediation-plan.md`,
 > which supersedes every open requirement here (R-CQ-1, R-CQ-2, R-CQ-11 … R-CQ-29,
 > R-CQ-31 and the constraints) and records, per requirement, whether it is carried,

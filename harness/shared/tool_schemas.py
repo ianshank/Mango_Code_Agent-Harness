@@ -77,6 +77,49 @@ NEMOTRON_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "generate_code",
+            "description": (
+                "Generate and write structured code to a workspace file with pre-write syntax validation, "
+                "workspace confinement, and write policy checks. Validates Python and JSON syntax before writing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Workspace-relative path to generate or write code to.",
+                    },
+                    "code": {"type": "string", "description": "The code content to generate and write."},
+                    "language": {
+                        "type": "string",
+                        "description": (
+                            "Optional programming language (e.g. 'python', 'json'). "
+                            "Auto-detected from file extension if omitted."
+                        ),
+                    },
+                    "validate_syntax": {
+                        "type": "boolean",
+                        "description": (
+                            "Whether syntax errors are reported before writing (default true). "
+                            "Python targets are always parsed for safety checks: setting this false does not "
+                            "disable them, and Python that does not parse is denied either way. Which target "
+                            "suffixes count as Python comes from `synthesis.python_write_suffixes` in the "
+                            "governance policy, not from this argument or `language`."
+                        ),
+                    },
+                    "overwrite": {
+                        "type": "boolean",
+                        "description": "Whether to overwrite the file if it already exists (default true).",
+                    },
+                },
+                "required": ["filepath", "code"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_command",
             "description": "Run a shell command and return its output.",
             "parameters": {
@@ -88,3 +131,21 @@ NEMOTRON_TOOLS = [
         },
     },
 ] + META_TOOLS_SCHEMA
+
+
+def format_tools_paragraph(tools: list[dict]) -> str:
+    """Render the tool inventory from the schema list passed to ``complete_chat``.
+
+    Names are derived from ``tools``, never restated. R-RBT-1 / R-RBT-3.
+    """
+    names: list[str] = []
+    for spec in tools:
+        function = spec.get("function") if isinstance(spec, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if isinstance(name, str) and name:
+            names.append(name)
+    if not names:
+        return "No tools are available on this turn."
+    lines = ["Tools available on this turn (generated from the bridge registry, not from persona markdown):"]
+    lines.extend(f"- `{name}`" for name in names)
+    return "\n".join(lines)

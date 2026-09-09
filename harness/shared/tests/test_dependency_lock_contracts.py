@@ -27,7 +27,6 @@ from harness.shared.tests._workflow_paths import (
     LOCK,
     LOCK_NAME,
     RANGE_FILES,
-    UNSUPPORTED_LEG,
     WORKFLOW,
     distribution_names,
     lock_pins,
@@ -93,13 +92,14 @@ class TestDependenciesComeFromTheLock:
         assert python_keys, f"{path.name} declares no pip cache key"
         assert set(python_keys) == {LOCK_NAME}, f"pip cache keyed on something other than the lock: {python_keys}"
 
-    def test_the_lock_carries_langgraph_behind_a_marker(self) -> None:
-        """The 3.9 leg must not receive langgraph; every other leg must."""
+    def test_the_lock_carries_langgraph_unconditionally(self) -> None:
+        """Every matrix leg supports langgraph's own >=3.10 floor (DEC-064), so
+        the lock pins it plainly now instead of behind a per-leg marker; a
+        marker reappearing here would mean some leg is being excluded again."""
         text = LOCK.read_text(encoding="utf-8")
-        entry = re.search(r"^langgraph==[^\s;]+ ; ([^\\]+)", text, re.M)
-        assert entry, f"{LOCK_NAME} pins no langgraph; the StateGraph suites would skip everywhere again"
-        assert re.search(r"python_full_version >= '3\.10'", entry.group(1)), (
-            f"langgraph's marker in {LOCK_NAME} is {entry.group(1)!r}; it must exclude {UNSUPPORTED_LEG}"
+        assert re.search(r"^langgraph==[^\s;\\]+\s*(?:\\|$)", text, re.M), (
+            f"{LOCK_NAME} pins no unconditional langgraph; either the StateGraph suites would "
+            "skip somewhere again, or a stale version marker has reappeared"
         )
 
     def test_the_lock_does_not_carry_the_postgres_checkpointer(self) -> None:
@@ -113,7 +113,7 @@ class TestDependenciesComeFromTheLock:
         text = LOCK.read_text(encoding="utf-8")
         assert "--universal" in text.splitlines()[1], (
             "the header must show the lock was compiled with --universal; a per-interpreter "
-            "compile evaluates the markers away and cannot serve the 3.9/3.10/3.12 matrix"
+            "compile evaluates the markers away and cannot serve the 3.10/3.12/3.14 matrix"
         )
 
 

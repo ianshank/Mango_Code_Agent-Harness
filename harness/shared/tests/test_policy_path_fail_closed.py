@@ -32,8 +32,8 @@ import re
 import stat
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 

@@ -15,7 +15,7 @@
     "node": {
       "marker": "package.json",
       "protected_files": {
-        "Makefile": "1e7f1bb4aca44e8df052e3a116c3242a211bb84d9493cc58c13e4797d026df8d",
+        "Makefile": "9a6cf238d6376202d3e5ee874566821acef9989e58e81ddea5a453e6ad534ffb",
         ".github/workflows/ci.yml": "e9d3134502c2201ff58c4421ce66c5f8eedf8bd719e23defca0f2dc429c71605",
         "scripts/remotes.py": "4f4ca368406c85c8d0b57d5bf34243a7eef9ae9db7c1acb4515fdbf4946c7b6a",
         "scripts/pretooluse_guard.py": "f5e3792f8b70c10a2f00c1c523bdef379491f724143ff913c9b30f986db344db",
@@ -30,7 +30,7 @@
         "scripts/validate_adoption.py": "2f7f055b98f8bfc9794cf8feb769452d0501613040ad546bf430806102dd2006",
         "scripts/check_traceability.py": "b579ff6893f2faf1be671608ff2a34f139b2bc578efb2f5eff5b9fdbc5883719",
         "scripts/check_projections.py": "6844b6a4b61853392b1a7a1e769201d0778a7f383087b8aba7f3e2435e852c01",
-        "package.json": "2d619119e00700b7f4a06820172aef8624385f38d2a1201e0cf07d0f14591ecd",
+        "package.json": "16f3b1def60b1f96736fa1a41319842a617f78e3ce69318b6adece59dd479725",
         "tsconfig.json": "02cde8fb8e4061ecd3ab1a8f99a8973455b740b4a4f77516fc8d5f512eefc6a6",
         "vitest.config.ts": "d45a03aa495783748fdb0d7ea1cc7be03210d2300d66519692fbd62564ef6765",
         "tests/governance/meta.test.ts": "47e948abb93aa1d83b544095e2784e12701fe52c2d5d7bbb75beee9f93fbafde"
@@ -39,7 +39,7 @@
     "jvm": {
       "marker": "build.gradle.kts",
       "protected_files": {
-        "Makefile": "cd84e4dfb5f208b1c34133a5bb518181581fe47b9d44fe471947104cfcefe34a",
+        "Makefile": "0477c5d9e847fd0a62b336d7fefa146db6deee34748c2a888483865d64730d3a",
         ".github/workflows/ci.yml": "809b1cd945ec0500b96014278aa5265c211c057bb7839b1f5fbd2c30a0dff858",
         "scripts/remotes.py": "4f4ca368406c85c8d0b57d5bf34243a7eef9ae9db7c1acb4515fdbf4946c7b6a",
         "scripts/pretooluse_guard.py": "f5e3792f8b70c10a2f00c1c523bdef379491f724143ff913c9b30f986db344db",

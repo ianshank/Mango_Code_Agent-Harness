@@ -1,5 +1,5 @@
 # ============================================================================
-# Agentic SSD v2.4.0 — Root Makefile
+# Agentic SSD v2.5.0 — Root Makefile
 # Unified entry point for validation, testing, and CI gates.
 # ============================================================================
 SHELL := /bin/bash
@@ -143,8 +143,6 @@ lint: lint-python check-compat ## Run code style, static analysis, and runtime-c
 # --- Python Testing & Coverage ---
 .PHONY: test-python
 test-python: ## Run full pytest suite in a seeded random order across every core (excludes live tests)
-	# Expected skip counts: 0 on Linux CI (all make/POSIX guards inactive);
-	# 133 on Windows dev (DEC-058 make-guards + DEC-059 asyncio guards). See skip-waivers.json.
 	$(PYTEST) $(PYTEST_RUN_FLAGS) $(SHARED_TESTS)/ $(API_TESTS)/ $(CP_TESTS)/ -m "not live" -v
 
 .PHONY: test-regression
@@ -157,15 +155,21 @@ test-langgraph: ## Run LangGraph StateGraph suite (state, nodes, graph, policy, 
 
 .PHONY: test-mcp
 test-mcp: ## Run Model Context Protocol (MCP) server tests
-	$(PYTEST) $(SHARED_TESTS)/test_mcp_server.py -m "not live" -v
+	$(PYTEST) $(SHARED_TESTS)/test_mcp_server*.py -m "not live" -v
 
 .PHONY: test-lats
 test-lats: ## Run LATS Optimizer and Ablation state forking tests
 	$(PYTEST) $(SHARED_TESTS)/test_lats_optimizer.py $(SHARED_TESTS)/test_ablation.py -m "not live" -v
 
 .PHONY: test-aqa
-test-aqa: ## Run AQA smoke tests and coverage-gap regression suite
-	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py $(SHARED_TESTS)/regression/test_nemotron_api_aqa.py -m "not live" -v
+test-aqa: ## Run Automated Quality Assurance (AQA) regression suite
+	$(PYTEST) $(SHARED_TESTS)/regression/test_coverage_gap_regression.py \
+		$(SHARED_TESTS)/regression/test_nemotron_api_aqa.py \
+		$(SHARED_TESTS)/regression/test_scripts_hook_shims.py \
+		$(SHARED_TESTS)/regression/test_process_backend_isolation_regression.py \
+		$(SHARED_TESTS)/regression/test_gaps_memory_integrity.py \
+		$(SHARED_TESTS)/regression/test_scan_findings_windows_waiver.py \
+		-m "not live" -v
 
 .PHONY: coverage-python
 coverage-python: ## Run pytest in a seeded random order across every core, then enforce lines and branches floors from governance-policy.json
@@ -205,10 +209,9 @@ verify-zero-skips-python: ## Verify zero unapproved pytest skips from the last c
 		--waivers $(SHARED_TESTS)/skip-waivers.json
 
 # Validate the skip-waivers.json registry schema (pure Python, no make/POSIX dependency).
-# Each waiver must have: test_id, skip_reason_pattern, decision_id, scope, and rationale.
-# Fails fast if the registry is malformed, missing required fields, or has duplicate test_ids.
+# Fails fast if the registry is malformed, missing required fields, or has duplicate ids.
 .PHONY: verify-skip-waivers
-verify-skip-waivers: ## Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-058/059)
+verify-skip-waivers: ## Validate skip-waivers.json schema (pure Python, runs on Windows; DEC-061/062)
 	$(PYTHON) -c "\
 import json, sys; \
 from pathlib import Path; \
@@ -234,6 +237,30 @@ if errors: \
     sys.exit(1); \
 print(f'verify-skip-waivers OK: {len(waivers)} waivers validated')"
 
+# --- Governance Validators ---
+.PHONY: memory-show
+memory-show: ## Print the agent memory stores (WORKSPACE=<dir> LIMIT=<n> STORE=gaps|hypotheses)
+	$(PYTHON) -m harness.shared.show_memory $(if $(WORKSPACE),--workspace $(WORKSPACE),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(STORE),--store $(STORE),)
+
+.PHONY: decision-index
+decision-index: ## Regenerate docs/decisions/index.{md,json} and the thin node decision-log
+	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root .
+
+.PHONY: decision-index-check
+decision-index-check: ## Fail if decision index artefacts drift from DEC-*.md
+	$(PYTHON) $(SHARED_SRC)/generate_decision_index.py --root . --check
+
+# Two invocations, deliberately. The per-stack one keeps the legacy CWD-relative
+# contract the DEC-056 shim window still depends on, and is the live proof that
+# `--workspace`'s default did not change it. The repository-scoped one is the
+# check this target is actually required for: `traceability` is a
+# `ci_required_targets` entry mapped to `validate` (test_ci_gate_coverage.py),
+# and before DEC-065 that required check read 6 requirement IDs out of a corpus
+# of 412 that shared none of them. Running only the per-stack invocation would
+# have left the gate this change exists to fix still pointed at the wrong
+# corpus in production, with the real one exercised solely by pytest -- which
+# enforces it, but leaves an operator reading `passed (6 requirements)` off the
+# named required check. Found by review on PR #120.
 .PHONY: validate
 validate: ## Run all governance validation scripts
 	@echo "--- Running governance validators ---"
@@ -241,8 +268,19 @@ validate: ## Run all governance validation scripts
 		echo "  → $$script.py"; \
 		(cd $(NODE_DIR) && $(PYTHON) ../shared/$$script.py) || exit 1; \
 	done
-	@echo "  → governance/check_traceability.py"
+	@echo "  → governance/check_traceability.py (per-stack, legacy CWD contract)"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/governance/check_traceability.py) || exit 1
+	@echo "  → governance/check_traceability.py --workspace . (repository corpus)"
+	@$(PYTHON) $(SHARED_SRC)/governance/check_traceability.py --workspace . || exit 1
+	@echo "  → governance/denial_rate.py (allowlist usability ratchet)"
+	@$(PYTHON) $(SHARED_SRC)/governance/denial_rate.py || exit 1
+	@# Host inventory (AC-12). A line inside validate so every ci / ci-python
+	@# matrix leg emits it; ci's prerequisite list is unchanged (INV-5).
+	@# --json keeps stdout json.loads-able. Absence is exit 0; undetermined
+	@# is the only non-zero exit. Not a BackendCapabilities record -- do not
+	@# pass the JSON into ProcessBackend.
+	@echo "  → governance/capability_probe.py --json"
+	@$(PYTHON) $(SHARED_SRC)/governance/capability_probe.py --json || exit 1
 	@echo "  → validate_invariants.py"
 	@(cd $(NODE_DIR) && $(PYTHON) ../shared/validate_invariants.py) || exit 1
 	@echo "--- All governance validators passed ---"
@@ -272,13 +310,13 @@ secrets-allowlist-check: ## Every .gitleaks.toml allowlist entry must still supp
 # resolved by the script from the remote's published default when unset, so an
 # adopter fork whose default branch is not `main` needs no edit here.
 .PHONY: attestation
-attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... to override)
-	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),)
+attestation: ## Print the protected-path attestation table for this branch (BASE_REF=... HEAD_SHA=... to override)
+	@$(PYTHON) harness/shared/governance/attestation.py $(if $(BASE_REF),--base-ref $(BASE_REF),) $(if $(HEAD_SHA),--head-sha $(HEAD_SHA),)
 
 .PHONY: attestation-check
 attestation-check: ## Verify a written attestation table against the real protected set (FILE=pr-body.md)
 	@test -n "$(FILE)" || { echo 'usage: make attestation-check FILE=<pr-body.md>'; exit 1; }
-	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),)
+	@$(PYTHON) harness/shared/governance/attestation.py --check $(FILE) $(if $(BASE_REF),--base-ref $(BASE_REF),) $(if $(HEAD_SHA),--head-sha $(HEAD_SHA),)
 
 .PHONY: secrets-install
 secrets-install: ## Install the pinned gitleaks used by the secrets gate
@@ -298,8 +336,8 @@ secrets-install: ## Install the pinned gitleaks used by the secrets gate
 # The scan reads the lock alone, and that is broader than the three-file
 # invocation it replaces, not narrower (DEC-047). `requirements-dev.txt` opens
 # with `-r requirements.txt`, and the lock compiles from dev + langgraph, so
-# every distribution the two range files name is pinned in the lock -- 15 named
-# across the three inputs, 79 pinned, the other 64 transitive dependencies the
+# every distribution the two range files name is pinned in the lock -- 16 named
+# across the three inputs, 105 pinned, the other 89 transitive dependencies the
 # range files never mention and the old invocation therefore scanned only by
 # accident of resolution. The lock is also what CI installs; a range resolves to
 # whatever PyPI offers that day, so scanning the ranges audited versions nobody
@@ -463,7 +501,8 @@ pre-pr: ci review lint-cold audit secrets ## Pre-PR validation gate (full CI + m
 
 .PHONY: clean
 clean: ## Remove build/test artifacts
-	rm -rf .coverage .pytest_cache .mypy_cache .ruff_cache htmlcov __pycache__
+	rm -rf .coverage .pytest_cache .mypy_cache .ruff_cache htmlcov __pycache__ .artifacts
 	rm -rf $(NODE_DIR)/coverage $(NODE_DIR)/.governance/vitest-results.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+

@@ -53,7 +53,7 @@ audit: ## Locked dependency vulnerability scan
 	@test -f $(ROOT)/gradle.lockfile || { echo 'gradle.lockfile missing; refusing vacuous audit'; exit 1; }
 	$(OSV) scan --lockfile=$(ROOT)/gradle.lockfile --config=$(ROOT)/osv-scanner.toml
 audit-install:
-	go install github.com/google/osv-scanner/v2/cmd/osv-scanner@$(OSV_VERSION)
+	bash $(ROOT)/../shared/go_install_retry.sh github.com/google/osv-scanner/v2/cmd/osv-scanner@$(OSV_VERSION)
 remotes: ## Verify every configured Git push URL against the allowlist
 	PYTHONPATH=$(ROOT)/../.. python3 $(ROOT)/scripts/remotes.py --check-current-remotes --repo $(ROOT) --allowlist $(ROOT)/.governance/allowed-remotes.txt
 projections: ## Projection applicability/drift gate

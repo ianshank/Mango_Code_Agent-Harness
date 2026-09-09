@@ -4,7 +4,6 @@ import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -75,17 +74,21 @@ class TaskResponse(BaseModel):
     # `verdict_detail` names the command and its exit code because the verdict
     # word alone overstates what was checked: the configured target is one gate,
     # not the repository's full matrix.
-    # Optional[...] rather than `str | None`: FastAPI resolves these at runtime
-    # and this module has no `from __future__ import annotations`.
-    verdict: Optional[str] = None
-    termination_reason: Optional[str] = None
-    verdict_detail: Optional[str] = None
+    # `str | None`, not `Optional[str]`: FastAPI resolves these at runtime via
+    # `typing.get_type_hints` and this module has no `from __future__ import
+    # annotations`, but the floor is Python >=3.10 (DEC-064), where a bare
+    # `X | Y` evaluates natively -- unlike on the retired 3.9 floor, no
+    # `Optional[...]` fallback is needed.
+    verdict: str | None = None
+    termination_reason: str | None = None
+    verdict_detail: str | None = None
 
 
-# NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints, so PEP 604
-# unions (`str | None`) would fail on Python 3.9/3.10 even with `from __future__ import
-# annotations`. Keep Optional[...] while 3.9 is in the CI matrix.
-async def verify_api_key(x_api_key: Optional[str] = Header(None)) -> None:
+# NOTE: FastAPI resolves this annotation at runtime via typing.get_type_hints. That
+# would have failed on the 3.9 floor even with `from __future__ import annotations`
+# (FastAPI's own resolution bypasses the deferral), but the floor is Python >=3.10
+# now (DEC-064), where `str | None` evaluates natively at runtime.
+async def verify_api_key(x_api_key: str | None = Header(None)) -> None:
     expected_key = os.environ.get(API_KEY_ENV_VAR)
     if not expected_key:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_SERVER_KEY is not set.")

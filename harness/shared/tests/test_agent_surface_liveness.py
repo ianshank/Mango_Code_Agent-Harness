@@ -19,6 +19,14 @@ failures this file covers, all of which were present when it was written:
 Age is deliberately *not* a blocking gate here: a clock-dependent assertion
 turns unrelated PRs red at a date boundary. Presence blocks; staleness is for
 the scheduled workflow to raise as an issue.
+
+Companion file: `test_agent_surface_determinism.py` carries the properties that
+survive everything here being true -- that the derived role surface is a pure
+function of the policy files, that the persona and execution-identity graph is
+closed in both directions, that hook commands in *both* settings files resolve
+to real scripts, and that the review horizon this file declines to enforce is
+still sourced from `skill_max_age_days` wherever it is applied. Split rather
+than appended because this module is near `limits.test_size_budget_lines`.
 """
 
 from __future__ import annotations
@@ -72,9 +80,10 @@ STANDALONE_SKILLS = {
         "so wiring it into a target would just print prose during CI."
     ),
     "evidence-signing": (
-        "Documents the HMAC evidence manifest contract described in harness/CONTRACT.md. The "
-        "fail-closed behaviour is enforced by test_evidence_manifest.py; the skill covers key "
-        "handling, which is an operational procedure rather than a build step."
+        "Documents the HMAC evidence manifest contract described in harness/CONTRACT.md. "
+        "Fail-closed export is enforced by test_evidence_manifest.py; the broker path "
+        "(keyless BLOCK before spawn, digest-of-digests, off-workspace sink) by "
+        "test_evidence_record.py. The skill is the operational procedure, not a Make target."
     ),
     "harness-engineering": (
         "House rules for extending the harness itself -- shim budgets, the shared-kernel rule, "
@@ -114,6 +123,23 @@ STANDALONE_SKILLS = {
         "falsification pass over the draft. Its mechanical residue is already a gate -- "
         "test_spec_selectors_collect.py catches the vacuous-selector class it found by hand -- "
         "and the rest is judgement about a report, which no per-PR target should run."
+    ),
+    "god-file-decomposer": (
+        "The procedure for splitting a module that is approaching `limits.size_budget_lines` or "
+        "`limits.test_size_budget_lines`. The budget is already a gate -- validate_invariants.py "
+        "enforces both in `make validate` -- and this skill is what someone does after that gate "
+        "goes red. It cannot be wired into a target, because its output is a rewrite of source: "
+        "choosing the cohesive seams and preserving the facade re-exports is judgement, and a "
+        "`make` recipe that decomposed a file to fit a budget is a recipe that can leave the tree "
+        "rewritten."
+    ),
+    "regression-pin-author": (
+        "The authoring standard for a regression-tier reproduction: where the module lives, what it "
+        "must define, and how to register it in REQUIRED_REGRESSION_MODULES. The registration half "
+        "is already enforced -- test_regression_tier_pin.py asserts every listed module exists, "
+        "defines its named reproduction, and is not shadowed by the unit tier -- so what remains is "
+        "the judgement no gate can make: whether a defect warrants a pin at all, and what the "
+        "reproduction must assert to fail on the bug rather than on its symptom."
     ),
 }
 

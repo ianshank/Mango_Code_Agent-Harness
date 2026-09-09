@@ -42,12 +42,24 @@ class RecordingBackend(ProcessBackend):
     The single ``_spawn`` seam is what keeps every branch of the real backend
     reachable without starting a process -- and what makes "did the broker
     execute anything?" a direct assertion rather than an inference.
+
+    ``_probe`` is also overridden to return ``True`` unconditionally: the probe
+    calls the real ``shell`` binary (``bash``), which may not exist on Windows
+    dev machines. A ``RecordingBackend`` never needs a shell -- it never spawns
+    one -- so the probe result is always ``True``. This also prevents the
+    ``_probed`` instance-level cache from leaking a ``False`` across xdist workers
+    that share module state, which caused flaky BLOCKED results in parallel runs
+    (RCA-7 / process_backend isolation regression).
     """
 
     def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
         super().__init__()
         self.calls: list[tuple[str, Path | None, int]] = []
         self._returncode, self._stdout, self._stderr = returncode, stdout, stderr
+
+    def _probe(self) -> bool:
+        """Always reports available — RecordingBackend never spawns a real shell."""
+        return True
 
     def _spawn(self, command: str, cwd: Path | None, timeout: int) -> typing.Any:
         self.calls.append((command, cwd, timeout))

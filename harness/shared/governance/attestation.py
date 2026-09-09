@@ -75,6 +75,10 @@ DEFAULT_SECTION = r"^#{1,6}\s.*attestation"
 #: Any markdown heading, used to find where the attested section ends.
 HEADING = re.compile(r"^#{1,6}\s", re.M)
 
+#: PR-head SHA the table was written against (R-SR-24 / R-RHI-3). Lives as a
+#: prose line *above* the table so ``compare()`` cannot treat it as a path row.
+ATTESTED_HEAD = re.compile(r"^Attested-head:\s*(?P<sha>[0-9a-f]{40})\s*$", re.M)
+
 #: A separator cell (`---`, `:--:`). Its presence is also what identifies the
 #: row above it as a header, so both are recognised by shape rather than by
 #: position -- a table preceded by prose, or a body carrying several tables,
@@ -139,12 +143,22 @@ def protected_changes(workspace_dir: Path, patterns: list[str], base_ref: str) -
     return sorted({path for path in modified if is_protected(path, patterns)})
 
 
-def render(paths: list[str], fmt: str) -> str:
+def render(paths: list[str], fmt: str, head_sha: str | None = None) -> str:
     """`plain` for piping, `markdown` for pasting into a PR description."""
     if fmt == "plain":
         return "\n".join(paths)
-    header = ["| Protected path | Why this change touches it |", "| --- | --- |"]
-    return "\n".join(header + [f"| `{path}` |  |" for path in paths])
+    lines: list[str] = []
+    if head_sha:
+        lines.append(f"Attested-head: {head_sha}")
+        lines.append("")
+    lines.extend(
+        [
+            "| Protected path | Why this change touches it |",
+            "| --- | --- |",
+        ]
+    )
+    lines.extend(f"| `{path}` |  |" for path in paths)
+    return "\n".join(lines)
 
 
 def table_paths(body: str) -> list[str]:
@@ -187,6 +201,25 @@ def section_body(body: str, pattern: str) -> str | None:
     return rest[: following.start()] if following else rest
 
 
+def attested_head(body: str) -> str | None:
+    """The 40-hex SHA named by ``Attested-head:``, or None when the line is absent."""
+    match = ATTESTED_HEAD.search(body)
+    return match.group("sha") if match else None
+
+
+def git_head_sha(workspace_dir: Path) -> str | None:
+    """``git rev-parse HEAD``, or None when git cannot answer."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            encoding="utf-8",
+            cwd=workspace_dir,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
+
 def compare(expected: list[str], body: str) -> tuple[list[str], list[str]]:
     """`(missing, unexpected)` -- protected paths absent from the table, and rows naming none.
 
@@ -201,7 +234,12 @@ def compare(expected: list[str], body: str) -> tuple[list[str], list[str]]:
     return missing, unexpected
 
 
-def _check(expected: list[str], body_path: Path, section: str = DEFAULT_SECTION) -> int:
+def _check(
+    expected: list[str],
+    body_path: Path,
+    section: str = DEFAULT_SECTION,
+    head_sha: str | None = None,
+) -> int:
     try:
         body = body_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -255,6 +293,15 @@ def _check(expected: list[str], body_path: Path, section: str = DEFAULT_SECTION)
         )
         return 1
     logger.info("[PASS] attestation table matches all %d protected path(s)", len(expected))
+    if head_sha:
+        found = attested_head(attested)
+        if found is None:
+            logger.error("[FAIL] attestation is missing Attested-head: <40 hex>")
+            return 1
+        if found != head_sha:
+            logger.error("[FAIL] Attested-head %s does not match PR head %s", found, head_sha)
+            return 1
+        logger.info("[PASS] Attested-head matches PR head %s", head_sha)
     return 0
 
 
@@ -266,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("plain", "markdown"), default="markdown")
     parser.add_argument("--check", type=Path, default=None, help="verify this file's table instead of printing one")
     parser.add_argument("--section", default=DEFAULT_SECTION, help="regex for the heading that opens the table")
+    parser.add_argument(
+        "--head-sha",
+        default=None,
+        help="PR head SHA the Attested-head line must match (R-SR-24); omitted skips the SHA check",
+    )
     args = parser.parse_args(argv)
 
     policy_path = args.policy or (args.workspace / "harness" / "shared" / "governance-policy.json")
@@ -275,12 +327,13 @@ def main(argv: list[str] | None = None) -> int:
     logger.debug("base_ref=%s protected=%d", base_ref, len(expected))
 
     if args.check is not None:
-        return _check(expected, args.check, args.section)
+        return _check(expected, args.check, args.section, head_sha=args.head_sha)
 
     if not expected:
         logger.info("[PASS] this change touches no protected path; no attestation is required")
         return 0
-    print(render(expected, args.format))
+    sha = args.head_sha or git_head_sha(args.workspace)
+    print(render(expected, args.format, head_sha=sha if args.format == "markdown" else None))
     return 0
 
 

@@ -1,5 +1,5 @@
 # Production Multi-Stage Dockerfile for the Nemotron AI Runner (Node stack)
-FROM node:22-alpine AS base
+FROM node:26-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
 
@@ -28,11 +28,12 @@ COPY --from=build /app/harness /app/harness
 # runtime image reads nothing under `tests/`, and the AI fixtures carry
 # `nvapi-...` literals that are allowlisted for the secret scan but have no
 # reason to ship.
-RUN rm -rf /app/harness/node/tests
+RUN rm -rf /app/harness/node/tests \
+    && chown -R node:node /app
 
 ENV NODE_ENV=production
 
-# Default entrypoint: the Nemotron CLI. Without NVIDIA_API_KEY (or an explicit
-# prompt) it prints usage instead of making a network call.
-EXPOSE 8080
-CMD ["node", "--loader", "tsx", "src/ai/nemotron/cli.ts", "--help"]
+# Non-root. Node 26 type-strips `.ts`, so the CLI runs without a TypeScript
+# loader (a dev dependency that must not ship in the runtime command).
+USER node
+CMD ["node", "src/ai/nemotron/cli.ts", "--help"]

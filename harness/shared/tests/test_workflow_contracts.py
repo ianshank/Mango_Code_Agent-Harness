@@ -33,8 +33,8 @@ from harness.shared.tests._workflow_paths import (
     DEPENDABOT,
     DRIFT_WORKFLOW,
     RULESET,
-    UNSUPPORTED_LEG,
     WORKFLOW,
+    pull_request_branch_globs,
 )
 from harness.shared.tests.conftest import LANGGRAPH_DESELECT_ENV
 
@@ -134,18 +134,22 @@ def jobs(workflow_text: str) -> dict[str, str]:
     return sections
 
 
-class TestTheUnsupportedLegDeselectsRatherThanSkips:
-    """R-TDH-4: no skip on the leg that cannot install langgraph."""
+class TestNoLegDeselectsLangGraph:
+    """R-RHI-1 (DEC-064): every leg installs langgraph unconditionally now
+    that the floor is >=3.10 (langgraph's own floor); no CI leg has a reason
+    to set the deselect variable, so none should. The deselect mechanism
+    itself (`_session_hooks.py`, `coverage.optional_extras`) stays live for an
+    adopter fork that chooses not to install the extra at all -- this test
+    only pins that this repository's own workflow does not (re)introduce a
+    3.9-shaped carve-out."""
 
-    def test_the_deselect_variable_is_set_only_on_the_unsupported_leg(self, jobs: dict[str, str]) -> None:
-        leg = re.escape(UNSUPPORTED_LEG)
-        pattern = rf"{LANGGRAPH_DESELECT_ENV}: \$\{{\{{ matrix\.python-version == '{leg}' && '1' \|\| '' \}}\}}"
-        assert re.search(pattern, jobs["build"]), (
-            f"the {UNSUPPORTED_LEG} leg must set {LANGGRAPH_DESELECT_ENV}=1 so conftest deselects the "
-            "langgraph-marked suites; a skip there would be an unwaived INV-2 violation"
+    def test_build_does_not_set_the_deselect_variable(self, jobs: dict[str, str]) -> None:
+        assert LANGGRAPH_DESELECT_ENV not in jobs["build"], (
+            "every build leg supports langgraph's own >=3.10 floor; setting "
+            f"{LANGGRAPH_DESELECT_ENV} here would silently reintroduce a skip-shaped carve-out"
         )
 
-    def test_the_primary_leg_does_not_deselect(self, jobs: dict[str, str]) -> None:
+    def test_build_full_does_not_set_the_deselect_variable(self, jobs: dict[str, str]) -> None:
         assert LANGGRAPH_DESELECT_ENV not in jobs["build-full"], (
             "build-full runs the regression tier with langgraph present; deselecting there "
             "would hide the very tests the lock exists to run"
@@ -574,6 +578,44 @@ class TestTheAttestationCheckRunsWhereItCanBeRead:
         assert "edited" in types, "a corrected PR description must be able to re-run the attestation check"
         assert "labeled" in types, "applying `infra-reviewed` must be able to re-run CI"
 
+    def test_stacked_prs_onto_the_cursor_agent_namespace_are_gated(self, workflow_text: str) -> None:
+        """A PR whose base is `cursor/**` must still run `make ci`.
+
+        Asserted against the parsed `pull_request.branches` list, not the
+        comment. Cloud-agent branches here use `cursor/`; `claude/**` is the
+        earlier namespace and must stay gated too. A comment-only
+        `cursor/**` would leave this green — the same mutation that left
+        `test_a_corrected_description_can_re_run_the_check` green on a
+        comment-only `edited`.
+        """
+        globs = pull_request_branch_globs(workflow_text)
+        assert "cursor/**" in globs, "a stacked PR onto the cursor/ agent namespace must still run make ci"
+        assert "claude/**" in globs
+        assert "main" in globs
+
+    def test_pull_request_branch_globs_ignore_the_push_filter(self) -> None:
+        """The helper must not return `on.push.branches` when the PR list is absent."""
+        push_only = (
+            "on:\n"
+            "  push:\n"
+            '    branches: ["main", "release/**"]\n'
+            "  pull_request:\n"
+            "    types: [opened]\n"
+            "permissions:\n"
+            "  contents: read\n"
+        )
+        both = (
+            "on:\n"
+            "  push:\n"
+            '    branches: ["main", "release/**"]\n'
+            "  pull_request:\n"
+            '    branches: ["main", "cursor/**"]\n'
+            "permissions:\n"
+            "  contents: read\n"
+        )
+        assert pull_request_branch_globs(push_only) == frozenset()
+        assert pull_request_branch_globs(both) == frozenset({"main", "cursor/**"})
+
     def test_the_description_reaches_the_script_as_data(self, jobs: dict[str, str]) -> None:
         """A PR body is author-controlled text; it must never reach the shell as code."""
         job = jobs["build-full"]
@@ -591,3 +633,60 @@ class TestTheAttestationCheckRunsWhereItCanBeRead:
         assert "pull-requests" not in workflow_text.split("jobs:")[0], (
             "the scope belongs on the one job that fetches the description, not workflow-wide"
         )
+
+
+class TestAttestationShaBinding:
+    """R-SR-24 / R-RHI-3: the table binds to the PR head SHA, not the merge SHA."""
+
+    def test_attestation_sha_is_read_from_the_pr_head(self, jobs: dict[str, str]) -> None:
+        job = jobs["build-full"]
+        step = job.split("Verify the protected-path attestation table")[-1].split("Run unified CI")[0]
+        assert '["head"]["sha"]' in step
+        assert "HEAD_SHA=" in step
+
+    def test_attestation_sha_mismatch_fails(self, tmp_path: Path) -> None:
+        from harness.shared.governance import attestation
+
+        head, stale = "a" * 40, "b" * 40
+        body = tmp_path / "pr.md"
+        body.write_text(
+            "## Protected-path attestation\n\n"
+            f"Attested-head: {stale}\n\n"
+            "| Protected path | Why |\n| --- | --- |\n| `Makefile` | x |\n",
+            encoding="utf-8",
+        )
+        assert attestation._check(["Makefile"], body, head_sha=head) == 1
+
+    def test_attestation_sha_match_passes(self, tmp_path: Path) -> None:
+        from harness.shared.governance import attestation
+
+        head = "a" * 40
+        body = tmp_path / "pr.md"
+        body.write_text(
+            "## Protected-path attestation\n\n"
+            f"Attested-head: {head}\n\n"
+            "| Protected path | Why |\n| --- | --- |\n| `Makefile` | x |\n",
+            encoding="utf-8",
+        )
+        assert attestation._check(["Makefile"], body, head_sha=head) == 0
+
+
+class TestProtectionReport:
+    def test_protection_report_queries_branch_rules(self, drift_text: str) -> None:
+        jobs = job_sections(drift_text)
+        assert "protection_report" in jobs
+        body = jobs["protection_report"]
+        assert "/rules/branches/main" in body
+        assert "timeout-minutes:" in body
+        assert "cat .github/rulesets/main.json" not in body
+        assert "gh issue" in body
+        assert "isinstance(data, list) and not data" in body
+
+    def test_protection_report_does_not_fail_the_workflow_on_query_errors(self, drift_text: str) -> None:
+        """Scheduled jobs notify; a GitHub API blip must not paint the run red."""
+        body = job_sections(drift_text)["protection_report"]
+        assert "set -euo pipefail" not in body
+        assert "set +e" in body
+        assert "curl -sSf" not in body
+        assert 'echo "empty=0"' in body
+        assert "|| gh issue create" in body

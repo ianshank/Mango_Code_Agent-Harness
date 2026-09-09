@@ -14,8 +14,8 @@ here (and its test) in the same change.
 
 | Active Mango role | Canonical contract(s) | Responsibility in the loop |
 |---|---|---|
-| `planner` | `spec-analyst.md`, `orchestrator.md` | Requirements + acceptance criteria; plans and delegates only, never edits code. |
-| `nemotron-reasoner` | `implementer.md` | Scoped code/config edits and local tests via the tool bridge; uses `knowledge_gap_log` / `hypothesis_register` meta-tools instead of hallucinating. |
+| `planner` | `spec-analyst.md`, `orchestrator.md` | Requirements + acceptance criteria; plans and delegates only, never edits code. Its prompt ends with the workspace's open knowledge gaps (`format_gaps_for_planner`, bounded by `agent_memory.planner_gap_limit`). |
+| `nemotron-reasoner` | `implementer.md` | Scoped code/config edits and local tests via the tool bridge; uses `knowledge_gap_log` / `hypothesis_register` meta-tools instead of hallucinating, and revises a hypothesis (`revises` + `confirmed`/`retracted`) when evidence settles it. Its prompt ends with the workspace's open hypotheses and their ids (`format_hypotheses_for_reasoner`, bounded by `agent_memory.reasoner_hypothesis_limit` / `reasoner_hypothesis_budget_tokens`, DEC-058). |
 | `verifier` | `test-eval.md`, `peer-reviewer.md`, `security-reviewer.md`, `release-auditor.md` | Test/eval execution + evidence; independent correctness/conformance review; blocks releases failing gates. |
 
 All seven canonical roles are bound by the table above. The mapping is
@@ -32,8 +32,8 @@ contracts' `allowed_actions`, **minus** each contract's
 | Active role | Effective actions | Tools received |
 |---|---|---|
 | `planner` | `read`, `plan`, `delegate`, `spec_write` | `read_file`, both meta-tools |
-| `nemotron-reasoner` | `read`, `write`, `test_execute` | `read_file`, `apply_patch`, `write_file`, `run_command`, both meta-tools |
-| `verifier` | `read`, `test_execute`, `evidence_write`, `review_write`, `security_scan` | `read_file`, `run_command`, both meta-tools — **no `write_file`/`apply_patch`** |
+| `nemotron-reasoner` | `read`, `write`, `test_execute` | `read_file`, `apply_patch`, `write_file`, `generate_code`, `run_command`, both meta-tools |
+| `verifier` | `read`, `test_execute`, `evidence_write`, `review_write`, `security_scan` | `read_file`, `run_command`, both meta-tools — **no `write_file`/`apply_patch`/`generate_code`** |
 
 **Execution identity.** `EXECUTION_IDENTITY` records the canonical role each
 active role *executes as* when the broker asks the authority model for a
@@ -43,3 +43,11 @@ rather than the union, and the active roles are not themselves declared in
 `agent-policy.json`, because declaring them would give the agent's own governing
 policy an execution grant (DEC-011). An active role absent from
 `EXECUTION_IDENTITY` cannot execute any command.
+
+## Workflow and orchestration agents
+
+Supporting workflow agents (`narrow-critic`, `sdlc-orchestrator`) live in
+`.mango/workflows/` rather than here. They are invoked by slash-command workflows
+and are not part of the `planner → nemotron-reasoner → verifier` execution loop.
+They are not mapped in `ACTIVE_TO_CANONICAL` and do not receive broker-enforced
+tool grants.

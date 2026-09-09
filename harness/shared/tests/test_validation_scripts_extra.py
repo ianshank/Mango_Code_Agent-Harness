@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.tests._helpers import utc_today
+from harness.shared.tests._helpers import seed_minimal_decision_records, utc_today
 from harness.shared.validate_agent_policy import main as validate_agent_policy
 from harness.shared.validate_governance_docs import main as validate_governance_docs
 from harness.shared.validate_policy import main as validate_policy
@@ -28,17 +28,42 @@ def temp_workspace(tmp_path: Path) -> Path:
                 "human_approval_required_for": ["a"],
                 "delegation_depth": 0,
             },
-            {"id": "spec-analyst", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
-            {"id": "implementer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
-            {"id": "test-eval", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
+            {
+                "id": "spec-analyst",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
+            {
+                "id": "implementer",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
+            {
+                "id": "test-eval",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
             {
                 "id": "security-reviewer",
                 "allowed_actions": [],
                 "human_approval_required_for": [],
                 "delegation_depth": 0,
             },
-            {"id": "peer-reviewer", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
-            {"id": "release-auditor", "allowed_actions": [], "human_approval_required_for": [], "delegation_depth": 0},
+            {
+                "id": "peer-reviewer",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
+            {
+                "id": "release-auditor",
+                "allowed_actions": [],
+                "human_approval_required_for": [],
+                "delegation_depth": 0,
+            },
         ],
         "default_deny": True,
         "limits": {"max_delegation_depth": 5},
@@ -84,11 +109,10 @@ def temp_workspace(tmp_path: Path) -> Path:
     }
     (gov / "policy.json").write_text(json.dumps(valid_policy_doc))
 
-    # Valid Docs
+    # Valid Docs (decision SoT is docs/decisions/; thin log kept for consumers)
     (docs / "PROJECT-CHARTER.md").write_text("Charter v1")
-    today = utc_today().isoformat()
-    (agents / "GOVERNANCE_SKILL.md").write_text(f"Reviewed: {today}\n## Decisions since 2026-01-01\nxyz")
-    (gov / "decision-log.md").write_text("2026-01-02 | xyz | reason")
+    (gov / "decision-log.md").write_text("- DEC-001\n")
+    seed_minimal_decision_records(tmp_path, dec_id="DEC-001", date="2026-01-02", since="2026-01-01")
 
     return tmp_path
 
@@ -157,7 +181,10 @@ def test_agent_policy_approvals_not_list(temp_workspace):
     d = json.loads(p.read_text())
     d["agents"][0]["human_approval_required_for"] = "none"
     p.write_text(json.dumps(d))
-    with pytest.raises(SystemExit, match="agent-policy: orchestrator has no human_approval_required_for list"):
+    with pytest.raises(
+        SystemExit,
+        match="agent-policy: orchestrator has no human_approval_required_for list",
+    ):
         validate_agent_policy(p)
 
 
@@ -166,7 +193,10 @@ def test_agent_policy_approvals_not_subset(temp_workspace):
     d = json.loads(p.read_text())
     d["agents"][0]["human_approval_required_for"] = ["c"]
     p.write_text(json.dumps(d))
-    with pytest.raises(SystemExit, match="agent-policy: orchestrator approval action is not allowed to the role"):
+    with pytest.raises(
+        SystemExit,
+        match="agent-policy: orchestrator approval action is not allowed to the role",
+    ):
         validate_agent_policy(p)
 
 
@@ -176,7 +206,10 @@ def test_agent_policy_unapproved_high_risk(temp_workspace):
     d["agents"][0]["allowed_actions"] = ["a", "b"]
     d["agents"][0]["human_approval_required_for"] = []
     p.write_text(json.dumps(d))
-    with pytest.raises(SystemExit, match="agent-policy: orchestrator high-risk actions lack human approval"):
+    with pytest.raises(
+        SystemExit,
+        match="agent-policy: orchestrator high-risk actions lack human approval",
+    ):
         validate_agent_policy(p)
 
 
@@ -321,7 +354,7 @@ def test_docs_missing_reviewed(temp_workspace):
 def test_docs_future_reviewed(temp_workspace):
     future = (utc_today() + dt.timedelta(days=1)).isoformat()
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {future}\n## Decisions since 2026-01-01\nxyz",
+        f"Reviewed: {future}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/ (see index.md).\n",
     )
     with pytest.raises(SystemExit, match="governance skill review date is in the future"):
         validate_governance_docs(temp_workspace)
@@ -329,7 +362,9 @@ def test_docs_future_reviewed(temp_workspace):
 
 def test_docs_stale_reviewed(temp_workspace):
     past = (utc_today() - dt.timedelta(days=91)).isoformat()
-    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(f"Reviewed: {past}\n## Decisions since 2026-01-01\nxyz")
+    (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
+        f"Reviewed: {past}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/ (see index.md).\n",
+    )
     with pytest.raises(SystemExit, match="governance skill review is stale"):
         validate_governance_docs(temp_workspace)
 
@@ -342,25 +377,30 @@ def test_docs_missing_since(temp_workspace):
 
 
 def test_docs_missing_log(temp_workspace):
-    (temp_workspace / ".governance/decision-log.md").unlink()
-    with pytest.raises(SystemExit, match="decision log missing"):
+    """Fail closed when the decision SoT directory is absent (replaces pipe-log gate)."""
+    import shutil
+
+    shutil.rmtree(temp_workspace / "docs" / "decisions")
+    with pytest.raises(SystemExit, match="docs/decisions directory missing"):
         validate_governance_docs(temp_workspace)
 
 
 def test_docs_missing_decision_in_skill(temp_workspace):
-    (temp_workspace / ".governance/decision-log.md").write_text("2026-01-02 | missed-id | reason")
     today = utc_today().isoformat()
+    # Point at docs/decisions without citing index.md so per-id pointers are required.
     (temp_workspace / "agents/GOVERNANCE_SKILL.md").write_text(
-        f"Reviewed: {today}\n## Decisions since 2026-01-01\nNot here",
+        f"Reviewed: {today}\n## Decisions since 2026-01-01\nSource of truth: docs/decisions/\nNot here\n",
     )
-    with pytest.raises(SystemExit, match="governance skill is missing recent decisions: missed-id"):
+    with pytest.raises(SystemExit, match="governance skill is missing recent decisions: DEC-001"):
         validate_governance_docs(temp_workspace)
 
 
 def test_docs_multiple_failures(temp_workspace):
-    (temp_workspace / ".governance/decision-log.md").unlink()
+    import shutil
+
+    shutil.rmtree(temp_workspace / "docs" / "decisions")
     (temp_workspace / "docs/PROJECT-CHARTER.md").unlink()
     with pytest.raises(SystemExit) as exc_info:
         validate_governance_docs(temp_workspace)
     assert "charter is missing" in str(exc_info.value)
-    assert "decision log missing" in str(exc_info.value)
+    assert "docs/decisions directory missing" in str(exc_info.value)

@@ -27,8 +27,24 @@ LOCK_NAME = LOCK.name
 #: opens with `-r requirements.txt`, and `requirements-langgraph.txt` is the
 #: second compile input. DEC-047 turns on the lock subsuming both.
 RANGE_FILES = (REPO / "requirements.txt", REPO / "requirements-langgraph.txt", REPO / "requirements-dev.txt")
-# The oldest interpreter in the matrix; langgraph declares Requires-Python >=3.10.
-UNSUPPORTED_LEG = "3.9"
+
+
+def pull_request_branch_globs(workflow_text: str) -> frozenset[str]:
+    """The `on.pull_request.branches` glob list, never `on.push.branches`.
+
+    The heading is line-anchored `pull_request:` so `pull_request_target`
+    is not a match. The block ends at the workflow-level `permissions:`
+    or `jobs:` key. Missing list or missing block is an empty set;
+    callers treat that as a broken workflow rather than as "no filter".
+    """
+    heading = re.search(r"(?m)^[ \t]*pull_request:[ \t]*$", workflow_text)
+    if heading is None:
+        return frozenset()
+    block = re.split(r"\n(?:permissions:|jobs:)", workflow_text[heading.end() :], maxsplit=1)[0]
+    match = re.search(r"(?m)^[ \t]*branches:\s*\[([^\]]*)\]", block)
+    if match is None:
+        return frozenset()
+    return frozenset(entry.strip().strip("\"'") for entry in match.group(1).split(",") if entry.strip())
 
 
 def pip_install_lines(workflow_text: str) -> list[str]:

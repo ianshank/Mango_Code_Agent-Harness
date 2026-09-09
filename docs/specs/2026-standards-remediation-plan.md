@@ -2,6 +2,10 @@
 
 > Status: IN PROGRESS, revision 3 (Phase B Done on PR #86; R-SR-5 / AC-5 closed on PR #93; roadmap peer-rewrite 2026-09-05b) · Date: 2026-09-05 · Base: `main` @ `58490c1` (PRs #89-#95 / #93 DECs)
 >
+> **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
+> traceability gate counts and reports them without requiring an implementation citation
+> until the work lands (see `docs/specs/graph-engineering-adoption.md`).
+>
 > Supersedes the open remainder of `docs/specs/code-quality-tech-debt-plan.md`
 > (closed 2026-09-04 at revision 2) and owns every Blocker, High and Medium
 > finding in `docs/reports/2026-STANDARDS-AUDIT.md` (revision 2). `NEXT_STEPS.md`
@@ -401,11 +405,11 @@ names the audit finding or closed-plan requirement it carries.
       passes with `warn_unused_ignores = true`; the ruleset lists no
       `dependency-audit (3.9)` context and `pytest harness/shared/tests/test_ci_gate_required_checks.py`
       fails if it does · stage: `make ci` (R-SR-23)
-- [ ] AC-24: `pytest harness/shared/tests/test_workflow_contracts.py -k "attestation_sha or protection_report"`
+- [x] AC-24: `pytest harness/shared/tests/test_workflow_contracts.py -k "attestation_sha or protection_report"`
       asserts the attestation step reads the head SHA from the table and the
       scheduled job calls `/rules/branches/main`; a PR with a stale SHA in its
       table fails `build-full` · stage: `make ci` (R-SR-24)
-- [ ] AC-25: `pytest harness/shared/tests/test_dockerfile_contract.py` asserts a
+- [x] AC-25: `pytest harness/shared/tests/test_dockerfile_contract.py` asserts a
       digest-pinned `FROM`, a `USER` line, and no `tsx` in the runtime stage;
       `pytest harness/shared/tests/test_dependabot_contract.py` asserts `docker`
       and `cooldown` and fails when either is removed · stage: `make test-python`
