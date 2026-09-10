@@ -10,6 +10,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### CI: retire inverted NS-17/NS-21 rollback pins revived on main (2026-09-10)
+
+- PR #102 merged with `build (3.10/3.12/3.14)` and `build-full` red (run 34513712396): 11 inverted NS-17 absence pins against the forward feature DEC-060 already restored. The two rollback modules are deleted again; `test_regression_tier_pin.py` fails if those filenames return without superseding DEC-060.
+- Restored `test_planner_template_surfaces_open_gaps` and `test_planner_template_open_gaps_default_empty_is_ok` that #102 removed. Atomic `append_locked` write (`O_EXCL`, stale `.tmp` recovery) from #102 is kept.
+
 ### INV-13 steps 7–9: Landlock isolation backend (2026-09-09)
 
 - **DEC-069:** GHA `ubuntu-latest` (PR #128 head, all three Python legs) reports Landlock ABI 7; this agent VM reports ABI 6. Both meet `landlock_restrict.MIN_ABI_FOR_NET` (UAPI floor 4, not a policy key). C-AEI-6 is not the close of this measurement. Broker default stays `ProcessBackend()`.
