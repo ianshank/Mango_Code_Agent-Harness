@@ -607,6 +607,37 @@ def test_a_store_whose_directory_vanishes_is_recreated_not_raised(tmp_path):
     assert json.loads(store.read_text(encoding="utf-8")) == [{"id": "x"}]
 
 
+def test_a_stale_temp_file_is_recovered_before_append(tmp_path):
+    from harness.shared.memory_store import append_locked
+
+    store = tmp_path / "store.json"
+    store.write_text("[]", encoding="utf-8")
+    temp_file = store.with_suffix(".tmp")
+    temp_file.write_text("stale", encoding="utf-8")
+
+    kept = append_locked(store, {"id": "x"}, 10, label="probe")
+    assert kept == [{"id": "x"}]
+    assert json.loads(store.read_text(encoding="utf-8")) == [{"id": "x"}]
+    assert not temp_file.exists()
+
+
+def test_a_failed_write_unlinks_partial_temp_file(tmp_path, monkeypatch):
+    from harness.shared import memory_store
+
+    store = tmp_path / "store.json"
+    store.write_text("[]", encoding="utf-8")
+    temp_file = store.with_suffix(".tmp")
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr(memory_store.json, "dump", _boom)
+    with pytest.raises(RuntimeError, match="write failed"):
+        memory_store.append_locked(store, {"id": "x"}, 10, label="probe")
+
+    assert not temp_file.exists()
+
+
 def test_a_whole_workspace_removed_mid_run_does_not_break_the_tool(tmp_path):
     """The same fault through the public door rather than the primitive."""
     import shutil

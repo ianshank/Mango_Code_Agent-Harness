@@ -29,7 +29,7 @@ class TestPromptTemplatesFormatCleanly:
     would break this at call time, not at import time)."""
 
     def test_planner_template_formats(self) -> None:
-        rendered = PLANNER_PROMPT_TEMPLATE.format(task="add a login form")
+        rendered = PLANNER_PROMPT_TEMPLATE.format(task="add a login form", open_gaps="")
         assert "add a login form" in rendered
 
     def test_reasoner_template_formats(self) -> None:

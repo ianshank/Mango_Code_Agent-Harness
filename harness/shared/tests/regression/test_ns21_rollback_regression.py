@@ -87,11 +87,23 @@ class TestNS21InvocationInfrastructureIsRetained:
         src = inspect.getsource(loop_mod.ExecutionLoop.execute_agent)
         assert "budget_exceeded" in src, "execute_agent no longer fires a post-*-run hook on budget_exceeded."
 
-    def test_loop_fires_post_timeout_hook(self) -> None:
-        from harness.shared.orchestrator import loop as loop_mod
+    def test_loop_fires_post_timeout_hook(self, tmp_path) -> None:
+        from harness.shared.mango_mas_orchestrator import MangoMASOrchestrator
 
-        src = inspect.getsource(loop_mod.ExecutionLoop.execute_agent)
-        assert "timeout" in src and "run_hook" in src, "execute_agent no longer fires a post-*-run hook on timeout."
+        orch = MangoMASOrchestrator(workspace_dir=tmp_path, max_iterations=0)
+        hook_events: list[tuple[str, dict]] = []
+
+        def _recording_hook(hook_name: str, **kwargs: object) -> None:
+            hook_events.append((hook_name, kwargs))
+
+        orch.execution_loop.hook_runner.run_hook = _recording_hook  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="exceeded maximum tool iterations"):
+            orch.execute_agent("nemotron-reasoner", "trigger timeout")
+
+        post_hooks = [event for event in hook_events if event[0] == "post-nemotron-reasoner-run"]
+        assert len(post_hooks) == 1
+        assert post_hooks[0][1].get("status") == "timeout"
 
     def test_hook_runner_does_not_hard_code_jsonl_path(self) -> None:
         """HookRunner must not hard-code the JSONL path -- that lives in the shell script."""
