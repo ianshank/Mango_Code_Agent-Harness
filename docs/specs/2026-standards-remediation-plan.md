@@ -405,7 +405,7 @@ names the audit finding or closed-plan requirement it carries.
       passes with `warn_unused_ignores = true`; the ruleset lists no
       `dependency-audit (3.9)` context and `pytest harness/shared/tests/test_ci_gate_required_checks.py`
       fails if it does · stage: `make ci` (R-SR-23)
-- [x] AC-24: `pytest harness/shared/tests/test_workflow_contracts.py -k "attestation_sha or protection_report"`
+- [x] AC-24: `pytest harness/shared/tests/test_workflow_attestation.py -k "attestation_sha or protection_report"`
       asserts the attestation step reads the head SHA from the table and the
       scheduled job calls `/rules/branches/main`; a PR with a stale SHA in its
       table fails `build-full` · stage: `make ci` (R-SR-24)

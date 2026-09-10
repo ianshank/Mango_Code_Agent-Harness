@@ -10,6 +10,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Reflection increment: NS-21 restore, workflow-test split, NS-39 ratchet (2026-09-10)
+
+- Restored `post-planner-run.sh`, `post-nemotron-reasoner-run.sh`, `post-verifier-run.sh`, and `lib/record_post_run.sh` deleted by PR #115. `HookRunner` logs DEBUG and skips a missing or non-file permitted hook; `loop.py` still constructs every `post-{role}-run` name. Disk-liveness fails if an entrypoint is deleted. DEC-003 stays dormant.
+- Split `test_workflow_contracts.py` (692/700) via `_workflow_parse.py` into `test_workflow_pins.py` (Node 24 / SHA pins) and `test_workflow_attestation.py`. `job_sections` remains importable from the original module. `NODE24_ACTION_MAJORS` are floors.
+- Traceability ratchet `max_uncited_contract_requirement_ids` 203→191 with both-side citations for `R-PF-1`..`R-PF-6`, `C-PF-1`, `C-PF-2`, `R-RHI-1`, `R-TDH-10`, `R-RBT-2`, `R-RBT-5`. `R-GEA-5` stays uncited.
+
+### CI: retire inverted NS-17/NS-21 rollback pins revived on main (2026-09-10)
+
+- PR #102 merged with `build (3.10/3.12/3.14)` and `build-full` red (run 34513712396): 11 inverted NS-17 absence pins against the forward feature DEC-060 already restored. The two rollback modules are deleted again; `test_regression_tier_pin.py` fails if those filenames return without superseding DEC-060.
+- Restored `test_planner_template_surfaces_open_gaps` and `test_planner_template_open_gaps_default_empty_is_ok` that #102 removed. Atomic `append_locked` write (`O_EXCL`, stale `.tmp` recovery) from #102 is kept.
+
 ### INV-13 steps 7–9: Landlock isolation backend (2026-09-09)
 
 - **DEC-069:** GHA `ubuntu-latest` (PR #128 head, all three Python legs) reports Landlock ABI 7; this agent VM reports ABI 6. Both meet `landlock_restrict.MIN_ABI_FOR_NET` (UAPI floor 4, not a policy key). C-AEI-6 is not the close of this measurement. Broker default stays `ProcessBackend()`.

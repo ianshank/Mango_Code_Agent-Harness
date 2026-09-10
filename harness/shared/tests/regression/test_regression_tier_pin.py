@@ -26,6 +26,13 @@ pytestmark = pytest.mark.governance
 REGRESSION_DIR = Path(__file__).resolve().parent
 UNIT_TESTS_DIR = REPO / "harness" / "shared" / "tests"
 
+#: Filenames DEC-060 retired. A later PR must not revive inverted
+#: "feature must be absent" pins under these names without superseding that DEC.
+FORBIDDEN_ROLLBACK_PIN_MODULES = (
+    "test_ns17_rollback_regression.py",
+    "test_ns21_rollback_regression.py",
+)
+
 #: Basename -> reproduction function name that must be *defined* in that
 #: regression module (not merely mentioned in a comment/string) and must not
 #: be defined anywhere under the unit suite.
@@ -53,6 +60,22 @@ def _defines_function(source: str, name: str) -> bool:
     tree = ast.parse(source)
     return any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name for node in ast.walk(tree)
+    )
+
+
+@pytest.mark.parametrize("basename", FORBIDDEN_ROLLBACK_PIN_MODULES)
+def test_inverted_ns17_ns21_rollback_pins_stay_absent(basename: str) -> None:
+    """PR #102 revived these inverted pins on main (run 34513712396).
+
+    The defect that reached main is the revival itself. The reproduction is
+    that the files must not exist — not a row in REQUIRED_REGRESSION_MODULES,
+    which requires presence.
+    """
+    path = REGRESSION_DIR / basename
+    assert not path.exists(), (
+        f"{basename} is back under harness/shared/tests/regression/; "
+        "DEC-060 deleted these inverted absence pins. Supersede DEC-060 "
+        "before reviving the filenames."
     )
 
 

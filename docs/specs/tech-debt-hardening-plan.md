@@ -376,7 +376,7 @@ Constraints.
       module along DEC-035's seam and the original path collected zero tests) · stage: `make ci` (R-TDH-9)
 - [x] AC-10: PRs #38–#46 are each merged or closed (recorded in the `DEC-`
       entry); `make lint` exits 0 with the bumped `ruff` pin;
-      `pytest harness/shared/tests/test_workflow_contracts.py -k node24`
+      `pytest harness/shared/tests/test_workflow_pins.py -k node24`
       fails on any `uses:` action major that declares `runs.using: node20`;
       `.github/dependabot.yml` lists `github-actions` · stage: `make lint` (R-TDH-10)
 - [x] AC-11: `pytest harness/shared/tests/test_workflow_contracts.py -k drift`

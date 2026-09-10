@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-09 · `origin/main` is PR #127 (`3e8d69d`). INV-13 evidence + protocol/routing, NS-18 tool parity, NS-36 minus signatures, and NS-39 ratchet/citations/AC-GEA-8 are on `main`. This change lands DEC-069 and the Landlock isolation backend (AEI steps 7–9 / AC-13–16). Owner P0 (NS-1 ruleset, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
+**Last reviewed:** 2026-09-10 · Hotfix `c175a83` restores green `main` after PR #102 revived inverted NS-17 pins (DEC-060). This increment restores NS-21 enablement scripts deleted by PR #115, splits `test_workflow_contracts.py`, and lowers the uncited ratchet 203→191. Owner P0 (NS-1 ruleset import, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E — agents must not implement those. Dependabot PRs #103–#108 / #125 / #126 rebase after `main` is green; `NODE24_ACTION_MAJORS` are floors, not a pin of a specific patch. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
 
 ---
 
@@ -434,7 +434,7 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 | Was | Now |
 |---|---|
-| **NS-21** Hook surface / post-turn observation | **Landed on PR #99.** `post-*-run` scripts + shared recorder append turn `status` / `run_id` / tool-call spend to `.mango/.state/post-run.jsonl`; liveness + record-contract tests fail if firing stops. DEC-003 unchanged. |
+| **NS-21** Hook surface / post-turn observation | **Restored after PR #115 silent disable.** PR #99 added `post-*-run.sh` + `lib/record_post_run.sh` (JSONL at `.mango/.state/post-run.jsonl`). PR #115 (`8e58b89e`) deleted those four files and the DEBUG / record-contract tests; `HookRunner.run_hook` no-ops when the script is missing, so observation died while the suite stayed green. Presence is enablement. DEC-003 unchanged: scripts stay unbound in `.claude/settings.json`. Disk-liveness (`test_every_live_post_run_hook_exists_on_disk`) and record-contract tests fail if firing stops. |
 
 **Closed 2026-09-05d (NS-34 / NS-17):**
 
@@ -453,7 +453,7 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 | Was | Now |
 |---|---|
-| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. **Bot PRs #62-#78 are all closed**; Dependabot open queue is empty (re-queried 2026-09-05). |
+| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. **Bot PRs #62-#78 are all closed.** Open Dependabot PRs #103–#108 / #125 / #126 failed `build*` while `main` was red from inverted NS-17 pins; rebase them after this hotfix is on `main`. `NODE24_ACTION_MAJORS` floors remain checkout 5, setup-python 6, setup-node 5, setup-go 6, pnpm/action-setup 5; a major above the floor is allowed, SHA pin + `# vX.Y.Z` must remain. |
 
 **Closed earlier (pointers only - details in prior revisions / CHANGELOG):**
 NS-5, NS-7, NS-8, NS-10, NS-12, NS-13, NS-14, NS-15, NS-16, NS-20,

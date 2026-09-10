@@ -710,7 +710,7 @@ change from a vacuous pass.
       it now stages a copy of the module beside a malformed policy, because a
       module-scope read has no "after import".
 - [x] AC-9: `git grep -nE "uses: [^@]+@v[0-9]" .github/workflows` returns nothing
-      (today: 20 lines); `pytest harness/shared/tests/test_workflow_contracts.py -k "node24 or sha_pinned"`
+      (today: 20 lines); `pytest harness/shared/tests/test_workflow_pins.py -k "node24 or sha_pinned"`
       passes on the tree, fails on a `tmp_path` workflow with a tag reference, and
       fails on a SHA with no version comment · stage: `make test-python` (R-CQ-9)
       — **Result:** the grep returns nothing (was 20 lines); the `-k` selector

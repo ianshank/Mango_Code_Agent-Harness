@@ -1,7 +1,7 @@
 # Spec: reflection-hardening-increment
 
-> Status: IN PROGRESS (Step 1/2 landed, `docs/specs/python-floor-310.md` /
-> `DEC-064`; Steps 3-5 not started) · Date: 2026-09-07 ·
+> Status: IN PROGRESS (Steps 1–5 product work landed on PR #124; AC-7/AC-8
+> verified 2026-09-10; AC-9 blocked on NS-2) · Date: 2026-09-07 ·
 > Base: `main` @ `33f21044`
 >
 > **Spec class:** program-plan — the requirement IDs below name scheduled work, so the
@@ -358,7 +358,7 @@ success path.
       contains none of the frontmatter's raw tool names, only the
       registry-derived paragraph (rejection case for C-RBT-3)
       · stage: `make test-python` (R-RHI-2, R-RBT-3, R-RBT-4, C-RBT-3)
-- [x] AC-4: `pytest harness/shared/tests/test_workflow_contracts.py -k attestation_sha`
+- [x] AC-4: `pytest harness/shared/tests/test_workflow_attestation.py -k attestation_sha`
       fails on a `tmp_path` PR body whose attestation table names a SHA that
       is not the current head (today: no such test exists — an attestation
       naming any SHA passes silently) and passes when the table's SHA matches
@@ -374,16 +374,21 @@ success path.
       (or the equivalent name chosen at implementation) fails on a `tmp_path`
       module carrying the bare `3` untriaged and passes on the tree once named
       · stage: `make test-python` (R-RHI-5)
-- [ ] AC-7 (rejection case): `python3 harness/shared/validate_invariants.py`
+- [x] AC-7 (rejection case): `python3 harness/shared/validate_invariants.py`
       still exits nonzero on a `tmp_path` tree with any watch-list file one
       line over 500 after Steps 2-4 land, proving no step above widened the
       size-budget gate to accommodate its own edit · stage: `make validate`
-      (C-RHI-3)
-- [ ] AC-8: `git grep -nE "R-SR-23|R-RBT-|R-SR-24|R-SR-25" docs/specs/reflection-hardening-increment.md`
+      (C-RHI-3) — **verified 2026-09-10:**
+      `pytest harness/shared/tests/test_validate_invariants.py -k test_check_test_size_budget_fails_one_line_over`
+      and `pytest harness/shared/tests/test_validate_invariants.py -k test_check_size_budget_fails_over`
+      still fail closed.
+- [x] AC-8: `git grep -nE "R-SR-23|R-RBT-|R-SR-24|R-SR-25" docs/specs/reflection-hardening-increment.md`
       finds each carried id, and neither `docs/specs/python-floor-310.md` nor
       `docs/specs/reasoner-bridge-tool-parity.md`'s existing content is
       duplicated by a new spec name (the parity spec is implemented in place,
-      not re-specified) · stage: `make specs`
+      not re-specified) · stage: `make specs` — **verified 2026-09-10.** R-SR-24
+      is carried in this criterion's own grep; the attestation-SHA work landed
+      as R-RHI-3 / AC-4.
 - [ ] AC-9 (blocked by NS-2 / R-SR-2): `ls harness/shared/langgraph` fails and
       `ls harness/shared/experimental/langgraph/__init__.py` succeeds;
       `python3 -W error::DeprecationWarning -c "import harness.shared.langgraph"`

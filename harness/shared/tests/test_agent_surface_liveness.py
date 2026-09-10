@@ -634,6 +634,23 @@ class TestHookNamespacePartition:
             f"{hook.name} no longer runs validate_invariants.py; it is the pre-turn gate in name only"
         )
 
+    def test_every_live_post_run_hook_exists_on_disk(self) -> None:
+        """``run_hook`` no-ops on a missing file, so only this notices a deletion."""
+        from harness.shared.agent_authority import ACTIVE_TO_CANONICAL
+
+        missing = [
+            f"post-{role}-run.sh"
+            for role in ACTIVE_TO_CANONICAL
+            if not (self.MANGO_HOOKS / f"post-{role}-run.sh").is_file()
+        ]
+        assert not missing, (
+            f"post-run enablement scripts missing: {missing}. ExecutionLoop fires "
+            "post-{role}-run after every agent turn and HookRunner.run_hook no-ops "
+            "when the script is absent, so NS-21 observation would silently stop."
+        )
+        recorder = self.MANGO_HOOKS / "lib" / "record_post_run.sh"
+        assert recorder.is_file(), f"{recorder.relative_to(REPO)} is missing; the entrypoints source it"
+
     def test_every_hook_script_belongs_to_a_namespace(self) -> None:
         """Either the orchestrator may fire it, or a settings file registers it."""
         from harness.shared.agent_prompts import PERMITTED_HOOK_NAMES
