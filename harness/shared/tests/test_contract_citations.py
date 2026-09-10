@@ -2,8 +2,9 @@
 
 Implementation glob: ``harness.shared.contract_citations``. This file is the
 matching test glob hit so those IDs leave the uncited ratchet (C-GT-1, C-LGH-2,
-C-PLR-2, C-PLR-3, R-AC-5, R-CGT-1, R-CGT-4, R-CGT-7, R-MMI-7, R-PLR-2, R-PLR-3,
-R-PLR-4, R-RPT-6, R-VP-2, R-VP-5).
+C-PF-1, C-PF-2, C-PLR-2, C-PLR-3, R-AC-5, R-CGT-1, R-CGT-4, R-CGT-7, R-MMI-7,
+R-PF-1, R-PF-2, R-PF-3, R-PF-4, R-PF-5, R-PF-6, R-PLR-2, R-PLR-3, R-PLR-4,
+R-RBT-2, R-RBT-5, R-RHI-1, R-RPT-6, R-TDH-10, R-VP-2, R-VP-5).
 """
 
 from __future__ import annotations

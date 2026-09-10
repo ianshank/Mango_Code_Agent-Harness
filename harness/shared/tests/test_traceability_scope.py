@@ -53,7 +53,7 @@ NODE_STACK = REPO_ROOT / "harness" / "node"
 #: passes freely; raising it above this line fails, and raising this line is a visible
 #: edit to an accepted decision's recorded high-water mark rather than a threshold tweak.
 #: Found by review on PR #120.
-ACCEPTED_RATCHET_CEILING = 203
+ACCEPTED_RATCHET_CEILING = 191
 
 pytestmark = pytest.mark.governance
 
