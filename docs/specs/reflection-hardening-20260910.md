@@ -317,6 +317,26 @@ Then `test_code_safety.py` 664, `test_hypothesis_revision.py` 651,
 `test_workflow_contracts.py` is 280 after the split (was 692).
 
 `_LOG_COMMAND_CHARS = 200` remains a private log truncation; `test_constant_triage`
-skips `_`-prefixed names. vulture stays on `make lint-python` against
-`vulture_whitelist.py`. Remeasure coverage via `coverage_gate.py` on the
-pushed head, not from this table.
+skips `_`-prefixed names (47 passed). vulture on `make lint-python` against
+`vulture_whitelist.py` exited 0 (no hits). Context7 `resolve-library-id` for
+pytest was retried on this head and still returned `Monthly quota exceeded`.
+
+**`coverage_gate.py` on this head (not pytest-cov `Cover`):** local
+`ALLOW_GITHUB_CHANGES=1 make coverage` → lines 98.83% ≥ `coverage.lines` 90,
+branches 96.67% ≥ `coverage.branches` 80, 110 first-party files measured,
+107 at the per-file lines floor, 0 waived. GitHub `build (3.10)` on
+`3a1fd35` ([run 34537086127](https://github.com/ianshank/Mango_Code_Agent-Harness/actions/runs/34537086127)):
+4917 passed, 1 skipped; lines 98.84%, branches 96.70%; same measured-set.
+GitHub `make ci` / `make ci-python` then fail at `validate` on the seven
+protected paths until a human applies `infra-reviewed`. That is the
+protected-path gate, not a test failure.
+
+**Adversarial sweep (tech-debt-audit §3.4–3.5), recorded not scheduled:**
+
+| Area | Finding | Disposition this increment |
+|---|---|---|
+| Hardcoded values | TRIAGE/EXCLUDED complete (28 discovered, 0 unlisted) | checked, clear |
+| Dead code | No unused module-level funcs beyond FastAPI `orchestrate_task` (whitelist) | checked, clear |
+| Duplication | `_policy_is_absent` twins | not real (adopter stdlib contract, R-CQ-12) |
+| Duplication | identical `REQ_PATTERN` / `REQ` in `plan_rules.py` and `check_traceability.py` (C-PLR-2) | remaining; do not touch `check_traceability.py` (437/500) here |
+| Missed edge | `denial_rate` fail-closed JSON arms; `context_policy` `chars_per_token<=0` / `budget_tokens<0` / bool `prompt_tokens` | remaining; `coverage.per_file` still holds (blended `Cover` on `context_policy.py` is not the gate) |
