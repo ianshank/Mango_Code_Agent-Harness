@@ -200,6 +200,21 @@ def append_locked(
 
         # Write to a temp file first for atomic replacement.
         temp_file = store_file.with_suffix(".tmp")
-        temp_file.write_text(json.dumps(entries, indent=2), encoding="utf-8")
-        temp_file.replace(store_file)
+        # Recover from an interrupted prior write while still under the store lock.
+        with contextlib.suppress(FileNotFoundError):
+            temp_file.unlink()
+
+        fd = -1
+        try:
+            fd = os.open(temp_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                fd = -1
+                json.dump(entries, handle, indent=2)
+            temp_file.replace(store_file)
+        except BaseException:
+            if fd != -1:
+                os.close(fd)
+            with contextlib.suppress(OSError):
+                temp_file.unlink()
+            raise
     return entries
