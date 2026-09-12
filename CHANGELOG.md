@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### C-PLR-2 matcher reuse, fail-closed tests, AC-23 comment pin (2026-09-12)
+
+- `check_traceability.REQ` is `plan_rules.REQ_PATTERN` (C-PLR-2). `cd harness/node && python ../shared/governance/check_traceability.py` still imports after `_gate_logger` puts the repo root on `sys.path`.
+- Fail-closed tests for `denial_rate` malformed JSON / non-object root / missing `commands`, and `context_policy` `chars_per_token <= 0`, `budget_tokens < 0`, bool `prompt_tokens`.
+- Remediation AC-23 now pins uncommented `3.9` / `target-version` only; historical comments stay.
+
 ### Reflection increment: NS-21 restore, workflow-test split, NS-39 ratchet (2026-09-10)
 
 - Restored `post-planner-run.sh`, `post-nemotron-reasoner-run.sh`, `post-verifier-run.sh`, and `lib/record_post_run.sh` deleted by PR #115. `HookRunner` logs DEBUG and skips a missing or non-file permitted hook; `loop.py` still constructs every `post-{role}-run` name. Disk-liveness fails if an entrypoint is deleted. DEC-003 stays dormant.

@@ -105,6 +105,29 @@ class TestFailsClosed:
         with pytest.raises(SystemExit):
             denial_rate.load_corpus(path)
 
+    def test_malformed_json_exits(self, tmp_path: Path) -> None:
+        path = tmp_path / "broken.json"
+        path.write_text("{not json", encoding="utf-8")
+        with pytest.raises(SystemExit):
+            denial_rate._load_json_object(path, "probe")
+
+    def test_a_directory_path_is_unreadable_and_exits(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit):
+            denial_rate._load_json_object(tmp_path, "probe")
+
+    def test_a_non_object_root_exits(self, tmp_path: Path) -> None:
+        path = tmp_path / "list.json"
+        path.write_text("[]", encoding="utf-8")
+        with pytest.raises(SystemExit):
+            denial_rate._load_json_object(path, "probe")
+
+    @pytest.mark.parametrize("payload", [{"entries": []}, {"commands": {}}])
+    def test_a_corpus_without_a_commands_list_exits(self, tmp_path: Path, payload: dict[str, object]) -> None:
+        path = tmp_path / "command-corpus.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(SystemExit):
+            denial_rate.load_corpus(path)
+
 
 class TestHeldActions:
     def test_held_actions_come_from_the_authority_model(self) -> None:

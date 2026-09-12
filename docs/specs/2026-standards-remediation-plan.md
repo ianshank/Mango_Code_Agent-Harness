@@ -398,13 +398,17 @@ names the audit finding or closed-plan requirement it carries.
       passes with `standards-audit` classified; removing its `STANDALONE_SKILLS`
       entry fails `EverySkillIsWiredOrDeclared` · stage: `make test-python`
       (R-SR-22) - verified 2026-09-04 on this branch
-- [ ] AC-23: `python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['requires-python'])"`
-      prints `>=3.10`; `git grep -n "3\.9" .github/workflows pyproject.toml requirements-dev.txt harness/shared/governance-policy.json`
-      returns nothing; `git grep -n "target-version" pyproject.toml` returns
-      nothing; `python -m mypy --version` reports 2.x and `make lint-cold`
-      passes with `warn_unused_ignores = true`; the ruleset lists no
-      `dependency-audit (3.9)` context and `pytest harness/shared/tests/test_ci_gate_required_checks.py`
-      fails if it does · stage: `make ci` (R-SR-23)
+- [x] AC-23: `python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['requires-python'])"`
+      prints `>=3.10`; `pytest harness/shared/tests/test_ci_gate_required_checks.py -k non_comment`
+      fails on uncommented `3.9` in `.github/workflows`, `pyproject.toml`,
+      `requirements-dev.txt`, or `harness/shared/governance-policy.json` and
+      on uncommented `target-version` in `pyproject.toml` (comment-only
+      historical mentions of 3.9 do not fail); `python -m mypy --version`
+      reports 2.x and `make lint-cold` passes with `warn_unused_ignores = true`;
+      the ruleset lists no `dependency-audit (3.9)` context and
+      `pytest harness/shared/tests/test_ci_gate_required_checks.py`
+      fails if it does · stage: `make ci` (R-SR-23) — verified 2026-09-12:
+      comment-stripped pin (R-RH3-3); `requires-python` is `>=3.10`
 - [x] AC-24: `pytest harness/shared/tests/test_workflow_attestation.py -k "attestation_sha or protection_report"`
       asserts the attestation step reads the head SHA from the table and the
       scheduled job calls `/rules/branches/main`; a PR with a stale SHA in its

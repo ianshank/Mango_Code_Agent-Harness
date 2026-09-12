@@ -62,10 +62,11 @@ fails `validate_invariants.py` with no feature work.
 ratchet of 203. `R-GEA-5` stays uncited on purpose. The ratchet MUST only fall
 (C-RH2-2).
 
-**5. Stale ticks and owner P0s.** Remediation AC-23 is still `[ ]` while
-`requires-python >= 3.10` is live; the written `git grep 3.9` still matches
-historical comments. Reflection header still says Steps 3–5 are unstarted
-while AC-2…AC-6 are `[x]`. NS-1/2/3/30 and Phase E remain owner-gated.
+**5. Stale ticks and owner P0s.** Reflection header still says Steps 3–5 are
+unstarted while AC-2…AC-6 are `[x]`. NS-1/2/3/30 and Phase E remain
+owner-gated. Remediation AC-23 was rewritten 2026-09-12 to ignore comment-only
+historical `3.9` mentions while still failing on uncommented `3.9` /
+`target-version` pins (R-RH3-3).
 
 ## Remaining-item ledger
 
@@ -75,7 +76,7 @@ while AC-2…AC-6 are `[x]`. NS-1/2/3/30 and Phase E remain owner-gated.
 | NS-2 / R-SR-2 | credential DEC-014; `feature/governed-run-console` | **Owner / parked.** Hard-gates Phase E (C-RH2-3). |
 | NS-3 / R-SR-4 | no `v*` tags locally | **Owner / parked.** |
 | NS-30 / R-SR-3 | `ls LICENSE` fails | **Owner / parked.** Apache-2.0 recommended, not chosen here. |
-| NS-6 / R-SR-23 | `requires-python >= 3.10`, DEC-064, matrix 3.10/3.12/3.14 | **Landed.** Remediation AC-23 stays `[ ]` until its written grep is empty or rewritten; comments still mention historical 3.9. |
+| NS-6 / R-SR-23 | `requires-python >= 3.10`, DEC-064, matrix 3.10/3.12/3.14 | **Landed.** Remediation AC-23 rewritten 2026-09-12 (comment-stripped pin, R-RH3-3). |
 | NS-18 / R-RBT-* | PR #124 | **Landed.** Do not re-specify. |
 | NS-21 | scripts deleted by #115; §6 still says landed | **Restore this increment** (R-RH2-2). |
 | NS-35 | mutmut | **Parked** (needs NS-6 packaging half; out of scope). |
@@ -269,9 +270,9 @@ allowed; the SHA-pin comment form does not change.
 2. **Python 3.11 floor trigger.** Inherited from
    `reflection-hardening-increment.md` open question 1 / NS-6 dated trigger
    before 2026-10-31. Not scheduled here.
-3. **Remediation AC-23 grep.** The floor is `>=3.10`; the written
-   `git grep 3.9` still matches comments. Correct the selector in a later
-   doc pass rather than rewriting history in this increment.
+3. **Remediation AC-23 grep.** Closed on 2026-09-12 by rewriting the selector
+   to ignore comment-only historical `3.9` mentions while still failing on
+   uncommented `3.9` / `target-version` pins (R-RH3-3).
 
 ## openspec-peer-review
 

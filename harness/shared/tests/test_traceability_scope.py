@@ -41,6 +41,14 @@ import pytest
 # Import the module explicitly to reach its internals.
 ct = importlib.import_module("harness.shared.governance.check_traceability")
 
+
+def test_requirement_id_matcher_is_the_plan_rules_pattern() -> None:
+    """C-PLR-2: a second compile is how the two gates drift."""
+    from harness.shared.plan_rules import REQ_PATTERN
+
+    assert ct.REQ is REQ_PATTERN
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NODE_STACK = REPO_ROOT / "harness" / "node"
 

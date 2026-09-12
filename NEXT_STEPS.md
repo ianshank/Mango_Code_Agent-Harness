@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0
 **Status:** Active roadmap - forward-looking only
-**Last reviewed:** 2026-09-10 · Hotfix `c175a83` restores green `main` after PR #102 revived inverted NS-17 pins (DEC-060). This increment restores NS-21 enablement scripts deleted by PR #115, splits `test_workflow_contracts.py`, and lowers the uncited ratchet 203→191. Owner P0 (NS-1 ruleset import, NS-2 credential purge, NS-3 tag, NS-30 licence) is unchanged and still hard-gates Phase E — agents must not implement those. Dependabot PRs #103–#108 / #125 / #126 rebase after `main` is green; `NODE24_ACTION_MAJORS` are floors, not a pin of a specific patch. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
+**Last reviewed:** 2026-09-12 · PR #131 is on `main`. Follow-up: C-PLR-2 (`REQ` is `REQ_PATTERN`), denial_rate/context_policy fail-closed tests, remediation AC-23 comment-stripped pin. Owner P0 (NS-1 ruleset import, NS-2 credential purge, NS-3 tag, NS-30 licence) still hard-gates Phase E — agents must not implement those. Dependabot PRs #103–#108 / #125 / #126 can rebase now that `main` is green; `NODE24_ACTION_MAJORS` are floors, not a pin of a specific patch. CONTRACT Python floor is 3.10 (DEC-064). AC-CE-1 is retired (isolation spec steps 6–9).
 
 ---
 
@@ -453,7 +453,7 @@ re-litigate boxes above, only schedules what a re-measurement against
 
 | Was | Now |
 |---|---|
-| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. **Bot PRs #62-#78 are all closed.** Open Dependabot PRs #103–#108 / #125 / #126 failed `build*` while `main` was red from inverted NS-17 pins; rebase them after this hotfix is on `main`. `NODE24_ACTION_MAJORS` floors remain checkout 5, setup-python 6, setup-node 5, setup-go 6, pnpm/action-setup 5; a major above the floor is allowed, SHA pin + `# vX.Y.Z` must remain. |
+| **NS-4** Dependabot contradicted DEC-031 | The `pip` ecosystem is gone from `.github/dependabot.yml`; DEC-033 records why, and that re-enabling it means superseding DEC-031 rather than editing the config. **Bot PRs #62-#78 are all closed.** Open Dependabot PRs #103–#108 / #125 / #126 can rebase now that PR #131 is on `main`. `NODE24_ACTION_MAJORS` floors remain checkout 5, setup-python 6, setup-node 5, setup-go 6, pnpm/action-setup 5; a major above the floor is allowed, SHA pin + `# vX.Y.Z` must remain. |
 
 **Closed earlier (pointers only - details in prior revisions / CHANGELOG):**
 NS-5, NS-7, NS-8, NS-10, NS-12, NS-13, NS-14, NS-15, NS-16, NS-20,

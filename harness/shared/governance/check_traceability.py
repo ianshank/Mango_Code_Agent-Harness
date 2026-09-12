@@ -60,8 +60,6 @@ import sys
 from pathlib import Path
 from typing import Any, NamedTuple
 
-REQ = re.compile(r"\b([CR]-[A-Za-z0-9_-]+)\b")
-
 TRACEABILITY_CONFIG = Path(".governance/traceability.json")
 
 #: The ``scope`` value that opts a config into the floor and the ratchet. Legacy
@@ -111,6 +109,12 @@ def _fallback_logger() -> logging.Logger:
 
 
 logger = _gate_logger()
+
+# C-PLR-2: one matcher. validate_specs already imports REQ_PATTERN; this gate
+# used a second compile of the same body. Load after _gate_logger so a
+# `cd harness/node && python ../shared/governance/check_traceability.py`
+# invocation has the repo root on sys.path.
+from harness.shared.plan_rules import REQ_PATTERN as REQ  # noqa: E402
 
 
 class TraceabilityResult(NamedTuple):
