@@ -226,6 +226,27 @@ class TestExecuteAgentBudgetWiring:
 
 
 class TestContextPolicyEdgeCases:
+    def test_estimate_tokens_rejects_non_positive_chars_per_token(self) -> None:
+        messages = [{"role": "user", "content": "x"}]
+        with pytest.raises(ValueError, match="must be positive"):
+            estimate_tokens(messages, 0)
+        with pytest.raises(ValueError, match="must be positive"):
+            estimate_tokens(messages, -1.0)
+
+    def test_apply_context_policy_rejects_negative_budget(self) -> None:
+        with pytest.raises(ValueError, match="must be non-negative"):
+            apply_context_policy(
+                [{"role": "user", "content": "x"}],
+                budget_tokens=-1,
+                chars_per_token=CHARS_PER_TOKEN,
+            )
+
+    def test_measure_tokens_ignores_bool_prompt_tokens(self) -> None:
+        messages = [{"role": "user", "content": "hi"}]
+        estimated = estimate_tokens(messages, CHARS_PER_TOKEN)
+        assert measure_tokens(messages, usage={"prompt_tokens": True}, chars_per_token=CHARS_PER_TOKEN) == estimated
+        assert measure_tokens(messages, usage={"prompt_tokens": False}, chars_per_token=CHARS_PER_TOKEN) == estimated
+
     def test_empty_history_is_noop(self) -> None:
         history: list[dict[str, Any]] = []
         kept, stats = apply_context_policy(history, budget_tokens=0, chars_per_token=CHARS_PER_TOKEN)

@@ -7,11 +7,13 @@ R-TDH-22); the workflow parser it exercises lives in `_ci_gate_helpers.py`.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
 from harness.shared.tests._ci_gate_helpers import (
     NEXT_STEPS,
+    REPO,
     ROOT_WORKFLOW_DIR,
     _job_check_names,
     _reported_check_names,
@@ -152,3 +154,52 @@ class TestRequiredStatusChecksListIsAccurate:
         single_quoted = "  secrets:\n    name: 'secret-scan'  # the security gate\n    steps:\n"
         for body in (unquoted, double_quoted, single_quoted):
             assert _job_check_names("secrets", body) == ["secret-scan"]
+
+
+def _uncommented_text(line: str) -> str:
+    """Strip a full-line or trailing `#` comment. These pin files are YAML/TOML/txt."""
+    stripped = line.lstrip()
+    if stripped.startswith("#"):
+        return ""
+    return line.split("#", 1)[0]
+
+
+def _iter_pin_lines() -> list[tuple[Path, int, str]]:
+    roots = (
+        REPO / ".github" / "workflows",
+        REPO / "pyproject.toml",
+        REPO / "requirements-dev.txt",
+        REPO / "harness" / "shared" / "governance-policy.json",
+    )
+    rows: list[tuple[Path, int, str]] = []
+    files: list[Path] = []
+    for root in roots:
+        if root.is_file():
+            files.append(root)
+        else:
+            files.extend(sorted(p for p in root.rglob("*") if p.is_file()))
+    for path in files:
+        for index, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            rows.append((path, index, line))
+    return rows
+
+
+class TestPythonFloorPinFiles:
+    """Remediation AC-23: historical `# 3.9` comments must not fail the floor pin."""
+
+    def test_non_comment_pin_files_do_not_name_python_39(self) -> None:
+        hits = [
+            f"{path.relative_to(REPO)}:{index}:{line}"
+            for path, index, line in _iter_pin_lines()
+            if re.search(r"3\.9", _uncommented_text(line))
+        ]
+        assert not hits, "uncommented 3.9 remains in Python-floor pin files:\n" + "\n".join(hits)
+
+    def test_non_comment_pyproject_does_not_set_target_version(self) -> None:
+        path = REPO / "pyproject.toml"
+        hits = [
+            f"{path.name}:{index}:{line}"
+            for index, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            if "target-version" in _uncommented_text(line)
+        ]
+        assert not hits, "uncommented target-version remains in pyproject.toml:\n" + "\n".join(hits)

@@ -75,7 +75,7 @@ while AC-2…AC-6 are `[x]`. NS-1/2/3/30 and Phase E remain owner-gated.
 | NS-2 / R-SR-2 | credential DEC-014; `feature/governed-run-console` | **Owner / parked.** Hard-gates Phase E (C-RH2-3). |
 | NS-3 / R-SR-4 | no `v*` tags locally | **Owner / parked.** |
 | NS-30 / R-SR-3 | `ls LICENSE` fails | **Owner / parked.** Apache-2.0 recommended, not chosen here. |
-| NS-6 / R-SR-23 | `requires-python >= 3.10`, DEC-064, matrix 3.10/3.12/3.14 | **Landed.** Remediation AC-23 stays `[ ]` until its written grep is empty or rewritten; comments still mention historical 3.9. |
+| NS-6 / R-SR-23 | `requires-python >= 3.10`, DEC-064, matrix 3.10/3.12/3.14 | **Landed.** Remediation AC-23 rewritten 2026-09-12 (comment-stripped pin, R-RH3-3). |
 | NS-18 / R-RBT-* | PR #124 | **Landed.** Do not re-specify. |
 | NS-21 | scripts deleted by #115; §6 still says landed | **Restore this increment** (R-RH2-2). |
 | NS-35 | mutmut | **Parked** (needs NS-6 packaging half; out of scope). |
