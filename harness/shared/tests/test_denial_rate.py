@@ -121,9 +121,10 @@ class TestFailsClosed:
         with pytest.raises(SystemExit):
             denial_rate._load_json_object(path, "probe")
 
-    def test_a_corpus_without_a_commands_list_exits(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("payload", [{"entries": []}, {"commands": {}}])
+    def test_a_corpus_without_a_commands_list_exits(self, tmp_path: Path, payload: dict[str, object]) -> None:
         path = tmp_path / "command-corpus.json"
-        path.write_text(json.dumps({"entries": []}), encoding="utf-8")
+        path.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(SystemExit):
             denial_rate.load_corpus(path)
 

@@ -100,6 +100,7 @@ PR #131's adversarial sweep recorded three leftovers without scheduling them:
 - `harness/shared/tests/test_denial_rate.py`
 - `harness/shared/tests/test_context_policy.py`
 - `harness/shared/tests/test_ci_gate_required_checks.py`
+- `docs/specs/reflection-hardening-20260910.md`
 - `docs/specs/reflection-hardening-20260911.md`
 - `docs/specs/2026-standards-remediation-plan.md`
 - `CHANGELOG.md`
