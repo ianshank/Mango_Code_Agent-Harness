@@ -4,7 +4,7 @@
 2026 standards audit (M26 and the Low list) found a further set of sentences
 that were simply false and had no gate: `harness/CONTRACT.md` said the CI
 examples carry `PIN_FULL_COMMIT_SHA` when only the control-plane example does;
-`harness/node/Agent.md` claimed React/Vite/WebSocket scope over a stack whose
+`harness/node/Agent.md` (now `AGENTS.md`, DEC-070) claimed React/Vite/WebSocket scope over a stack whose
 manifest declares none of them; `CONTRIBUTING.md` said `make pre-pr` must pass
 before a push and, five lines later, that two of its gates may be uninstallable;
 `harness/README.md` indexed two of the reports under `docs/reports/`; and a
@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.agents_doc import scope_names
 from harness.shared.tests._ci_gate_helpers import _make_targets
 from harness.shared.tests._helpers import REPO
 from harness.shared.tests._workflow_paths import WORKFLOW
@@ -39,7 +40,7 @@ MAKEFILE = REPO / "Makefile"
 DOCS = REPO / "docs"
 REPORTS = DOCS / "reports"
 NODE_STACK = REPO / "harness" / "node"
-NODE_PERSONA = NODE_STACK / "Agent.md"
+NODE_PERSONA = NODE_STACK / "AGENTS.md"
 
 PLACEHOLDER = "PIN_FULL_COMMIT_SHA"
 
@@ -127,16 +128,18 @@ class TestPlaceholderLivesWhereContractSaysItDoes:
 # Every backticked name on that line is either a path, checked to exist under
 # the stack directory, or a technology, checked against the stack's
 # `package.json` dependency names and the module specifiers its `src/` imports.
-# The helper is generic over a stack directory; only `harness/node/Agent.md` is
-# held to it today, because it is the one that was wrong.
+# The helper is generic over a stack directory; only `harness/node/AGENTS.md` is
+# held to it today, because it is the one that was wrong. Every other directory's
+# document is held to the path-only rule in `harness/shared/agents_doc.py`, which
+# has no manifest to resolve a technology name against (DEC-070).
 
-SCOPE_LINE = re.compile(r"^\*\*Scope:\*\*(.*)$", re.M)
 IMPORT_SPECIFIER = re.compile(r"""from\s+['"]([^'"]+)['"]""")
 
-
-def scope_names(persona_text: str) -> list[str]:
-    match = SCOPE_LINE.search(persona_text)
-    return re.findall(r"`([^`]+)`", match.group(1)) if match else []
+#: `scope_names` and the `**Scope:**` pattern it reads are owned by
+#: `harness.shared.agents_doc`, which applies the same convention to every other
+#: directory. A second copy here would be a shim-versus-copy drift of exactly the
+#: kind `check_dedup` exists to refuse, one regex away from the two rules
+#: disagreeing about what a scope line is.
 
 
 def stack_technologies(stack: Path) -> set[str]:
@@ -177,7 +180,7 @@ def unsupported_scope_names(persona: Path, stack: Path) -> list[str]:
 
 
 class TestPersonaScopeIsBackedByTheStack:
-    """`harness/node/Agent.md` told the Node Bridge it owned "React/Vite
+    """`harness/node/AGENTS.md` told the Node Bridge it owned "React/Vite
     frontends, and any external WebSockets/Node.js bridges". The manifest has
     never declared react, vite or a WebSocket library, and `src/` is a Nemotron
     client plus a governance anchor. An agent adopting that persona would look
@@ -186,7 +189,7 @@ class TestPersonaScopeIsBackedByTheStack:
     def test_the_scope_line_is_found_and_substantive(self) -> None:
         """Guards the parse: with no scope line every claim below passes vacuously."""
         names = scope_names(NODE_PERSONA.read_text(encoding="utf-8"))
-        assert len(names) >= 3, f"harness/node/Agent.md has no parseable **Scope:** line ({names})"
+        assert len(names) >= 3, f"harness/node/AGENTS.md has no parseable **Scope:** line ({names})"
 
     def test_the_stack_declares_technologies(self) -> None:
         assert {"typescript", "vitest"} <= stack_technologies(NODE_STACK)
@@ -194,7 +197,7 @@ class TestPersonaScopeIsBackedByTheStack:
     def test_every_scope_claim_is_supported(self) -> None:
         unsupported = unsupported_scope_names(NODE_PERSONA, NODE_STACK)
         assert not unsupported, (
-            f"harness/node/Agent.md claims scope over {unsupported}, which harness/node neither "
+            f"harness/node/AGENTS.md claims scope over {unsupported}, which harness/node neither "
             "declares in package.json nor imports under src/ (or, for a path, does not contain). "
             "A persona's scope is a promise about the code; keep it to what is there."
         )
@@ -204,7 +207,7 @@ class TestPersonaScopeIsBackedByTheStack:
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "index.ts").write_text("import { readFileSync } from 'node:fs';\n", encoding="utf-8")
         (tmp_path / "package.json").write_text(json.dumps({"devDependencies": {"vitest": "1.0.0"}}), encoding="utf-8")
-        persona = tmp_path / "Agent.md"
+        persona = tmp_path / "AGENTS.md"
         persona.write_text("# P\n\n**Scope:** `vitest`, `node`, `react`, `src/`, `src/web/`.\n", encoding="utf-8")
         assert unsupported_scope_names(persona, tmp_path) == ["react", "src/web/"]
 

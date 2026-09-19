@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from harness.shared.agents_doc import iter_documents
+from harness.shared.agents_doc_policy import load_config
 from harness.shared.tests._helpers import REPO
 
 if sys.version_info >= (3, 11):
@@ -485,11 +487,22 @@ def mermaid_blocks(text: str) -> list[str]:
 
 
 def documents_with_diagrams() -> list[Path]:
-    """Markdown files under `DIAGRAM_ROOTS` that contain at least one mermaid block."""
+    """Markdown with a mermaid block: `DIAGRAM_ROOTS`, plus every `AGENTS.md`.
+
+    The per-directory documents are collected through `agents_doc.iter_documents`
+    rather than by adding their trees to `DIAGRAM_ROOTS`. Adding `"harness"`
+    would reach `harness/node/node_modules`, so the scan would grow to thousands
+    of vendored files and start failing on third-party prose this repository
+    does not own. Deriving the list from the same policy that decides which
+    directories owe a document keeps the two in step by construction: a
+    directory added there is scanned here on the next run, with no second list
+    to remember.
+    """
     candidates: list[Path] = []
     for entry in DIAGRAM_ROOTS:
         target = REPO / entry
         candidates.extend(sorted(target.rglob("*.md")) if target.is_dir() else [target])
+    candidates.extend(path for _relative, path in iter_documents(REPO, load_config()))
     return [path for path in candidates if path.is_file() and "```mermaid" in path.read_text(encoding="utf-8")]
 
 
@@ -511,6 +524,19 @@ class TestEveryMermaidDiagramCanRender:
         found = documents_with_diagrams()
         assert found, "no markdown with a mermaid block was found; the discovery is broken"
         assert any(path.name == "c4_architecture.md" for path in found)
+
+    def test_the_scan_reaches_the_per_directory_documents(self) -> None:
+        """`DIAGRAM_ROOTS` alone reached three files, all under `docs/`. Every
+        `AGENTS.md` diagram was outside the rule -- a bare bracket in one
+        rendered as an error box on GitHub with CI green, which is precisely the
+        defect this class was written for. Deriving them from `agents_doc` keeps
+        the two lists in step; this asserts the derivation still fires."""
+        found = documents_with_diagrams()
+        named = [path for path in found if path.name == "AGENTS.md"]
+        assert len(named) >= 10, (
+            f"only {len(named)} AGENTS.md files reached the diagram scan; "
+            "the derivation from agents_doc.iter_documents has stopped working"
+        )
 
     def test_no_node_label_ends_early_on_a_nested_bracket(self) -> None:
         offenders: list[str] = []

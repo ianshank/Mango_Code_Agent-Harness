@@ -73,6 +73,27 @@ TRIAGE: tuple[Row, ...] = (
     Row("harness.shared.validate_invariants", "SIZE_BUDGET_LINES", policy_key="limits.size_budget_lines"),
     Row("harness.shared.validate_invariants", "TEST_SIZE_BUDGET_LINES", policy_key="limits.test_size_budget_lines"),
     Row("harness.shared.check_dedup", "DEFAULT_MAX_SHIM_LINES", policy_key="dedup.max_shim_lines"),
+    # The per-directory documentation gate (DEC-070). Each of these is the
+    # adopter fallback for one `agents_doc` key: a repository that has the
+    # module but not the block still gets a working gate, and a policy that
+    # *declares* the block owes every one of them, so the literal here can
+    # never be the number a run enforces.
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MAX_LINES", policy_key="agents_doc.max_lines"),
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MIN_SCOPE_NAMES", policy_key="agents_doc.min_scope_names"),
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MAX_KEY_FILES", policy_key="agents_doc.max_key_files"),
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MAX_DIAGRAMS", policy_key="agents_doc.max_diagrams"),
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MAX_DIAGRAM_NODES", policy_key="agents_doc.max_diagram_nodes"),
+    Row("harness.shared.agents_doc_policy", "DEFAULT_MIN_SOURCE_FILES", policy_key="agents_doc.min_source_files"),
+    Row(
+        "harness.shared.agents_doc_policy",
+        "DEFAULT_MIN_DOCUMENTED_DIRECTORIES",
+        policy_key="agents_doc.min_documented_directories",
+    ),
+    Row(
+        "harness.shared.agents_doc_policy",
+        "DEFAULT_MIN_WAIVER_REASON_CHARS",
+        policy_key="agents_doc.min_waiver_reason_chars",
+    ),
     # The adopter fallback for the destination-check timeout duplicated
     # `orchestrator.tool_timeout_sec` with nothing holding the two equal: they
     # agree today at 30 by coincidence, and the only test asserted `> 0`. This
