@@ -32,15 +32,15 @@ flowchart TD
 
 ## Key files
 
-| File | Role |
-| --- | --- |
-| `package.json` | The manifest the scope line is checked against: `packageManager` pin, the Node engine floor, and the dev toolchain. |
-| `Makefile` | The 19-target stack-neutral vocabulary (`lint`, `types`, `cov`, `governance`, …) shared with `harness/jvm`. **Protected.** |
-| `vitest.config.ts` | Reads the `coverage` block from the shared policy and fails closed rather than defaulting. |
-| `eslint.config.js` | Reads `limits.size_budget_lines` from the same policy; a literal here would be exactly the drift the rule forbids. |
-| `knip.json` | Dead-code and unused-dependency scan over `src/` and `tests/`. |
-| `scripts/run_vitest.sh` | Always writes the results JSON, then runs the zero-skip verifier. Shell, so it is byte-identical to the shared copy. |
-| `.governance/` | The per-stack root of trust: policy, agent policy, allowed remotes, traceability, skip waivers. **Protected.** |
+| File                    | Role                                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`          | The manifest the scope line is checked against: `packageManager` pin, the Node engine floor, and the dev toolchain.        |
+| `Makefile`              | The 19-target stack-neutral vocabulary (`lint`, `types`, `cov`, `governance`, …) shared with `harness/jvm`. **Protected.** |
+| `vitest.config.ts`      | Reads the `coverage` block from the shared policy and fails closed rather than defaulting.                                 |
+| `eslint.config.js`      | Reads `limits.size_budget_lines` from the same policy; a literal here would be exactly the drift the rule forbids.         |
+| `knip.json`             | Dead-code and unused-dependency scan over `src/` and `tests/`.                                                             |
+| `scripts/run_vitest.sh` | Always writes the results JSON, then runs the zero-skip verifier. Shell, so it is byte-identical to the shared copy.       |
+| `.governance/`          | The per-stack root of trust: policy, agent policy, allowed remotes, traceability, skip waivers. **Protected.**             |
 
 ## Invariants
 
@@ -59,22 +59,22 @@ flowchart TD
 
 ## Commands
 
-| Task | Command |
-| --- | --- |
-| Install pinned dependencies | `make node-deps` (root) |
-| Lint tier | `make lint-node` (root) |
-| Vitest with coverage | `make test-node` (root) |
-| Zero-skip verification | `make verify-zero-skips` (root) |
-| Whole-project types | `make types` (in `harness/node`) |
+| Task                        | Command                           |
+| --------------------------- | --------------------------------- |
+| Install pinned dependencies | `make node-deps` (root)           |
+| Lint tier                   | `make lint-node` (root)           |
+| Vitest with coverage        | `make test-node` (root)           |
+| Zero-skip verification      | `make verify-zero-skips` (root)   |
+| Whole-project types         | `make types` (in `harness/node`)  |
 | Stack-local gate vocabulary | `make pre-pr` (in `harness/node`) |
 
 ## Agents and skills
 
-| Stage | Agent | Skills |
-| --- | --- | --- |
-| plan | `.mango/agents/planner.md` | `spec-authoring`, `openspec-peer-review` |
-| build | `.mango/agents/nemotron-reasoner.md` | `harness-engineering`, `nemotron-reasoner`, `god-file-decomposer` |
-| verify | `.mango/agents/verifier.md` | `validation-runner`, `coverage-gate`, `repo-invariant-review` |
+| Stage  | Agent                                | Skills                                                            |
+| ------ | ------------------------------------ | ----------------------------------------------------------------- |
+| plan   | `.mango/agents/planner.md`           | `spec-authoring`, `openspec-peer-review`                          |
+| build  | `.mango/agents/nemotron-reasoner.md` | `harness-engineering`, `nemotron-reasoner`, `god-file-decomposer` |
+| verify | `.mango/agents/verifier.md`          | `validation-runner`, `coverage-gate`, `repo-invariant-review`     |
 
 ## Gotchas
 

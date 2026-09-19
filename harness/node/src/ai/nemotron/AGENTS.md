@@ -29,16 +29,16 @@ flowchart TD
 
 ## Key files
 
-| File | Role |
-| --- | --- |
-| `nemotron-client.ts` | The client: request construction, SSE stream parsing, token telemetry, and the seam the other modules plug into. |
-| `policy.ts` | Timeout, retry budget and sampling defaults read from the shared policy. A missing or non-numeric key throws at module load. |
-| `request-body.ts` | Builds the chat-completions body once, so `complete()` and `stream()` cannot disagree about sampling. |
-| `retry.ts` | The retry decision on its own: transient fault, 429 or 5xx, up to `maxRetries`, backoff with jitter. |
-| `circuit-breaker.ts` | Failure threshold, reset cooldown and half-open success count; `CLOSED`, `OPEN`, `HALF_OPEN`. |
-| `secret-masker.ts` | INV-1 / C-AI-SEC-1 redactor. Ten characters of prefix, four of suffix, `<UNSET>` when absent. |
-| `types.ts` | The wire contracts: config, chat options, responses and stream chunks. |
-| `cli.ts` | `runNemotronCli`: argument parsing and the operator-facing output path. |
+| File                 | Role                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `nemotron-client.ts` | The client: request construction, SSE stream parsing, token telemetry, and the seam the other modules plug into.             |
+| `policy.ts`          | Timeout, retry budget and sampling defaults read from the shared policy. A missing or non-numeric key throws at module load. |
+| `request-body.ts`    | Builds the chat-completions body once, so `complete()` and `stream()` cannot disagree about sampling.                        |
+| `retry.ts`           | The retry decision on its own: transient fault, 429 or 5xx, up to `maxRetries`, backoff with jitter.                         |
+| `circuit-breaker.ts` | Failure threshold, reset cooldown and half-open success count; `CLOSED`, `OPEN`, `HALF_OPEN`.                                |
+| `secret-masker.ts`   | INV-1 / C-AI-SEC-1 redactor. Ten characters of prefix, four of suffix, `<UNSET>` when absent.                                |
+| `types.ts`           | The wire contracts: config, chat options, responses and stream chunks.                                                       |
+| `cli.ts`             | `runNemotronCli`: argument parsing and the operator-facing output path.                                                      |
 
 ## Invariants
 
@@ -61,22 +61,22 @@ flowchart TD
 
 ## Commands
 
-| Task | Command |
-| --- | --- |
-| Vitest with coverage | `make test-node` (root) |
-| Lint tier | `make lint-node` (root) |
-| Whole-project types | `make types` (in `harness/node`) |
-| Coverage plus zero skips | `make cov` (in `harness/node`) |
+| Task                        | Command                           |
+| --------------------------- | --------------------------------- |
+| Vitest with coverage        | `make test-node` (root)           |
+| Lint tier                   | `make lint-node` (root)           |
+| Whole-project types         | `make types` (in `harness/node`)  |
+| Coverage plus zero skips    | `make cov` (in `harness/node`)    |
 | Stack-local gate vocabulary | `make pre-pr` (in `harness/node`) |
-| Full deterministic gate | `make ci` |
+| Full deterministic gate     | `make ci`                         |
 
 ## Agents and skills
 
-| Stage | Agent | Skills |
-| --- | --- | --- |
-| plan | `.mango/agents/planner.md` | `spec-authoring`, `openspec-peer-review` |
-| build | `.mango/agents/nemotron-reasoner.md` | `nemotron-reasoner`, `harness-engineering`, `god-file-decomposer` |
-| verify | `.mango/agents/verifier.md` | `validation-runner`, `coverage-gate`, `shadow-channel-analysis` |
+| Stage  | Agent                                | Skills                                                            |
+| ------ | ------------------------------------ | ----------------------------------------------------------------- |
+| plan   | `.mango/agents/planner.md`           | `spec-authoring`, `openspec-peer-review`                          |
+| build  | `.mango/agents/nemotron-reasoner.md` | `nemotron-reasoner`, `harness-engineering`, `god-file-decomposer` |
+| verify | `.mango/agents/verifier.md`          | `validation-runner`, `coverage-gate`, `shadow-channel-analysis`   |
 
 ## Gotchas
 
