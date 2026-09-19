@@ -159,8 +159,22 @@ jobs:
           PY
           if [ -s staleness.md ]; then echo "stale=1" >> "$GITHUB_OUTPUT"; fi
 
+      # Same split, same reason, second population: `document_findings` blocks on a
+      # missing or unparseable `**Reviewed:**` line, because a document recording
+      # nothing about when it was checked is broken the moment it is written. Age
+      # is reported here instead, so twenty-five documents cannot turn an unrelated
+      # PR red at a date boundary (DEC-070, C-ADOC-4). The horizon is the same
+      # `skill_max_age_days` the skills use, read from the policy rather than
+      # written down twice.
+      - name: Report AGENTS.md documents past skill_max_age_days
+        id: doc-staleness
+        run: |
+          max_age=$(python -c "import json,pathlib;print(json.loads(pathlib.Path('harness/shared/governance-policy.json').read_text())['skill_max_age_days'])")
+          python -m harness.shared.agents_doc --repo-root . --stale-since-days "$max_age" >> staleness.md
+          if [ -s staleness.md ]; then echo "stale=1" >> "$GITHUB_OUTPUT"; fi
+
       - name: Open or update the staleness issue
-        if: steps.staleness.outputs.stale == '1'
+        if: steps.staleness.outputs.stale == '1' || steps.doc-staleness.outputs.stale == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

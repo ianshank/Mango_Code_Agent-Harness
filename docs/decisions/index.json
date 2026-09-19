@@ -844,6 +844,18 @@
       "owners": [
         "governance-maintainers"
       ]
+    },
+    {
+      "id": "DEC-070",
+      "status": "accepted",
+      "date": "2026-09-19",
+      "title": "Per-directory instruction files are AGENTS.md plus a one-line CLAUDE.md import, and their claims are gated",
+      "path": "docs/decisions/DEC-070.md",
+      "supersedes": [],
+      "superseded_by": null,
+      "owners": [
+        "governance-maintainers"
+      ]
     }
   ]
 }
