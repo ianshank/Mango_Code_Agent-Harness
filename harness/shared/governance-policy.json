@@ -146,6 +146,7 @@
     ".mango/skills/**",
     ".claude/settings.json",
     ".claude/hooks/**",
+    ".claude/agents/**",
     "CLAUDE.md",
     "docs/PROJECT-CHARTER.md",
     "harness/*/docs/PROJECT-CHARTER.md",
