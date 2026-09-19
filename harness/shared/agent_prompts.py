@@ -39,7 +39,7 @@ REASONER_PROMPT_TEMPLATE = (
     "Execute the following plan using backward-compatible, modular code. "
     "Use the tools listed in your system prompt to implement and test it on the filesystem.\n"
     f"{AUTONOMOUS_AGENT_GUARDRAIL} "
-    "If working in a scratch workspace without a Makefile or Agent.md, directly create and test the target files. "
+    "If working in a scratch workspace without a Makefile or AGENTS.md, directly create and test the target files. "
     "Run each command individually as a single standalone command "
     "(do not chain with '&&', ';', '|', or redirect with '>'). "
     "Commands that install packages or reach the network are classified as external actions and will be denied; "

@@ -68,6 +68,26 @@ in `NEXT_STEPS.md` required on `main`. Invoke pinned tools through the
 interpreter (`python -m ruff`, `python -m mypy`) or the `make` targets, never a
 bare binary on `PATH` (DEC-013).
 
+## Per-directory instructions
+
+Directories that own a boundary carry an `AGENTS.md` — scope, invariants,
+commands, and the traps specific to that code — beside a one-line `CLAUDE.md`
+holding `@AGENTS.md`, which is what makes it load here. **Read the one for the
+directory you are about to edit before you edit it.**
+
+The required set is derived from the tree, not listed by hand: every directory
+with at least `agents_doc.min_source_files` first-party sources, minus waivers,
+plus the boundaries named in `agents_doc.additional_directories`. Every claim a
+document makes is checked against that directory in `make ci`
+(`harness/shared/agents_doc.py`), so a stale path fails rather than misleads.
+Adding a source directory means adding its document or a justified waiver.
+Rationale and the filename decision are in DEC-070.
+
+```bash
+python -m harness.shared.agents_doc --repo-root .                  # the gate
+python -m harness.shared.agents_doc --directory <dir>              # one draft
+```
+
 ## Non-negotiables
 
 - No hard-coded values; thresholds come from `governance-policy.json`.
