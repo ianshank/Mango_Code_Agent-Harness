@@ -172,7 +172,7 @@ Adapters MUST map from concrete class / mode, not from product name:
 |---|---|---|
 | `ProcessBackend` | Host `bash -c` subprocess | `unenforced` |
 | `SweRexBackend` | `LocalRuntime` / `LocalDeployment` (host) | `unenforced` |
-| `SweRexBackend` | Containerized / remote deployment where the runtime executes inside an isolating boundary the adapter can attest (e.g. Docker-backed `RemoteRuntime`) | `enforced` only after successful alive + deployment-class check; else `undetermined` |
+| `SweRexBackend` | Containerized / remote deployment where the runtime executes inside an isolating boundary the adapter can attest (e.g. Docker-backed `RemoteRuntime`) | **Never auto-`enforced` from Docker alone.** `enforced` only after successful alive + deployment-class attestation probe; else `undetermined` |
 | `SweRexBackend` | Unknown or custom deployment | `undetermined` |
 | `OpenSandboxBackend` | `POST /v1/isolated/session` with isolation capabilities available (`GET /v1/isolated/capabilities` reports usable isolation) | `enforced` when session create + capability probe succeed; else `undetermined` |
 | `OpenSandboxBackend` | Non-isolated session / command APIs | `unenforced` |
@@ -388,6 +388,22 @@ Critic should confirm:
 
 ---
 
+
+---
+
+## 11a. Critic DESIGN SHIP bindings (2026-09-21)
+
+Critic DESIGN SHIP on PR #142 sealed the soft gaps as **bindings** (not HOLD). Implementer and Spec Writer treat these as normative:
+
+| Binding | Rule |
+|---|---|
+| **backend_id policy** | Backend selection is a protected policy key (registry of allowlisted ids such as `process`, `swe-rex`, `opensandbox`). Unknown or disallowed `backend_id` denies fail-closed. Absence of selection keeps `ProcessBackend` default; never reinterpret absence as a sandbox. |
+| **Docker never always-enforced** | Presence of Docker / container tooling is not evidence. `filesystem_isolation=enforced` requires deployment-class mapping **and** a successful live attestation probe for that run. Otherwise report `undetermined` (or `unenforced` for known host classes). |
+| **Single sync/async bridge** | Exactly one bridge owns async SWE-ReX / OpenSandbox SDK calls inside the sync `ExecutionBroker` path (adapter-owned loop or the repo's existing async bridge helper). Do not invent a second concurrent bridge pattern in MG-E1. |
+| **R-AEI-10 cross-links** | When code lands, evidence / CONTRACT / INV docs cross-link R-AEI-10: assert `capabilities().filesystem_isolation == enforced`; never `backend.available()`. Architecture alone is not a substitute for DEC-grade evidence, but Implementer PRs must land the cross-links with behaviour. |
+
+These bindings supersede any softer "gap" wording earlier in this file.
+
 ## 12. Document control
 
 | Field | Value |
@@ -395,4 +411,4 @@ Critic should confirm:
 | Path | `docs/architecture/mg-e1-swe-rex-opensandbox.md` |
 | Package | soft-P1 / MG-E1 |
 | Supersedes | None (new). Relates to DEC-010, AC-CE-1 parked item. |
-| Next | Critic design gate -> Implementer PRs for protocol + adapters. |
+| Next | Critic DESIGN SHIP (bindings in §11a). Spec Writer OpenSpec + Implementer PRs for protocol + adapters. |
