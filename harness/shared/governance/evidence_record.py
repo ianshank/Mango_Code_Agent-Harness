@@ -23,6 +23,8 @@ from harness.shared.governance.execution_backend import (
     ISOLATION_ENFORCED,
     ISOLATION_UNENFORCED,
     LANDLOCK_BACKEND_NAME,
+    OPEN_SANDBOX_BACKEND_NAME,
+    SWE_REX_BACKEND_NAME,
 )
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_defaults import evidence_defaults
@@ -92,7 +94,10 @@ def _sandbox_fields(backend: Any, outcome: str) -> dict[str, Any]:
         caps = caps_fn()
         filesystem = str(getattr(caps, "filesystem_isolation", ISOLATION_UNENFORCED))
         network = str(getattr(caps, "network_isolation", ISOLATION_UNENFORCED))
-    attested = name == LANDLOCK_BACKEND_NAME and filesystem == ISOLATION_ENFORCED and network == ISOLATION_ENFORCED
+    attested = filesystem == ISOLATION_ENFORCED and (
+        (name == LANDLOCK_BACKEND_NAME and network == ISOLATION_ENFORCED)
+        or name in {SWE_REX_BACKEND_NAME, OPEN_SANDBOX_BACKEND_NAME}
+    )
     if not attested:
         return {"sandbox_attested": False}
     payload = json.dumps(

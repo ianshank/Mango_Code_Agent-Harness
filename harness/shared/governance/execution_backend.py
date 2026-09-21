@@ -21,6 +21,9 @@ ISOLATION_UNDETERMINED: IsolationState = "undetermined"
 #: INV-13 isolation backend name (DEC-069). ``LandlockBackend.name`` and the
 #: fifth-digest gate in ``evidence_record`` must share this token.
 LANDLOCK_BACKEND_NAME = "landlock"
+SWE_REX_BACKEND_NAME = "swe-rex"
+OPEN_SANDBOX_BACKEND_NAME = "opensandbox"
+
 
 _EXECUTE_PARAM = "request"
 
@@ -126,5 +129,7 @@ __all__ = [
     "ISOLATION_UNENFORCED",
     "IsolationState",
     "LANDLOCK_BACKEND_NAME",
+    "SWE_REX_BACKEND_NAME",
+    "OPEN_SANDBOX_BACKEND_NAME",
     "conforms_to_backend",
 ]
