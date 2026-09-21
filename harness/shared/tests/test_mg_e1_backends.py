@@ -1,4 +1,8 @@
-"""MG-E1 SWE-ReX + OpenSandbox adapters and fail-closed registry."""
+"""MG-E1 SWE-ReX + OpenSandbox adapters and fail-closed registry.
+
+R-AEI-10 cross-links: harness/CONTRACT.md INV-13; DEC-010; DEC-069;
+docs/specs/attested-execution-isolation.md R-AEI-10; OpenSpec tasks §12.
+"""
 
 from __future__ import annotations
 
@@ -217,3 +221,38 @@ def test_rae10_evidence_attests_enforced_opensandbox() -> None:
             )
 
     assert _sandbox_fields(Honest(), BROKER_SUCCESS).get("sandbox_attested") is True
+
+
+def test_evidence_entry_additive_schema_and_rae10_crosslinks() -> None:
+    """OpenSpec tasks §12: R-AEI-10 + additive evidence fields (Data Steward)."""
+    from harness.shared.governance.evidence_record import build_execution_entry
+
+    class EnforcedSweRex:
+        name = SWE_REX_BACKEND_NAME
+        version = "1.0.0"
+
+        def capabilities(self) -> BackendCapabilities:
+            return BackendCapabilities(
+                filesystem_isolation=ISOLATION_ENFORCED,
+                network_isolation=ISOLATION_UNDETERMINED,
+                process_isolation=ISOLATION_UNDETERMINED,
+                version=self.version,
+            )
+
+    entry = build_execution_entry(
+        command="echo ok",
+        outcome=BROKER_SUCCESS,
+        action="shell",
+        exit_code=0,
+        baseline={"a": "b"},
+        backend=EnforcedSweRex(),
+        node_ids=(),
+    )
+    # Legacy digests remain present (no breaking mutation).
+    for key in ("policy_digest", "source_digest", "backend_name", "backend_version", "test_digest"):
+        assert key in entry
+    # Additive MG-E1 fields.
+    assert entry["evidence_schema_version"] == 1
+    assert entry["filesystem_isolation"] == ISOLATION_ENFORCED
+    assert entry["sandbox_attested"] is True
+    # R-AEI-10: available()-only lie still not attested (covered above); enforced path ok.
