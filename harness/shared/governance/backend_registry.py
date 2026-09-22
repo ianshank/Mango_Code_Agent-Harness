@@ -54,7 +54,10 @@ def execution_backend_id(policy_path: Path | None = None) -> str:
         return resolved
     raw = section._value("backend_id", DEFAULT_BACKEND_ID)
     if not isinstance(raw, str) or not raw.strip():
-        raise PolicyError("policy execution_backend.backend_id must be a non-empty string")
+        raise PolicyError(
+            "policy execution_backend.backend_id must "
+            "be a non-empty string"
+        )
     resolved = raw.strip()
     _log_resolution("execution_backend", {"backend_id": resolved}, policy_path)
     return resolved
