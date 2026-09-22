@@ -106,10 +106,7 @@ class OpenSandboxBackend:
                     "",
                     "",
                     1,
-                    reason=(
-                        "BROKER_BLOCKED: opensandbox filesystem_isolation="
-                        f"{grade} (enforced required)"
-                    ),
+                    reason=(f"BROKER_BLOCKED: opensandbox filesystem_isolation={grade} (enforced required)"),
                     action=request.action,
                 )
             if not self._base_url and self._http is _default_http and self._capabilities_payload is None:
@@ -122,11 +119,7 @@ class OpenSandboxBackend:
                     action=request.action,
                 )
             timeout = float(request.timeout if request.timeout > 0 else DEFAULT_TIMEOUT_SEC)
-            max_out = (
-                request.max_output_bytes
-                if request.max_output_bytes > 0
-                else DEFAULT_MAX_OUTPUT_BYTES
-            )
+            max_out = request.max_output_bytes if request.max_output_bytes > 0 else DEFAULT_MAX_OUTPUT_BYTES
             if self._use_isolated and grade == ISOLATION_ENFORCED:
                 session_id = self._create_isolated_session(timeout)
                 status_code, payload = self._run_isolated(session_id, request.command, timeout)

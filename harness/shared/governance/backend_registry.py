@@ -21,9 +21,7 @@ from harness.shared.governance.process_backend import ProcessBackend
 from harness.shared.policy_io import PolicyError, _log_resolution, _section
 
 DEFAULT_BACKEND_ID = "process"
-KNOWN_BACKEND_IDS = frozenset(
-    {"process", SWE_REX_BACKEND_NAME, OPEN_SANDBOX_BACKEND_NAME, "landlock"}
-)
+KNOWN_BACKEND_IDS = frozenset({"process", SWE_REX_BACKEND_NAME, OPEN_SANDBOX_BACKEND_NAME, "landlock"})
 
 BackendFactory = Callable[[], ExecutionBackend]
 
@@ -54,10 +52,7 @@ def execution_backend_id(policy_path: Path | None = None) -> str:
         return resolved
     raw = section._value("backend_id", DEFAULT_BACKEND_ID)
     if not isinstance(raw, str) or not raw.strip():
-        raise PolicyError(
-            "policy execution_backend.backend_id must "
-            "be a non-empty string"
-        )
+        raise PolicyError("policy execution_backend.backend_id must be a non-empty string")
     resolved = raw.strip()
     _log_resolution("execution_backend", {"backend_id": resolved}, policy_path)
     return resolved
@@ -73,8 +68,7 @@ def required_filesystem_isolation(policy_path: Path | None = None) -> IsolationS
         return None
     if raw not in {"enforced", "unenforced", "undetermined"}:
         raise PolicyError(
-            "policy execution_backend.require_filesystem_isolation must be "
-            "enforced|unenforced|undetermined"
+            "policy execution_backend.require_filesystem_isolation must be enforced|unenforced|undetermined"
         )
     return raw  # type: ignore[return-value]
 
@@ -89,9 +83,7 @@ def resolve_backend(
     selected = backend_id if backend_id is not None else execution_backend_id(policy_path)
     factory_map = dict(factories) if factories is not None else _default_factories()
     if selected not in factory_map:
-        raise BackendSelectionError(
-            f"unknown execution backend_id {selected!r}; known={sorted(factory_map)}"
-        )
+        raise BackendSelectionError(f"unknown execution backend_id {selected!r}; known={sorted(factory_map)}")
     return factory_map[selected]()
 
 

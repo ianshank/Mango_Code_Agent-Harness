@@ -49,9 +49,7 @@ def grade_swerex_deployment(
     label = (deployment_class or "").strip().lower().replace("_", "").replace("-", "")
     if not label:
         return ISOLATION_UNDETERMINED
-    if any(m in label for m in _HOST_DEPLOYMENT_MARKERS) and not any(
-        m in label for m in _ISOLATING_DEPLOYMENT_MARKERS
-    ):
+    if any(m in label for m in _HOST_DEPLOYMENT_MARKERS) and not any(m in label for m in _ISOLATING_DEPLOYMENT_MARKERS):
         return ISOLATION_UNENFORCED
     if any(m in label for m in _ISOLATING_DEPLOYMENT_MARKERS):
         if probe_ok is True:
@@ -123,8 +121,7 @@ class SweRexBackend:
                 "",
                 1,
                 reason=(
-                    "BROKER_BLOCKED: swe-rex filesystem_isolation="
-                    f"{caps.filesystem_isolation} (enforced required)"
+                    f"BROKER_BLOCKED: swe-rex filesystem_isolation={caps.filesystem_isolation} (enforced required)"
                 ),
                 action=request.action,
             )
@@ -149,18 +146,11 @@ class SweRexBackend:
                     "",
                     "",
                     1,
-                    reason=(
-                        "BROKER_BLOCKED: swe-rex filesystem_isolation="
-                        f"{caps.filesystem_isolation} after probe"
-                    ),
+                    reason=(f"BROKER_BLOCKED: swe-rex filesystem_isolation={caps.filesystem_isolation} after probe"),
                     action=request.action,
                 )
             timeout = request.timeout if request.timeout > 0 else DEFAULT_TIMEOUT_SEC
-            max_out = (
-                request.max_output_bytes
-                if request.max_output_bytes > 0
-                else DEFAULT_MAX_OUTPUT_BYTES
-            )
+            max_out = request.max_output_bytes if request.max_output_bytes > 0 else DEFAULT_MAX_OUTPUT_BYTES
             response = self._run_async(self._execute_async(runtime, request.command, timeout))
             stdout = _cap(str(getattr(response, "stdout", "") or ""), max_out)
             stderr = _cap(str(getattr(response, "stderr", "") or ""), max_out)
@@ -229,9 +219,7 @@ class SweRexBackend:
             asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(coro)
-        raise RuntimeError(
-            "SweRexBackend refuses nested event loops; call execute from sync code"
-        )
+        raise RuntimeError("SweRexBackend refuses nested event loops; call execute from sync code")
 
 
 _: ExecutionBackend = SweRexBackend(deployment_class="LocalRuntime", runtime_factory=lambda: None)

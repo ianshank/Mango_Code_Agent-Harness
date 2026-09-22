@@ -151,9 +151,7 @@ def build_execution_entry(
     filesystem_isolation = ISOLATION_UNENFORCED
     if callable(caps_fn):
         live = caps_fn()
-        filesystem_isolation = str(
-            getattr(live, "filesystem_isolation", ISOLATION_UNENFORCED)
-        )
+        filesystem_isolation = str(getattr(live, "filesystem_isolation", ISOLATION_UNENFORCED))
     entry: dict[str, Any] = {
         "command": command,
         "outcome": outcome,
