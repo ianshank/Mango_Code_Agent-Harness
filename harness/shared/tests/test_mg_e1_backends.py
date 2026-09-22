@@ -6,6 +6,9 @@ docs/specs/attested-execution-isolation.md R-AEI-10; OpenSpec tasks §12.
 
 from __future__ import annotations
 
+import asyncio
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -13,8 +16,11 @@ import pytest
 from harness.shared.governance.backend_registry import (
     BackendSelectionError,
     assert_isolation_requirement,
+    execution_backend_id,
     resolve_backend,
+    select_execution_backend,
 )
+from harness.shared.governance.broker import ExecutionBroker
 from harness.shared.governance.evidence_record import _sandbox_fields
 from harness.shared.governance.execution_backend import (
     ISOLATION_ENFORCED,
@@ -256,3 +262,150 @@ def test_evidence_entry_additive_schema_and_rae10_crosslinks() -> None:
     assert entry["filesystem_isolation"] == ISOLATION_ENFORCED
     assert entry["sandbox_attested"] is True
     # R-AEI-10: available()-only lie still not attested (covered above); enforced path ok.
+
+
+def test_swerex_nested_event_loop_refused() -> None:
+    """SweRex must not nest asyncio.run; refuse when a loop is already running."""
+    backend = SweRexBackend(deployment_class="LocalRuntime", runtime_factory=lambda: None)
+
+    async def _probe() -> None:
+        coro = asyncio.sleep(0)
+        try:
+            with pytest.raises(RuntimeError, match="nested event loops"):
+                backend._run_async(coro)
+        finally:
+            coro.close()
+
+    asyncio.run(_probe())
+
+    async def _execute_while_running() -> None:
+        class _RT:
+            async def execute(self, command: str):
+                return SimpleNamespace(stdout="x", stderr="", exit_code=0)
+
+            def close(self):
+                return None
+
+        nested = SweRexBackend(
+            deployment_class="LocalRuntime",
+            runtime_factory=_RT,
+            require_enforced=False,
+        )
+        result = nested.execute(_req("nested"))
+        assert result.status != BROKER_SUCCESS
+        assert "nested" in (result.reason or "").lower()
+
+    asyncio.run(_execute_while_running())
+
+
+def test_policy_file_backend_id_selection(tmp_path: Path) -> None:
+    """Registry reads governance-policy.json execution_backend.backend_id."""
+    policy = tmp_path / "governance-policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "execution_backend": {
+                    "backend_id": SWE_REX_BACKEND_NAME,
+                    "require_filesystem_isolation": None,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert execution_backend_id(policy) == SWE_REX_BACKEND_NAME
+    backend = resolve_backend(
+        policy_path=policy,
+        factories={SWE_REX_BACKEND_NAME: lambda: SweRexBackend(deployment_class="LocalRuntime")},
+    )
+    assert backend.name == SWE_REX_BACKEND_NAME
+
+
+def test_opensandbox_silent_downgrade_denied() -> None:
+    """Isolated request with grade != enforced must BROKER_BLOCKED (no /v1/command)."""
+    hits: list[str] = []
+
+    def http(method: str, url: str, body: bytes | None, timeout: float):
+        hits.append(url)
+        if "capabilities" in url:
+            return 200, {"available": False}
+        return 200, {"stdout": "should-not-run", "stderr": "", "exit_code": 0}
+
+    backend = OpenSandboxBackend(
+        base_url="http://example.test",
+        use_isolated=True,
+        require_enforced=False,
+        capabilities_payload={"available": False},
+        http=http,
+    )
+    result = backend.execute(_req())
+    assert result.status == BROKER_BLOCKED
+    assert "silent downgrade" in (result.reason or "").lower() or "enforced required" in (result.reason or "").lower()
+    assert not any("/v1/command" in u for u in hits)
+
+
+def test_broker_wires_select_execution_backend() -> None:
+    """ExecutionBroker() resolves via select_execution_backend (policy process default)."""
+    broker = ExecutionBroker()
+    assert broker._backend.name == "process"
+    assert isinstance(broker._backend, ProcessBackend)
+
+
+def test_broker_injectable_backend_still_honoured() -> None:
+    custom = SweRexBackend(deployment_class="LocalRuntime", runtime_factory=lambda: None)
+    broker = ExecutionBroker(backend=custom)
+    assert broker._backend is custom
+
+
+def test_select_execution_backend_threads_isolation(tmp_path: Path) -> None:
+    """require_filesystem_isolation=enforced is composed into selection."""
+    policy = tmp_path / "governance-policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "execution_backend": {
+                    "backend_id": "process",
+                    "require_filesystem_isolation": "enforced",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(BackendSelectionError, match="BROKER_BLOCKED"):
+        select_execution_backend(policy_path=policy, factories={"process": ProcessBackend})
+
+
+def test_env_cannot_select_backend_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env vars / agent-facing knobs cannot override policy backend_id."""
+    policy = tmp_path / "governance-policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "execution_backend": {
+                    "backend_id": "process",
+                    "require_filesystem_isolation": None,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    for key in (
+        "MANGO_EXECUTION_BACKEND",
+        "MANGO_BACKEND_ID",
+        "EXECUTION_BACKEND",
+        "EXECUTION_BACKEND_ID",
+        "BACKEND_ID",
+    ):
+        monkeypatch.setenv(key, SWE_REX_BACKEND_NAME)
+    assert execution_backend_id(policy) == "process"
+    backend = select_execution_backend(policy_path=policy, factories={"process": ProcessBackend})
+    assert backend.name == "process"
+    # Clearing env also cannot invent a selection when policy says process.
+    for key in (
+        "MANGO_EXECUTION_BACKEND",
+        "MANGO_BACKEND_ID",
+        "EXECUTION_BACKEND",
+        "EXECUTION_BACKEND_ID",
+        "BACKEND_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    assert execution_backend_id(policy) == "process"

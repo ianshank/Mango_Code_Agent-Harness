@@ -219,6 +219,9 @@ class SweRexBackend:
             asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(coro)
+        closer = getattr(coro, "close", None)
+        if callable(closer):
+            closer()
         raise RuntimeError("SweRexBackend refuses nested event loops; call execute from sync code")
 
 

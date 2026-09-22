@@ -120,7 +120,21 @@ class OpenSandboxBackend:
                 )
             timeout = float(request.timeout if request.timeout > 0 else DEFAULT_TIMEOUT_SEC)
             max_out = request.max_output_bytes if request.max_output_bytes > 0 else DEFAULT_MAX_OUTPUT_BYTES
-            if self._use_isolated and grade == ISOLATION_ENFORCED:
+            if self._use_isolated:
+                # Fail closed: isolated request must not silently downgrade to
+                # non-isolated /v1/command when the grade is not enforced.
+                if grade != ISOLATION_ENFORCED:
+                    return ExecutionResult(
+                        BROKER_BLOCKED,
+                        "",
+                        "",
+                        1,
+                        reason=(
+                            "BROKER_BLOCKED: opensandbox isolated execution requested but "
+                            f"filesystem_isolation={grade} (enforced required; no silent downgrade)"
+                        ),
+                        action=request.action,
+                    )
                 session_id = self._create_isolated_session(timeout)
                 status_code, payload = self._run_isolated(session_id, request.command, timeout)
             else:

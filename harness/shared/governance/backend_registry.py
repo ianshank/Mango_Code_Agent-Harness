@@ -107,6 +107,29 @@ def assert_isolation_requirement(
         )
 
 
+def select_execution_backend(
+    *,
+    policy_path: Path | None = None,
+    factories: Mapping[str, BackendFactory] | None = None,
+    backend_id: str | None = None,
+) -> ExecutionBackend:
+    """Resolve the policy-selected backend and enforce require_filesystem_isolation.
+
+    Composes ``resolve_backend`` + ``assert_isolation_requirement`` so the
+    ``execution_backend.require_filesystem_isolation`` policy key is threaded
+    into adapter selection. Agents and environment variables cannot select a
+    backend; only the protected policy file (or an explicit injectable
+    ``backend`` on ``ExecutionBroker``) can.
+    """
+    backend = resolve_backend(
+        policy_path=policy_path,
+        factories=factories,
+        backend_id=backend_id,
+    )
+    assert_isolation_requirement(backend, policy_path=policy_path)
+    return backend
+
+
 __all__ = [
     "BackendFactory",
     "BackendSelectionError",
@@ -116,4 +139,5 @@ __all__ = [
     "execution_backend_id",
     "required_filesystem_isolation",
     "resolve_backend",
+    "select_execution_backend",
 ]
