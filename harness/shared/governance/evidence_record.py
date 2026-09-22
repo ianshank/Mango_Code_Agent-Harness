@@ -21,7 +21,7 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
 from harness.shared.governance.execution_backend import (
@@ -30,6 +30,7 @@ from harness.shared.governance.execution_backend import (
     LANDLOCK_BACKEND_NAME,
     OPEN_SANDBOX_BACKEND_NAME,
     SWE_REX_BACKEND_NAME,
+    IsolationState,
 )
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_defaults import evidence_defaults
@@ -151,7 +152,11 @@ def build_execution_entry(
     filesystem_isolation = ISOLATION_UNENFORCED
     if callable(caps_fn):
         live = caps_fn()
-        filesystem_isolation = str(getattr(live, "filesystem_isolation", ISOLATION_UNENFORCED))
+        raw_fs = getattr(live, "filesystem_isolation", ISOLATION_UNENFORCED)
+        filesystem_isolation = cast(
+            IsolationState,
+            raw_fs if raw_fs in {"enforced", "unenforced", "undetermined"} else ISOLATION_UNENFORCED,
+        )
     entry: dict[str, Any] = {
         "command": command,
         "outcome": outcome,

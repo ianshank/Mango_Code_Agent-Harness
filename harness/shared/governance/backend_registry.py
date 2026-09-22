@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 
 from harness.shared.governance.execution_backend import (
     ISOLATION_ENFORCED,
@@ -70,7 +71,7 @@ def required_filesystem_isolation(policy_path: Path | None = None) -> IsolationS
         raise PolicyError(
             "policy execution_backend.require_filesystem_isolation must be enforced|unenforced|undetermined"
         )
-    return raw  # type: ignore[return-value]
+    return cast(IsolationState, raw)
 
 
 def resolve_backend(

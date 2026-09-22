@@ -178,7 +178,7 @@ class SweRexBackend:
             return self._runtime
         try:
             # Optional extra; core CI never imports this path.
-            from swerex.runtime.abstract import AbstractRuntime  # type: ignore[import-not-found]
+            from swerex.runtime.abstract import AbstractRuntime
 
             _ = AbstractRuntime
         except Exception:  # noqa: BLE001

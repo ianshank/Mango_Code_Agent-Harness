@@ -157,35 +157,36 @@ class OpenSandboxBackend:
 
     def _probe_capabilities(self) -> Mapping[str, Any]:
         if self._capabilities_payload is not None:
-            payload = self._capabilities_payload
-            available = bool(payload.get("available", payload.get("isolation_available", False)))
+            injected = self._capabilities_payload
+            available = bool(injected.get("available", injected.get("isolation_available", False)))
             self._probe_ok = available
-            return payload
+            return injected
         if not self._base_url:
             self._probe_ok = False
             return {}
-        code, payload = self._http(
+        code, raw_payload = self._http(
             "GET",
             urljoin(self._base_url + "/", "v1/isolated/capabilities"),
             None,
             5.0,
         )
-        if code >= 400 or not isinstance(payload, dict):
+        if code >= 400 or not isinstance(raw_payload, dict):
             self._probe_ok = False
             return {}
-        available = bool(payload.get("available", payload.get("isolation_available", False)))
+        available = bool(raw_payload.get("available", raw_payload.get("isolation_available", False)))
         self._probe_ok = available
-        return payload
+        return raw_payload
 
     def _create_isolated_session(self, timeout: float) -> str:
-        code, payload = self._http(
+        code, raw_payload = self._http(
             "POST",
             urljoin(self._base_url + "/", "v1/isolated/session"),
             b"{}",
             timeout,
         )
-        if code >= 400 or not isinstance(payload, dict):
+        if code >= 400 or not isinstance(raw_payload, dict):
             raise RuntimeError(f"isolated session create failed: HTTP {code}")
+        payload: dict[str, Any] = raw_payload
         session_id = str(payload.get("id") or payload.get("session_id") or "")
         if not session_id:
             raise RuntimeError("isolated session create returned no id")
