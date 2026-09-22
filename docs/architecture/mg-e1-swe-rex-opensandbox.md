@@ -346,7 +346,12 @@ guards). Until then:
    `harness/shared/governance/process_backend.py` (or split modules if size
    budget requires). Keep `ProcessBackend` public exports stable.
 2. Widen `ExecutionBroker` backend parameter type only; default construction
-   remains `ProcessBackend()`.
+   remains `ProcessBackend()` when policy `execution_backend.backend_id` is
+   `process` (or the block is absent). `ExecutionBroker()` calls
+   `select_execution_backend` (`resolve_backend` +
+   `assert_isolation_requirement`) so policy selection and
+   `require_filesystem_isolation` are threaded. Explicit `backend=` injection
+   still wins; agents/env cannot select `backend_id`.
 3. Implement `SweRexBackend` against `AbstractRuntime.execute` for one-shot
    `run`, with optional session path via `create_session` /
    `run_in_session` when a single brokered command needs session semantics.
@@ -385,9 +390,6 @@ Critic should confirm:
 - [ ] MG-E2/E3/E4 and E0 license called out as non-goals / stubs.
 - [ ] No Distilled / Neuroharness / FORGE scope creep.
 - [ ] No emojis, no hardcoded secrets or model IDs.
-
----
-
 
 ---
 

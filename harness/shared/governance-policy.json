@@ -268,5 +268,10 @@
   "execution": {
     "routing": "brokered",
     "rationale": "Two-state selector for governed execution (docs/specs/attested-execution-isolation.md R-AEI-11, AC-11). brokered runs commands through ExecutionBroker; refuse returns BLOCKED before spawn. A new top-level block rather than a key inside an adopted one, because DEC-043 makes an absent key in an adopted block a PolicyError for every adopter policy that predates it. Absent block (adopter policies that predate it) defaults to brokered."
+  },
+  "execution_backend": {
+    "backend_id": "process",
+    "require_filesystem_isolation": null,
+    "rationale": "MG-E1 policy-selected ExecutionBackend id (docs/architecture/mg-e1-swe-rex-opensandbox.md). Protected governance path: agents/env cannot select. Absent block defaults to process. Unknown backend_id denies fail-closed. require_filesystem_isolation=enforced with undetermined/unenforced capabilities yields BROKER_BLOCKED. New top-level block per DEC-043."
   }
 }

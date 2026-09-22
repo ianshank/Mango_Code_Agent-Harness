@@ -6,7 +6,12 @@ one digest-of-digests and names the policy, backend, and test digests the
 evidence entry cites. It does not import ``broker`` (C-AEI-5) and does not call
 ``enforcement_digests`` (R-AEI-7).
 
-Spec: docs/specs/attested-execution-isolation.md (R-AEI-4..7, C-AEI-2).
+Spec: docs/specs/attested-execution-isolation.md (R-AEI-4..7, R-AEI-10, C-AEI-2).
+CONTRACT: ``harness/CONTRACT.md`` INV-13 (sandbox digest only when isolation
+applied). Decisions: DEC-010 (ProcessBackend contains, does not isolate);
+DEC-069 (Landlock path for INV-13 isolation). MG-E1 extends attestation to
+SWE-ReX / OpenSandbox when ``capabilities().filesystem_isolation == enforced``
+(R-AEI-10); payload field changes are additive only.
 """
 
 from __future__ import annotations
@@ -16,13 +21,16 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from harness.shared.governance.evidence_manifest import EvidenceBuilder
 from harness.shared.governance.execution_backend import (
     ISOLATION_ENFORCED,
     ISOLATION_UNENFORCED,
     LANDLOCK_BACKEND_NAME,
+    OPEN_SANDBOX_BACKEND_NAME,
+    SWE_REX_BACKEND_NAME,
+    IsolationState,
 )
 from harness.shared.governance.verdict import BROKER_BLOCKED
 from harness.shared.policy_defaults import evidence_defaults
@@ -74,7 +82,12 @@ def current_policy_digest(policy_path: Path | None = None) -> str:
 
 
 def _sandbox_fields(backend: Any, outcome: str) -> dict[str, Any]:
-    """Sandbox digest only when this command was isolated (DEC-069, AC-19).
+    """Sandbox digest only when this command was isolated (DEC-069, R-AEI-10, AC-19).
+
+    Cross-links: CONTRACT INV-13; DEC-010 (ProcessBackend never isolates);
+    DEC-069 (Landlock attestation when FS+net enforced); R-AEI-10 (MG-E1
+    SWE-ReX/OpenSandbox may attest when ``filesystem_isolation == enforced``;
+    ``available()`` alone is never sufficient).
 
     ``ProcessBackend`` never qualifies, even if a test injects isolation-shaped
     probe JSON (AQA-007). Unenforced capabilities are never recorded as
@@ -92,7 +105,10 @@ def _sandbox_fields(backend: Any, outcome: str) -> dict[str, Any]:
         caps = caps_fn()
         filesystem = str(getattr(caps, "filesystem_isolation", ISOLATION_UNENFORCED))
         network = str(getattr(caps, "network_isolation", ISOLATION_UNENFORCED))
-    attested = name == LANDLOCK_BACKEND_NAME and filesystem == ISOLATION_ENFORCED and network == ISOLATION_ENFORCED
+    attested = filesystem == ISOLATION_ENFORCED and (
+        (name == LANDLOCK_BACKEND_NAME and network == ISOLATION_ENFORCED)
+        or name in {SWE_REX_BACKEND_NAME, OPEN_SANDBOX_BACKEND_NAME}
+    )
     if not attested:
         return {"sandbox_attested": False}
     payload = json.dumps(
@@ -125,12 +141,22 @@ def build_execution_entry(
 ) -> dict[str, Any]:
     """The four INV-13 digests, the command outcome, and optional sandbox fields.
 
-    ``sandbox_attested`` is True and ``sandbox_digest`` is present only when
-    ``outcome`` is not ``BLOCKED``, the backend name is
-    ``LANDLOCK_BACKEND_NAME``, and both filesystem and network isolation were
-    applied. The four digest fields are always recorded.
+    ``sandbox_attested`` / ``sandbox_digest`` follow ``_sandbox_fields`` (Landlock
+    DEC-069 or MG-E1 enforced SWE-ReX/OpenSandbox per R-AEI-10). The four digest
+    fields are always recorded. Additive MG-E1 keys: ``filesystem_isolation``
+    (backend capability snapshot) and ``evidence_schema_version`` (currently 1);
+    existing keys are never removed or renamed.
     """
     caps = backend_capability_record(backend)
+    caps_fn = getattr(backend, "capabilities", None)
+    filesystem_isolation = ISOLATION_UNENFORCED
+    if callable(caps_fn):
+        live = caps_fn()
+        raw_fs = getattr(live, "filesystem_isolation", ISOLATION_UNENFORCED)
+        filesystem_isolation = cast(
+            IsolationState,
+            raw_fs if raw_fs in {"enforced", "unenforced", "undetermined"} else ISOLATION_UNENFORCED,
+        )
     entry: dict[str, Any] = {
         "command": command,
         "outcome": outcome,
@@ -141,6 +167,9 @@ def build_execution_entry(
         "backend_name": caps["name"],
         "backend_version": caps["version"],
         "test_digest": test_digest(command, node_ids),
+        # Additive MG-E1 (Data Steward): do not mutate legacy field meanings.
+        "evidence_schema_version": 1,
+        "filesystem_isolation": filesystem_isolation,
     }
     entry.update(_sandbox_fields(backend, outcome))
     return entry
