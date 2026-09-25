@@ -36,6 +36,11 @@ constraints are compiled into executable checks.
   precedence `explicit argument > environment > policy > built-in default`.
 - R-ADOC-5: The gate MUST report the directory and the specific claim for every
   finding, so a failure names the fix rather than the symptom.
+- R-ADOC-6: Every path-valued key in the `agents_doc` block — `filename`,
+  `companion_filename`, `subagent_directory`, `additional_directories` and the
+  keys of `waived_directories` — MUST resolve inside the checkout, so a policy
+  can tighten or relocate the audit but never redirect it somewhere with
+  nothing to find.
 - C-ADOC-1: A policy that declares the `agents_doc` block MUST fail closed on a
   missing numeric key; a policy that does not declare the block at all MUST take
   the built-in defaults, so an adopter policy predating the block keeps working.
@@ -44,6 +49,10 @@ constraints are compiled into executable checks.
   five existing assertions hold to an exact membership.
 - C-ADOC-3: The change MUST NOT weaken any invariant in `harness/CONTRACT.md`,
   and MUST NOT widen an existing gate's exclusion list to accommodate a document.
+- C-ADOC-5: The gate's own implementation MUST be covered by
+  `protected_paths`, on the same footing as every other validator module, so
+  the rules cannot be relaxed without the review the rest of the control
+  surface requires.
 - C-ADOC-4: Document staleness MUST NOT block a pull request, because a
   time-based gate over many files turns CI red for changes that touch none of
   them; freshness is reported by the weekly drift workflow instead.
@@ -62,7 +71,7 @@ constraints are compiled into executable checks.
       same way — verified by `pytest harness/shared/tests/test_agents_doc.py -k TestAudit` · stage: `make ci` (R-ADOC-2)
 - [x] AC-4: A declared policy block missing a numeric key **raises** `PolicyError`
       rather than substituting a default, and an undeclared block does not —
-      verified by `pytest harness/shared/tests/test_agents_doc.py -k TestConfigResolution` · stage: `make ci` (C-ADOC-1)
+      verified by `pytest harness/shared/tests/test_agents_doc_policy.py -k TestConfigResolution` · stage: `make ci` (C-ADOC-1)
 - [x] AC-5: A companion file whose body is anything other than the configured
       import is **rejected** — verified by
       `pytest harness/shared/tests/test_agents_doc.py -k TestCompanionFindings` · stage: `make ci` (R-ADOC-3)
@@ -97,6 +106,17 @@ constraints are compiled into executable checks.
       `pytest harness/shared/tests/test_agents_doc.py -k "reviewed"` and by `.github/workflows/scheduled-drift.yml`
       declaring no `pull_request` trigger · stage: `make ci` (C-ADOC-4)
 
+- [x] AC-12: A policy naming an absolute or escaping path in any path-valued key
+      is **rejected** at load, and a nested-but-inside layout still loads —
+      verified by
+      `pytest harness/shared/tests/test_agents_doc_policy.py -k TestPolicyPathsStayInTheCheckout` ·
+      stage: `make ci` (R-ADOC-6)
+- [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_policy.py` and
+      `agents_doc_discovery.py` are each covered by `protected_paths` —
+      verified by
+      `pytest harness/shared/tests/test_protected_path_liveness.py -k control_surface` ·
+      stage: `make ci` (C-ADOC-5)
+
 ## Steps
 
 1. Add the `agents_doc` block to `harness/shared/governance-policy.json` —
@@ -122,8 +142,11 @@ constraints are compiled into executable checks.
 
 Protected paths are marked; each needs an `infra-reviewed` attestation row.
 
-- `harness/shared/agents_doc.py`, `harness/shared/agents_doc_policy.py`
-- `harness/shared/tests/test_agents_doc.py`
+- `harness/shared/agents_doc.py`, `harness/shared/agents_doc_policy.py`,
+  `harness/shared/agents_doc_discovery.py` **(all three protected)**
+- `harness/shared/tests/test_agents_doc.py`,
+  `harness/shared/tests/test_agents_doc_policy.py`,
+  `harness/shared/tests/_agents_doc_helpers.py`
 - `harness/shared/governance-policy.json` **(protected)**
 - `harness/shared/agent_prompts.py` **(protected)**
 - `.mango/agents/nemotron-reasoner.md` **(protected)**

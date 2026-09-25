@@ -17,6 +17,11 @@ Filename choice is DEC-070: ``AGENTS.md`` is the cross-tool standard, and
 Claude Code reads it only where no ``CLAUDE.md`` sits at or above it, so each
 document ships beside a one-line ``CLAUDE.md`` that imports it.
 
+C-ADOC-5: this module, :mod:`agents_doc_policy` and :mod:`agents_doc_discovery`
+are each a ``protected_paths`` entry, on the same footing as every other
+validator here. A gate whose own source can be relaxed without review is a gate
+that reports on itself; `test_protected_path_liveness.py` holds all three.
+
 Two boundaries are built in rather than remembered. C-ADOC-2: a persona
 directory (``.mango/agents/``, any ``harness/*/agents/``) holds no source file,
 so discovery never reaches it, and none is named in ``additional_directories``

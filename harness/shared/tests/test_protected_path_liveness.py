@@ -170,6 +170,16 @@ CONTROL_SURFACE = {
     ".mango/skills/repo-invariant-review/SKILL.md": "a review skill that gates PRs",
     "harness/shared/governance-policy.json": "the policy this very list lives in",
     "harness/shared/validate_invariants.py": "the gate that enforces this list",
+    # The per-directory documentation gate (C-ADOC-5, DEC-070). Every other validator
+    # implementation in this repository is protected; these three were not, so
+    # an agent could relax `contains()`, drop a threshold's range check or
+    # widen the waiver map and keep the gate's own check green -- the finding
+    # is that a gate nobody may edit without review is the only kind that
+    # holds. The test module is not listed, matching `test_documentation_*`:
+    # CONTROL_SURFACE covers the enforcement mechanism, not every suite.
+    "harness/shared/agents_doc.py": "decides whether a directory's document is true",
+    "harness/shared/agents_doc_policy.py": "resolves every threshold the gate enforces",
+    "harness/shared/agents_doc_discovery.py": "decides which directories the gate judges at all",
     "pyproject.toml": "lint, type and coverage gates can be weakened here",
     "harness/control-plane/publish_policy_artifact.py": "computes the policy drift baseline",
     "harness/control-plane/policy-artifact.json": "the committed drift baseline itself",

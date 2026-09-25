@@ -16,18 +16,19 @@ documents are true" and "the walker matched nothing".
 from __future__ import annotations
 
 import json
-import logging
+import os
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
 import pytest
 
+from harness.shared import agents_doc_discovery
 from harness.shared.agents_doc import (
     audit,
     companion_findings,
     contains,
     discover_source_directories,
-    document_findings,
     iter_documents,
     main,
     mermaid_findings,
@@ -46,166 +47,16 @@ from harness.shared.agents_doc_policy import (
     AgentsDocConfig,
     load_config,
 )
-from harness.shared.policy_loader import PolicyError
+from harness.shared.tests._agents_doc_helpers import (
+    CONFIG,
+    findings_for,
+    policy_block,
+    write_document,
+    write_policy,
+)
 from harness.shared.tests._helpers import REPO
 
 pytestmark = pytest.mark.governance
-
-CONFIG = AgentsDocConfig()
-
-
-def write_document(
-    directory: Path,
-    *,
-    scope: str = "`a.py`, `b.py`, `c.py`",
-    reviewed: str | None = "2026-09-19",
-    key_files: tuple[str, ...] = ("a.py",),
-    diagram: str | None = 'flowchart LR\n  A["one"] --> B["two"]\n',
-    extra_lines: int = 0,
-    companion: str | None = "@AGENTS.md",
-) -> Path:
-    """A document that passes every rule, minus whatever the caller breaks."""
-    directory.mkdir(parents=True, exist_ok=True)
-    for name in ("a.py", "b.py", "c.py"):
-        (directory / name).write_text("x = 1\n", encoding="utf-8")
-    body = [f"# AGENTS.md — {directory.name}", "", f"**Scope:** {scope}"]
-    if reviewed is not None:
-        body.append(f"**Reviewed:** {reviewed}")
-    body += ["", "## What this does", "It exists so a test has something true to read.", ""]
-    if diagram is not None:
-        body += ["## Map", "", "```mermaid", diagram.rstrip("\n"), "```", ""]
-    body += ["## Key files", "", "| File | Role |", "| --- | --- |"]
-    body += [f"| `{name}` | a module |" for name in key_files]
-    body += [""] + [f"<!-- filler {n} -->" for n in range(extra_lines)]
-    path = directory / "AGENTS.md"
-    path.write_text("\n".join(body) + "\n", encoding="utf-8")
-    if companion is not None:
-        (directory / "CLAUDE.md").write_text(companion + "\n", encoding="utf-8")
-    return path
-
-
-def findings_for(directory: Path, config: AgentsDocConfig = CONFIG) -> list[str]:
-    return document_findings(parse_document(directory / "AGENTS.md", directory), directory.name, config)
-
-
-#: The keys a declared block owes. Derived from the dataclass rather than typed
-#: out, so a threshold added to the module cannot leave this helper behind: the
-#: new key would be missing from every synthetic policy and the whole suite
-#: would fail closed, which is the direction a drifting fixture should fail in.
-NUMERIC_KEYS = tuple(
-    name for name, value in vars(AgentsDocConfig()).items() if isinstance(value, int) and not isinstance(value, bool)
-)
-
-
-def policy_block(**overrides: object) -> dict[str, object]:
-    """A complete `agents_doc` block at its defaults, with `overrides` applied.
-
-    Complete on purpose. A declared block owes every numeric key it reads, so a
-    partial one is not a lighter fixture -- it is a different test.
-    """
-    block: dict[str, object] = {key: getattr(AgentsDocConfig(), key) for key in NUMERIC_KEYS}
-    block.update(overrides)
-    return block
-
-
-def write_policy(tmp_path: Path, block: object) -> Path:
-    """A policy file carrying only the block under test."""
-    path = tmp_path / "governance-policy.json"
-    payload: dict[str, object] = {} if block is None else {POLICY_BLOCK: block}
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return path
-
-
-# --- Configuration resolution ---------------------------------------------------
-
-
-class TestConfigResolution:
-    """R-ADOC-4, C-ADOC-1. Precedence: explicit argument > environment > policy > default.
-
-    The order matters in one direction only: a run must never silently enforce a
-    number nobody reviewed. `_Section.int` handles the policy half; these cover
-    the three levels above it and the adopter path below.
-    """
-
-    def test_an_undeclared_block_takes_built_in_defaults(self, tmp_path: Path) -> None:
-        """The DEC-043 hazard. `_section` marks any present *file* as backed, so
-        without the `declared()` guard every adopter policy written before this
-        block existed would raise on its first numeric key."""
-        assert load_config(write_policy(tmp_path, None)).max_lines == DEFAULT_MAX_LINES
-
-    def test_a_declared_block_overrides_the_default(self, tmp_path: Path) -> None:
-        assert load_config(write_policy(tmp_path, policy_block(max_lines=42))).max_lines == 42
-
-    def test_a_declared_block_missing_a_numeric_key_fails_closed(self, tmp_path: Path) -> None:
-        """A substituted threshold lets a gate report success against a number
-        the policy no longer states, and the substitute is always plausible."""
-        with pytest.raises(PolicyError, match="min_scope_names"):
-            load_config(write_policy(tmp_path, {"max_lines": 42}))
-
-    def test_the_environment_overrides_the_policy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "7")
-        assert load_config(write_policy(tmp_path, policy_block(max_lines=999))).max_lines == 7
-
-    def test_a_non_numeric_environment_override_is_ignored_not_fatal(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """The environment is the least reviewed level; a typo there must not be
-        able to take a CI leg down. It is logged so the fallback is explicable."""
-        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "not-a-number")
-        with caplog.at_level(logging.WARNING):
-            assert load_config(write_policy(tmp_path, policy_block(max_lines=999))).max_lines == 999
-        assert "not an integer" in caplog.text
-
-    def test_an_explicit_argument_overrides_the_environment(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "7")
-        assert load_config(write_policy(tmp_path, policy_block(max_lines=999)), max_lines=3).max_lines == 3
-
-    def test_a_non_integer_explicit_override_is_rejected(self, tmp_path: Path) -> None:
-        with pytest.raises(PolicyError, match="must be an integer"):
-            load_config(write_policy(tmp_path, policy_block(max_lines=999)), max_lines="three")
-
-    def test_a_list_key_of_the_wrong_shape_is_rejected(self, tmp_path: Path) -> None:
-        block = policy_block(additional_directories="scripts")
-        with pytest.raises(PolicyError, match="list of strings"):
-            load_config(write_policy(tmp_path, block))
-
-    def test_a_negative_threshold_is_rejected(self, tmp_path: Path) -> None:
-        """A negative floor does not tighten a gate, it disables one:
-        `min_documented_directories: -1` makes `present < floor` false for an
-        empty tree, so the anti-vacuity check passes with no documents at all."""
-        with pytest.raises(PolicyError, match="zero or greater"):
-            load_config(write_policy(tmp_path, policy_block(min_documented_directories=-1)))
-
-    def test_every_numeric_key_is_range_checked_not_just_one(self, tmp_path: Path) -> None:
-        """Written against the dataclass, so a threshold added later is covered
-        without anyone remembering to extend this test."""
-        for key in NUMERIC_KEYS:
-            with pytest.raises(PolicyError, match="zero or greater"):
-                load_config(write_policy(tmp_path, policy_block(**{key: -1})))
-
-    def test_an_override_reaches_an_undeclared_block(self, tmp_path: Path) -> None:
-        """The undeclared-block branch returned early, which dropped the two
-        levels above the policy: `--max-lines 5` against an adopter policy
-        resolved to the built-in 150, so the documented precedence held only
-        for deployments that had already adopted the block."""
-        policy = write_policy(tmp_path, None)
-        assert load_config(policy, max_lines=5).max_lines == 5
-
-    def test_the_environment_reaches_an_undeclared_block(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "9")
-        assert load_config(write_policy(tmp_path, None)).max_lines == 9
-
-    def test_a_waiver_map_of_the_wrong_shape_is_rejected(self, tmp_path: Path) -> None:
-        with pytest.raises(PolicyError, match="object of string reasons"):
-            load_config(write_policy(tmp_path, policy_block(waived_directories=["scripts"])))
-
-    def test_this_repositorys_policy_declares_every_key_the_module_reads(self) -> None:
-        """The live block, resolved the way a gate run resolves it. A key added
-        to the module and forgotten in the policy fails here, not in CI."""
-        assert load_config().filename == "AGENTS.md"
-
 
 # --- Discovery ------------------------------------------------------------------
 
@@ -245,6 +96,37 @@ class TestDiscovery:
     def test_iter_documents_pairs_each_directory_with_its_path(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg")
         assert list(iter_documents(tmp_path, CONFIG)) == [("pkg", tmp_path / "pkg" / "AGENTS.md")]
+
+    def test_a_pruned_tree_is_never_descended(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Pruning after the walk was correct and wasteful.
+
+        `rglob("*")` materialised the whole checkout before `_is_pruned` threw
+        any of it away: on this repository 96% of the 3,417 directories walked
+        were discarded afterwards, across 194 `node_modules` trees. The
+        property under test is not "the result excludes a pruned tree" -- that
+        held before and is asserted below it -- but that the walker never
+        enters one, which is the part that costs CI time.
+        """
+        (tmp_path / "pkg").mkdir()
+        buried = tmp_path / "node_modules" / "dep"
+        buried.mkdir(parents=True)
+        for directory in (tmp_path / "pkg", buried):
+            for name in ("a.py", "b.py", "c.py"):
+                (directory / name).write_text("x = 1\n", encoding="utf-8")
+
+        visited: list[str] = []
+        real_walk = os.walk
+
+        def spy(top: str | os.PathLike[str]) -> Iterator[tuple[str, list[str], list[str]]]:
+            # `dirnames` is yielded through by identity, so the caller's in-place
+            # prune still reaches os.walk's own traversal state.
+            for dirpath, dirnames, filenames in real_walk(top):
+                visited.append(dirpath)
+                yield dirpath, dirnames, filenames
+
+        monkeypatch.setattr(agents_doc_discovery.os, "walk", spy)
+        assert discover_source_directories(tmp_path, CONFIG) == ["pkg"]
+        assert not [seen for seen in visited if "node_modules" in seen], f"descended into a pruned tree: {visited}"
 
 
 class TestWaiverFindings:

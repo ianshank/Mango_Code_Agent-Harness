@@ -19,7 +19,7 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 try:
     from harness.shared.policy_loader import PolicyError, _log_resolution, _Section, _section
@@ -99,6 +99,58 @@ class AgentsDocConfig:
     waived_directories: Mapping[str, str] = field(default_factory=dict)
 
 
+def _escapes_checkout(value: str) -> bool:
+    """True when `value` could resolve outside the directory it is joined to.
+
+    Lexical rather than filesystem-resolved, because a configured location may
+    legitimately not exist yet: `waiver_findings` reports a waiver naming a
+    missing directory as a *finding*, which a load-time `resolve(strict=True)`
+    would turn into a crash. Both flavours of `PurePath` are consulted because
+    a policy is JSON and may be authored on either platform: `/etc` is absolute
+    only to the posix parser, `C:/x` only to the Windows one, and `..\\x`
+    splits into parts only for the latter.
+    """
+    if not value.strip():
+        return True
+    posix, windows = PurePosixPath(value), PureWindowsPath(value)
+    if posix.is_absolute() or windows.is_absolute() or value.startswith(("/", "\\")):
+        return True
+    return ".." in posix.parts or ".." in windows.parts
+
+
+def _checkout_path(key: str, value: str) -> str:
+    """A configured directory, refused unless it stays inside the checkout (R-ADOC-6).
+
+    `contains()` already refuses a path a *document* names outside its own
+    directory. This is the same rule one level up, on the configuration, and it
+    is the level that actually mattered: pointing `subagent_directory` at an
+    empty directory elsewhere made `subagent_findings` return nothing at all,
+    so the frontmatter gate reported success over a tree it had never read.
+    A present policy fails closed; it does not silently audit somewhere else.
+    """
+    if _escapes_checkout(value):
+        raise PolicyError(
+            f"policy {POLICY_BLOCK}.{key} must be a path inside the checkout, got {value!r}; "
+            "an absolute or escaping location points this gate at a tree it does not govern"
+        )
+    return value
+
+
+def _bare_name(key: str, value: str) -> str:
+    """A bare file name, so a lookup cannot leave its own directory (R-ADOC-6)."""
+    if _escapes_checkout(value) or value in {".", ".."}:
+        raise PolicyError(
+            f"policy {POLICY_BLOCK}.{key} must be a bare file name, got {value!r}; "
+            "a name that escapes redirects every document lookup off its own directory"
+        )
+    if PurePosixPath(value).parts != (value,) or PureWindowsPath(value).parts != (value,):
+        raise PolicyError(
+            f"policy {POLICY_BLOCK}.{key} must be a bare file name, got {value!r}; "
+            "a separator makes the gate read a file the directory does not own"
+        )
+    return value
+
+
 def _env_int(key: str) -> int | None:
     """An ``AGENTS_DOC_*`` override, or None. A non-numeric value is ignored.
 
@@ -167,6 +219,10 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
     policy: ``--max-lines 5`` against an adopter policy resolved to 150, so the
     documented precedence held only for deployments that had adopted the block.
 
+    Every path-valued key is constrained to the checkout, and the two file
+    names to a bare name. Unconstrained, they redirected the audit rather
+    than failing it, which is the one outcome a gate must never have.
+
     Every threshold is also range-checked. A negative one is not a tighter
     gate, it is a disabled one: ``min_documented_directories: -1`` makes
     ``present < floor`` false for an empty tree, so the anti-vacuity check
@@ -198,11 +254,14 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
             raise PolicyError(f"policy {POLICY_BLOCK}.{key} must be a list of strings, got {value!r}")
         return tuple(value)
 
+    def paths(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(_checkout_path(key, value) for value in names(key, default))
+
     resolved = AgentsDocConfig(
-        filename=text("filename", DEFAULT_FILENAME),
-        companion_filename=text("companion_filename", DEFAULT_COMPANION_FILENAME),
+        filename=_bare_name("filename", text("filename", DEFAULT_FILENAME)),
+        companion_filename=_bare_name("companion_filename", text("companion_filename", DEFAULT_COMPANION_FILENAME)),
         companion_body=text("companion_body", DEFAULT_COMPANION_BODY),
-        subagent_directory=text("subagent_directory", DEFAULT_SUBAGENT_DIRECTORY),
+        subagent_directory=_checkout_path("subagent_directory", text("subagent_directory", DEFAULT_SUBAGENT_DIRECTORY)),
         max_lines=number("max_lines", DEFAULT_MAX_LINES),
         min_scope_names=number("min_scope_names", DEFAULT_MIN_SCOPE_NAMES),
         max_key_files=number("max_key_files", DEFAULT_MAX_KEY_FILES),
@@ -214,8 +273,11 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
         source_extensions=names("source_extensions", DEFAULT_SOURCE_EXTENSIONS),
         pruned_directory_names=names("pruned_directory_names", DEFAULT_PRUNED_DIRECTORY_NAMES),
         diagram_types=names("diagram_types", DEFAULT_DIAGRAM_TYPES),
-        additional_directories=names("additional_directories", ()),
-        waived_directories=_as_str_map(section.optional("waived_directories", {}), "waived_directories"),
+        additional_directories=paths("additional_directories", ()),
+        waived_directories={
+            _checkout_path("waived_directories", name): reason
+            for name, reason in _as_str_map(section.optional("waived_directories", {}), "waived_directories").items()
+        },
     )
     _log_resolution(POLICY_BLOCK, {"declared": declared, "max_lines": resolved.max_lines}, policy_path)
     logger.debug("%s config resolved: %s", POLICY_BLOCK, resolved)

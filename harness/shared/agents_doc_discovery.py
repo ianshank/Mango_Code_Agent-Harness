@@ -17,6 +17,7 @@ that are document-worthy but source-light (R-ADOC-2).
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -26,10 +27,6 @@ except ImportError:  # sibling import when this dir is sys.path[0]
     from agents_doc_policy import AgentsDocConfig  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
-
-
-def _is_pruned(path: Path, config: AgentsDocConfig) -> bool:
-    return bool(set(path.parts) & set(config.pruned_directory_names))
 
 
 def source_file_count(directory: Path, config: AgentsDocConfig) -> int:
@@ -47,15 +44,27 @@ def source_file_count(directory: Path, config: AgentsDocConfig) -> int:
 
 
 def discover_source_directories(repo_root: Path, config: AgentsDocConfig) -> list[str]:
-    """Repo-relative directories carrying at least `min_source_files` sources."""
+    """Repo-relative directories carrying at least `min_source_files` sources.
+
+    Pruned names are dropped from `dirnames` in place, so `os.walk` never
+    descends them. Filtering after `rglob("*")` was correct but materialised
+    the whole checkout first: on this repository 96% of the 3,417 directories
+    walked were discarded afterwards, and the 194 `node_modules` trees a
+    `pnpm install` leaves behind are the common case in CI, not the edge one.
+
+    The repository root is not a candidate, which matches `rglob` -- it yields
+    only descendants. Instructions for the root are `CLAUDE.md`, not this gate.
+    """
+    pruned = set(config.pruned_directory_names)
     found: list[str] = []
-    for directory in sorted(p for p in repo_root.rglob("*") if p.is_dir()):
-        relative = directory.relative_to(repo_root)
-        if _is_pruned(relative, config):
+    for dirpath, dirnames, _ in os.walk(repo_root):
+        dirnames[:] = [name for name in dirnames if name not in pruned]
+        directory = Path(dirpath)
+        if directory == repo_root:
             continue
         if source_file_count(directory, config) >= config.min_source_files:
-            found.append(relative.as_posix())
-    return found
+            found.append(directory.relative_to(repo_root).as_posix())
+    return sorted(found)
 
 
 def required_directories(repo_root: Path, config: AgentsDocConfig) -> list[str]:
