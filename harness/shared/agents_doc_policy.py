@@ -115,6 +115,13 @@ def _escapes_checkout(value: str) -> bool:
     posix, windows = PurePosixPath(value), PureWindowsPath(value)
     if posix.is_absolute() or windows.is_absolute() or value.startswith(("/", "\\")):
         return True
+    # A drive without a root is *not* absolute to `PureWindowsPath`, so `C:foo`
+    # passed every test above: joined to a checkout it resolves against drive
+    # C's working directory, which is outside the repository by construction.
+    # This also refuses a POSIX directory literally named `a:b`, which is a
+    # portability hazard this repository already guards against elsewhere.
+    if windows.drive:
+        return True
     return ".." in posix.parts or ".." in windows.parts
 
 

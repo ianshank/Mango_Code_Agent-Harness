@@ -40,7 +40,8 @@ constraints are compiled into executable checks.
   `companion_filename`, `subagent_directory`, `additional_directories` and the
   keys of `waived_directories` — MUST resolve inside the checkout, so a policy
   can tighten or relocate the audit but never redirect it somewhere with
-  nothing to find.
+  nothing to find. A Windows drive letter counts as outside, including the
+  drive-relative `C:foo` form that is not absolute to `PurePath`.
 - C-ADOC-1: A policy that declares the `agents_doc` block MUST fail closed on a
   missing numeric key; a policy that does not declare the block at all MUST take
   the built-in defaults, so an adopter policy predating the block keeps working.
@@ -77,7 +78,8 @@ constraints are compiled into executable checks.
       `pytest harness/shared/tests/test_agents_doc.py -k TestCompanionFindings` · stage: `make ci` (R-ADOC-3)
 - [x] AC-6: A mermaid diagram opening with an unknown keyword, carrying an
       unbalanced quote or bracket, or declaring more than
-      `agents_doc.max_diagram_nodes` nodes is **rejected**; diagrams also remain
+      `agents_doc.max_diagram_nodes` nodes — **counting bare `A --> B`
+      endpoints, not only shaped nodes** — is **rejected**; diagrams also remain
       subject to the existing bare-bracket rule — verified by
       `pytest harness/shared/tests/test_agents_doc.py -k TestMermaidFindings` · stage: `make ci` (R-ADOC-1)
 - [x] AC-7: A subagent definition whose frontmatter Claude Code would **silently

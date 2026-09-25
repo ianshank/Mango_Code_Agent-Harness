@@ -17,10 +17,11 @@ Filename choice is DEC-070: ``AGENTS.md`` is the cross-tool standard, and
 Claude Code reads it only where no ``CLAUDE.md`` sits at or above it, so each
 document ships beside a one-line ``CLAUDE.md`` that imports it.
 
-C-ADOC-5: this module, :mod:`agents_doc_policy` and :mod:`agents_doc_discovery`
-are each a ``protected_paths`` entry, on the same footing as every other
-validator here. A gate whose own source can be relaxed without review is a gate
-that reports on itself; `test_protected_path_liveness.py` holds all three.
+C-ADOC-5: this module, :mod:`agents_doc_policy`, :mod:`agents_doc_discovery`
+and :mod:`agents_doc_mermaid` are each a ``protected_paths`` entry, on the same
+footing as every other validator here. A gate whose own source can be relaxed
+without review is a gate that reports on itself; `test_protected_path_liveness.py`
+holds all four.
 
 Two boundaries are built in rather than remembered. C-ADOC-2: a persona
 directory (``.mango/agents/``, any ``harness/*/agents/``) holds no source file,
@@ -50,6 +51,7 @@ try:
         source_file_count,
         waiver_findings,
     )
+    from harness.shared.agents_doc_mermaid import MERMAID_BLOCK, declared_nodes, mermaid_findings
     from harness.shared.agents_doc_policy import AgentsDocConfig, load_config
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
     from harness.shared.policy_loader import PolicyError
@@ -60,6 +62,11 @@ except ImportError:  # sibling import when this dir is sys.path[0]
         required_directories,
         source_file_count,
         waiver_findings,
+    )
+    from agents_doc_mermaid import (  # type: ignore[no-redef]
+        MERMAID_BLOCK,
+        declared_nodes,
+        mermaid_findings,
     )
     from agents_doc_policy import AgentsDocConfig, load_config  # type: ignore[no-redef]
     from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
@@ -75,11 +82,6 @@ BACKTICKED = re.compile(r"`([^`]+)`")
 REVIEWED_LINE = re.compile(r"^\*\*Reviewed:\*\*\s*(\S+)\s*$", re.M)
 KEY_FILES_HEADING = re.compile(r"^##\s+Key files\s*$", re.M)
 NEXT_HEADING = re.compile(r"^##\s+", re.M)
-MERMAID_BLOCK = re.compile(r"```mermaid\n(.*?)```", re.S)
-#: A node declaration: an identifier immediately followed by a shape opener.
-#: An approximation, deliberately: the cap it feeds is a legibility budget, not
-#: a parser, and over-counting a dense diagram is the safe direction.
-MERMAID_NODE = re.compile(r"(?<![\w-])([A-Za-z_][\w-]*)\s*[\[\(\{]")
 #: One `key: value` line of a subagent's YAML frontmatter. Deliberately not a
 #: YAML parser: the only keys that decide whether Claude Code loads the file
 #: are flat scalars, and a parser would add a dependency to a stdlib gate.
@@ -92,6 +94,8 @@ __all__ = [
     "companion_findings",
     "contains",
     "discover_source_directories",
+    "MERMAID_BLOCK",
+    "declared_nodes",
     "document_findings",
     "is_path_like",
     "iter_documents",
@@ -199,42 +203,6 @@ def parse_document(path: Path, directory: Path) -> AgentsDocument:
         reviewed=reviewed.group(1) if reviewed else None,
         diagrams=tuple(MERMAID_BLOCK.findall(text)),
     )
-
-
-def mermaid_findings(diagrams: Sequence[str], config: AgentsDocConfig) -> list[str]:
-    """Structural checks the existing bracket-quoting rule cannot make.
-
-    `test_documentation_truth` catches one failure mode -- a bare bracket in a
-    label -- leaving an unknown opening keyword, an unbalanced quote and an
-    unreadably dense diagram all passing. Each renders as an error box or as
-    something nobody can follow, and none is visible until the page is opened.
-    """
-    findings: list[str] = []
-    if len(diagrams) > config.max_diagrams:
-        findings.append(f"{len(diagrams)} diagrams; at most {config.max_diagrams} keeps a document scannable")
-    for index, body in enumerate(diagrams):
-        lines = [line for line in body.splitlines() if line.strip()]
-        if not lines:
-            findings.append(f"diagram {index} is empty")
-            continue
-        opening = lines[0].strip()
-        # The first whitespace-delimited token, not a prefix: `startswith` accepted
-        # `flowchartX LR`, which shares a prefix with `flowchart` and renders as an
-        # error box. A check that admits the typo it exists to catch is not a check.
-        keyword = opening.split()[0] if opening.split() else opening
-        if keyword not in config.diagram_types:
-            findings.append(f"diagram {index} opens with {opening!r}, which is not a known mermaid diagram type")
-        for lineno, line in enumerate(lines, 1):
-            if line.count('"') % 2:
-                findings.append(f"diagram {index} line {lineno} has an unbalanced quote: {line.strip()}")
-            if line.count("[") != line.count("]"):
-                findings.append(f"diagram {index} line {lineno} has unbalanced brackets: {line.strip()}")
-        nodes = {match.group(1) for match in MERMAID_NODE.finditer(body)}
-        if len(nodes) > config.max_diagram_nodes:
-            findings.append(
-                f"diagram {index} declares {len(nodes)} nodes; at most {config.max_diagram_nodes} stays legible"
-            )
-    return findings
 
 
 def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) -> list[str]:

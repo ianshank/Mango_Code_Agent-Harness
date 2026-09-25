@@ -28,6 +28,7 @@ from harness.shared.agents_doc import (
     audit,
     companion_findings,
     contains,
+    declared_nodes,
     discover_source_directories,
     iter_documents,
     main,
@@ -323,6 +324,29 @@ class TestMermaidFindings:
     def test_the_node_cap_comes_from_the_config(self) -> None:
         body = "flowchart LR\n" + "".join(f'  N{n}["node {n}"]\n' for n in range(5))
         assert "at most 3" in "".join(mermaid_findings([body], AgentsDocConfig(max_diagram_nodes=3)))
+
+    def test_bare_node_declarations_count_toward_the_cap(self) -> None:
+        """Counting only *shaped* nodes made the cap vacuous for the commonest
+        diagram there is. `A --> B` declared zero nodes, so a diagram of any
+        size passed -- and the comment on the regex claimed the approximation
+        erred by over-counting, which was the reassuring direction and the
+        wrong one."""
+        body = "flowchart LR\n" + "\n".join(f"  N{i} --> N{i + 1}" for i in range(60))
+        assert len(declared_nodes(body, CONFIG)) == 61
+        assert "declares 61 nodes" in "".join(mermaid_findings([body], CONFIG))
+
+    def test_syntax_keywords_are_not_counted_as_nodes(self) -> None:
+        """The cap must count nodes, not words. `subgraph`, `end` and the
+        direction token are mermaid syntax, and counting them would tighten the
+        budget by a different amount for every diagram shape. A subgraph's own
+        name is excluded for a second reason: its line carries no edge, and
+        only edge-bearing lines contribute bare endpoints."""
+        body = "flowchart LR\n  subgraph S\n    A --> B\n  end\n  B --> C\n"
+        assert declared_nodes(body, CONFIG) == {"A", "B", "C"}
+
+    def test_an_edge_caption_does_not_hide_its_endpoints(self) -> None:
+        """A captioned edge still declares both ends."""
+        assert {"A", "B"} <= declared_nodes('flowchart LR\n  A -->|"yes"| B\n', CONFIG)
 
 
 class TestSubagentFindings:

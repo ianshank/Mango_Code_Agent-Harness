@@ -15,7 +15,7 @@ nothing in it at all.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -141,11 +141,31 @@ class TestPolicyPathsStayInTheCheckout:
             ("subagent_directory", "C:/Windows"),
             ("subagent_directory", "..\\etc"),
             ("subagent_directory", "   "),
+            ("subagent_directory", "C:foo"),
+            ("subagent_directory", "c:windows"),
         ],
     )
     def test_an_escaping_directory_is_refused(self, tmp_path: Path, key: str, value: str) -> None:
         with pytest.raises(PolicyError, match="inside the checkout"):
             load_config(write_policy(tmp_path, policy_block(**{key: value})))
+
+    def test_a_drive_relative_windows_path_is_refused(self, tmp_path: Path) -> None:
+        """`PureWindowsPath('C:foo')` has a drive but is **not** absolute, so it
+        passed every other arm of the predicate. Joined to a checkout it
+        resolves against drive C's working directory, which is outside the
+        repository by construction -- the containment rule with the one case
+        that reads like a relative path and is not."""
+        assert not PureWindowsPath("C:foo").is_absolute(), "the premise of this test has changed"
+        assert PureWindowsPath("C:foo").drive == "C:"
+        with pytest.raises(PolicyError, match="inside the checkout"):
+            load_config(write_policy(tmp_path, policy_block(subagent_directory="C:foo")))
+
+    def test_an_ordinary_relative_path_is_not_mistaken_for_a_drive(self, tmp_path: Path) -> None:
+        """The negative control for the rule above: tightening on a drive must
+        not start refusing the relative directories an adopter legitimately
+        names."""
+        config = load_config(write_policy(tmp_path, policy_block(subagent_directory="tools/agents")))
+        assert config.subagent_directory == "tools/agents"
 
     def test_an_escaping_additional_directory_is_refused(self, tmp_path: Path) -> None:
         with pytest.raises(PolicyError, match="inside the checkout"):
