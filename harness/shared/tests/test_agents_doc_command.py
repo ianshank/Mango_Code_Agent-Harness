@@ -71,6 +71,30 @@ class TestStaleness:
         config = AgentsDocConfig(additional_directories=("pkg",))
         assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
 
+    def test_a_symlinked_document_is_not_read_for_staleness(self, tmp_path: Path) -> None:
+        """The report reached a document `audit()` refuses, and read a file outside
+        the checkout to do it: `path.is_file()` follows links. Reporting an external
+        document's date as this repository's staleness is the same defect as parsing
+        it -- one report further on."""
+        write_document(tmp_path / "outside", reviewed="2020-01-01")
+        pkg = tmp_path / "repo" / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "AGENTS.md").symlink_to(tmp_path / "outside" / "AGENTS.md")
+        (pkg / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert stale_documents(tmp_path / "repo", config, 90, date(2026, 10, 1)) == []
+
+    def test_an_escaping_directory_is_not_read_for_staleness(self, tmp_path: Path) -> None:
+        """Same rule one level up: a configured directory that resolves outside is a
+        finding in `audit()`, so this path declines to read it rather than reporting
+        on a tree the repository does not own."""
+        write_document(tmp_path / "outside", reviewed="2020-01-01")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "pkg").symlink_to(tmp_path / "outside", target_is_directory=True)
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert stale_documents(repo, config, 90, date(2026, 10, 1)) == []
+
     def test_nothing_stale_renders_nothing(self) -> None:
         """The workflow appends this to an issue body and opens the issue only
         when the file is non-empty, so an empty string is load-bearing."""

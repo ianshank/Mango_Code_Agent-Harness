@@ -311,7 +311,7 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
 
 
 def configured_path_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
-    """Configured directories that exist but resolve outside the checkout.
+    """Configured directories that do not resolve to a directory inside the checkout.
 
     The load-time rule in :mod:`agents_doc_policy` is lexical, so it cannot see
     a symlink: `additional_directories: ["docs_link"]` is a plain relative name
@@ -324,6 +324,18 @@ def configured_path_findings(repo_root: Path, config: AgentsDocConfig) -> list[s
     for name in sorted({*config.additional_directories, *config.waived_directories}):
         if (repo_root / name).exists() and not contains(repo_root, name):
             findings.append(f"{name}: configured in the policy but resolves outside the checkout")
+    for name in sorted(config.additional_directories):
+        # The `continue` in `audit()` skips anything `contains()` refuses, and
+        # `contains()` refuses a path that does not resolve *at all* as readily as
+        # one that resolves outside -- so a typo in `additional_directories` was
+        # skipped in silence, and a satisfied floor made the whole audit return
+        # `[]`. A waived directory already gets this check in `waiver_findings`;
+        # an additional one had nothing.
+        if not (repo_root / name).is_dir():
+            findings.append(
+                f"{name}: named in additional_directories but is not a directory in this checkout, "
+                "so nothing would be judged for it"
+            )
     return findings
 
 

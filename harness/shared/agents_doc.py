@@ -135,9 +135,14 @@ def stale_documents(
     """
     stale: list[tuple[str, str, int]] = []
     for relative, path in iter_documents(repo_root, config):
-        if not path.is_file():
+        directory = repo_root / relative
+        if not contains(repo_root, relative) or not is_regular_in(directory, config.filename):
+            # `path.is_file()` was the whole guard, and it follows links -- so this
+            # report parsed a document `audit()` refuses, and read a file outside
+            # the checkout to do it. Both refusals are already findings next door;
+            # this path must not *act* on what they refuse, only decline to read it.
             continue
-        reviewed = parse_document(path, repo_root / relative).reviewed
+        reviewed = parse_document(path, directory).reviewed
         if reviewed is None:
             continue  # a blocking finding already, not a staleness report
         try:

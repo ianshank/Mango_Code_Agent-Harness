@@ -2,7 +2,7 @@
 
 **Scope:** `settings.json`, `hooks/session-start.sh`, `agents/`, `rules/`
 **Owner:** nemotron-reasoner → implementer; this is the only directory Claude Code itself reads
-**Protected path:** partly — `.claude/settings.json`, `.claude/settings.local.json` and `.claude/hooks/**` each match a `protected_paths` pattern and need `ALLOW_GITHUB_CHANGES=1`, the `infra-reviewed` label and an attestation row. The `.claude/` root, `agents/` and `rules/` do not.
+**Protected path:** partly — `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.claude/agents/**` each match a `protected_paths` pattern and need `ALLOW_GITHUB_CHANGES=1`, the `infra-reviewed` label and an attestation row. The `.claude/` root and `rules/` do not.
 **Reviewed:** 2026-09-19
 
 ## What this does

@@ -56,8 +56,10 @@ flowchart TD
   make prose read better; `test_policy_consistency.DECLARED_NOT_YET_ENFORCED` pins it.
 - **A new gate is not just a target.** It needs a `ci_required_targets` entry, a
   `CONTRACT.md` row and a `test_ci_gate_coverage.py` mapping, or the meta-gate fails.
-- **Every directory with three or more first-party sources owes an `AGENTS.md` and a
-  one-line `CLAUDE.md`** — derived, never transcribed (`test_agents_doc.py`).
+- **Every directory with `agents_doc.min_source_files` first-party sources owes an
+  `AGENTS.md` and a one-line `CLAUDE.md`, minus `agents_doc.waived_directories`** —
+  derived from the tree, never transcribed (`test_agents_doc.py`). The waiver arm is
+  load-bearing: five directories clear the floor and are exempt on purpose.
 
 ## Commands
 

@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.agents_doc import iter_documents
-from harness.shared.agents_doc_policy import load_config
+from harness.shared.agents_doc import contains, is_regular_in, iter_documents
+from harness.shared.agents_doc_policy import AgentsDocConfig, load_config
 from harness.shared.tests._helpers import REPO
 
 if sys.version_info >= (3, 11):
@@ -486,6 +486,27 @@ def mermaid_blocks(text: str) -> list[str]:
     return re.findall(r"```mermaid\n(.*?)```", text, re.S)
 
 
+def readable_documents(root: Path, config: AgentsDocConfig) -> list[Path]:
+    """The per-directory documents this scan may read, by the gate's own rule.
+
+    `is_file()` and `read_text()` both follow links, so reaching the documents
+    through the policy and then reading them meant a linked `AGENTS.md` had its
+    content read *here* -- before `agents_doc` reported the link. That is the
+    containment rule leaking out of the gate and into the suite that checks it.
+
+    It takes `root` rather than closing over `REPO` for a reason the defect itself
+    demonstrates: a scan that can only run against the real repository is one whose
+    refusals nobody can write a test for, which is how this went unnoticed. The
+    relative path is kept for the same reason -- discarding it is what made the
+    predicate unavailable.
+    """
+    readable: list[Path] = []
+    for relative, path in iter_documents(root, config):
+        if contains(root, relative) and is_regular_in(root / relative, config.filename):
+            readable.append(path)
+    return readable
+
+
 def documents_with_diagrams() -> list[Path]:
     """Markdown with a mermaid block: `DIAGRAM_ROOTS`, plus every `AGENTS.md`.
 
@@ -502,8 +523,48 @@ def documents_with_diagrams() -> list[Path]:
     for entry in DIAGRAM_ROOTS:
         target = REPO / entry
         candidates.extend(sorted(target.rglob("*.md")) if target.is_dir() else [target])
-    candidates.extend(path for _relative, path in iter_documents(REPO, load_config()))
+    candidates.extend(readable_documents(REPO, load_config()))
     return [path for path in candidates if path.is_file() and "```mermaid" in path.read_text(encoding="utf-8")]
+
+
+class TestTheDiagramScanRefusesWhatTheGateRefuses:
+    """The mutation that exposed this: reverting `readable_documents` to
+    `iter_documents` plus `is_file()` left every test in this module green, so the
+    containment fix was unproven. These are what make it a fix rather than a claim."""
+
+    @staticmethod
+    def _document(directory: Path) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        for name in ("a.py", "b.py", "c.py"):
+            (directory / name).write_text("x = 1\n", encoding="utf-8")
+        (directory / "AGENTS.md").write_text(
+            "# AGENTS.md — pkg\n\n**Scope:** `a.py`\n**Reviewed:** 2026-09-19\n\n"
+            '## Map\n\n```mermaid\nflowchart LR\n  A["one"] --> B["two"]\n```\n',
+            encoding="utf-8",
+        )
+
+    def test_a_regular_document_is_readable(self, tmp_path: Path) -> None:
+        """The positive control. Without it a predicate that refuses everything
+        would pass both cases below and the scan would silently read nothing."""
+        self._document(tmp_path / "pkg")
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert readable_documents(tmp_path, config) == [tmp_path / "pkg" / "AGENTS.md"]
+
+    def test_a_symlinked_document_is_not_readable(self, tmp_path: Path) -> None:
+        self._document(tmp_path / "outside")
+        pkg = tmp_path / "repo" / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "AGENTS.md").symlink_to(tmp_path / "outside" / "AGENTS.md")
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert readable_documents(tmp_path / "repo", config) == []
+
+    def test_a_directory_resolving_outside_is_not_readable(self, tmp_path: Path) -> None:
+        self._document(tmp_path / "outside")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "pkg").symlink_to(tmp_path / "outside", target_is_directory=True)
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert readable_documents(repo, config) == []
 
 
 class TestEveryMermaidDiagramCanRender:

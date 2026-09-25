@@ -157,6 +157,7 @@ Protected paths are marked; each needs an `infra-reviewed` attestation row.
   `harness/shared/agents_doc_discovery.py`,
   `harness/shared/agents_doc_mermaid.py` **(all five protected)**
 - `harness/shared/tests/test_agents_doc.py`,
+  `harness/shared/tests/test_agents_doc_containment.py`,
   `harness/shared/tests/test_agents_doc_command.py`,
   `harness/shared/tests/test_agents_doc_policy.py`,
   `harness/shared/tests/_agents_doc_helpers.py`
