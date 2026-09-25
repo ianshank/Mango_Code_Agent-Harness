@@ -92,6 +92,7 @@ FRONTMATTER_KEY = re.compile(r"^([A-Za-z_][\w-]*):\s*(.*)$")
 __all__ = [
     "audit",
     "companion_findings",
+    "configured_path_findings",
     "contains",
     "discover_source_directories",
     "MERMAID_BLOCK",
@@ -281,8 +282,16 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
     itself as an agent that does not answer, months later.
     """
     directory = repo_root / config.subagent_directory
+    if not directory.exists():
+        return []  # a repository need not define subagents at all
     if not directory.is_dir():
-        return []
+        return [f"{config.subagent_directory}: configured as the subagent directory but is not a directory"]
+    if not contains(repo_root, config.subagent_directory):
+        outside = (
+            f"{config.subagent_directory}: resolves outside the checkout, "
+            "so this audit would read a tree this repository does not own"
+        )
+        return [outside]
     findings: list[str] = []
     for path in sorted(directory.glob("*.md")):
         relative = f"{config.subagent_directory}/{path.name}"
@@ -312,6 +321,23 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
     return findings
 
 
+def configured_path_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
+    """Configured directories that exist but resolve outside the checkout.
+
+    The load-time rule in :mod:`agents_doc_policy` is lexical, so it cannot see
+    a symlink: `additional_directories: ["docs_link"]` is a plain relative name
+    until something resolves it, and then the audit walks whatever it points
+    at. Lexical is still right at load time -- a configured directory may
+    legitimately not exist yet, and `waiver_findings` reports that rather than
+    crashing -- so the resolution half belongs here, where the root is known.
+    """
+    findings: list[str] = []
+    for name in sorted({*config.additional_directories, *config.waived_directories}):
+        if (repo_root / name).exists() and not contains(repo_root, name):
+            findings.append(f"{name}: configured in the policy but resolves outside the checkout")
+    return findings
+
+
 def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | None = None) -> list[str]:
     """Every finding across the repository. Empty means the documents are true.
 
@@ -322,7 +348,13 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
     check, and nothing in CI passes it.
     """
     resolved = config if config is not None else load_config()
-    findings = waiver_findings(repo_root, resolved) + subagent_findings(repo_root, resolved) if only is None else []
+    findings = (
+        waiver_findings(repo_root, resolved)
+        + configured_path_findings(repo_root, resolved)
+        + subagent_findings(repo_root, resolved)
+        if only is None
+        else []
+    )
     present = 0
     for relative, path in iter_documents(repo_root, resolved):
         if only is not None and relative != only:

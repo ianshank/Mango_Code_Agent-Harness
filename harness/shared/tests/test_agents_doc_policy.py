@@ -198,15 +198,21 @@ class TestPolicyPathsStayInTheCheckout:
         assert config.subagent_directory == "tools/agents"
         assert config.additional_directories == ("src/core",)
 
-    def test_the_gate_reports_nothing_when_pointed_at_an_empty_tree(self, tmp_path: Path) -> None:
-        """The positive control for the rule above: this is what an accepted
-        escape bought. Constructed directly, because the policy now refuses it.
+    def test_a_redirect_that_bypasses_the_load_check_is_still_caught(self, tmp_path: Path) -> None:
+        """Defence in depth, and the reason there are two layers.
+
+        This originally asserted the *hole*: pointed at an empty directory
+        elsewhere, `subagent_findings` returned `[]` and the frontmatter audit
+        reported success over a tree it had never opened. The load-time rule
+        closed the policy route, and the resolution-time rule in
+        `subagent_findings` now closes the constructed one too — so a config
+        that reaches the consumer redirected is reported rather than obeyed.
         """
         empty = tmp_path / "elsewhere"
         empty.mkdir()
         redirected = load_config(write_policy(tmp_path, policy_block()))
         object.__setattr__(redirected, "subagent_directory", str(empty))
-        assert subagent_findings(REPO, redirected) == []
+        assert "resolves outside the checkout" in "".join(subagent_findings(REPO, redirected))
         assert list((REPO / ".claude" / "agents").glob("*.md")), "the real directory must not be empty"
 
     def test_the_committed_policy_keeps_every_path_inside_the_tree(self) -> None:
@@ -214,3 +220,71 @@ class TestPolicyPathsStayInTheCheckout:
         config = load_config()
         for value in (config.subagent_directory, *config.additional_directories, *config.waived_directories):
             assert (REPO / value).is_dir(), f"{value} is configured but is not a directory in this checkout"
+
+
+class TestAnOverrideMayOnlyTighten:
+    """C-ADOC-1 / R-CQ-8, the rule `validate_invariants._policy_limit` and
+    `check_dedup` already apply and this loader did not.
+
+    `MAX_FILE_LINES=9999` was once returned verbatim, which switched the size
+    gate off while it still printed `[PASS]`. The same hole was open here in
+    two places at once: `--max-lines 999` against a policy of 150, and
+    `AGENTS_DOC_MIN_DOCUMENTED_DIRECTORIES=0` against a floor of 20.
+    """
+
+    def test_an_explicit_override_cannot_raise_a_cap(self, tmp_path: Path) -> None:
+        policy = write_policy(tmp_path, policy_block(max_lines=150))
+        assert load_config(policy, max_lines=999).max_lines == 150
+
+    def test_an_explicit_override_can_still_lower_a_cap(self, tmp_path: Path) -> None:
+        """The negative control: tightening is the whole point of the override."""
+        policy = write_policy(tmp_path, policy_block(max_lines=150))
+        assert load_config(policy, max_lines=40).max_lines == 40
+
+    def test_an_environment_override_cannot_lower_a_floor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTS_DOC_MIN_DOCUMENTED_DIRECTORIES", "0")
+        policy = write_policy(tmp_path, policy_block(min_documented_directories=20))
+        assert load_config(policy).min_documented_directories == 20
+
+    def test_an_environment_override_can_still_raise_a_floor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTS_DOC_MIN_DOCUMENTED_DIRECTORIES", "30")
+        policy = write_policy(tmp_path, policy_block(min_documented_directories=20))
+        assert load_config(policy).min_documented_directories == 30
+
+    def test_min_source_files_tightens_downward_despite_its_name(self, tmp_path: Path) -> None:
+        """The key a prefix rule would get wrong. `min_source_files` is how many
+        sources *earn* a directory a document, so raising it requires fewer
+        documents -- looser, despite the `min_` name. A rule that read the name
+        would have let this one key be relaxed silently."""
+        policy = write_policy(tmp_path, policy_block(min_source_files=3))
+        assert load_config(policy, min_source_files=9).min_source_files == 3
+        assert load_config(policy, min_source_files=2).min_source_files == 2
+
+    def test_a_refused_override_says_so(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Silently ignoring an override would be its own trap."""
+        policy = write_policy(tmp_path, policy_block(max_lines=150))
+        with caplog.at_level(logging.WARNING):
+            load_config(policy, max_lines=999)
+        assert "may only tighten" in caplog.text
+
+
+class TestMalformedScalarsAreRefused:
+    """C-ADOC-1. `str()` turned `subagent_directory: null` into the literal
+    `"None"`, which names no directory -- so `subagent_findings` saw a missing
+    one and reported nothing. A malformed policy value silently switched the
+    frontmatter audit off instead of failing closed."""
+
+    @pytest.mark.parametrize("value", [None, 42, ["a"], {"a": "b"}, True])
+    def test_a_non_string_scalar_is_rejected(self, tmp_path: Path, value: object) -> None:
+        with pytest.raises(PolicyError, match="must be a string"):
+            load_config(write_policy(tmp_path, policy_block(subagent_directory=value)))
+
+    def test_the_coercion_that_used_to_happen_is_gone(self, tmp_path: Path) -> None:
+        """Pins the exact shape: `None` must never reach the config as `"None"`."""
+        with pytest.raises(PolicyError):
+            config = load_config(write_policy(tmp_path, policy_block(filename=None)))
+            assert config.filename != "None"

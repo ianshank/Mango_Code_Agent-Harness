@@ -27,6 +27,7 @@ from harness.shared import agents_doc_discovery
 from harness.shared.agents_doc import (
     audit,
     companion_findings,
+    configured_path_findings,
     contains,
     declared_nodes,
     discover_source_directories,
@@ -574,3 +575,50 @@ class TestThisRepository:
     def test_every_document_is_backed_by_its_own_directory(self) -> None:
         findings = audit(REPO, load_config())
         assert not findings, "per-directory documentation has drifted from the tree:\n" + "\n".join(findings)
+
+
+class TestConfiguredPathsAreRealAndInTree:
+    """R-ADOC-6 at the point of use. The load-time rule is lexical, so it cannot
+    see a symlink: a plain relative name stays plain until something resolves
+    it. Lexical is still right at load time -- a configured directory may
+    legitimately not exist yet -- so the resolution half lives here."""
+
+    def _repo(self, tmp_path: Path) -> Path:
+        (tmp_path / ".claude" / "agents").mkdir(parents=True)
+        return tmp_path
+
+    def test_a_missing_subagent_directory_is_not_a_finding(self, tmp_path: Path) -> None:
+        """The negative control: a repository need not define subagents."""
+        config = AgentsDocConfig(subagent_directory="nowhere")
+        assert subagent_findings(tmp_path, config) == []
+
+    def test_an_existing_non_directory_is_reported(self, tmp_path: Path) -> None:
+        """`is_dir()` alone returned `[]` here, so pointing the key at a file
+        switched the frontmatter audit off with no finding at all."""
+        (tmp_path / "notadir").write_text("x\n", encoding="utf-8")
+        findings = subagent_findings(tmp_path, AgentsDocConfig(subagent_directory="notadir"))
+        assert "is not a directory" in "".join(findings)
+
+    def test_a_symlink_out_of_the_tree_is_reported_not_followed(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "rogue.md").write_text("no frontmatter\n", encoding="utf-8")
+        root = self._repo(tmp_path / "repo")
+        (root / "linked").symlink_to(outside)
+        findings = subagent_findings(root, AgentsDocConfig(subagent_directory="linked"))
+        assert "resolves outside the checkout" in "".join(findings)
+        assert "rogue.md" not in "".join(findings), "the external tree must not be audited"
+
+    def test_an_additional_directory_pointing_out_of_the_tree_is_reported(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        root = self._repo(tmp_path / "repo")
+        (root / "linked").symlink_to(outside)
+        config = AgentsDocConfig(additional_directories=("linked",))
+        assert "resolves outside the checkout" in "".join(configured_path_findings(root, config))
+
+    def test_paths_that_stay_inside_report_nothing(self, tmp_path: Path) -> None:
+        root = self._repo(tmp_path / "repo")
+        (root / "pkg").mkdir()
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert configured_path_findings(root, config) == []

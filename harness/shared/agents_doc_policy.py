@@ -65,6 +65,14 @@ DEFAULT_DIAGRAM_TYPES = tuple(
     "C4Context C4Container C4Component C4Dynamic".split()
 )
 
+#: Thresholds a *larger* value tightens. Everything else is a cap, which a
+#: smaller value tightens. Written out rather than derived from the `min_`/`max_`
+#: prefix, because the prefix gets one of them wrong: `min_source_files` is how
+#: many sources *earn* a directory a document, so raising it requires fewer
+#: documents -- looser, despite the name. A rule that reads the name would have
+#: let that one key be loosened silently.
+TIGHTENS_UPWARD = frozenset({"min_scope_names", "min_documented_directories", "min_waiver_reason_chars"})
+
 #: Environment overrides, applied above the policy and below an explicit
 #: argument. Only the numeric keys are exposed: a run may need a tighter budget
 #: without editing a protected policy, but no run should be able to rename the
@@ -184,23 +192,47 @@ def _as_str_map(value: object, key: str) -> Mapping[str, str]:
     return dict(value)
 
 
-def _resolve_number(key: str, default: int, section: _Section, declared: bool, overrides: Mapping[str, object]) -> int:
-    """One threshold, under ``explicit argument > environment > policy > default``.
+def _tighter(key: str, current: int, requested: int, label: str) -> int:
+    """`requested` if it tightens the gate, else `current` with a warning.
 
-    Split out so the undeclared-block path runs the same three upper levels the
-    declared path does. Only the bottom level differs: an undeclared block has
-    no policy value to read, so it falls to the built-in default instead of
-    ``_Section.int``, which would raise for a key a backed file never states.
+    R-CQ-8, the rule `validate_invariants._policy_limit` and `check_dedup`
+    already apply: an override may tighten what the policy states and may never
+    relax it. `MAX_FILE_LINES=9999` was once returned verbatim, which switched
+    the size gate off while it still printed `[PASS]` -- a gate whose own report
+    cannot be told apart from a real pass. The same hole was open here:
+    `--max-lines 999` against a policy of 150, or
+    `AGENTS_DOC_MIN_DOCUMENTED_DIRECTORIES=0` against a floor of 20.
     """
+    tightens = requested > current if key in TIGHTENS_UPWARD else requested < current
+    if tightens or requested == current:
+        return requested
+    logger.warning(
+        "ignoring %s=%d: an override may only tighten this gate (policy says %d)",
+        label,
+        requested,
+        current,
+    )
+    return current
+
+
+def _resolve_number(key: str, default: int, section: _Section, declared: bool, overrides: Mapping[str, object]) -> int:
+    """One threshold: the policy states it; the two levels above may only tighten.
+
+    The undeclared-block path runs the same upper levels the declared path
+    does. Only the bottom differs: an undeclared block has no policy value to
+    read, so it falls to the built-in default instead of ``_Section.int``,
+    which would raise for a key a backed file never states.
+    """
+    resolved = section.int(key, default) if declared else default
+    from_env = _env_int(key)
+    if from_env is not None:
+        resolved = _tighter(key, resolved, from_env, f"{ENV_PREFIX}{key.upper()}")
     explicit = overrides.get(key)
     if explicit is not None:
         if not isinstance(explicit, int) or isinstance(explicit, bool):
             raise PolicyError(f"{key} override must be an integer, got {explicit!r}")
-        return explicit
-    from_env = _env_int(key)
-    if from_env is not None:
-        return from_env
-    return section.int(key, default) if declared else default
+        resolved = _tighter(key, resolved, explicit, f"{key} override")
+    return resolved
 
 
 def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsDocConfig:
@@ -251,7 +283,17 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
         return resolved
 
     def text(key: str, default: str) -> str:
-        return str(section.optional(key, default))
+        """A string key, refused rather than coerced.
+
+        `str()` turned `subagent_directory: null` into the literal `"None"`,
+        which names no directory, so `subagent_findings` saw a missing one and
+        reported nothing -- the frontmatter audit silently switched off by a
+        malformed policy value. A present policy fails closed.
+        """
+        value = section.optional(key, default)
+        if not isinstance(value, str):
+            raise PolicyError(f"policy {POLICY_BLOCK}.{key} must be a string, got {value!r}")
+        return value
 
     def names(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
         value = section.optional(key, default)

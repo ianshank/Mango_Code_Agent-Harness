@@ -41,9 +41,14 @@ constraints are compiled into executable checks.
   keys of `waived_directories` — MUST resolve inside the checkout, so a policy
   can tighten or relocate the audit but never redirect it somewhere with
   nothing to find. A Windows drive letter counts as outside, including the
-  drive-relative `C:foo` form that is not absolute to `PurePath`.
-- C-ADOC-1: A policy that declares the `agents_doc` block MUST fail closed on a
-  missing numeric key; a policy that does not declare the block at all MUST take
+  drive-relative `C:foo` form that is not absolute to `PurePath`. A configured
+  directory that exists MUST also resolve inside the checkout, so an in-tree
+  symlink cannot redirect the audit outward.
+- C-ADOC-1: An explicit or environment override MUST only ever tighten a
+  threshold, never relax one — the rule `validate_invariants._policy_limit` and
+  `check_dedup` already apply — and a malformed scalar MUST be refused rather
+  than coerced. A policy that declares the `agents_doc` block MUST fail
+  closed on a missing numeric key; a policy that does not declare the block at all MUST take
   the built-in defaults, so an adopter policy predating the block keeps working.
 - C-ADOC-2: The change MUST NOT create any file under `.mango/agents/` or any
   `harness/*/agents/` directory, whose `*.md` namespace is the persona set that
@@ -113,8 +118,9 @@ constraints are compiled into executable checks.
       verified by
       `pytest harness/shared/tests/test_agents_doc_policy.py -k TestPolicyPathsStayInTheCheckout` ·
       stage: `make ci` (R-ADOC-6)
-- [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_policy.py` and
-      `agents_doc_discovery.py` are each covered by `protected_paths` —
+- [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_policy.py`,
+      `agents_doc_discovery.py` and `agents_doc_mermaid.py` — the whole
+      enforcement surface — are each covered by `protected_paths` —
       verified by
       `pytest harness/shared/tests/test_protected_path_liveness.py -k control_surface` ·
       stage: `make ci` (C-ADOC-5)
