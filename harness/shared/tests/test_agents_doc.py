@@ -617,6 +617,50 @@ class TestConfiguredPathsAreRealAndInTree:
         config = AgentsDocConfig(additional_directories=("linked",))
         assert "resolves outside the checkout" in "".join(configured_path_findings(root, config))
 
+    def _document_body(self) -> str:
+        return (
+            "# AGENTS.md — pkg\n\n**Scope:** `a.py`, `b.py`, `c.py`\n"
+            "**Reviewed:** 2026-09-19\n\n## What this does\nIt exists.\n\n"
+            "## Key files\n\n| File | Role |\n| --- | --- |\n| `a.py` | a module |\n"
+        )
+
+    def test_a_symlinked_companion_is_reported(self, tmp_path: Path) -> None:
+        """DEC-070 rejected a symlinked companion for Windows portability, and
+        that was prose. A link to an external file holding the right one line
+        satisfied the rule while the content the gate read lived outside the
+        checkout, so the decision is mechanical now."""
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "companion.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        directory = tmp_path / "repo" / "pkg"
+        directory.mkdir(parents=True)
+        (directory / "CLAUDE.md").symlink_to(outside / "companion.md")
+        findings = companion_findings(directory, "pkg", CONFIG)
+        assert "resolves outside its own directory" in "".join(findings)
+
+    def test_a_real_companion_beside_the_document_is_accepted(self, tmp_path: Path) -> None:
+        """The negative control: the rule is about escaping, not about existing."""
+        directory = tmp_path / "pkg"
+        directory.mkdir()
+        (directory / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        assert companion_findings(directory, "pkg", CONFIG) == []
+
+    def test_a_symlinked_document_is_reported(self, tmp_path: Path) -> None:
+        """The document itself was read through a link the same way."""
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "AGENTS.md").write_text(self._document_body(), encoding="utf-8")
+        root = tmp_path / "repo"
+        directory = root / "pkg"
+        directory.mkdir(parents=True)
+        for name in ("a.py", "b.py", "c.py"):
+            (directory / name).write_text("x = 1\n", encoding="utf-8")
+        (directory / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        (directory / "AGENTS.md").symlink_to(outside / "AGENTS.md")
+        config = AgentsDocConfig(additional_directories=("pkg",), min_documented_directories=1)
+        escapes = [f for f in audit(root, config) if "resolves outside its own directory" in f]
+        assert escapes, "a symlinked document must be reported, not read"
+
     def test_paths_that_stay_inside_report_nothing(self, tmp_path: Path) -> None:
         root = self._repo(tmp_path / "repo")
         (root / "pkg").mkdir()

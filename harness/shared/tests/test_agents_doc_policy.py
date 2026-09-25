@@ -264,6 +264,38 @@ class TestAnOverrideMayOnlyTighten:
         assert load_config(policy, min_source_files=9).min_source_files == 3
         assert load_config(policy, min_source_files=2).min_source_files == 2
 
+    def test_an_explicit_override_is_judged_against_the_policy_not_the_environment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The regression the tighten-only rule introduced, and the reason the
+        two levels are not chained.
+
+        Applying the environment first and then judging the explicit value
+        against the *result* broke the documented precedence: with policy 150
+        and `AGENTS_DOC_MAX_LINES=7`, an explicit 8 tightens the policy but
+        loses to the 7 it was compared against. Only the highest-priority
+        override that was supplied is consulted, and it answers to the policy.
+        """
+        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "7")
+        policy = write_policy(tmp_path, policy_block(max_lines=150))
+        assert load_config(policy, max_lines=8).max_lines == 8
+
+    def test_an_explicit_override_that_loosens_is_still_refused_with_an_environment_value_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Restoring the precedence must not restore the hole: the explicit value
+        answers to the policy, so a loosening one falls back to the policy rather
+        than to the environment."""
+        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "7")
+        policy = write_policy(tmp_path, policy_block(max_lines=150))
+        assert load_config(policy, max_lines=200).max_lines == 150
+
+    def test_the_environment_still_applies_when_no_explicit_override_is_given(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "7")
+        assert load_config(write_policy(tmp_path, policy_block(max_lines=150))).max_lines == 7
+
     def test_a_refused_override_says_so(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Silently ignoring an override would be its own trap."""
         policy = write_policy(tmp_path, policy_block(max_lines=150))

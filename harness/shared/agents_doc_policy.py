@@ -216,22 +216,31 @@ def _tighter(key: str, current: int, requested: int, label: str) -> int:
 
 
 def _resolve_number(key: str, default: int, section: _Section, declared: bool, overrides: Mapping[str, object]) -> int:
-    """One threshold: the policy states it; the two levels above may only tighten.
+    """One threshold: the policy states it; the level above may only tighten it.
 
-    The undeclared-block path runs the same upper levels the declared path
-    does. Only the bottom differs: an undeclared block has no policy value to
-    read, so it falls to the built-in default instead of ``_Section.int``,
-    which would raise for a key a backed file never states.
+    Precedence is ``explicit argument > environment > policy > default``, so the
+    highest-priority override *that was supplied* is the only one consulted, and
+    it is judged against the **policy** value. Chaining the two instead --
+    environment first, then explicit against the result -- broke the
+    precedence: with policy 150, ``AGENTS_DOC_MAX_LINES=7`` and
+    ``--max-lines 8``, the explicit 8 tightens the policy but loses to the 7 it
+    was compared against. The environment is consulted only when no explicit
+    override was given.
+
+    The undeclared-block path runs the same upper level the declared path does.
+    Only the bottom differs: an undeclared block has no policy value to read, so
+    it falls to the built-in default instead of ``_Section.int``, which would
+    raise for a key a backed file never states.
     """
     resolved = section.int(key, default) if declared else default
-    from_env = _env_int(key)
-    if from_env is not None:
-        resolved = _tighter(key, resolved, from_env, f"{ENV_PREFIX}{key.upper()}")
     explicit = overrides.get(key)
     if explicit is not None:
         if not isinstance(explicit, int) or isinstance(explicit, bool):
             raise PolicyError(f"{key} override must be an integer, got {explicit!r}")
-        resolved = _tighter(key, resolved, explicit, f"{key} override")
+        return _tighter(key, resolved, explicit, f"{key} override")
+    from_env = _env_int(key)
+    if from_env is not None:
+        return _tighter(key, resolved, from_env, f"{ENV_PREFIX}{key.upper()}")
     return resolved
 
 

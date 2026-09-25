@@ -151,7 +151,8 @@ constraints are compiled into executable checks.
 Protected paths are marked; each needs an `infra-reviewed` attestation row.
 
 - `harness/shared/agents_doc.py`, `harness/shared/agents_doc_policy.py`,
-  `harness/shared/agents_doc_discovery.py` **(all three protected)**
+  `harness/shared/agents_doc_discovery.py`,
+  `harness/shared/agents_doc_mermaid.py` **(all four protected)**
 - `harness/shared/tests/test_agents_doc.py`,
   `harness/shared/tests/test_agents_doc_policy.py`,
   `harness/shared/tests/_agents_doc_helpers.py`

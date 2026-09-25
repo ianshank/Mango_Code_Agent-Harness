@@ -218,6 +218,12 @@ def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) 
     companion = directory / config.companion_filename
     if not companion.is_file():
         return [f"{relative}: missing {config.companion_filename} importing {config.filename}"]
+    if not contains(directory, config.companion_filename):
+        # DEC-070 rejected a symlinked companion for Windows portability; this
+        # makes that decision mechanical. Without it a link to an external file
+        # holding the right one line satisfied the rule while the content the
+        # gate read lived outside the checkout entirely.
+        return [f"{relative}/{config.companion_filename}: resolves outside its own directory"]
     body = companion.read_text(encoding="utf-8").strip()
     if body != config.companion_body:
         return [f"{relative}/{config.companion_filename}: body is {body!r}, expected {config.companion_body!r}"]
@@ -362,6 +368,9 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
         directory = repo_root / relative
         if not path.is_file():
             findings.append(f"{relative}: missing {resolved.filename}")
+            continue
+        if not contains(directory, resolved.filename):
+            findings.append(f"{relative}/{resolved.filename}: resolves outside its own directory")
             continue
         present += 1
         findings.extend(companion_findings(directory, relative, resolved))
