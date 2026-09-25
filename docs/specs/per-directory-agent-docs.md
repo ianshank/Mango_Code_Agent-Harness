@@ -120,8 +120,8 @@ constraints are compiled into executable checks.
       verified by
       `pytest harness/shared/tests/test_agents_doc_policy.py -k TestPolicyPathsStayInTheCheckout` ·
       stage: `make ci` (R-ADOC-6)
-- [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_policy.py`,
-      `agents_doc_discovery.py`, `agents_doc_mermaid.py` and `agents_doc_cli.py`
+- [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_checks.py`,
+      `agents_doc_policy.py`, `agents_doc_discovery.py` and `agents_doc_mermaid.py`
       — the whole enforcement surface — are each covered by `protected_paths` —
       verified by
       `pytest harness/shared/tests/test_protected_path_liveness.py -k control_surface` ·
@@ -152,11 +152,12 @@ constraints are compiled into executable checks.
 
 Protected paths are marked; each needs an `infra-reviewed` attestation row.
 
-- `harness/shared/agents_doc.py`, `harness/shared/agents_doc_policy.py`,
+- `harness/shared/agents_doc.py`, `harness/shared/agents_doc_checks.py`,
+  `harness/shared/agents_doc_policy.py`,
   `harness/shared/agents_doc_discovery.py`,
-  `harness/shared/agents_doc_mermaid.py`, `harness/shared/agents_doc_cli.py`
-  **(all five protected)**
+  `harness/shared/agents_doc_mermaid.py` **(all five protected)**
 - `harness/shared/tests/test_agents_doc.py`,
+  `harness/shared/tests/test_agents_doc_command.py`,
   `harness/shared/tests/test_agents_doc_policy.py`,
   `harness/shared/tests/_agents_doc_helpers.py`
 - `harness/shared/governance-policy.json` **(protected)**

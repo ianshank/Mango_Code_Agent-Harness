@@ -1,8 +1,10 @@
-"""The ``agents_doc`` command line and its staleness report (`agents_doc_cli`).
+"""The ``agents_doc`` command line and its staleness report.
 
 Split from `test_agents_doc.py` when it reached ``limits.test_size_budget_lines``,
-along the seam the source already uses: `agents_doc_cli` owns how the gate is
-invoked and how it reports, `agents_doc` owns what is true.
+along the seam the source uses: `agents_doc` owns how the gate is invoked and how
+it reports, `agents_doc_checks` owns what is true. That direction is load-bearing
+and `test_import_direction.py` holds it -- a command line imports the checks, not
+the other way around.
 
 The staleness half is the one worth reading twice. C-ADOC-4 says an old
 `**Reviewed:**` date must *not* block a pull request -- a clock-dependent gate
