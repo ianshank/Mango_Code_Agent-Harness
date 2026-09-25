@@ -25,6 +25,7 @@ import pytest
 from harness.shared.agents_doc import (
     audit,
     companion_findings,
+    contains,
     discover_source_directories,
     document_findings,
     iter_documents,
@@ -170,6 +171,32 @@ class TestConfigResolution:
         with pytest.raises(PolicyError, match="list of strings"):
             load_config(write_policy(tmp_path, block))
 
+    def test_a_negative_threshold_is_rejected(self, tmp_path: Path) -> None:
+        """A negative floor does not tighten a gate, it disables one:
+        `min_documented_directories: -1` makes `present < floor` false for an
+        empty tree, so the anti-vacuity check passes with no documents at all."""
+        with pytest.raises(PolicyError, match="zero or greater"):
+            load_config(write_policy(tmp_path, policy_block(min_documented_directories=-1)))
+
+    def test_every_numeric_key_is_range_checked_not_just_one(self, tmp_path: Path) -> None:
+        """Written against the dataclass, so a threshold added later is covered
+        without anyone remembering to extend this test."""
+        for key in NUMERIC_KEYS:
+            with pytest.raises(PolicyError, match="zero or greater"):
+                load_config(write_policy(tmp_path, policy_block(**{key: -1})))
+
+    def test_an_override_reaches_an_undeclared_block(self, tmp_path: Path) -> None:
+        """The undeclared-block branch returned early, which dropped the two
+        levels above the policy: `--max-lines 5` against an adopter policy
+        resolved to the built-in 150, so the documented precedence held only
+        for deployments that had already adopted the block."""
+        policy = write_policy(tmp_path, None)
+        assert load_config(policy, max_lines=5).max_lines == 5
+
+    def test_the_environment_reaches_an_undeclared_block(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENTS_DOC_MAX_LINES", "9")
+        assert load_config(write_policy(tmp_path, None)).max_lines == 9
+
     def test_a_waiver_map_of_the_wrong_shape_is_rejected(self, tmp_path: Path) -> None:
         with pytest.raises(PolicyError, match="object of string reasons"):
             load_config(write_policy(tmp_path, policy_block(waived_directories=["scripts"])))
@@ -288,6 +315,34 @@ class TestDocumentFindings:
         write_document(tmp_path / "pkg", scope="`a.py`, `vitest`, `pnpm`")
         assert findings_for(tmp_path / "pkg") == []
 
+    def test_a_scope_path_escaping_the_directory_is_reported(self, tmp_path: Path) -> None:
+        """`directory / name` is not containment. `../sibling.py` resolved to a
+        real file outside the directory the document describes, and existence
+        was the whole rule, so the claim was accepted."""
+        (tmp_path / "outside.py").write_text("x = 1\n", encoding="utf-8")
+        write_document(tmp_path / "pkg", scope="`a.py`, `b.py`, `../outside.py`")
+        assert "does not exist under" in "".join(findings_for(tmp_path / "pkg"))
+
+    def test_an_absolute_scope_path_is_reported(self, tmp_path: Path) -> None:
+        """An absolute name discards the base entirely, so any existing file on
+        the machine satisfied the check."""
+        write_document(tmp_path / "pkg", scope="`a.py`, `b.py`, `/etc/hosts`")
+        assert "`/etc/hosts`" in "".join(findings_for(tmp_path / "pkg"))
+
+    def test_a_key_file_escaping_the_directory_is_reported(self, tmp_path: Path) -> None:
+        (tmp_path / "outside.py").write_text("x = 1\n", encoding="utf-8")
+        write_document(tmp_path / "pkg", key_files=("a.py", "../outside.py"))
+        assert "Key files names `../outside.py`" in "".join(findings_for(tmp_path / "pkg"))
+
+    def test_containment_still_accepts_a_real_subdirectory_path(self, tmp_path: Path) -> None:
+        """The negative control: tightening this must not start rejecting the
+        nested paths documents legitimately name."""
+        write_document(tmp_path / "pkg")
+        (tmp_path / "pkg" / "sub").mkdir()
+        (tmp_path / "pkg" / "sub" / "deep.py").write_text("x = 1\n", encoding="utf-8")
+        assert contains(tmp_path / "pkg", "sub/deep.py")
+        assert not contains(tmp_path / "pkg", "../outside.py")
+
     def test_a_scope_line_of_only_technologies_is_reported(self, tmp_path: Path) -> None:
         """Without one path claim the line is unfalsifiable by anything here."""
         write_document(tmp_path / "pkg", scope="`vitest`, `pnpm`, `eslint`")
@@ -353,6 +408,18 @@ class TestMermaidFindings:
 
     def test_an_unknown_opening_keyword_is_reported(self) -> None:
         assert "not a known mermaid diagram type" in "".join(mermaid_findings(["flowchrt LR\n  A --> B\n"], CONFIG))
+
+    def test_a_keyword_that_merely_shares_a_prefix_is_reported(self) -> None:
+        """`startswith` accepted `flowchartX LR`, which renders as an error box.
+        A check that admits the typo it exists to catch is not a check."""
+        assert "not a known mermaid diagram type" in "".join(
+            mermaid_findings(['flowchartX LR\n  A["a"] --> B["b"]\n'], CONFIG)
+        )
+
+    def test_a_valid_keyword_with_a_direction_is_still_accepted(self) -> None:
+        """Negative control for the fix above: the token check must not start
+        rejecting `flowchart LR`, which is how every diagram here opens."""
+        assert mermaid_findings(['flowchart LR\n  A["a"] --> B["b"]\n'], CONFIG) == []
 
     def test_an_unbalanced_quote_is_reported(self) -> None:
         assert "unbalanced quote" in "".join(mermaid_findings(['flowchart LR\n  A["one] --> B\n'], CONFIG))
@@ -556,6 +623,13 @@ class TestTheGateIsNotVacuous:
 
     def test_a_known_directory_is_required(self) -> None:
         assert "harness/shared/governance" in required_directories(REPO, load_config())
+
+    def test_openspec_is_not_in_the_required_set(self) -> None:
+        """DEC-055 folds `openspec/` into `docs/specs/` and deletes it; its
+        AC-28 requires `ls openspec` to fail. Requiring a document there would
+        make this gate depend on a directory scheduled for removal, and create
+        one that must immediately be migrated or deleted."""
+        assert "openspec" not in required_directories(REPO, load_config())
 
     def test_every_waiver_names_a_directory_that_exists(self) -> None:
         assert waiver_findings(REPO, load_config()) == []

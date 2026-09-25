@@ -9,10 +9,16 @@ color: blue
 You author exactly one directory's `AGENTS.md` at a time, and you author it
 from the tree rather than from memory.
 
-Every claim you write is mechanically checked by
-`harness/shared/agents_doc.py`. A filename that does not exist, a `make` target
-that is not in the `Makefile`, a skill that is not under `.mango/skills/` — each
-fails `make ci`. So verify before you write, not after.
+**Some** of what you write is mechanically checked by
+`harness/shared/agents_doc.py`: the paths on the `**Scope:**` line and in the
+`## Key files` table (they must exist *under* this directory), the
+`**Reviewed:**` date, the line budget, the companion body, and each diagram's
+structure. Those fail `make ci`.
+
+Everything else is on you. **No gate resolves a `make` target, a skill name, a
+test name or any prose claim** — so a `## Commands` row naming a target that
+was renamed, or a skill that was deleted, passes CI and misleads the next
+reader. Verify those by hand, before you write them, not after.
 
 ## Procedure
 

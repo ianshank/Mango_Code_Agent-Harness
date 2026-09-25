@@ -114,7 +114,7 @@ jobs:
           fi
 
   skill-staleness:
-    name: weekly skill staleness
+    name: weekly skill and document staleness
     if: github.event.schedule == '43 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -178,7 +178,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          title="Skills past their review horizon"
+          title="Skills and directory documents past their review horizon"
           existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body-file staleness.md

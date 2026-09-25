@@ -50,51 +50,51 @@ constraints are compiled into executable checks.
 
 ## Acceptance criteria
 
-- [ ] AC-1: Every directory in the required set carries both files — verified by
-      `pytest -k test_every_required_directory_carries_a_document` · stage:
+- [x] AC-1: Every directory in the required set carries both files — verified by
+      `pytest harness/shared/tests/test_agents_doc.py -k test_every_required_directory_carries_a_document` · stage:
       `make ci` (R-ADOC-1, R-ADOC-3)
-- [ ] AC-2: A document naming a path that does not exist under its own directory
+- [x] AC-2: A document naming a path that does not exist under its own directory
       is **rejected**, on the `**Scope:**` line and in the `## Key files` table —
-      verified by `pytest -k "missing_path or does_not_exist"` · stage:
+      verified by `pytest harness/shared/tests/test_agents_doc.py -k "missing_path or does_not_exist or escaping_the_directory"` · stage:
       `make ci` (R-ADOC-1, R-ADOC-5)
-- [ ] AC-3: Deleting any one document **fails** `make ci` naming that directory,
+- [x] AC-3: Deleting any one document **fails** `make ci` naming that directory,
       and a new source directory with no document and no waiver **fails** the
-      same way — verified by `pytest -k TestAudit` · stage: `make ci` (R-ADOC-2)
-- [ ] AC-4: A declared policy block missing a numeric key **raises** `PolicyError`
+      same way — verified by `pytest harness/shared/tests/test_agents_doc.py -k TestAudit` · stage: `make ci` (R-ADOC-2)
+- [x] AC-4: A declared policy block missing a numeric key **raises** `PolicyError`
       rather than substituting a default, and an undeclared block does not —
-      verified by `pytest -k TestConfigResolution` · stage: `make ci` (C-ADOC-1)
-- [ ] AC-5: A companion file whose body is anything other than the configured
+      verified by `pytest harness/shared/tests/test_agents_doc.py -k TestConfigResolution` · stage: `make ci` (C-ADOC-1)
+- [x] AC-5: A companion file whose body is anything other than the configured
       import is **rejected** — verified by
-      `pytest -k TestCompanionFindings` · stage: `make ci` (R-ADOC-3)
-- [ ] AC-6: A mermaid diagram opening with an unknown keyword, carrying an
+      `pytest harness/shared/tests/test_agents_doc.py -k TestCompanionFindings` · stage: `make ci` (R-ADOC-3)
+- [x] AC-6: A mermaid diagram opening with an unknown keyword, carrying an
       unbalanced quote or bracket, or declaring more than
       `agents_doc.max_diagram_nodes` nodes is **rejected**; diagrams also remain
       subject to the existing bare-bracket rule — verified by
-      `pytest -k TestMermaidFindings` · stage: `make ci` (R-ADOC-1)
-- [ ] AC-7: A subagent definition whose frontmatter Claude Code would **silently
+      `pytest harness/shared/tests/test_agents_doc.py -k TestMermaidFindings` · stage: `make ci` (R-ADOC-1)
+- [x] AC-7: A subagent definition whose frontmatter Claude Code would **silently
       skip** — no opening `---` on line 1, no `name`, a `name` containing `:`, or
       no `description` — is reported — verified by
-      `pytest -k TestSubagentFindings` · stage: `make ci` (R-ADOC-5)
-- [ ] AC-8: An empty tree **fails** the population floor rather than passing
+      `pytest harness/shared/tests/test_agents_doc.py -k TestSubagentFindings` · stage: `make ci` (R-ADOC-5)
+- [x] AC-8: An empty tree **fails** the population floor rather than passing
       vacuously — verified by
-      `pytest -k test_the_population_floor_catches_a_vacuous_pass` · stage:
+      `pytest harness/shared/tests/test_agents_doc.py -k test_the_population_floor_catches_a_vacuous_pass` · stage:
       `make ci` (R-ADOC-2)
-- [ ] AC-9: No file is added under `.mango/agents/` or `harness/*/agents/`, and
+- [x] AC-9: No file is added under `.mango/agents/` or `harness/*/agents/`, and
       the five persona-namespace assertions still pass unchanged — verified by
       `pytest harness/shared/tests/test_agent_harness_wiring.py
       harness/shared/tests/test_agent_surface_liveness.py
       harness/shared/tests/test_agent_surface_determinism.py
       harness/shared/tests/test_reasoner_bridge_tool_parity.py` · stage:
       `make ci` (C-ADOC-2, C-ADOC-3)
-- [ ] AC-10: New modules reach the per-file coverage floor from
+- [x] AC-10: New modules reach the per-file coverage floor from
       `governance-policy.json → coverage.lines` — verified by
       `make coverage-python` · stage: `make ci` (R-ADOC-4)
-- [ ] AC-11: A document whose `**Reviewed:**` date is older than
+- [x] AC-11: A document whose `**Reviewed:**` date is older than
       `governance-policy.json → skill_max_age_days` does **not** fail `make ci`;
       a document with a missing or unparseable `**Reviewed:**` line does. The
       stale date is reported by the weekly drift workflow, which opens an issue
       and never blocks a pull request — verified by
-      `pytest -k "reviewed"` and by `.github/workflows/scheduled-drift.yml`
+      `pytest harness/shared/tests/test_agents_doc.py -k "reviewed"` and by `.github/workflows/scheduled-drift.yml`
       declaring no `pull_request` trigger · stage: `make ci` (C-ADOC-4)
 
 ## Steps

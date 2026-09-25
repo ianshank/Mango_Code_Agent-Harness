@@ -32,16 +32,30 @@ import argparse
 import logging
 import re
 import sys
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 try:
+    from harness.shared.agents_doc_discovery import (
+        discover_source_directories,
+        iter_documents,
+        required_directories,
+        source_file_count,
+        waiver_findings,
+    )
     from harness.shared.agents_doc_policy import AgentsDocConfig, load_config
     from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
     from harness.shared.policy_loader import PolicyError
 except ImportError:  # sibling import when this dir is sys.path[0]
+    from agents_doc_discovery import (  # type: ignore[no-redef]
+        discover_source_directories,
+        iter_documents,
+        required_directories,
+        source_file_count,
+        waiver_findings,
+    )
     from agents_doc_policy import AgentsDocConfig, load_config  # type: ignore[no-redef]
     from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
     from policy_loader import PolicyError  # type: ignore[no-redef]
@@ -66,6 +80,28 @@ MERMAID_NODE = re.compile(r"(?<![\w-])([A-Za-z_][\w-]*)\s*[\[\(\{]")
 #: are flat scalars, and a parser would add a dependency to a stdlib gate.
 FRONTMATTER_KEY = re.compile(r"^([A-Za-z_][\w-]*):\s*(.*)$")
 
+#: Re-exported so the discovery split stays an implementation detail for
+#: callers: `agents_doc` remains the one import for the whole gate.
+__all__ = [
+    "audit",
+    "companion_findings",
+    "contains",
+    "discover_source_directories",
+    "document_findings",
+    "is_path_like",
+    "iter_documents",
+    "main",
+    "mermaid_findings",
+    "parse_document",
+    "render_staleness_report",
+    "required_directories",
+    "scope_names",
+    "source_file_count",
+    "stale_documents",
+    "subagent_findings",
+    "waiver_findings",
+]
+
 
 def scope_names(text: str) -> list[str]:
     """Every backticked name on the document's ``**Scope:**`` line."""
@@ -77,83 +113,34 @@ def is_path_like(name: str) -> bool:
     """Whether a scope name is a path claim rather than a technology claim.
 
     The same test ``test_documentation_claims.unsupported_scope_names`` applies,
-    and for the same reason: a scope line mixes the two, and only one of them
-    can be resolved against a directory. ``harness/node`` says `vitest` and
-    `pnpm` truthfully, and this module has no way to judge those -- the Node
-    gate does, against ``package.json``. Judging them here would reject true
-    sentences, so path claims are checked and technology claims are left to the
-    stack that can check them. At least one path is still required, or the line
-    would be unfalsifiable by anything.
+    for the same reason: a scope line mixes the two and only one can be
+    resolved against a directory. ``harness/node`` says `vitest` truthfully and
+    this module has no manifest to judge that -- the Node gate does. So path
+    claims are checked, technology claims are left to the stack that can check
+    them, and at least one path is required or the line is unfalsifiable.
     """
     return "/" in name or name.startswith(".") or Path(name).suffix != ""
 
 
-def _is_pruned(path: Path, config: AgentsDocConfig) -> bool:
-    return bool(set(path.parts) & set(config.pruned_directory_names))
+def contains(directory: Path, name: str) -> bool:
+    """Whether `name` resolves to something that exists *inside* `directory`.
 
-
-def source_file_count(directory: Path, config: AgentsDocConfig) -> int:
-    """First-party source files directly in `directory`, not recursively.
-
-    Not recursive on purpose: a parent would otherwise inherit every child's
-    count and the rule would demand a document at the root of any deep tree,
-    which is the opposite of scoping instructions to where the edit happens.
+    Existence alone was the rule, and ``directory / name`` is not containment:
+    an absolute name discards the base, so `/etc/passwd` was accepted on any
+    scope line, and `../sibling.py` walked out of the directory the document
+    describes. R-ADOC-1 says *under* that directory, which is the claim a
+    reader takes away; a document that can name a file it does not own is back
+    to prose. Resolution follows symlinks, so a link out of the tree is
+    refused rather than accepted through its target.
     """
+    if Path(name).is_absolute():
+        return False
     try:
-        entries = list(directory.iterdir())
-    except OSError:  # pragma: no cover - unreadable dir is not a documentation fact
-        return 0
-    return sum(1 for f in entries if f.is_file() and f.suffix in config.source_extensions)
-
-
-def discover_source_directories(repo_root: Path, config: AgentsDocConfig) -> list[str]:
-    """Repo-relative directories carrying at least `min_source_files` sources."""
-    found: list[str] = []
-    for directory in sorted(p for p in repo_root.rglob("*") if p.is_dir()):
-        relative = directory.relative_to(repo_root)
-        if _is_pruned(relative, config):
-            continue
-        if source_file_count(directory, config) >= config.min_source_files:
-            found.append(relative.as_posix())
-    return found
-
-
-def required_directories(repo_root: Path, config: AgentsDocConfig) -> list[str]:
-    """The directories that owe a document: discovered, minus waived, plus additional.
-
-    R-ADOC-2: derived from the tree so a directory added later is caught,
-    never transcribed as a literal list that passes while the tree grows.
-    """
-    discovered = set(discover_source_directories(repo_root, config))
-    required = (discovered - set(config.waived_directories)) | set(config.additional_directories)
-    logger.debug(
-        "required directories: %d discovered, %d waived, %d additional, %d required",
-        len(discovered),
-        len(config.waived_directories),
-        len(config.additional_directories),
-        len(required),
-    )
-    return sorted(required)
-
-
-def waiver_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
-    """A waiver must name a real directory and carry a reason worth reading.
-
-    Both halves matter. A waiver for a path that no longer exists is a rule
-    nobody can evaluate, and a waiver whose reason is "n/a" is an exemption
-    granted without one -- the shape `STANDALONE_SKILLS` guards against by the
-    same means.
-    """
-    findings: list[str] = []
-    for name, reason in sorted(config.waived_directories.items()):
-        if not (repo_root / name).is_dir():
-            findings.append(f"{name}: waived but the directory does not exist")
-        if len(reason.strip()) < config.min_waiver_reason_chars:
-            findings.append(
-                f"{name}: waiver reason is {len(reason.strip())} characters; "
-                f"at least {config.min_waiver_reason_chars} are required so an exemption states why"
-            )
-    return findings
+        root = directory.resolve(strict=True)
+        candidate = (directory / name).resolve(strict=True)
+    except (OSError, RuntimeError):  # missing, or a symlink loop
+        return False
+    return candidate == root or root in candidate.parents
 
 
 @dataclass(frozen=True)
@@ -212,11 +199,10 @@ def parse_document(path: Path, directory: Path) -> AgentsDocument:
 def mermaid_findings(diagrams: Sequence[str], config: AgentsDocConfig) -> list[str]:
     """Structural checks the existing bracket-quoting rule cannot make.
 
-    `test_documentation_truth` catches exactly one failure mode -- a bare
-    bracket inside a label -- which leaves an unknown opening keyword, an
-    unbalanced quote and a diagram too dense to read all passing. Each of those
-    renders as an error box or as something nobody can follow, and neither is
-    visible in review until the page is opened.
+    `test_documentation_truth` catches one failure mode -- a bare bracket in a
+    label -- leaving an unknown opening keyword, an unbalanced quote and an
+    unreadably dense diagram all passing. Each renders as an error box or as
+    something nobody can follow, and none is visible until the page is opened.
     """
     findings: list[str] = []
     if len(diagrams) > config.max_diagrams:
@@ -227,7 +213,11 @@ def mermaid_findings(diagrams: Sequence[str], config: AgentsDocConfig) -> list[s
             findings.append(f"diagram {index} is empty")
             continue
         opening = lines[0].strip()
-        if not any(opening.startswith(kind) for kind in config.diagram_types):
+        # The first whitespace-delimited token, not a prefix: `startswith` accepted
+        # `flowchartX LR`, which shares a prefix with `flowchart` and renders as an
+        # error box. A check that admits the typo it exists to catch is not a check.
+        keyword = opening.split()[0] if opening.split() else opening
+        if keyword not in config.diagram_types:
             findings.append(f"diagram {index} opens with {opening!r}, which is not a known mermaid diagram type")
         for lineno, line in enumerate(lines, 1):
             if line.count('"') % 2:
@@ -275,7 +265,7 @@ def document_findings(document: AgentsDocument, relative: str, config: AgentsDoc
         )
     paths = [name for name in document.scope_names if is_path_like(name)]
     for name in paths:
-        if not (document.directory / name).exists():
+        if not contains(document.directory, name):
             findings.append(f"{relative}: **Scope:** names `{name}`, which does not exist under {relative}")
     if not paths:
         findings.append(
@@ -288,7 +278,7 @@ def document_findings(document: AgentsDocument, relative: str, config: AgentsDoc
             "keeps the table a summary rather than a second copy of the README tree"
         )
     for name in document.key_files:
-        if not (document.directory / name).exists():
+        if not contains(document.directory, name):
             findings.append(f"{relative}: ## Key files names `{name}`, which does not exist under {relative}")
     if document.reviewed is None:
         findings.append(f"{relative}: no **Reviewed:** line, so nothing records when this was last checked")
@@ -347,12 +337,6 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
         if not fields.get("description", "").strip():
             findings.append(f"{relative}: no 'description', so nothing tells Claude when to delegate to it")
     return findings
-
-
-def iter_documents(repo_root: Path, config: AgentsDocConfig) -> Iterator[tuple[str, Path]]:
-    """Every required directory paired with the path its document should occupy."""
-    for relative in required_directories(repo_root, config):
-        yield relative, repo_root / relative / config.filename
 
 
 def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | None = None) -> list[str]:

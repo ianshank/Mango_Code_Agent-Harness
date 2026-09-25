@@ -22,9 +22,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from harness.shared.policy_loader import PolicyError, _log_resolution, _section
+    from harness.shared.policy_loader import PolicyError, _log_resolution, _Section, _section
 except ImportError:  # sibling import when this dir is sys.path[0]
-    from policy_loader import PolicyError, _log_resolution, _section  # type: ignore[no-redef]
+    from policy_loader import PolicyError, _log_resolution, _Section, _section  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,25 @@ def _as_str_map(value: object, key: str) -> Mapping[str, str]:
     return dict(value)
 
 
+def _resolve_number(key: str, default: int, section: _Section, declared: bool, overrides: Mapping[str, object]) -> int:
+    """One threshold, under ``explicit argument > environment > policy > default``.
+
+    Split out so the undeclared-block path runs the same three upper levels the
+    declared path does. Only the bottom level differs: an undeclared block has
+    no policy value to read, so it falls to the built-in default instead of
+    ``_Section.int``, which would raise for a key a backed file never states.
+    """
+    explicit = overrides.get(key)
+    if explicit is not None:
+        if not isinstance(explicit, int) or isinstance(explicit, bool):
+            raise PolicyError(f"{key} override must be an integer, got {explicit!r}")
+        return explicit
+    from_env = _env_int(key)
+    if from_env is not None:
+        return from_env
+    return section.int(key, default) if declared else default
+
+
 def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsDocConfig:
     """Resolve thresholds: explicit argument > environment > policy > default.
 
@@ -139,25 +158,34 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
     states its own ``additional_directories`` and waives nothing -- so "not
     declared" is a statement there, not a hole.
 
-    A policy that predates the block entirely takes the built-in defaults. That
-    branch is not a convenience: ``_section`` marks any present *file* as
-    backed, so without it every adopter policy written before this block would
-    raise on its first numeric key -- the DEC-043 hazard, and the reason
-    ``gate_floors`` carries the same guard.
+    A policy that predates the block entirely takes the built-in defaults for
+    the *policy* level only. That branch is not a convenience: ``_section``
+    marks any present *file* as backed, so without it every adopter policy
+    written before this block would raise on its first numeric key -- the
+    DEC-043 hazard, and the reason ``gate_floors`` carries the same guard. It
+    returned early at first, which silently dropped the two levels *above* the
+    policy: ``--max-lines 5`` against an adopter policy resolved to 150, so the
+    documented precedence held only for deployments that had adopted the block.
+
+    Every threshold is also range-checked. A negative one is not a tighter
+    gate, it is a disabled one: ``min_documented_directories: -1`` makes
+    ``present < floor`` false for an empty tree, so the anti-vacuity check
+    passes on a repository with no documents at all. A malformed number is
+    refused rather than enforced.
     """
     section = _section(POLICY_BLOCK, policy_path)
-    if not section.declared():
+    declared = section.declared()
+    if not declared:
         _log_resolution(POLICY_BLOCK, {"declared": False}, policy_path)
-        return AgentsDocConfig()
 
     def number(key: str, default: int) -> int:
-        explicit = overrides.get(key)
-        if explicit is not None:
-            if not isinstance(explicit, int) or isinstance(explicit, bool):
-                raise PolicyError(f"{key} override must be an integer, got {explicit!r}")
-            return explicit
-        from_env = _env_int(key)
-        return from_env if from_env is not None else section.int(key, default)
+        resolved = _resolve_number(key, default, section, declared, overrides)
+        if resolved < 0:
+            raise PolicyError(
+                f"policy {POLICY_BLOCK}.{key} must be zero or greater, got {resolved}; "
+                "a negative threshold does not tighten this gate, it disables it"
+            )
+        return resolved
 
     def text(key: str, default: str) -> str:
         return str(section.optional(key, default))
@@ -189,6 +217,6 @@ def load_config(policy_path: Path | None = None, **overrides: object) -> AgentsD
         additional_directories=names("additional_directories", ()),
         waived_directories=_as_str_map(section.optional("waived_directories", {}), "waived_directories"),
     )
-    _log_resolution(POLICY_BLOCK, {"declared": True, "max_lines": resolved.max_lines}, policy_path)
+    _log_resolution(POLICY_BLOCK, {"declared": declared, "max_lines": resolved.max_lines}, policy_path)
     logger.debug("%s config resolved: %s", POLICY_BLOCK, resolved)
     return resolved
