@@ -201,9 +201,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # UTC rather than local: the report runs on a scheduled runner, and a
         # horizon that shifts with the runner's timezone is one nobody can reproduce.
         stale = stale_documents(args.repo_root, config, args.stale_since_days, datetime.now(tz=timezone.utc).date())
-        report = render_staleness_report(stale, args.stale_since_days, config.filename)
-        if report:
-            print(report, end="")
+        # No `if report` guard: an empty report prints nothing on its own, and a
+        # branch whose two arms are indistinguishable is one a mutation test
+        # cannot fail -- `render_staleness_report` returning "" is the contract
+        # the weekly workflow reads, and that is where it is asserted.
+        print(render_staleness_report(stale, args.stale_since_days, config.filename), end="")
         logger.info("%d document(s) past %d days", len(stale), args.stale_since_days)
         return 0
 

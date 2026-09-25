@@ -16,6 +16,8 @@ a missing or unparseable one is what actually fails.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -61,6 +63,14 @@ class TestStaleness:
         config = AgentsDocConfig(additional_directories=("pkg",))
         assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
 
+    def test_a_document_with_no_reviewed_line_is_left_to_the_blocking_rule(self, tmp_path: Path) -> None:
+        """Same reasoning as the unparseable date, one step earlier: a document
+        with no date at all already fails `make ci`, so reporting it weekly as
+        well files an issue for something already red."""
+        write_document(tmp_path / "pkg", reviewed=None)
+        config = AgentsDocConfig(additional_directories=("pkg",))
+        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
+
     def test_nothing_stale_renders_nothing(self) -> None:
         """The workflow appends this to an issue body and opens the issue only
         when the file is non-empty, so an empty string is load-bearing."""
@@ -79,6 +89,18 @@ class TestStaleness:
         policy = write_policy(tmp_path, policy_block(additional_directories=["pkg"]))
         assert main(["--repo-root", str(tmp_path), "--policy", str(policy), "--stale-since-days", "1"]) == 0
         assert "| `pkg` |" in capsys.readouterr().out
+
+    def test_nothing_stale_prints_nothing_and_still_exits_zero(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The workflow opens an issue only when this output is non-empty, so a
+        run with nothing to report must print nothing rather than an empty table
+        -- a heading with no rows is an issue nobody can act on."""
+        write_document(tmp_path / "pkg")
+        policy = write_policy(tmp_path, policy_block(additional_directories=["pkg"]))
+        argv = ["--repo-root", str(tmp_path), "--policy", str(policy), "--stale-since-days", "36500"]
+        assert main(argv) == 0
+        assert capsys.readouterr().out == ""
 
 
 class TestCommandLine:
@@ -117,6 +139,42 @@ class TestCommandLine:
         bad = tmp_path / "policy.json"
         bad.write_text(json.dumps({POLICY_BLOCK: {"max_lines": 1}}), encoding="utf-8")
         assert main(["--repo-root", str(tmp_path), "--policy", str(bad)]) == 1
+
+
+class TestTheSiblingImportFallback:
+    """`python harness/shared/agents_doc.py` has to work, and no in-process test
+    can prove it: the editable install makes `harness.shared` importable, so the
+    `try` arm always wins here and the `except ImportError` arm -- five modules
+    deep, since every sibling needs its own -- is never entered. `python -S -E`
+    is the adopter's bare invocation: no site processing, no `PYTHON*` variables,
+    so the script's own directory at the head of `sys.path` is the only way any
+    of it resolves. The same idiom guards the shim entry points."""
+
+    def test_the_gate_runs_as_a_script_from_its_own_directory(self) -> None:
+        shared = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, "-S", "-E", "agents_doc.py", "--repo-root", str(shared.parents[1]), "--list"],
+            cwd=shared,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "harness/shared" in result.stdout.splitlines()
+
+    def test_the_package_path_is_genuinely_unavailable_there(self) -> None:
+        """The positive control. Without it the test above would pass just as well
+        through the `try` arm, and prove nothing about the fallback."""
+        shared = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, "-S", "-E", "-c", "import harness.shared.agents_doc_checks"],
+            cwd=shared,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "No module named 'harness'" in result.stderr
 
 
 # --- This repository ------------------------------------------------------------
