@@ -180,6 +180,7 @@ CONTROL_SURFACE = {
     "harness/shared/agents_doc.py": "decides whether a directory's document is true",
     "harness/shared/agents_doc_policy.py": "resolves every threshold the gate enforces",
     "harness/shared/agents_doc_discovery.py": "decides which directories the gate judges at all",
+    "harness/shared/agents_doc_cli.py": "how the gate is invoked and what it reports",
     "harness/shared/agents_doc_mermaid.py": "decides whether a diagram renders at all",
     "pyproject.toml": "lint, type and coverage gates can be weakened here",
     "harness/control-plane/publish_policy_artifact.py": "computes the policy drift baseline",

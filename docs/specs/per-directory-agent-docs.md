@@ -43,7 +43,9 @@ constraints are compiled into executable checks.
   nothing to find. A Windows drive letter counts as outside, including the
   drive-relative `C:foo` form that is not absolute to `PurePath`. A configured
   directory that exists MUST also resolve inside the checkout, so an in-tree
-  symlink cannot redirect the audit outward.
+  symlink cannot redirect the audit outward, and every file the gate reads — the
+  document, its companion, and each subagent definition — MUST be a regular file
+  in its own directory rather than a link, which is what DEC-070 already says.
 - C-ADOC-1: An explicit or environment override MUST only ever tighten a
   threshold, never relax one — the rule `validate_invariants._policy_limit` and
   `check_dedup` already apply — and a malformed scalar MUST be refused rather
@@ -119,8 +121,8 @@ constraints are compiled into executable checks.
       `pytest harness/shared/tests/test_agents_doc_policy.py -k TestPolicyPathsStayInTheCheckout` ·
       stage: `make ci` (R-ADOC-6)
 - [x] AC-13: `harness/shared/agents_doc.py`, `agents_doc_policy.py`,
-      `agents_doc_discovery.py` and `agents_doc_mermaid.py` — the whole
-      enforcement surface — are each covered by `protected_paths` —
+      `agents_doc_discovery.py`, `agents_doc_mermaid.py` and `agents_doc_cli.py`
+      — the whole enforcement surface — are each covered by `protected_paths` —
       verified by
       `pytest harness/shared/tests/test_protected_path_liveness.py -k control_surface` ·
       stage: `make ci` (C-ADOC-5)
@@ -152,7 +154,8 @@ Protected paths are marked; each needs an `infra-reviewed` attestation row.
 
 - `harness/shared/agents_doc.py`, `harness/shared/agents_doc_policy.py`,
   `harness/shared/agents_doc_discovery.py`,
-  `harness/shared/agents_doc_mermaid.py` **(all four protected)**
+  `harness/shared/agents_doc_mermaid.py`, `harness/shared/agents_doc_cli.py`
+  **(all five protected)**
 - `harness/shared/tests/test_agents_doc.py`,
   `harness/shared/tests/test_agents_doc_policy.py`,
   `harness/shared/tests/_agents_doc_helpers.py`

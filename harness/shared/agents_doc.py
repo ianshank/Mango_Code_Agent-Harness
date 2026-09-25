@@ -34,13 +34,11 @@ existing gate's exclusion list, so no rule already in place is loosened.
 
 from __future__ import annotations
 
-import argparse
 import logging
 import re
-import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
 try:
@@ -53,8 +51,6 @@ try:
     )
     from harness.shared.agents_doc_mermaid import MERMAID_BLOCK, declared_nodes, mermaid_findings
     from harness.shared.agents_doc_policy import AgentsDocConfig, load_config
-    from harness.shared.json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging
-    from harness.shared.policy_loader import PolicyError
 except ImportError:  # sibling import when this dir is sys.path[0]
     from agents_doc_discovery import (  # type: ignore[no-redef]
         discover_source_directories,
@@ -69,8 +65,6 @@ except ImportError:  # sibling import when this dir is sys.path[0]
         mermaid_findings,
     )
     from agents_doc_policy import AgentsDocConfig, load_config  # type: ignore[no-redef]
-    from json_logging import LOG_LEVEL_ENV_VAR, configure_gate_process_logging  # type: ignore[no-redef]
-    from policy_loader import PolicyError  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +93,7 @@ __all__ = [
     "declared_nodes",
     "document_findings",
     "is_path_like",
+    "is_regular_in",
     "iter_documents",
     "main",
     "mermaid_findings",
@@ -151,6 +146,21 @@ def contains(directory: Path, name: str) -> bool:
     except (OSError, RuntimeError):  # missing, or a symlink loop
         return False
     return candidate == root or root in candidate.parents
+
+
+def is_regular_in(directory: Path, name: str) -> bool:
+    """A regular file directly under `directory`, reached without following a link.
+
+    Containment alone did not enforce the rule DEC-070 states. That decision
+    rejected a symlinked ``AGENTS.md``/``CLAUDE.md`` outright, for Windows
+    checkouts where ``core.symlinks`` is off by default -- but an *in-tree* link
+    such as ``pkg/CLAUDE.md -> pkg/real.md`` resolves inside and compares equal,
+    so `contains()` accepted exactly the shape the decision refuses. A link is
+    refused here whether or not its target escapes; when it does escape,
+    `contains()` refuses it too.
+    """
+    candidate = directory / name
+    return not candidate.is_symlink() and candidate.is_file() and contains(directory, name)
 
 
 @dataclass(frozen=True)
@@ -218,12 +228,12 @@ def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) 
     companion = directory / config.companion_filename
     if not companion.is_file():
         return [f"{relative}: missing {config.companion_filename} importing {config.filename}"]
-    if not contains(directory, config.companion_filename):
+    if not is_regular_in(directory, config.companion_filename):
         # DEC-070 rejected a symlinked companion for Windows portability; this
-        # makes that decision mechanical. Without it a link to an external file
-        # holding the right one line satisfied the rule while the content the
-        # gate read lived outside the checkout entirely.
-        return [f"{relative}/{config.companion_filename}: resolves outside its own directory"]
+        # makes that decision mechanical. Containment alone was not enough: an
+        # in-tree link resolves inside and compared equal, so the shape the
+        # decision refuses still passed.
+        return [f"{relative}/{config.companion_filename}: must be a regular file in this directory, not a link"]
     body = companion.read_text(encoding="utf-8").strip()
     if body != config.companion_body:
         return [f"{relative}/{config.companion_filename}: body is {body!r}, expected {config.companion_body!r}"]
@@ -301,6 +311,11 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
     findings: list[str] = []
     for path in sorted(directory.glob("*.md")):
         relative = f"{config.subagent_directory}/{path.name}"
+        if not is_regular_in(directory, path.name):
+            # The directory being contained said nothing about its children: a
+            # linked `rogue.md` was read and parsed like any other definition.
+            findings.append(f"{relative}: must be a regular file in this directory, not a link")
+            continue
         lines = path.read_text(encoding="utf-8").splitlines()
         if not lines or lines[0].strip() != "---":
             findings.append(f"{relative}: no opening '---' on line 1, so Claude Code reads it as documentation")
@@ -366,11 +381,17 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
         if only is not None and relative != only:
             continue
         directory = repo_root / relative
+        if not contains(repo_root, relative):
+            # Reported by `configured_path_findings`; skipped here so the
+            # external document is not read as well as reported. Discovery
+            # cannot produce such a directory -- `os.walk` does not follow
+            # links -- so the only routes in are the two configured lists.
+            continue
         if not path.is_file():
             findings.append(f"{relative}: missing {resolved.filename}")
             continue
-        if not contains(directory, resolved.filename):
-            findings.append(f"{relative}/{resolved.filename}: resolves outside its own directory")
+        if not is_regular_in(directory, resolved.filename):
+            findings.append(f"{relative}/{resolved.filename}: must be a regular file in this directory, not a link")
             continue
         present += 1
         findings.extend(companion_findings(directory, relative, resolved))
@@ -388,99 +409,37 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
     return findings
 
 
-def stale_documents(
-    repo_root: Path, config: AgentsDocConfig, max_age_days: int, today: date
-) -> list[tuple[str, str, int]]:
-    """Documents whose ``**Reviewed:**`` date is older than `max_age_days`.
-
-    C-ADOC-4. Reported, never blocking, and the split is deliberate. *Presence* of the
-    date is a blocking rule in :func:`document_findings`, because a document
-    that records nothing about when it was checked is broken the moment it is
-    written. *Age* is a clock-dependent fact: gating on it turns unrelated pull
-    requests red at a date boundary, on a day nobody touched the document. The
-    skills already carry exactly this split, for exactly this reason.
-    """
-    stale: list[tuple[str, str, int]] = []
-    for relative, path in iter_documents(repo_root, config):
-        if not path.is_file():
-            continue
-        reviewed = parse_document(path, repo_root / relative).reviewed
-        if reviewed is None:
-            continue  # a blocking finding already, not a staleness report
-        try:
-            age = (today - date.fromisoformat(reviewed)).days
-        except ValueError:
-            continue  # likewise
-        if age > max_age_days:
-            stale.append((relative, reviewed, age))
-    return stale
+def stale_documents(*args: object, **kwargs: object) -> object:
+    """Re-exported from :mod:`agents_doc_cli`; see the note on `main`."""
+    try:
+        from harness.shared.agents_doc_cli import stale_documents as impl
+    except ImportError:  # sibling import when this dir is sys.path[0]
+        from agents_doc_cli import stale_documents as impl  # type: ignore[no-redef]
+    return impl(*args, **kwargs)  # type: ignore[arg-type]
 
 
-def render_staleness_report(stale: Sequence[tuple[str, str, int]], max_age_days: int, filename: str) -> str:
-    """A markdown table for the weekly drift issue. Empty when nothing is stale."""
-    if not stale:
-        return ""
-    lines = [
-        f"## `{filename}` documents past {max_age_days} days\n",
-        "A stale document is one whose claims may no longer match the code it",
-        "describes. Re-read it, change what is wrong, and bump `**Reviewed:**`.\n",
-        "| Directory | Reviewed | Age (days) |",
-        "|---|---|---|",
-    ]
-    lines.extend(f"| `{relative}` | {reviewed} | {age} |" for relative, reviewed, age in stale)
-    return "\n".join(lines) + "\n"
-
-
-def _render(findings: Iterable[str]) -> str:
-    return "\n".join(f"  - {finding}" for finding in findings)
+def render_staleness_report(*args: object, **kwargs: object) -> str:
+    """Re-exported from :mod:`agents_doc_cli`; see the note on `main`."""
+    try:
+        from harness.shared.agents_doc_cli import render_staleness_report as impl
+    except ImportError:  # sibling import when this dir is sys.path[0]
+        from agents_doc_cli import render_staleness_report as impl  # type: ignore[no-redef]
+    return impl(*args, **kwargs)  # type: ignore[arg-type]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """``python -m harness.shared.agents_doc`` -- the gate outside pytest."""
-    parser = argparse.ArgumentParser(description="Audit per-directory AGENTS.md documents.")
-    parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--policy", type=Path, default=None, help="governance-policy.json to read thresholds from")
-    parser.add_argument("--max-lines", type=int, default=None, help="override agents_doc.max_lines")
-    parser.add_argument("--list", action="store_true", help="print the required directories and exit")
-    parser.add_argument("--directory", default=None, help="check one required directory (a draft check, not the gate)")
-    parser.add_argument(
-        "--stale-since-days",
-        type=int,
-        default=None,
-        help="report documents past this age as markdown and exit 0; never a gate",
-    )
-    args = parser.parse_args(argv)
+    """Delegate to :mod:`agents_doc_cli`, which owns the flags and the reports.
 
-    configure_gate_process_logging()
-    logger.debug("log level from %s; repo root %s", LOG_LEVEL_ENV_VAR, args.repo_root)
+    Kept here because ``python -m harness.shared.agents_doc`` is the entry point
+    `CLAUDE.md` and the spec both name; the split must not move a documented
+    command. The import is local so the checks carry no argparse dependency.
+    """
     try:
-        config = load_config(args.policy, max_lines=args.max_lines)
-    except PolicyError as error:
-        logger.error("[FAIL] agents_doc policy: %s", error)
-        return 1
-
-    if args.list:
-        for relative in required_directories(args.repo_root, config):
-            print(relative)
-        return 0
-
-    if args.stale_since_days is not None:
-        # UTC rather than local: the report runs on a scheduled runner, and a
-        # horizon that shifts with the runner's timezone is one nobody can reproduce.
-        stale = stale_documents(args.repo_root, config, args.stale_since_days, datetime.now(tz=timezone.utc).date())
-        report = render_staleness_report(stale, args.stale_since_days, config.filename)
-        if report:
-            print(report, end="")
-        logger.info("%d document(s) past %d days", len(stale), args.stale_since_days)
-        return 0
-
-    findings = audit(args.repo_root, config, only=args.directory)
-    if findings:
-        logger.error("[FAIL] agents_doc: %d findings\n%s", len(findings), _render(findings))
-        return 1
-    logger.info("[PASS] agents_doc: every required directory carries a true %s", config.filename)
-    return 0
+        from harness.shared.agents_doc_cli import main as cli_main
+    except ImportError:  # sibling import when this dir is sys.path[0]
+        from agents_doc_cli import main as cli_main  # type: ignore[no-redef]
+    return cli_main(argv)
 
 
-if __name__ == "__main__":  # pragma: no cover - exercised via main()
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover - exercised as a subprocess
+    raise SystemExit(main())

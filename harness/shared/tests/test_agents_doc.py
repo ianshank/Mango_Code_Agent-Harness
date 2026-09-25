@@ -15,10 +15,8 @@ documents are true" and "the walker matched nothing".
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Iterator
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -32,35 +30,49 @@ from harness.shared.agents_doc import (
     declared_nodes,
     discover_source_directories,
     iter_documents,
-    main,
     mermaid_findings,
     parse_document,
-    render_staleness_report,
     required_directories,
     scope_names,
     source_file_count,
-    stale_documents,
     subagent_findings,
     waiver_findings,
 )
 from harness.shared.agents_doc_policy import (
     DEFAULT_MAX_LINES,
-    POLICY_BLOCK,
     AgentsDocConfig,
     load_config,
 )
 from harness.shared.tests._agents_doc_helpers import (
     CONFIG,
     findings_for,
-    policy_block,
     write_document,
-    write_policy,
 )
 from harness.shared.tests._helpers import REPO
 
 pytestmark = pytest.mark.governance
 
 # --- Discovery ------------------------------------------------------------------
+
+
+def persona_namespace_intruders(root: Path, config: AgentsDocConfig) -> list[str]:
+    """Documents sitting anywhere inside a persona namespace, at any depth.
+
+    The scan globbed `**/agents/<filename>`, which matches only a document
+    *immediately* below an `agents/` directory. `harness/node/agents/examples/`
+    is just as forbidden by C-ADOC-2 and escaped the assertion entirely, so the
+    gate could have passed while carrying the exact document the constraint
+    exists to prevent. Any `agents` component in the path now counts.
+    """
+    pruned = set(config.pruned_directory_names)
+    intruders: list[str] = []
+    for path in root.rglob(config.filename):
+        relative = path.relative_to(root)
+        if pruned & set(relative.parts):
+            continue
+        if "agents" in relative.parts[:-1]:
+            intruders.append(relative.as_posix())
+    return sorted(intruders)
 
 
 class TestDiscovery:
@@ -425,96 +437,6 @@ class TestAudit:
         assert audit(tmp_path) != []
 
 
-class TestStaleness:
-    """C-ADOC-4. Reported, never blocking. Presence of `**Reviewed:**` is a blocking rule;
-    its age is not, because a clock-dependent gate over twenty-five documents
-    turns unrelated pull requests red at a date boundary (DEC-070, C-ADOC-4)."""
-
-    @staticmethod
-    def tree(tmp_path: Path, reviewed: str) -> AgentsDocConfig:
-        write_document(tmp_path / "pkg", reviewed=reviewed)
-        return AgentsDocConfig(additional_directories=("pkg",))
-
-    def test_a_fresh_document_is_not_stale(self, tmp_path: Path) -> None:
-        config = self.tree(tmp_path, "2026-09-19")
-        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
-
-    def test_a_document_past_the_horizon_is_reported(self, tmp_path: Path) -> None:
-        config = self.tree(tmp_path, "2026-01-01")
-        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == [("pkg", "2026-01-01", 273)]
-
-    def test_an_unparseable_date_is_left_to_the_blocking_rule(self, tmp_path: Path) -> None:
-        """Reporting it here as well would file an issue for something that has
-        already failed `make ci`, which trains people to ignore the issue."""
-        config = self.tree(tmp_path, "last-tuesday")
-        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
-
-    def test_a_missing_document_is_not_a_staleness_report(self, tmp_path: Path) -> None:
-        (tmp_path / "pkg").mkdir()
-        config = AgentsDocConfig(additional_directories=("pkg",))
-        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
-
-    def test_nothing_stale_renders_nothing(self) -> None:
-        """The workflow appends this to an issue body and opens the issue only
-        when the file is non-empty, so an empty string is load-bearing."""
-        assert render_staleness_report([], 90, "AGENTS.md") == ""
-
-    def test_the_report_names_the_directory_and_the_age(self) -> None:
-        report = render_staleness_report([("pkg", "2026-01-01", 273)], 90, "AGENTS.md")
-        assert "| `pkg` | 2026-01-01 | 273 |" in report
-        assert "past 90 days" in report
-
-    def test_the_command_line_reports_and_still_exits_zero(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """Exit 0 is the whole point: this path must never fail a pipeline."""
-        write_document(tmp_path / "pkg", reviewed="2020-01-01")
-        policy = write_policy(tmp_path, policy_block(additional_directories=["pkg"]))
-        assert main(["--repo-root", str(tmp_path), "--policy", str(policy), "--stale-since-days", "1"]) == 0
-        assert "| `pkg` |" in capsys.readouterr().out
-
-
-class TestCommandLine:
-    """Each case passes `--policy`. Without it the CLI resolves this repository's
-    policy, whose `additional_directories` name paths a `tmp_path` tree does not
-    have -- so the run under test would be judged against the wrong contract."""
-
-    def test_list_prints_the_required_directories(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        write_document(tmp_path / "pkg")
-        policy = write_policy(tmp_path, policy_block(min_documented_directories=1))
-        assert main(["--repo-root", str(tmp_path), "--policy", str(policy), "--list"]) == 0
-        assert capsys.readouterr().out.strip() == "pkg"
-
-    def test_a_clean_tree_exits_zero(self, tmp_path: Path) -> None:
-        for name in ("one", "two"):
-            write_document(tmp_path / name)
-        policy = write_policy(tmp_path, policy_block(min_documented_directories=2))
-        assert main(["--repo-root", str(tmp_path), "--policy", str(policy)]) == 0
-
-    def test_findings_exit_non_zero(self, tmp_path: Path) -> None:
-        policy = write_policy(tmp_path, policy_block())
-        assert main(["--repo-root", str(tmp_path), "--policy", str(policy)]) == 1
-
-    def test_an_explicit_override_reaches_the_audit(self, tmp_path: Path) -> None:
-        """`--max-lines` is the one threshold the command line can tighten, so a
-        run can prove a stricter budget without editing a protected policy."""
-        write_document(tmp_path / "pkg")
-        policy = write_policy(tmp_path, policy_block(min_documented_directories=1))
-        argv = ["--repo-root", str(tmp_path), "--policy", str(policy)]
-        assert main(argv) == 0
-        assert main([*argv, "--max-lines", "5"]) == 1
-
-    def test_an_unreadable_policy_exits_non_zero_rather_than_raising(self, tmp_path: Path) -> None:
-        """Fail closed: a gate that crashes on its own policy has still not
-        judged the tree, and an exception trace is not a verdict."""
-        bad = tmp_path / "policy.json"
-        bad.write_text(json.dumps({POLICY_BLOCK: {"max_lines": 1}}), encoding="utf-8")
-        assert main(["--repo-root", str(tmp_path), "--policy", str(bad)]) == 1
-
-
-# --- This repository ------------------------------------------------------------
-
-
 class TestTheGateIsNotVacuous:
     """Positive controls. Every assertion in the suite below is "no findings",
     and a discovery that matched nothing returns exactly that."""
@@ -556,13 +478,29 @@ class TestThisRepository:
     def test_no_document_was_written_into_a_persona_namespace(self) -> None:
         """C-ADOC-2. Widening those globs would have been the easy fix and the
         wrong one: it weakens five real gates to accommodate prose."""
-        config = load_config()
-        intruders = [
-            str(path.relative_to(REPO))
-            for path in REPO.glob("**/agents/" + config.filename)
-            if ".git" not in path.parts
-        ]
+        intruders = persona_namespace_intruders(REPO, load_config())
         assert not intruders, f"a document landed in a persona namespace: {intruders}"
+
+    def test_the_persona_namespace_scan_would_catch_a_nested_document(self, tmp_path: Path) -> None:
+        """The control for the control, and the reason the scan was widened.
+
+        `**/agents/AGENTS.md` matched only a document immediately below an
+        `agents/` directory, so one at `harness/node/agents/examples/AGENTS.md`
+        was equally forbidden by C-ADOC-2 and equally invisible. An assertion
+        that cannot see the violation it names is not an assertion.
+        """
+        nested = tmp_path / "harness" / "node" / "agents" / "examples"
+        nested.mkdir(parents=True)
+        (nested / "AGENTS.md").write_text("# planted\n", encoding="utf-8")
+        found = persona_namespace_intruders(tmp_path, load_config())
+        assert found == ["harness/node/agents/examples/AGENTS.md"], found
+
+    def test_the_persona_namespace_scan_ignores_pruned_trees(self, tmp_path: Path) -> None:
+        """A vendored tree is not this repository's persona namespace."""
+        vendored = tmp_path / "node_modules" / "dep" / "agents"
+        vendored.mkdir(parents=True)
+        (vendored / "AGENTS.md").write_text("# vendored\n", encoding="utf-8")
+        assert persona_namespace_intruders(tmp_path, load_config()) == []
 
     def test_every_required_directory_carries_a_document(self) -> None:
         config = load_config()
@@ -636,7 +574,7 @@ class TestConfiguredPathsAreRealAndInTree:
         directory.mkdir(parents=True)
         (directory / "CLAUDE.md").symlink_to(outside / "companion.md")
         findings = companion_findings(directory, "pkg", CONFIG)
-        assert "resolves outside its own directory" in "".join(findings)
+        assert "must be a regular file in this directory, not a link" in "".join(findings)
 
     def test_a_real_companion_beside_the_document_is_accepted(self, tmp_path: Path) -> None:
         """The negative control: the rule is about escaping, not about existing."""
@@ -658,8 +596,71 @@ class TestConfiguredPathsAreRealAndInTree:
         (directory / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
         (directory / "AGENTS.md").symlink_to(outside / "AGENTS.md")
         config = AgentsDocConfig(additional_directories=("pkg",), min_documented_directories=1)
-        escapes = [f for f in audit(root, config) if "resolves outside its own directory" in f]
+        escapes = [f for f in audit(root, config) if "not a link" in f]
         assert escapes, "a symlinked document must be reported, not read"
+
+    def test_an_in_tree_symlinked_companion_is_reported(self, tmp_path: Path) -> None:
+        """Containment was not enough to enforce the rule DEC-070 states.
+
+        An *in-tree* link resolves inside and compares equal, so
+        `pkg/CLAUDE.md -> pkg/real.md` satisfied `contains()` while being exactly
+        the shape that decision refuses. The PR body claimed symlinked
+        companions were refused; until this, only escaping ones were.
+        """
+        directory = tmp_path / "pkg"
+        directory.mkdir()
+        (directory / "real.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        (directory / "CLAUDE.md").symlink_to(directory / "real.md")
+        findings = companion_findings(directory, "pkg", CONFIG)
+        assert "must be a regular file in this directory, not a link" in "".join(findings)
+
+    def test_an_in_tree_symlinked_document_is_reported(self, tmp_path: Path) -> None:
+        root = tmp_path / "repo"
+        directory = root / "pkg"
+        directory.mkdir(parents=True)
+        for name in ("a.py", "b.py", "c.py"):
+            (directory / name).write_text("x = 1\n", encoding="utf-8")
+        (directory / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        (directory / "real.md").write_text(self._document_body(), encoding="utf-8")
+        (directory / "AGENTS.md").symlink_to(directory / "real.md")
+        config = AgentsDocConfig(additional_directories=("pkg",), min_documented_directories=1)
+        assert [f for f in audit(root, config) if "not a link" in f]
+
+    def test_a_symlinked_subagent_definition_is_reported_not_parsed(self, tmp_path: Path) -> None:
+        """The directory being contained said nothing about its children: a
+        linked `rogue.md` was read and parsed like any other definition, so the
+        audit consumed external content through a door the directory check had
+        already been added to guard."""
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "rogue.md").write_text("no frontmatter at all\n", encoding="utf-8")
+        root = tmp_path / "repo"
+        (root / ".claude" / "agents").mkdir(parents=True)
+        (root / ".claude" / "agents" / "rogue.md").symlink_to(outside / "rogue.md")
+        findings = subagent_findings(root, AgentsDocConfig())
+        assert "must be a regular file in this directory, not a link" in "".join(findings)
+        assert "opening '---'" not in "".join(findings), "the external file must not be parsed"
+
+    def test_an_escaping_configured_directory_is_reported_and_its_document_not_read(self, tmp_path: Path) -> None:
+        """Reporting the escape was not the same as declining to read it. The
+        external document was still found, parsed and counted toward the
+        population floor, so the tree outside the checkout was being judged.
+        """
+        external = tmp_path / "external"
+        external.mkdir()
+        for name in ("a.py", "b.py", "c.py"):
+            (external / name).write_text("x = 1\n", encoding="utf-8")
+        (external / "AGENTS.md").write_text(self._document_body(), encoding="utf-8")
+        (external / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "linked").symlink_to(external)
+        config = AgentsDocConfig(additional_directories=("linked",), min_documented_directories=1)
+        findings = audit(root, config)
+        assert any("resolves outside the checkout" in f for f in findings), findings
+        assert any("the floor is 1" in f for f in findings), (
+            "the external document must not count toward the population floor"
+        )
 
     def test_paths_that_stay_inside_report_nothing(self, tmp_path: Path) -> None:
         root = self._repo(tmp_path / "repo")
