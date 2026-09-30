@@ -7,6 +7,7 @@ docs/specs/attested-execution-isolation.md R-AEI-10; OpenSpec tasks §12.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from harness.shared.governance.backend_registry import (
     BackendSelectionError,
     assert_isolation_requirement,
     execution_backend_id,
+    required_filesystem_isolation,
     resolve_backend,
     select_execution_backend,
 )
@@ -31,10 +33,11 @@ from harness.shared.governance.execution_backend import (
     BackendCapabilities,
     ExecutionRequest,
 )
-from harness.shared.governance.opensandbox_backend import OpenSandboxBackend
+from harness.shared.governance.opensandbox_backend import OpenSandboxBackend, _default_http
 from harness.shared.governance.process_backend import ProcessBackend
 from harness.shared.governance.swerex_backend import SweRexBackend, grade_swerex_deployment
-from harness.shared.governance.verdict import BROKER_BLOCKED, BROKER_SUCCESS
+from harness.shared.governance.verdict import BROKER_BLOCKED, BROKER_FAILED, BROKER_SUCCESS
+from harness.shared.policy_io import PolicyError
 
 
 def _req(command: str = "echo hi") -> ExecutionRequest:
@@ -409,3 +412,359 @@ def test_env_cannot_select_backend_id(tmp_path: Path, monkeypatch: pytest.Monkey
     ):
         monkeypatch.delenv(key, raising=False)
     assert execution_backend_id(policy) == "process"
+
+
+# --- Coverage fillers: backend_registry / opensandbox / swerex (PR #144) ---
+
+
+def _write_policy(dir_path: Path, body: dict) -> Path:
+    dir_path.mkdir(parents=True, exist_ok=True)
+    path = dir_path / "governance-policy.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
+
+
+def test_execution_backend_id_absent_block_defaults(tmp_path: Path) -> None:
+    path = _write_policy(tmp_path / "absent", {"coverage": {"lines": 90}})
+    assert execution_backend_id(path) == "process"
+
+
+def test_execution_backend_id_rejects_empty(tmp_path: Path) -> None:
+    path = _write_policy(tmp_path / "empty", {"execution_backend": {"backend_id": "  "}})
+    with pytest.raises(PolicyError, match="non-empty string"):
+        execution_backend_id(path)
+
+
+def test_required_filesystem_isolation_paths(tmp_path: Path) -> None:
+    absent = _write_policy(tmp_path / "absent", {"coverage": {"lines": 90}})
+    assert required_filesystem_isolation(absent) is None
+
+    bad = _write_policy(
+        tmp_path / "bad",
+        {
+            "execution_backend": {
+                "backend_id": "process",
+                "require_filesystem_isolation": "nope",
+            }
+        },
+    )
+    with pytest.raises(PolicyError, match="require_filesystem_isolation"):
+        required_filesystem_isolation(bad)
+
+
+def test_opensandbox_available_false_without_config() -> None:
+    assert OpenSandboxBackend().available() is False
+
+
+def test_opensandbox_available_probe_exception() -> None:
+    def boom(*_a, **_k):
+        raise RuntimeError("probe down")
+
+    assert OpenSandboxBackend(base_url="http://example.test", http=boom).available() is False
+
+
+def test_opensandbox_execute_blocked_without_base_url() -> None:
+    backend = OpenSandboxBackend(use_isolated=True, require_enforced=False)
+    result = backend.execute(_req())
+    assert result.status == BROKER_BLOCKED
+    assert "base_url" in (result.reason or "")
+
+
+def test_opensandbox_http_error_exit_and_normalize() -> None:
+    def http(method: str, url: str, body: bytes | None, timeout: float):
+        if method == "POST":
+            return 500, {"stdout": "x", "stderr": "", "exit_code": 0}
+        return 200, {}
+
+    backend = OpenSandboxBackend(
+        base_url="http://example.test",
+        use_isolated=False,
+        http=http,
+        capabilities_payload={"available": False},
+    )
+    result = backend.execute(_req())
+    assert result.status == BROKER_FAILED
+    assert result.exit_code == 1
+
+
+def test_opensandbox_execute_exception_path() -> None:
+    def boom(*_a, **_k):
+        raise RuntimeError("exec boom")
+
+    backend = OpenSandboxBackend(
+        base_url="http://example.test",
+        use_isolated=False,
+        capabilities_payload={"available": False},
+        http=boom,
+    )
+    result = backend.execute(_req())
+    assert result.status == BROKER_FAILED
+    assert "exec boom" in (result.reason or "")
+
+
+def test_opensandbox_grade_undetermined_before_probe() -> None:
+    backend = OpenSandboxBackend(base_url="http://example.test", use_isolated=True)
+    assert backend.capabilities().filesystem_isolation == ISOLATION_UNDETERMINED
+
+
+def test_opensandbox_probe_via_http_paths() -> None:
+    def http_ok(method: str, url: str, body: bytes | None, timeout: float):
+        return 200, {"isolation_available": True}
+
+    backend = OpenSandboxBackend(base_url="http://example.test/", http=http_ok)
+    assert backend.available() is True
+    assert backend.capabilities().filesystem_isolation == ISOLATION_ENFORCED
+
+    def http_bad(method: str, url: str, body: bytes | None, timeout: float):
+        return 500, "nope"
+
+    assert OpenSandboxBackend(base_url="http://example.test", http=http_bad).available() is False
+
+    backend3 = OpenSandboxBackend(base_url="")
+    backend3._http = http_ok
+    assert backend3._probe_capabilities() == {}
+    assert backend3._probe_ok is False
+
+
+def test_opensandbox_session_create_failures() -> None:
+    def http_no_id(method: str, url: str, body: bytes | None, timeout: float):
+        if method == "POST" and url.endswith("/v1/isolated/session"):
+            return 200, {"not_id": True}
+        return 200, {"available": True}
+
+    backend = OpenSandboxBackend(
+        base_url="http://example.test",
+        use_isolated=True,
+        require_enforced=True,
+        capabilities_payload={"available": True},
+        http=http_no_id,
+    )
+    assert backend.execute(_req()).status == BROKER_FAILED
+
+    def http_bad_code(method: str, url: str, body: bytes | None, timeout: float):
+        if method == "POST" and url.endswith("/v1/isolated/session"):
+            return 500, {"id": "x"}
+        return 200, {}
+
+    backend2 = OpenSandboxBackend(
+        base_url="http://example.test",
+        use_isolated=True,
+        require_enforced=True,
+        capabilities_payload={"available": True},
+        http=http_bad_code,
+    )
+    assert backend2.execute(_req()).status == BROKER_FAILED
+
+
+def test_opensandbox_delete_session_paths() -> None:
+    OpenSandboxBackend(base_url="")._delete_session("sess")
+
+    def boom(*_a, **_k):
+        raise RuntimeError("delete failed")
+
+    OpenSandboxBackend(base_url="http://example.test", http=boom)._delete_session("sess")
+
+
+def test_opensandbox_normalize_payload_variants() -> None:
+    assert OpenSandboxBackend._normalize_payload("raw-text") == ("raw-text", "", 0)
+    assert OpenSandboxBackend._normalize_payload(123)[2] == 1
+
+
+def test_opensandbox_default_http_success_and_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error as urllib_error
+
+    class _Resp:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(
+        "harness.shared.governance.opensandbox_backend.urllib.request.urlopen",
+        lambda *a, **k: _Resp(),
+    )
+    code, payload = _default_http("GET", "http://example.test/x", None, 1.0)
+    assert code == 200
+    assert payload == {"ok": True}
+
+    class _RespRaw:
+        status = 200
+
+        def read(self) -> bytes:
+            return b"not-json"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(
+        "harness.shared.governance.opensandbox_backend.urllib.request.urlopen",
+        lambda *a, **k: _RespRaw(),
+    )
+    code, payload = _default_http("POST", "http://example.test/x", b"{}", 1.0)
+    assert code == 200
+    assert payload == "not-json"
+
+    def raise_http(*_a, **_k):
+        raise urllib_error.HTTPError(
+            "http://example.test/x",
+            404,
+            "missing",
+            None,
+            io.BytesIO(b'{"error": "missing"}'),
+        )
+
+    monkeypatch.setattr(
+        "harness.shared.governance.opensandbox_backend.urllib.request.urlopen",
+        raise_http,
+    )
+    code, payload = _default_http("GET", "http://example.test/x", None, 1.0)
+    assert code == 404
+    assert isinstance(payload, dict)
+
+    def raise_http_raw(*_a, **_k):
+        raise urllib_error.HTTPError(
+            "http://example.test/x",
+            502,
+            "bad",
+            None,
+            io.BytesIO(b"gateway"),
+        )
+
+    monkeypatch.setattr(
+        "harness.shared.governance.opensandbox_backend.urllib.request.urlopen",
+        raise_http_raw,
+    )
+    code, payload = _default_http("GET", "http://example.test/x", None, 1.0)
+    assert code == 502
+    assert payload == "gateway"
+
+
+def test_swerex_grade_empty_and_unknown() -> None:
+    assert grade_swerex_deployment("", probe_ok=True) == ISOLATION_UNDETERMINED
+    assert grade_swerex_deployment(None, probe_ok=True) == ISOLATION_UNDETERMINED
+    assert grade_swerex_deployment("WeirdRuntime", probe_ok=True) == ISOLATION_UNDETERMINED
+
+
+def test_swerex_available_paths() -> None:
+    def boom_factory():
+        raise RuntimeError("no runtime")
+
+    assert SweRexBackend(runtime_factory=boom_factory).available() is False
+
+    backend = SweRexBackend(runtime_factory=lambda: SimpleNamespace())
+    assert backend.available() is True
+    assert backend._probe_result is True
+
+    backend2 = SweRexBackend(
+        runtime_factory=lambda: SimpleNamespace(),
+        probe_alive=lambda _rt: True,
+    )
+    assert backend2.available() is True
+
+    backend3 = SweRexBackend(
+        runtime_factory=lambda: SimpleNamespace(),
+        probe_alive=lambda _rt: (_ for _ in ()).throw(RuntimeError("probe fail")),
+    )
+    assert backend3.available() is False
+
+
+def test_swerex_execute_runtime_unavailable() -> None:
+    backend = SweRexBackend(
+        deployment_class="LocalRuntime",
+        runtime_factory=lambda: None,
+        require_enforced=False,
+    )
+    result = backend.execute(_req())
+    assert result.status == BROKER_BLOCKED
+    assert "unavailable" in (result.reason or "")
+
+
+def test_swerex_execute_require_enforced_after_probe() -> None:
+    backend = SweRexBackend(
+        deployment_class="DockerDeployment",
+        runtime_factory=lambda: SimpleNamespace(
+            execute=lambda command: SimpleNamespace(stdout="ok", stderr="", exit_code=0),
+            close=lambda: None,
+        ),
+        probe_alive=lambda _rt: False,
+        require_enforced=True,
+    )
+    backend._probe_result = True
+    result = backend.execute(_req())
+    assert result.status == BROKER_BLOCKED
+    assert "after probe" in (result.reason or "")
+
+
+def test_swerex_execute_exception_and_close_failure() -> None:
+    class _RT:
+        def execute(self, command: str):
+            raise RuntimeError("exec blow")
+
+        def close(self):
+            raise RuntimeError("close blow")
+
+    backend = SweRexBackend(
+        deployment_class="LocalRuntime",
+        runtime_factory=_RT,
+        require_enforced=False,
+    )
+    assert backend.execute(_req()).status == BROKER_FAILED
+
+
+def test_swerex_ensure_runtime_without_sdk() -> None:
+    assert SweRexBackend(deployment_class="LocalRuntime")._ensure_runtime() is None
+
+
+def test_swerex_ensure_runtime_with_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    import types
+
+    abstract = types.ModuleType("swerex.runtime.abstract")
+
+    class AbstractRuntime:
+        pass
+
+    abstract.AbstractRuntime = AbstractRuntime  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "swerex", types.ModuleType("swerex"))
+    monkeypatch.setitem(sys.modules, "swerex.runtime", types.ModuleType("swerex.runtime"))
+    monkeypatch.setitem(sys.modules, "swerex.runtime.abstract", abstract)
+    assert SweRexBackend(deployment_class="LocalRuntime")._ensure_runtime() is None
+
+
+def test_swerex_execute_async_variants() -> None:
+    class KwOnly:
+        async def execute(self, *, command: str, timeout: int = 0):
+            return SimpleNamespace(stdout=command, stderr="", exit_code=0)
+
+    backend = SweRexBackend(
+        deployment_class="LocalRuntime",
+        runtime_factory=KwOnly,
+        require_enforced=False,
+    )
+    result = backend.execute(_req("kw"))
+    assert result.status == BROKER_SUCCESS
+    assert "kw" in result.stdout
+
+    class NoExec:
+        def close(self):
+            return None
+
+    backend2 = SweRexBackend(
+        deployment_class="LocalRuntime",
+        runtime_factory=NoExec,
+        require_enforced=False,
+    )
+    assert backend2.execute(_req()).status == BROKER_FAILED
+
+
+def test_swerex_close_none() -> None:
+    SweRexBackend(runtime_factory=lambda: None)._close_runtime(None)
