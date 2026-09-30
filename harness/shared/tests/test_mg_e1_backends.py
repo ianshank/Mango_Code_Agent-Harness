@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -618,7 +619,7 @@ def test_opensandbox_default_http_success_and_errors(monkeypatch: pytest.MonkeyP
             "http://example.test/x",
             404,
             "missing",
-            None,
+            Message(),
             io.BytesIO(b'{"error": "missing"}'),
         )
 
@@ -635,7 +636,7 @@ def test_opensandbox_default_http_success_and_errors(monkeypatch: pytest.MonkeyP
             "http://example.test/x",
             502,
             "bad",
-            None,
+            Message(),
             io.BytesIO(b"gateway"),
         )
 
