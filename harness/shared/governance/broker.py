@@ -105,7 +105,16 @@ class ExecutionBroker:
         the broker path does not read the environment at export.
         """
         self._sandbox_available = sandbox_available
-        self._backend = backend or ProcessBackend()
+        # Policy-selected backend when none is injected (MG-E1). Default policy
+        # backend_id is process, so ExecutionBroker() still yields ProcessBackend.
+        # SweRex/OpenSandbox remain injectable via backend= or policy selection;
+        # agents/env cannot override backend_id.
+        if backend is not None:
+            self._backend = backend
+        else:
+            from harness.shared.governance.backend_registry import select_execution_backend
+
+            self._backend = select_execution_backend()
         self._agent_policy_path = agent_policy_path or _AGENT_POLICY_PATH
         self._max_output_bytes = max_output_bytes
         if evidence_enabled is None:
