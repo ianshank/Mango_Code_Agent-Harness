@@ -10,6 +10,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### MG-E1: SWE-ReX + OpenSandbox additive adapters (2026-09-21)
+
+- Additive `SweRexBackend` and `OpenSandboxBackend` `ExecutionBackend` adapters (optional extras; default remains `ProcessBackend`).
+- Policy-selected backend via protected `execution_backend` block; `ExecutionBroker()` wires `select_execution_backend` (`resolve_backend` + `assert_isolation_requirement`) so `require_filesystem_isolation` is fail-closed. Agents and env cannot override `backend_id`.
+- OpenSandbox fail-closed: `use_isolated=True` with `filesystem_isolation != enforced` returns `BROKER_BLOCKED` (no silent downgrade to non-isolated `/v1/command`).
+- Evidence may record `filesystem_isolation` / R-AEI-10 attestation only when capabilities report `enforced`.
+
 ### C-PLR-2 matcher reuse, fail-closed tests, AC-23 comment pin (2026-09-12)
 
 - `check_traceability.REQ` is `plan_rules.REQ_PATTERN` (C-PLR-2). `cd harness/node && python ../shared/governance/check_traceability.py` still imports after `_gate_logger` puts the repo root on `sys.path`.

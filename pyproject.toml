@@ -24,6 +24,10 @@ dependencies = [
 # `mcp` above: `langgraph` itself declares `Requires-Python >=3.10`, so every
 # supported interpreter installs it unconditionally now.
 [project.optional-dependencies]
+swerex = ["swe-rex>=1.0.0"]
+opensandbox = []  # HTTP client uses stdlib urllib; pin SDK later when published
+mg-e1 = ["swe-rex>=1.0.0"]
+
 langgraph = [
     "langgraph>=1.0.10,<2.0",
 ]
