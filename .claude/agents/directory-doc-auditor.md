@@ -32,12 +32,19 @@ which exists because a claim that a check passed is not the check passing.
    Exit 0 with `[PASS]` is the only passing outcome. Every finding it prints
    names the directory and the claim that failed.
 
-2. Run the pytest suite that wraps the same rules, because it also carries the
+2. Run the pytest suites that wrap the same rules, because they also carry the
    positive controls that stop an empty walk from passing for free:
 
    ```
-   python -m pytest harness/shared/tests/test_agents_doc.py -q
+   python -m pytest harness/shared/tests/test_agents_doc*.py -q
    ```
+
+   Glob the family rather than naming one module. The rules are split across
+   five files today — parsing, the command line and staleness, path
+   containment, the policy block, and the threshold boundaries — and naming
+   only the first would report a green summary over 81 of 188 tests. A glob
+   also picks up the sixth module whenever the next split happens, instead of
+   narrowing silently.
 
 3. Read what the gate cannot. For each changed document, check by eye:
    - does `## What this does` explain why the directory exists, or has it

@@ -46,12 +46,19 @@ flowchart TD
 - **FastAPI endpoints are typed and async.** Requests and responses are Pydantic
   models; the one deliberate `def` is `readyz`, so its policy read runs in the
   threadpool instead of blocking the event loop.
-- **Full pytest coverage for every new endpoint.** This package is in the
-  coverage `source` set and `tests/` is explicitly *omitted* from it
-  (`pyproject.toml` `[tool.coverage.run] omit`), so the measurement is of the
-  implementation, never of the tests measuring it. Per-file floors come from
-  `governance-policy.json`, and a route added without tests fails
-  `make coverage-python` on its own uncovered lines.
+- **Test every new endpoint — no gate here will stop you if you don't.** This
+  package is in the coverage `source` set and `tests/` is explicitly *omitted*
+  from it (`pyproject.toml` `[tool.coverage.run] omit`), so what
+  `make coverage-python` measures is the implementation, never the tests
+  measuring it. It will not, however, notice an untested route. A route's
+  `@app.get` and `def` lines execute when any test imports `app`, so they count
+  as covered on import alone; only the handler body goes uncovered, and the
+  per-file floor in `governance-policy.json` is a percentage with room for it.
+  Appending an untested one-line route to `main.py` moves it from 79/81 to
+  81/84 — still clear of the floor. `TestDocumentedRoutesExist`
+  (`test_documentation_truth.py`) does not close the gap either: it asserts a
+  *documented* route is registered, never that any route is exercised. The
+  requirement is real and rests on review.
 - **No hard-coded thresholds.** `TaskRequest.task` is deliberately unbounded because
   no policy key describes a task brief; borrowing `orchestrator.max_command_bytes`
   would enforce a limit the policy does not state.

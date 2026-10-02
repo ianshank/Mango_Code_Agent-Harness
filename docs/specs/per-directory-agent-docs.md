@@ -112,7 +112,11 @@ constraints are compiled into executable checks.
       a document with a missing or unparseable `**Reviewed:**` line does. The
       stale date is reported by the weekly drift workflow, which opens an issue
       and never blocks a pull request — verified by
-      `pytest harness/shared/tests/test_agents_doc.py -k "reviewed"` and by `.github/workflows/scheduled-drift.yml`
+      `pytest harness/shared/tests/test_agents_doc.py
+      harness/shared/tests/test_agents_doc_command.py -k "reviewed or Staleness"`
+      — the first module carries the blocking arm, the second
+      `TestStaleness`, which is where the non-blocking horizon and the
+      exit-zero command line live — and by `.github/workflows/scheduled-drift.yml`
       declaring no `pull_request` trigger · stage: `make ci` (C-ADOC-4)
 
 - [x] AC-12: A policy naming an absolute or escaping path in any path-valued key
