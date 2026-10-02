@@ -77,9 +77,12 @@ directory you are about to edit before you edit it.**
 
 The required set is derived from the tree, not listed by hand: every directory
 with at least `agents_doc.min_source_files` first-party sources, minus waivers,
-plus the boundaries named in `agents_doc.additional_directories`. Every claim a
-document makes is checked against that directory in `make ci`
-(`harness/shared/agents_doc.py`), so a stale path fails rather than misleads.
+plus the boundaries named in `agents_doc.additional_directories`. `make ci`
+(`harness/shared/agents_doc.py`) resolves the fields it can — the paths on the
+`**Scope:**` line and in `## Key files`, the `**Reviewed:**` date, the line
+budget, the companion body, each diagram's structure — so a stale path fails
+rather than misleads. It resolves no `make` target, skill name or test name, and
+no prose claim; those have drifted before and are review's job, not the gate's.
 Adding a source directory means adding its document or a justified waiver.
 Rationale and the filename decision are in DEC-070.
 

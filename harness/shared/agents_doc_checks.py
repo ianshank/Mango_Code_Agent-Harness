@@ -257,6 +257,27 @@ def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) 
     return []
 
 
+#: The canonical calendar date and nothing else. ``date.fromisoformat`` widened
+#: in 3.11 to accept the basic form (``20260919``) and week dates, so the same
+#: ``**Reviewed:**`` value was a finding on the 3.10 floor and silent on 3.12
+#: and 3.14 -- a gate whose verdict moved with the interpreter.
+_CANONICAL_DATE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+
+def parse_reviewed_date(value: str) -> date | None:
+    """``value`` as a date, or ``None`` if it is not a canonical ``YYYY-MM-DD``.
+
+    The shape is necessary but not sufficient: ``2026-02-31`` matches the
+    pattern, so the calendar still decides.
+    """
+    if not _CANONICAL_DATE.match(value):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def document_findings(document: AgentsDocument, relative: str, config: AgentsDocConfig) -> list[str]:
     """Every claim one document makes that its own directory does not back.
 
@@ -289,11 +310,8 @@ def document_findings(document: AgentsDocument, relative: str, config: AgentsDoc
             findings.append(f"{relative}: ## Key files names `{name}`, which does not exist under {relative}")
     if document.reviewed is None:
         findings.append(f"{relative}: no **Reviewed:** line, so nothing records when this was last checked")
-    else:
-        try:
-            date.fromisoformat(document.reviewed)
-        except ValueError:
-            findings.append(f"{relative}: **Reviewed:** {document.reviewed!r} is not an ISO date")
+    elif parse_reviewed_date(document.reviewed) is None:
+        findings.append(f"{relative}: **Reviewed:** {document.reviewed!r} is not a YYYY-MM-DD date")
     if document.line_count > config.max_lines:
         findings.append(
             f"{relative}: {document.line_count} lines exceeds the {config.max_lines}-line budget; "

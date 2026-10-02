@@ -42,6 +42,7 @@ try:
         is_path_like,
         is_regular_in,
         parse_document,
+        parse_reviewed_date,
         read_utf8,
         scope_names,
         subagent_findings,
@@ -69,6 +70,7 @@ except ImportError:  # sibling import when this dir is sys.path[0]
         is_path_like,
         is_regular_in,
         parse_document,
+        parse_reviewed_date,
         read_utf8,
         scope_names,
         subagent_findings,
@@ -119,6 +121,7 @@ __all__ = [
     "main",
     "mermaid_findings",
     "parse_document",
+    "parse_reviewed_date",
     "read_utf8",
     "render_staleness_report",
     "required_directories",
@@ -163,11 +166,11 @@ def stale_documents(
         if reviewed is None:
             logger.debug("%s: records no **Reviewed:** date; a blocking finding, not staleness", relative)
             continue  # a blocking finding already, not a staleness report
-        try:
-            age = (today - date.fromisoformat(reviewed)).days
-        except ValueError:
-            logger.debug("%s: **Reviewed:** %r is not an ISO date; likewise", relative, reviewed)
+        parsed = parse_reviewed_date(reviewed)
+        if parsed is None:
+            logger.debug("%s: **Reviewed:** %r is not a YYYY-MM-DD date; likewise", relative, reviewed)
             continue  # likewise
+        age = (today - parsed).days
         if age > max_age_days:
             stale.append((relative, reviewed, age))
     return stale

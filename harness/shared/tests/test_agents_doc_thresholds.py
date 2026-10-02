@@ -26,6 +26,7 @@ reaches either.
 
 from __future__ import annotations
 
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -208,3 +209,53 @@ class TestTheCompanionBodyIsExact:
         the gate on exactly the Windows checkouts DEC-061 exists for."""
         write_document(tmp_path / "pkg", companion=body)
         assert companion_findings(tmp_path / "pkg", "pkg", CONFIG) == []
+
+
+class TestTheReviewedDateMeansTheSameOnEveryInterpreter:
+    """``date.fromisoformat`` widened in 3.11, so the gate's verdict moved with it.
+
+    Before 3.11 it accepted only ``YYYY-MM-DD``; from 3.11 it takes most of
+    ISO 8601, including the basic form and week dates. This repository's floor
+    is 3.10 and CI runs 3.10, 3.12 and 3.14, so ``**Reviewed:** 20260919`` was
+    a blocking finding on one leg and silent on the other two -- a gate whose
+    accepted set depended on which interpreter happened to run it. The rule is
+    now pinned to the canonical form on every version.
+    """
+
+    # Each is accepted by 3.11+ and rejected by the 3.10 floor, which is the
+    # whole defect; `2026-9-19` and ordinal dates are rejected by both and so
+    # prove nothing here.
+    @pytest.mark.parametrize("value", ["20260919", "2026-W38-6", "2026W386"])
+    def test_a_form_only_newer_interpreters_accept_is_reported(self, tmp_path: Path, value: str) -> None:
+        write_document(tmp_path / "pkg", reviewed=value)
+        assert "not a YYYY-MM-DD date" in "".join(findings_for(tmp_path / "pkg"))
+
+    def test_the_canonical_form_is_still_accepted(self, tmp_path: Path) -> None:
+        """The negative control: pinning the format must not reject the real one."""
+        write_document(tmp_path / "pkg", reviewed="2026-09-19")
+        assert "not a YYYY-MM-DD date" not in "".join(findings_for(tmp_path / "pkg"))
+
+    def test_the_shape_alone_is_not_enough(self, tmp_path: Path) -> None:
+        """A regex would accept the 31st of February; the calendar still decides."""
+        write_document(tmp_path / "pkg", reviewed="2026-02-31")
+        assert "not a YYYY-MM-DD date" in "".join(findings_for(tmp_path / "pkg"))
+
+    @pytest.mark.parametrize("value", ["20260101", "2026-W01-1"])
+    def test_staleness_leaves_such_a_form_to_the_blocking_rule(self, tmp_path: Path, value: str) -> None:
+        """The report reads the same date, so it drifted the same way: on 3.11+ it
+        aged a document the 3.10 leg refused to parse at all."""
+        write_document(tmp_path / "pkg", reviewed=value)
+        assert stale_documents(tmp_path, CONFIG, 90, date(2026, 10, 1)) == []
+
+    def test_the_stdlib_divergence_the_pin_exists_for(self) -> None:
+        """Asserted, not left in a comment, so the pin is a fix and not a style
+        choice (the v2.2.4 precedent for stdlib-dependent behaviour). It holds on
+        every leg of the matrix, and keeps holding once the floor passes 3.10 --
+        `fromisoformat` does not narrow again, so a week date stays a trap.
+        """
+        try:
+            date.fromisoformat("20260919")
+        except ValueError:
+            assert sys.version_info < (3, 11), "3.11+ accepts the basic form"
+        else:
+            assert sys.version_info >= (3, 11), "before 3.11 the basic form raises"

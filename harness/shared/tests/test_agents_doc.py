@@ -309,7 +309,7 @@ class TestDocumentFindings:
 
     def test_a_reviewed_line_that_is_not_a_date_is_reported(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg", reviewed="last-tuesday")
-        assert "not an ISO date" in "".join(findings_for(tmp_path / "pkg"))
+        assert "not a YYYY-MM-DD date" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_a_document_over_the_line_budget_is_reported(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg", extra_lines=DEFAULT_MAX_LINES + 5)

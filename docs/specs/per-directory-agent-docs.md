@@ -109,14 +109,19 @@ constraints are compiled into executable checks.
       `make coverage-python` · stage: `make ci` (R-ADOC-4)
 - [x] AC-11: A document whose `**Reviewed:**` date is older than
       `governance-policy.json → skill_max_age_days` does **not** fail `make ci`;
-      a document with a missing or unparseable `**Reviewed:**` line does. The
-      stale date is reported by the weekly drift workflow, which opens an issue
-      and never blocks a pull request — verified by
+      a document whose `**Reviewed:**` line is missing, or is not a canonical
+      `YYYY-MM-DD` calendar date, does — and on every interpreter in the
+      matrix, not only the one that happens to run it. The stale date is
+      reported by the weekly drift workflow, which opens an issue and never
+      blocks a pull request — verified by
       `pytest harness/shared/tests/test_agents_doc.py
-      harness/shared/tests/test_agents_doc_command.py -k "reviewed or Staleness"`
-      — the first module carries the blocking arm, the second
-      `TestStaleness`, which is where the non-blocking horizon and the
-      exit-zero command line live — and by `.github/workflows/scheduled-drift.yml`
+      harness/shared/tests/test_agents_doc_command.py
+      harness/shared/tests/test_agents_doc_thresholds.py -k "reviewed or Staleness"`
+      — the blocking arm, then `TestStaleness` for the non-blocking horizon and
+      the exit-zero command line, then the horizon's boundary and
+      `TestTheReviewedDateMeansTheSameOnEveryInterpreter`, which pins the
+      accepted date forms against `date.fromisoformat`'s widening in 3.11 — and
+      by `.github/workflows/scheduled-drift.yml`
       declaring no `pull_request` trigger · stage: `make ci` (C-ADOC-4)
 
 - [x] AC-12: A policy naming an absolute or escaping path in any path-valued key
