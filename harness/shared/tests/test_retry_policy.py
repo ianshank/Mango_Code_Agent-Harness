@@ -78,10 +78,21 @@ class TestParseRetryAfter:
         )
         assert parse_retry_after("Mon, 01 Jan 2030 00:00:00 GMT") is None
 
-    def test_a_parser_returning_none_is_handled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Python 3.9's parser returns None where 3.10+ raises."""
-        monkeypatch.setattr("harness.shared.retry_policy.email.utils.parsedate_to_datetime", lambda _text: None)
-        assert parse_retry_after("whatever") is None
+    def test_a_non_str_header_hits_the_type_error_arm(self) -> None:
+        """``bytes`` is the input that makes the date parse raise ``TypeError``
+        rather than ``ValueError``: it survives ``strip()``, and ``int(b"abc")``
+        raises ``ValueError`` so the delta-seconds branch falls through, leaving
+        ``parsedate_to_datetime`` to reject it on type. Unusable is unusable --
+        it must fall back to computed backoff, not raise through the retry loop.
+
+        Replaces a test that monkeypatched the parser to return ``None`` on the
+        premise that Python 3.9 did so. 3.9 raised ``TypeError`` from unpacking
+        ``_parsedate_tz``'s ``None``; no CPython has returned it, and from the
+        3.10 floor (docs/specs/python-floor-310.md) the rejection is an explicit
+        ``ValueError``. The ``parsed is None`` branch that test reached was
+        unreachable on every supported interpreter.
+        """
+        assert parse_retry_after(b"abc") is None  # type: ignore[arg-type]
 
 
 class TestRetryPredicate:
