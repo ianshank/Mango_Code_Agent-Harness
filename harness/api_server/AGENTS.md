@@ -46,9 +46,12 @@ flowchart TD
 - **FastAPI endpoints are typed and async.** Requests and responses are Pydantic
   models; the one deliberate `def` is `readyz`, so its policy read runs in the
   threadpool instead of blocking the event loop.
-- **Full pytest coverage for every new endpoint.** `tests/` is in the coverage
-  `source` set, per-file floors come from `governance-policy.json`, and a route
-  added without tests fails `make coverage-python`.
+- **Full pytest coverage for every new endpoint.** This package is in the
+  coverage `source` set and `tests/` is explicitly *omitted* from it
+  (`pyproject.toml` `[tool.coverage.run] omit`), so the measurement is of the
+  implementation, never of the tests measuring it. Per-file floors come from
+  `governance-policy.json`, and a route added without tests fails
+  `make coverage-python` on its own uncovered lines.
 - **No hard-coded thresholds.** `TaskRequest.task` is deliberately unbounded because
   no policy key describes a task brief; borrowing `orchestrator.max_command_bytes`
   would enforce a limit the policy does not state.

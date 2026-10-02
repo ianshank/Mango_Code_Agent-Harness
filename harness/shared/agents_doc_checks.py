@@ -175,6 +175,18 @@ def _key_file_names(text: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _one_terminator(text: str) -> str:
+    """`text` without a single trailing newline.
+
+    A CRLF checkout needs no arm of its own, and one written here would be dead:
+    `read_utf8` goes through `Path.read_text`, whose universal-newline
+    translation turns `\r\n` into `\n` before this sees it. That is load-bearing
+    for the Windows checkouts DEC-061 exists for, so the suite pins it rather
+    than leaving it to be rediscovered by a switch to `read_bytes().decode()`.
+    """
+    return text.removesuffix("\n")
+
+
 def read_utf8(path: Path) -> str | None:
     """The file's text, or ``None`` when it cannot be read as UTF-8.
 
@@ -234,8 +246,13 @@ def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) 
     text = read_utf8(companion)
     if text is None:
         return [f"{relative}/{config.companion_filename}: cannot be read as UTF-8, so its body cannot be judged"]
-    body = text.strip()
-    if body != config.companion_body:
+    # One trailing terminator, not `strip()`. R-ADOC-3 holds the *entire* body
+    # to the import, and `strip()` normalised `"\n@AGENTS.md\n\n"` and
+    # `"   @AGENTS.md\n"` to the import and accepted both -- leading whitespace
+    # and blank lines are content. Applied to the configured value too, so a
+    # policy that writes the terminator in is not failed for it.
+    body = _one_terminator(text)
+    if body != _one_terminator(config.companion_body):
         return [f"{relative}/{config.companion_filename}: body is {body!r}, expected {config.companion_body!r}"]
     return []
 

@@ -56,7 +56,8 @@ flowchart TD
   unmapped tool is withheld; a missing policy key raises rather than
   substituting a default.
 - **No hard-coded thresholds.** Every number comes from
-  `governance-policy.json` through `policy_loader`.
+  `governance-policy.json`, read from it and never inlined — through
+  `policy_loader` in new code, which is the facade rather than the only reader.
 - The broker **contains**; it does not isolate. Say so in any doc or comment
   that describes it — `.governance/agent-policy.json` carries the same caveat
   deliberately.

@@ -13,6 +13,11 @@ boundary and each killed the same mutation. It was applied unevenly, which is
 the only reason this module exists: one place where a threshold is pinned from
 both sides, so a new one has an obvious home and an obvious shape.
 
+The companion-body rule is the same story told with whitespace: it was
+asserted against `"@AGENTS.md\n\nAlso, some rules."` -- prose, nowhere near the
+line -- while `strip()` quietly accepted `"   @AGENTS.md"` and
+`"\n@AGENTS.md\n\n"`, which R-ADOC-3 calls content.
+
 The exclusion lists are here for the same reason. ``MERMAID_NON_NODES`` and the
 ``%%``-comment skip could both be deleted outright with 198 tests still green,
 because every diagram in the suite is multi-line and uncommented and so never
@@ -28,6 +33,7 @@ import pytest
 
 from harness.shared.agents_doc import (
     audit,
+    companion_findings,
     declared_nodes,
     discover_source_directories,
     mermaid_findings,
@@ -165,3 +171,40 @@ class TestTheRepositoryRootNeverOwesADocument:
         for name in ("a.py", "b.py", "c.py"):
             (tmp_path / name).write_text("x = 1\n", encoding="utf-8")
         assert discover_source_directories(tmp_path, CONFIG) == []
+
+
+class TestTheCompanionBodyIsExact:
+    """R-ADOC-3 holds the *entire* body to the configured import."""
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "\n@AGENTS.md",
+            "@AGENTS.md\n\n",
+            "   @AGENTS.md",
+            "\n\n@AGENTS.md\n\n",
+            "\t@AGENTS.md",
+        ],
+        ids=["leading-blank", "trailing-blank", "leading-spaces", "surrounded", "leading-tab"],
+    )
+    def test_whitespace_around_the_import_is_still_content(self, tmp_path: Path, body: str) -> None:
+        """`strip()` normalised every one of these to the import and accepted
+        it, although R-ADOC-3 holds the *entire* body to the import. Leading
+        whitespace and extra blank lines are content, and all 24 companions in
+        this repository are byte-exactly `@AGENTS.md` plus one newline, so
+        nothing legitimate relies on the laxity."""
+        write_document(tmp_path / "pkg", companion=body)
+        assert "expected '@AGENTS.md'" in "".join(companion_findings(tmp_path / "pkg", "pkg", CONFIG))
+
+    @pytest.mark.parametrize("body", ["@AGENTS.md", "@AGENTS.md\r"], ids=["lf", "crlf"])
+    def test_one_trailing_terminator_is_accepted_in_either_convention(self, tmp_path: Path, body: str) -> None:
+        """The control, and a pin on *why* CRLF works. `write_document` appends
+        the newline, so these land as `"@AGENTS.md\n"` and `"@AGENTS.md\r\n"`,
+        and `Path.read_text`'s universal-newline translation collapses the second
+        to the first before any comparison. I first wrote an explicit `\r` arm
+        for it; its mutation could not be made to fail, because the arm was
+        unreachable. This test is what makes the dependency visible — switch
+        `read_utf8` to `read_bytes().decode()` and the CRLF case starts failing
+        the gate on exactly the Windows checkouts DEC-061 exists for."""
+        write_document(tmp_path / "pkg", companion=body)
+        assert companion_findings(tmp_path / "pkg", "pkg", CONFIG) == []

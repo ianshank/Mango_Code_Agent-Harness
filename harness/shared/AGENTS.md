@@ -18,7 +18,7 @@ document covers the modules that sit directly here.
 
 ```mermaid
 flowchart TD
-  Policy["governance-policy.json<br/>every threshold"] --> Loader["policy_loader.py<br/>the only reader, fails closed"]
+  Policy["governance-policy.json<br/>every threshold"] --> Loader["policy_loader.py<br/>canonical facade, fails closed"]
   Loader --> Runtime["runtime gates"]
   Loader --> CIGates["CI gates"]
   Runtime --> Auth["agent_authority.py<br/>role to tool exposure"]
@@ -37,7 +37,7 @@ flowchart TD
 | File | Role |
 | --- | --- |
 | `governance-policy.json` | The policy. Every threshold in the repository is declared here, nowhere else. |
-| `policy_loader.py` | The only reader. A present policy missing a declared key raises `PolicyError` rather than substituting a default (DEC-043). |
+| `policy_loader.py` | The canonical reader, and the one new code should use: a present policy missing a declared key raises `PolicyError` rather than substituting a default (DEC-043). Not the *only* reader — `validate_invariants.py`, `check_projections.py`, `governance/check_traceability.py` and `governance/denial_rate.py` each `json.loads` the file directly, which predates the facade and is not a violation. |
 | `agent_authority.py` | Derives each active role's tool exposure from `agent-policy.json`; holds `ACTIVE_TO_CANONICAL` and `EXECUTION_IDENTITY`. |
 | `write_policy.py` | Runtime write gate at tool-call granularity: `protected_paths`, any `.git` segment, any credential filename. |
 | `tool_executors.py` | The tool doors themselves, plus the shared write authorization. Protected. |
@@ -47,8 +47,10 @@ flowchart TD
 
 ## Invariants
 
-- **No hard-coded thresholds.** Every number comes from `governance-policy.json`
-  through `policy_loader`, and the read fails closed. A gate that lowers itself when
+- **No hard-coded thresholds.** Every number is declared in
+  `governance-policy.json` and read from it, never inlined, and the read fails
+  closed. `policy_loader` is the facade new code should use; the direct readers
+  listed above predate it. A gate that lowers itself when
   it cannot read its own policy is the defect `coverage_gate.py` replaced.
 - **Import direction is enforced by AST, not by grep.** Nothing under `governance/`,
   nor `write_policy.py`, `read_policy.py` or `agent_authority.py`, may import the

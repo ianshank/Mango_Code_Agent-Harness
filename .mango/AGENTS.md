@@ -54,7 +54,9 @@ flowchart TD
   (`test_every_declared_hook_command_is_routed_through_bash`) because every
   tracked `.sh` here is mode 644.
 - **No hard-coded thresholds.** Everything numeric comes from
-  `harness/shared/governance-policy.json` through `policy_loader`.
+  `harness/shared/governance-policy.json`, read from it and never inlined —
+  through `policy_loader` in new code, which is the facade rather than the only
+  reader.
 
 ## Commands
 
