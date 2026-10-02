@@ -477,8 +477,12 @@ class TestAudit:
         "all documents are true" different from "there are no documents"."""
         assert "the floor is 20" in "".join(audit(tmp_path, AgentsDocConfig()))
 
-    def test_audit_resolves_its_own_config_when_given_none(self, tmp_path: Path) -> None:
-        assert audit(tmp_path) != []
+    # `test_audit_resolves_its_own_config_when_given_none` lived here and asserted
+    # `audit(tmp_path) != []`, which an empty tree satisfies under *any* config --
+    # so replacing `load_config()` with `AgentsDocConfig()` in `audit`, i.e. the
+    # gate ceasing to read `governance-policy.json` at all, left it green. It also
+    # duplicated the floor test four lines up. The load-bearing version is
+    # `test_agents_doc_thresholds.TestTheAuditReadsTheRealPolicy`.
 
 
 class TestUnreadableFiles:

@@ -160,6 +160,7 @@ Protected paths are marked; each needs an `infra-reviewed` attestation row.
   `harness/shared/tests/test_agents_doc_containment.py`,
   `harness/shared/tests/test_agents_doc_command.py`,
   `harness/shared/tests/test_agents_doc_policy.py`,
+  `harness/shared/tests/test_agents_doc_thresholds.py`,
   `harness/shared/tests/_agents_doc_helpers.py`
 - `harness/shared/governance-policy.json` **(protected)**
 - `harness/shared/agent_prompts.py` **(protected)**

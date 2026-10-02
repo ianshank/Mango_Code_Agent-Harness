@@ -58,6 +58,16 @@ class TestStaleness:
         config = self.tree(tmp_path, "last-tuesday")
         assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
 
+    def test_an_undecodable_document_is_left_to_the_blocking_rule(self, tmp_path: Path) -> None:
+        """It used to raise `UnicodeDecodeError` out of here, which took the
+        weekly job down with it -- a report whose whole contract is to report
+        and never block, failing. The audit reports the file by name; this half
+        declines to read it and says so at DEBUG."""
+        config = self.tree(tmp_path, "2026-01-01")
+        path = tmp_path / "pkg" / "AGENTS.md"
+        path.write_bytes(path.read_bytes() + b"\xff\xfe")
+        assert stale_documents(tmp_path, config, 90, date(2026, 10, 1)) == []
+
     def test_a_missing_document_is_not_a_staleness_report(self, tmp_path: Path) -> None:
         (tmp_path / "pkg").mkdir()
         config = AgentsDocConfig(additional_directories=("pkg",))

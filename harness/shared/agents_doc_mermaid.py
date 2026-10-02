@@ -102,7 +102,10 @@ def mermaid_findings(diagrams: Sequence[str], config: AgentsDocConfig) -> list[s
         # The first whitespace-delimited token, not a prefix: `startswith` accepted
         # `flowchartX LR`, which shares a prefix with `flowchart` and renders as an
         # error box. A check that admits the typo it exists to catch is not a check.
-        keyword = opening.split()[0] if opening.split() else opening
+        # No `if opening.split() else` arm: `lines` is filtered to truthy-after-strip
+        # and `opening` is `lines[0].strip()`, so `split()` on it is never empty.
+        # The guard was unreachable, and it split twice to be so.
+        keyword = opening.split()[0]
         if keyword not in config.diagram_types:
             findings.append(f"diagram {index} opens with {opening!r}, which is not a known mermaid diagram type")
         for lineno, line in enumerate(lines, 1):
