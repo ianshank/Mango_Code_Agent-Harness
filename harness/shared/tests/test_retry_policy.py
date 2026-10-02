@@ -96,13 +96,16 @@ class TestParseRetryAfter:
 
 
 class TestRetryPredicate:
-    # Explicit ids, and a real file object for HTTPError. Both are required on
-    # Python 3.9, which is a live CI matrix leg: there `urllib.response.addbase`
-    # still inherits from `tempfile._TemporaryFileWrapper`, whose `__getattr__`
-    # raises KeyError('file') for an uninitialised wrapper instead of returning
-    # None as 3.10+ does. pytest builds parameter ids by calling
-    # `getattr(value, "__name__", None)`, so an HTTPError constructed with
-    # `fp=None` makes *collection* fail on 3.9 and pass everywhere else.
+    # Explicit ids, and a real file object for HTTPError. Both were required by
+    # the since-dropped 3.9 leg (docs/specs/python-floor-310.md): there
+    # `tempfile._TemporaryFileWrapper.__getattr__` -- which
+    # `urllib.response.addbase` inherits -- raised KeyError('file') for an
+    # uninitialised wrapper instead of returning None as 3.10+ does. pytest
+    # builds parameter ids by calling `getattr(value, "__name__", None)`, so an
+    # HTTPError constructed with `fp=None` made *collection* fail there and pass
+    # everywhere else. Both stay: the ids are readable on their own merits, and
+    # they are now the only thing telling the `timeouterror` and `socket-timeout`
+    # rows apart, since `socket.timeout` *is* `TimeoutError` from 3.10 on.
     @pytest.mark.parametrize(
         "exc",
         [

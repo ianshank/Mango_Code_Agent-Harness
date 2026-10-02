@@ -41,11 +41,13 @@ DEFAULT_JITTER_RATIO = 0.25
 
 # Connection-level failures worth retrying.
 #
-# ``socket.timeout`` is the load-bearing entry: ``urlopen`` raises it for read
-# timeouts, and it only became an alias of ``TimeoutError`` in Python 3.10. On
-# 3.9 — a live leg of this repo's CI matrix — a bare ``TimeoutError`` check never
-# matches, so every read timeout fell through unretried no matter how
-# NEMOTRON_MAX_RETRIES was set. Listing both is correct on every version.
+# ``socket.timeout`` became an alias of ``TimeoutError`` in Python 3.10, so on
+# this repo's floor (docs/specs/python-floor-310.md) the two entries name one
+# class and either alone would match. The pair is kept for the history it
+# records: before the floor moved, a bare ``TimeoutError`` never matched the read
+# timeouts ``urlopen`` raises on 3.9, so every one of them fell through unretried
+# no matter how NEMOTRON_MAX_RETRIES was set. Listing both stays correct on every
+# version.
 #
 # ``ConnectionError`` covers peer resets raised mid-read, which urllib does not
 # wrap in ``URLError``.
