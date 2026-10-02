@@ -111,7 +111,14 @@ def contains(directory: Path, name: str) -> bool:
     try:
         root = directory.resolve(strict=True)
         candidate = (directory / name).resolve(strict=True)
-    except (OSError, RuntimeError):  # missing, or a symlink loop
+    except (OSError, RuntimeError) as exc:  # missing, or a symlink loop
+        # Every "does not exist under X" finding in this module is decided here
+        # -- scope paths, key files, the subagent directory, both configured
+        # lists. Genuinely absent, a symlink loop and permission denied on a
+        # parent all produce the same sentence, so the reason is logged rather
+        # than discarded: otherwise an author watching the gate deny a file they
+        # can see has nothing to go on at any level.
+        logger.debug("containment refused for %r under %s: %s", name, directory, exc)
         return False
     return candidate == root or root in candidate.parents
 
@@ -168,19 +175,41 @@ def _key_file_names(text: str) -> tuple[str, ...]:
     return tuple(names)
 
 
-def parse_document(path: Path, directory: Path) -> AgentsDocument:
-    """Read one document into the facts the checks below are written against."""
-    text = path.read_text(encoding="utf-8")
-    reviewed = REVIEWED_LINE.search(text)
+def read_utf8(path: Path) -> str | None:
+    """The file's text, or ``None`` when it cannot be read as UTF-8.
+
+    Three sites here read a file this gate did not write, and a decode or I/O
+    error in any of them put a traceback where a finding belongs. That is worst
+    in the weekly staleness job, whose whole contract (C-ADOC-4) is to report
+    and never block: a stack trace there is a notification nobody reads. The
+    caller turns ``None`` into a finding naming the file, so the audit still
+    fails closed -- it just says which file, and why.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("cannot read %s as UTF-8: %s", path, exc)
+        return None
+
+
+def parse_document(path: Path, directory: Path, text: str | None = None) -> AgentsDocument:
+    """Read one document into the facts the checks below are written against.
+
+    ``text`` lets a caller that has already read the file -- to decide whether
+    it *can* be read -- hand the body over rather than reading it twice.
+    Omitted, this reads the file, which is what every existing caller does.
+    """
+    body = path.read_text(encoding="utf-8") if text is None else text
+    reviewed = REVIEWED_LINE.search(body)
     return AgentsDocument(
         path=path,
         directory=directory,
-        text=text,
-        line_count=len(text.splitlines()),
-        scope_names=tuple(scope_names(text)),
-        key_files=_key_file_names(text),
+        text=body,
+        line_count=len(body.splitlines()),
+        scope_names=tuple(scope_names(body)),
+        key_files=_key_file_names(body),
         reviewed=reviewed.group(1) if reviewed else None,
-        diagrams=tuple(MERMAID_BLOCK.findall(text)),
+        diagrams=tuple(MERMAID_BLOCK.findall(body)),
     )
 
 
@@ -202,7 +231,10 @@ def companion_findings(directory: Path, relative: str, config: AgentsDocConfig) 
         # in-tree link resolves inside and compared equal, so the shape the
         # decision refuses still passed.
         return [f"{relative}/{config.companion_filename}: must be a regular file in this directory, not a link"]
-    body = companion.read_text(encoding="utf-8").strip()
+    text = read_utf8(companion)
+    if text is None:
+        return [f"{relative}/{config.companion_filename}: cannot be read as UTF-8, so its body cannot be judged"]
+    body = text.strip()
     if body != config.companion_body:
         return [f"{relative}/{config.companion_filename}: body is {body!r}, expected {config.companion_body!r}"]
     return []
@@ -267,6 +299,18 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
     """
     directory = repo_root / config.subagent_directory
     if not directory.exists():
+        if directory.is_symlink():
+            # `exists()` follows the link, so a *dangling* one is false here and
+            # was indistinguishable from "this repository defines no subagents".
+            # The one check in this module that guards a silent outcome was
+            # itself silently disabled. A link whose target exists but escapes
+            # the checkout is reported below; a broken one is reported here or
+            # nowhere.
+            dangling = (
+                f"{config.subagent_directory}: is a symlink whose target does not exist, "
+                "so the frontmatter audit would be skipped rather than performed"
+            )
+            return [dangling]
         return []  # a repository need not define subagents at all
     if not directory.is_dir():
         return [f"{config.subagent_directory}: configured as the subagent directory but is not a directory"]
@@ -284,7 +328,11 @@ def subagent_findings(repo_root: Path, config: AgentsDocConfig) -> list[str]:
             # linked `rogue.md` was read and parsed like any other definition.
             findings.append(f"{relative}: must be a regular file in this directory, not a link")
             continue
-        lines = path.read_text(encoding="utf-8").splitlines()
+        text = read_utf8(path)
+        if text is None:
+            findings.append(f"{relative}: cannot be read as UTF-8, so its frontmatter cannot be judged")
+            continue
+        lines = text.splitlines()
         if not lines or lines[0].strip() != "---":
             findings.append(f"{relative}: no opening '---' on line 1, so Claude Code reads it as documentation")
             continue
@@ -349,16 +397,25 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
     check, and nothing in CI passes it.
     """
     resolved = config if config is not None else load_config()
+    # Normalised, so `--directory harness/shared/` and `--directory ./harness/shared`
+    # both name the directory `iter_documents` yields. Unnormalised they matched
+    # nothing, and the fallback below then reported "is not a required directory"
+    # for a directory that is one -- the gate telling an author the opposite of
+    # the truth about the document in front of them.
+    target = Path(only).as_posix() if only is not None else None
+    configured = configured_path_findings(repo_root, resolved)
     findings = (
-        waiver_findings(repo_root, resolved)
-        + configured_path_findings(repo_root, resolved)
-        + subagent_findings(repo_root, resolved)
-        if only is None
-        else []
+        waiver_findings(repo_root, resolved) + configured + subagent_findings(repo_root, resolved)
+        if target is None
+        # A narrowed run still owes the findings that explain why its own
+        # directory may be unjudgeable: the loop below skips a configured
+        # directory resolving outside the checkout, so without this the fallback
+        # blamed the author's spelling for the policy's redirect.
+        else [finding for finding in configured if finding.split(":", 1)[0] == target]
     )
     present = 0
     for relative, path in iter_documents(repo_root, resolved):
-        if only is not None and relative != only:
+        if target is not None and relative != target:
             continue
         directory = repo_root / relative
         if not contains(repo_root, relative):
@@ -373,12 +430,25 @@ def audit(repo_root: Path, config: AgentsDocConfig | None = None, only: str | No
         if not is_regular_in(directory, resolved.filename):
             findings.append(f"{relative}/{resolved.filename}: must be a regular file in this directory, not a link")
             continue
+        text = read_utf8(path)
+        if text is None:
+            unreadable = f"{relative}/{resolved.filename}: cannot be read as UTF-8, so no claim in it can be checked"
+            findings.append(unreadable)
+            continue
         present += 1
         findings.extend(companion_findings(directory, relative, resolved))
-        findings.extend(document_findings(parse_document(path, directory), relative, resolved))
-    if only is not None:
+        findings.extend(document_findings(parse_document(path, directory, text), relative, resolved))
+    if target is not None:
+        # `not findings` is the whole test, and it is sound now that a narrowed
+        # run keeps its configured findings: every other way a *required*
+        # directory reaches here with nothing judged -- document missing,
+        # linked, or undecodable -- has already appended one. Asking
+        # `required_directories` instead reads better and agrees on every
+        # reachable state, so it would be a second traversal buying a branch no
+        # mutation can fail (the round 7 lesson).
         if present == 0 and not findings:
-            findings.append(f"{only} is not a required directory; nothing was checked")
+            findings.append(f"{target} is not a required directory; nothing was checked")
+        logger.info("agents_doc audit: --directory %s, %d finding(s)", target, len(findings))
         return findings
     if present < resolved.min_documented_directories:
         findings.append(

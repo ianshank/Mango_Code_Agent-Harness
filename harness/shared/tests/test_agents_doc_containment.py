@@ -223,3 +223,42 @@ class TestConfiguredPathsAreRealAndInTree:
         (root / "pkg").mkdir()
         config = AgentsDocConfig(additional_directories=("pkg",))
         assert configured_path_findings(root, config) == []
+
+
+class TestADanglingConfiguredLink:
+    """The seventh layer, and the one the gate's own silence hid.
+
+    ``Path.exists()`` follows the link, so a *broken* ``.claude/agents`` was
+    false at the existence check and `subagent_findings` returned ``[]`` --
+    byte-identical to the legitimate "this repository defines no subagents".
+    The one check in this module that guards a *silent* outcome was itself the
+    one a silent skip could disable, which is the same shape as (6) above.
+    """
+
+    @staticmethod
+    def _repo(tmp_path: Path) -> Path:
+        root = tmp_path / "repo"
+        (root / ".claude").mkdir(parents=True)
+        return root
+
+    def test_a_dangling_subagent_directory_is_reported(self, tmp_path: Path) -> None:
+        root = self._repo(tmp_path)
+        (root / ".claude" / "agents").symlink_to(root / ".claude" / "gone", target_is_directory=True)
+        findings = subagent_findings(root, AgentsDocConfig())
+        assert findings, "a dangling link disabled the whole frontmatter audit in silence"
+        assert "symlink whose target does not exist" in findings[0], findings
+
+    def test_a_genuinely_absent_directory_is_still_silent(self, tmp_path: Path) -> None:
+        """The control that gives the test above its meaning: a repository need
+        not define subagents, and that silence is exactly what a dangling link
+        was indistinguishable from."""
+        assert subagent_findings(self._repo(tmp_path), AgentsDocConfig()) == []
+
+    def test_a_real_directory_is_still_audited(self, tmp_path: Path) -> None:
+        """The other control. A guard that reported on every absence would pass
+        the first test and say nothing about the case the check exists for."""
+        root = self._repo(tmp_path)
+        agents = root / ".claude" / "agents"
+        agents.mkdir()
+        (agents / "broken.md").write_text("no frontmatter here\n", encoding="utf-8")
+        assert any("opening '---'" in finding for finding in subagent_findings(root, AgentsDocConfig()))

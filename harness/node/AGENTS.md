@@ -2,7 +2,7 @@
 
 **Scope:** the `typescript` NVIDIA Nemotron client adapter under `src/ai/nemotron/` (HTTP client, circuit breaker, retry, secret masker, CLI), the governance mirror under `.governance/` and `src/governance/`, the `vitest` test matrix, and the `eslint`, `prettier` and `knip` lint tier.
 **Owner:** nemotron-reasoner → implementer — the **Node Bridge** for the `.mango` / `harness` architecture
-**Protected path:** no — but `Makefile`, `agents/` and `.governance/` here are; see Gotchas
+**Protected path:** no — but `Makefile`, `agents/`, `.governance/`, `.github/workflows/` and `docs/PROJECT-CHARTER.md` here are; see Gotchas
 **Reviewed:** 2026-09-19
 
 ## What this does
@@ -82,11 +82,13 @@ flowchart TD
   `node-deps`; the stack-local names (`lint`, `types`, `cov`, `governance`, `specs`)
   only work from inside `harness/node`. Running `make test` at the root runs the
   whole repository.
-- **Three protected patterns live under this directory.** `harness/*/Makefile`,
-  `harness/*/agents/**` and `**/.governance/**` all match here, so editing the
-  Makefile, a role contract or the mirror needs the `infra-reviewed` label,
-  `ALLOW_GITHUB_CHANGES=1` and an attestation row — even though the directory itself
-  is unprotected.
+- **Five protected patterns live under this directory**, not the three that are
+  obvious: `harness/*/Makefile`, `harness/*/agents/**` and `**/.governance/**`, plus
+  `**/.github/workflows/**` matching `.github/workflows/ci.yml` and
+  `harness/*/docs/PROJECT-CHARTER.md`. Editing any of them needs the `infra-reviewed`
+  label, `ALLOW_GITHUB_CHANGES=1` and an attestation row — even though the directory
+  itself is unprotected. The last two are the ones that surprise: this stack's
+  workflow never runs in CI, which does not make it editable.
 - **`.governance/vitest-results.json` is written into a protected directory** by
   every test run. It is generated state: `make clean` removes it, and it must not be
   committed as if it were policy.

@@ -48,9 +48,13 @@ DEFAULT_MIN_DOCUMENTED_DIRECTORIES = 20
 DEFAULT_MIN_WAIVER_REASON_CHARS = 40
 DEFAULT_SOURCE_EXTENSIONS = (".py", ".ts", ".kt", ".sh")
 #: Build output, caches and vendored trees. Written as one string because the
-#: list carries no per-entry rationale: it is the same prune set every walker
-#: in this repository uses, and a column of quoted names costs ten lines of the
-#: `limits.size_budget_lines` budget to say so.
+#: list carries no per-entry rationale, and a column of quoted names costs ten
+#: lines of the `limits.size_budget_lines` budget to say so. It is *not* the one
+#: prune set this repository uses: `validate_invariants.SKIP_DIR_PARTS` has six
+#: entries and `check_py_compat.DEFAULT_SKIP_DIRS` nine, which adds `scratch`
+#: and drops five of these. Three sets, no two equal -- so this one is
+#: deliberately the widest and the only policy-overridable one, and a claim that
+#: they agree would be false.
 DEFAULT_PRUNED_DIRECTORY_NAMES = tuple(
     ".git .venv venv node_modules __pycache__ .mypy_cache .pytest_cache .ruff_cache "
     ".gradle .artifacts htmlcov build dist".split()

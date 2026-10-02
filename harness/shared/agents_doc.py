@@ -42,6 +42,7 @@ try:
         is_path_like,
         is_regular_in,
         parse_document,
+        read_utf8,
         scope_names,
         subagent_findings,
     )
@@ -51,6 +52,7 @@ try:
         required_directories,
         source_file_count,
         waiver_findings,
+        walk_pruned,
     )
     from harness.shared.agents_doc_mermaid import MERMAID_BLOCK, declared_nodes, mermaid_findings
     from harness.shared.agents_doc_policy import AgentsDocConfig, load_config
@@ -67,6 +69,7 @@ except ImportError:  # sibling import when this dir is sys.path[0]
         is_path_like,
         is_regular_in,
         parse_document,
+        read_utf8,
         scope_names,
         subagent_findings,
     )
@@ -76,6 +79,7 @@ except ImportError:  # sibling import when this dir is sys.path[0]
         required_directories,
         source_file_count,
         waiver_findings,
+        walk_pruned,
     )
     from agents_doc_mermaid import (  # type: ignore[no-redef]
         MERMAID_BLOCK,
@@ -91,10 +95,14 @@ except ImportError:  # sibling import when this dir is sys.path[0]
 
 logger = logging.getLogger(__name__)
 
-#: The whole gate, from one import. Names defined in :mod:`agents_doc_checks`,
+#: Every check, from one import. Names defined in :mod:`agents_doc_checks`,
 #: :mod:`agents_doc_discovery` and :mod:`agents_doc_mermaid` are re-exported so a
 #: caller never has to know which of them a given rule lives in, and so a later
-#: split moves code without moving anybody's import.
+#: split moves code without moving anybody's import. :mod:`agents_doc_policy` is
+#: the deliberate exception -- `AgentsDocConfig` and `load_config` are imported
+#: here for internal use and are not re-exported, so a caller configuring the
+#: gate names that module. Not "the whole gate from one import": those two are
+#: parameters of every public entry point below.
 __all__ = [
     "MERMAID_BLOCK",
     "AgentsDocument",
@@ -111,6 +119,7 @@ __all__ = [
     "main",
     "mermaid_findings",
     "parse_document",
+    "read_utf8",
     "render_staleness_report",
     "required_directories",
     "scope_names",
@@ -118,6 +127,7 @@ __all__ = [
     "stale_documents",
     "subagent_findings",
     "waiver_findings",
+    "walk_pruned",
 ]
 
 
@@ -141,13 +151,22 @@ def stale_documents(
             # report parsed a document `audit()` refuses, and read a file outside
             # the checkout to do it. Both refusals are already findings next door;
             # this path must not *act* on what they refuse, only decline to read it.
+            logger.debug("%s: not a contained regular %s; left to the audit", relative, config.filename)
             continue
-        reviewed = parse_document(path, directory).reviewed
+        text = read_utf8(path)
+        if text is None:
+            # The report's contract is to report, never to fail. An undecodable
+            # document raised out of here instead, taking the weekly job with it.
+            logger.debug("%s: cannot be read as UTF-8; left to the audit", relative)
+            continue
+        reviewed = parse_document(path, directory, text).reviewed
         if reviewed is None:
+            logger.debug("%s: records no **Reviewed:** date; a blocking finding, not staleness", relative)
             continue  # a blocking finding already, not a staleness report
         try:
             age = (today - date.fromisoformat(reviewed)).days
         except ValueError:
+            logger.debug("%s: **Reviewed:** %r is not an ISO date; likewise", relative, reviewed)
             continue  # likewise
         if age > max_age_days:
             stale.append((relative, reviewed, age))

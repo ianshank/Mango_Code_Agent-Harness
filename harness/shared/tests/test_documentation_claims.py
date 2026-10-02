@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.shared.agents_doc import scope_names
+from harness.shared.agents_doc import is_path_like, scope_names
 from harness.shared.tests._ci_gate_helpers import _make_targets
 from harness.shared.tests._helpers import REPO
 from harness.shared.tests._workflow_paths import WORKFLOW
@@ -171,12 +171,30 @@ def unsupported_scope_names(persona: Path, stack: Path) -> list[str]:
     supported = stack_technologies(stack)
     unsupported: list[str] = []
     for name in scope_names(persona.read_text(encoding="utf-8")):
-        is_path = "/" in name or name.startswith(".")
+        is_path = is_path_like(name)
         if is_path and not (stack / name).exists():
             unsupported.append(name)
         elif not is_path and name.lower() not in supported:
             unsupported.append(name)
     return unsupported
+
+
+class TestTheScopePredicateHasOneDefinition:
+    """`unsupported_scope_names` split path claims from technology claims with
+    its own copy of the rule, which had already lost the suffix clause
+    `agents_doc_checks.is_path_like` carries -- so a bare `loop.py` was a path
+    to the gate and a technology here, while the gate's docstring states the two
+    apply the same test. The drift has no live trigger on today's scope lines,
+    which is why it needs asserting rather than waiting for one.
+    """
+
+    def test_a_bare_filename_with_a_suffix_is_a_path_claim(self) -> None:
+        assert is_path_like("loop.py")
+        assert is_path_like("build.gradle.kts")
+
+    def test_a_technology_name_is_not(self) -> None:
+        assert not is_path_like("vitest")
+        assert not is_path_like("pnpm")
 
 
 class TestPersonaScopeIsBackedByTheStack:

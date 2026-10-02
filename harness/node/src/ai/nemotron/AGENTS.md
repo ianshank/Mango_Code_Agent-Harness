@@ -24,7 +24,7 @@ flowchart TD
   Retry --> Breaker["circuit-breaker.ts<br/>CLOSED, OPEN, HALF_OPEN"]
   Client --> Chunks["SSE chunks<br/>types.ts StreamChunk"]
   Client --> Mask["secret-masker.ts<br/>prefix and suffix only"]
-  Index["index.ts re-exports every module"] --> Client
+  Index["index.ts re-exports all but policy.ts"] --> Client
 ```
 
 ## Key files

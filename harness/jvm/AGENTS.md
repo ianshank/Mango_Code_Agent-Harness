@@ -2,7 +2,7 @@
 
 **Scope:** `build.gradle.kts`, `src/main/kotlin/governance/PolicyAnchor.kt`, `.governance/`, `Kotlin`, `Gradle`
 **Owner:** nemotron-reasoner → implementer
-**Protected path:** no — but `Makefile`, `agents/`, `.governance/` and `docs/PROJECT-CHARTER.md` here are
+**Protected path:** no — but `Makefile`, `agents/`, `.governance/`, `docs/PROJECT-CHARTER.md` and `.github/workflows/` here are
 **Reviewed:** 2026-09-19
 
 ## What this does
@@ -92,9 +92,11 @@ flowchart TD
   builder with `--jvm harness/jvm` and digests the Makefile, both Gradle scripts,
   `gradle.properties`, the two Kotlin test sources, the JUnit services file and every
   `scripts/` entry. Change one without regenerating and `make ci` fails on the diff.
-- **Four protected patterns match inside this unprotected directory**:
-  `harness/*/Makefile`, `harness/*/agents/**`, `**/.governance/**` and
-  `harness/*/docs/PROJECT-CHARTER.md`. Any of them needs the `infra-reviewed` label,
-  `ALLOW_GITHUB_CHANGES=1` and an attestation row.
+- **Five protected patterns match inside this unprotected directory**:
+  `harness/*/Makefile`, `harness/*/agents/**`, `**/.governance/**`,
+  `harness/*/docs/PROJECT-CHARTER.md` and `**/.github/workflows/**`. Any of them needs
+  the `infra-reviewed` label, `ALLOW_GITHUB_CHANGES=1` and an attestation row. The last
+  is the trap: the gotcha above says `.github/workflows/ci.yml` never executes, and
+  inert is not the same as editable.
 - **`GovernanceMetaTest` reads files by relative path**, so it only passes when
   Gradle runs with `harness/jvm` as the working directory.

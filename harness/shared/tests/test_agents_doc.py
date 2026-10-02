@@ -36,6 +36,7 @@ from harness.shared.agents_doc import (
     source_file_count,
     subagent_findings,
     waiver_findings,
+    walk_pruned,
 )
 from harness.shared.agents_doc_policy import (
     DEFAULT_MAX_LINES,
@@ -62,13 +63,18 @@ def persona_namespace_intruders(root: Path, config: AgentsDocConfig) -> list[str
     is just as forbidden by C-ADOC-2 and escaped the assertion entirely, so the
     gate could have passed while carrying the exact document the constraint
     exists to prevent. Any `agents` component in the path now counts.
+
+    Walks through `walk_pruned` rather than `rglob`, which prunes nothing: it
+    traversed all 3,067 directories of this checkout to reach the same 24
+    documents a pruned walk reaches in 137, and filtering its finished result
+    only *looked* like sharing discovery's behaviour. Sharing the function is
+    the only way the claim stays true.
     """
-    pruned = set(config.pruned_directory_names)
     intruders: list[str] = []
-    for path in root.rglob(config.filename):
-        relative = path.relative_to(root)
-        if pruned & set(relative.parts):
+    for directory, filenames in walk_pruned(root, config):
+        if config.filename not in filenames:
             continue
+        relative = (directory / config.filename).relative_to(root)
         if "agents" in relative.parts[:-1]:
             intruders.append(relative.as_posix())
     return sorted(intruders)
@@ -140,6 +146,45 @@ class TestDiscovery:
         monkeypatch.setattr(agents_doc_discovery.os, "walk", spy)
         assert discover_source_directories(tmp_path, CONFIG) == ["pkg"]
         assert not [seen for seen in visited if "node_modules" in seen], f"descended into a pruned tree: {visited}"
+
+
+class TestWalkPruned:
+    """The one definition of the prune, because two walkers that prune by eye
+    drift. Discovery was moved to prune during traversal in round 2; the scan
+    below kept filtering a finished `rglob`, which is not the same thing."""
+
+    def test_it_never_descends_a_pruned_tree(self, tmp_path: Path) -> None:
+        (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+        (tmp_path / "pkg").mkdir()
+        seen = [directory for directory, _ in walk_pruned(tmp_path, CONFIG)]
+        assert tmp_path / "pkg" in seen, "the positive control: it must walk the live tree"
+        assert not [directory for directory in seen if "node_modules" in str(directory)], seen
+
+    def test_the_persona_namespace_scan_does_not_descend_pruned_trees(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`rglob` filtered a *finished* walk, so the control reached the right
+        answer having already entered every `node_modules` in the checkout --
+        3,067 directories on this repository against 137 for a pruned walk.
+        Traversal is the only place that difference shows, and `assert visited`
+        is what fails under `rglob`: it never calls `os.walk` at all.
+        """
+        (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+        live = tmp_path / "harness" / "node" / "agents" / "examples"
+        live.mkdir(parents=True)
+        (live / "AGENTS.md").write_text("# x\n", encoding="utf-8")
+        visited: list[str] = []
+        real_walk = agents_doc_discovery.os.walk
+
+        def spy(top: str | os.PathLike[str]) -> Iterator[tuple[str, list[str], list[str]]]:
+            for dirpath, dirnames, filenames in real_walk(top):
+                visited.append(dirpath)
+                yield dirpath, dirnames, filenames
+
+        monkeypatch.setattr(agents_doc_discovery.os, "walk", spy)
+        assert persona_namespace_intruders(tmp_path, CONFIG) == ["harness/node/agents/examples/AGENTS.md"]
+        assert visited, "the scan did not walk at all, so it cannot be sharing the prune"
+        assert not [seen for seen in visited if "node_modules" in seen], visited
 
 
 class TestWaiverFindings:
@@ -436,11 +481,104 @@ class TestAudit:
         assert audit(tmp_path) != []
 
 
+class TestUnreadableFiles:
+    """Three sites read a file this gate did not write, and a decode error in
+    any of them put a traceback where a finding belongs. That is worst in the
+    weekly staleness job, whose whole contract is to report and never block: a
+    stack trace there is a notification nobody reads."""
+
+    @staticmethod
+    def _undecodable(path: Path) -> None:
+        path.write_bytes(path.read_bytes() + b"\xff\xfe")
+
+    def test_an_undecodable_document_is_a_finding_not_a_traceback(self, tmp_path: Path) -> None:
+        self._undecodable(write_document(tmp_path / "pkg"))
+        findings = audit(tmp_path, AgentsDocConfig(min_documented_directories=1))
+        assert any("cannot be read as UTF-8" in finding for finding in findings), findings
+
+    def test_an_undecodable_document_does_not_count_as_present(self, tmp_path: Path) -> None:
+        """Fail closed in both directions. Its claims went unchecked, so it must
+        not also satisfy a population floor it never earned."""
+        self._undecodable(write_document(tmp_path / "pkg"))
+        findings = audit(tmp_path, AgentsDocConfig(min_documented_directories=1))
+        assert any("the floor is 1" in finding for finding in findings), findings
+
+    def test_an_undecodable_companion_is_a_finding(self, tmp_path: Path) -> None:
+        write_document(tmp_path / "pkg")
+        self._undecodable(tmp_path / "pkg" / "CLAUDE.md")
+        assert companion_findings(tmp_path / "pkg", "pkg", CONFIG) == [
+            "pkg/CLAUDE.md: cannot be read as UTF-8, so its body cannot be judged"
+        ]
+
+    def test_an_undecodable_subagent_definition_is_a_finding(self, tmp_path: Path) -> None:
+        agents = tmp_path / ".claude" / "agents"
+        agents.mkdir(parents=True)
+        (agents / "rogue.md").write_bytes(b"---\nname: rogue\n---\n\xff\xfe")
+        findings = subagent_findings(tmp_path, CONFIG)
+        assert any("cannot be read as UTF-8" in finding for finding in findings), findings
+
+    def test_a_decodable_document_is_still_judged(self, tmp_path: Path) -> None:
+        """The positive control. A guard that refuses everything would pass every
+        assertion above and say nothing about the ordinary path."""
+        write_document(tmp_path / "pkg")
+        assert audit(tmp_path, AgentsDocConfig(min_documented_directories=1)) == []
+
+
+class TestANarrowedRun:
+    """``--directory`` is documented in the root `CLAUDE.md` and had no test at
+    all. It reported "is not a required directory" for a directory that is one,
+    which is the gate telling an author the opposite of the truth about the
+    document in front of them."""
+
+    def test_a_trailing_slash_names_the_same_directory(self, tmp_path: Path) -> None:
+        write_document(tmp_path / "pkg")
+        config = AgentsDocConfig(min_documented_directories=1)
+        assert audit(tmp_path, config, only="pkg") == []
+        assert audit(tmp_path, config, only="pkg/") == []
+
+    def test_a_dot_prefix_names_the_same_directory(self, tmp_path: Path) -> None:
+        write_document(tmp_path / "pkg")
+        assert audit(tmp_path, AgentsDocConfig(min_documented_directories=1), only="./pkg") == []
+
+    def test_a_narrowed_run_still_reports_the_defect(self, tmp_path: Path) -> None:
+        """A flag that answers "clean" for a broken document is worse than no
+        flag, so the normalisation must not have made every spelling pass."""
+        write_document(tmp_path / "pkg", scope="`nope.py`, `b.py`, `c.py`")
+        findings = audit(tmp_path, AgentsDocConfig(min_documented_directories=1), only="pkg/")
+        assert any("nope.py" in finding for finding in findings), findings
+
+    def test_a_directory_that_is_not_required_still_says_so(self, tmp_path: Path) -> None:
+        """The message that was being given wrongly is still given rightly."""
+        write_document(tmp_path / "pkg")
+        findings = audit(tmp_path, AgentsDocConfig(min_documented_directories=1), only="elsewhere")
+        assert findings == ["elsewhere is not a required directory; nothing was checked"]
+
+    def test_an_escaping_configured_directory_names_the_policy_not_the_spelling(self, tmp_path: Path) -> None:
+        """The loop skips a directory resolving outside the checkout, and a
+        narrowed run dropped the configured findings that explain why -- so the
+        fallback was the only thing left to say, and it blamed the author."""
+        external = tmp_path / "external"
+        external.mkdir()
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "linked").symlink_to(external)
+        config = AgentsDocConfig(additional_directories=("linked",), min_documented_directories=1)
+        findings = audit(root, config, only="linked")
+        assert any("resolves outside the checkout" in finding for finding in findings), findings
+        assert not any("is not a required directory" in finding for finding in findings), findings
+
+
 class TestTheGateIsNotVacuous:
     """Positive controls. Every assertion in the suite below is "no findings",
     and a discovery that matched nothing returns exactly that."""
 
     def test_the_walker_finds_source_directories(self) -> None:
+        """A literal, and deliberately not `min_documented_directories`. That
+        floor counts *documented* directories against the required set, which
+        `additional_directories` makes larger than the discovered one; the
+        discovered count is 18 against a floor of 20, so reusing the policy key
+        here would assert `18 >= 20` and fail. This number guards a different
+        population, so it is written down with its reason instead."""
         assert len(discover_source_directories(REPO, load_config())) >= 15
 
     def test_the_required_set_is_larger_than_the_discovered_one(self) -> None:

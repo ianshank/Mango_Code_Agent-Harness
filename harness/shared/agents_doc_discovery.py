@@ -38,7 +38,11 @@ def source_file_count(directory: Path, config: AgentsDocConfig) -> int:
     """
     try:
         entries = list(directory.iterdir())
-    except OSError:  # pragma: no cover - unreadable dir is not a documentation fact
+    except OSError as exc:  # pragma: no cover - unreadable dir is not a documentation fact
+        # Counting zero drops the directory out of `required_directories`, so it
+        # is never judged and only `min_documented_directories` would notice --
+        # exactly the vacuity that floor exists for. Say so rather than absorb it.
+        logger.warning("cannot read %s, counting zero sources: %s", directory, exc)
         return 0
     return sum(1 for f in entries if f.is_file() and f.suffix in config.source_extensions)
 
@@ -55,16 +59,31 @@ def discover_source_directories(repo_root: Path, config: AgentsDocConfig) -> lis
     The repository root is not a candidate, which matches `rglob` -- it yields
     only descendants. Instructions for the root are `CLAUDE.md`, not this gate.
     """
-    pruned = set(config.pruned_directory_names)
     found: list[str] = []
-    for dirpath, dirnames, _ in os.walk(repo_root):
-        dirnames[:] = [name for name in dirnames if name not in pruned]
-        directory = Path(dirpath)
+    for directory, _filenames in walk_pruned(repo_root, config):
         if directory == repo_root:
             continue
         if source_file_count(directory, config) >= config.min_source_files:
             found.append(directory.relative_to(repo_root).as_posix())
     return sorted(found)
+
+
+def walk_pruned(repo_root: Path, config: AgentsDocConfig) -> Iterator[tuple[Path, list[str]]]:
+    """``os.walk`` with `pruned_directory_names` dropped from `dirnames` in place.
+
+    One definition, because two walkers that prune by eye drift apart. This
+    gate's discovery was moved to prune *during* traversal while the suite's
+    persona-namespace control kept filtering a finished ``rglob`` -- which walks
+    3,067 directories on this repository to reach the same 24 documents a pruned
+    walk reaches in 137. Callers needing every document in the tree, rather than
+    the required set `iter_documents` yields, share this instead of re-deriving
+    it. Yielded `dirnames` is pruned before the caller sees it, so a caller
+    cannot forget to.
+    """
+    pruned = set(config.pruned_directory_names)
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [name for name in dirnames if name not in pruned]
+        yield Path(dirpath), filenames
 
 
 def required_directories(repo_root: Path, config: AgentsDocConfig) -> list[str]:

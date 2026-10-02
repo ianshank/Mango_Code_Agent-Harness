@@ -14,6 +14,7 @@ actually shipped broken somewhere in this repository's history.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Sequence
 
@@ -21,6 +22,8 @@ try:
     from harness.shared.agents_doc_policy import AgentsDocConfig
 except ImportError:  # sibling import when this dir is sys.path[0]
     from agents_doc_policy import AgentsDocConfig  # type: ignore[no-redef]
+
+logger = logging.getLogger(__name__)
 
 MERMAID_BLOCK = re.compile(r"```mermaid\n(.*?)```", re.S)
 
@@ -71,6 +74,11 @@ def declared_nodes(body: str, config: AgentsDocConfig) -> set[str]:
             name = match.group(1)
             if name not in MERMAID_NON_NODES and name not in config.diagram_types:
                 nodes.add(name)
+    # The node set is a deliberate over-count (see above), so when
+    # `max_diagram_nodes` fires on a diagram its author believes is small, this
+    # set is the only thing that explains the number -- and it was unobtainable
+    # at any level.
+    logger.debug("diagram declares %d node(s): %s", len(nodes), sorted(nodes))
     return nodes
 
 
