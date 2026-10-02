@@ -41,11 +41,13 @@ DEFAULT_JITTER_RATIO = 0.25
 
 # Connection-level failures worth retrying.
 #
-# ``socket.timeout`` is the load-bearing entry: ``urlopen`` raises it for read
-# timeouts, and it only became an alias of ``TimeoutError`` in Python 3.10. On
-# 3.9 — a live leg of this repo's CI matrix — a bare ``TimeoutError`` check never
-# matches, so every read timeout fell through unretried no matter how
-# NEMOTRON_MAX_RETRIES was set. Listing both is correct on every version.
+# ``socket.timeout`` became an alias of ``TimeoutError`` in Python 3.10, so on
+# this repo's floor (docs/specs/python-floor-310.md) the two entries name one
+# class and either alone would match. The pair is kept for the history it
+# records: before the floor moved, a bare ``TimeoutError`` never matched the read
+# timeouts ``urlopen`` raises on 3.9, so every one of them fell through unretried
+# no matter how NEMOTRON_MAX_RETRIES was set. Listing both stays correct on every
+# version.
 #
 # ``ConnectionError`` covers peer resets raised mid-read, which urllib does not
 # wrap in ``URLError``.
@@ -86,14 +88,19 @@ def parse_retry_after(raw: str | None, now: float | None = None) -> float | None
         return max(0.0, float(int(text)))
     except ValueError:
         pass
-    # parsedate_to_datetime returns None on 3.9 but *raises* ValueError from
-    # 3.10 on. Handle both, or a garbage header becomes an exception on the
-    # newer legs of the CI matrix while passing silently on the oldest.
+    # ``parsedate_to_datetime`` signals an unparseable header by *raising*, never
+    # by returning ``None``: on this repo's 3.10 floor (``requires-python =
+    # ">=3.10"``, docs/specs/python-floor-310.md) it rejects whatever
+    # ``_parsedate_tz`` could not read with ``ValueError``. This single ``except``
+    # is therefore the whole guard, and no ``parsed is None`` test follows it --
+    # that check was dead on every supported interpreter, which mypy's
+    # ``--warn-unreachable`` flagged. ``TypeError`` stays in the tuple because a
+    # ``bytes`` header from an untyped caller raises that instead; either way a
+    # garbage ``Retry-After`` must fall back to computed backoff rather than
+    # raise through the retry loop.
     try:
         parsed = email.utils.parsedate_to_datetime(text)
     except (TypeError, ValueError):
-        return None
-    if parsed is None:
         return None
     try:
         target = parsed.timestamp()
