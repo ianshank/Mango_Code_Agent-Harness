@@ -42,9 +42,10 @@ which exists because a claim that a check passed is not the check passing.
    Glob the family rather than naming one module. The rules are split across
    five files today — parsing, the command line and staleness, path
    containment, the policy block, and the threshold boundaries — and naming
-   only the first would report a green summary over 81 of 188 tests. A glob
-   also picks up the sixth module whenever the next split happens, instead of
-   narrowing silently.
+   only the first would print a green summary while the containment, policy,
+   command-line and boundary rules went unrun. A glob also picks up the sixth
+   module whenever the next split happens, instead of narrowing silently. It is
+   deliberately not a count: the one written here was stale within a commit.
 
 3. Read what the gate cannot. For each changed document, check by eye:
    - does `## What this does` explain why the directory exists, or has it

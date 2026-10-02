@@ -54,8 +54,8 @@ flowchart TD
   `@app.get` and `def` lines execute when any test imports `app`, so they count
   as covered on import alone; only the handler body goes uncovered, and the
   per-file floor in `governance-policy.json` is a percentage with room for it.
-  Appending an untested one-line route to `main.py` moves it from 79/81 to
-  81/84 — still clear of the floor. `TestDocumentedRoutesExist`
+  Appending an untested one-line route to `main.py` moves it from 80/81 to
+  82/84 — further from the floor than before, not nearer. `TestDocumentedRoutesExist`
   (`test_documentation_truth.py`) does not close the gap either: it asserts a
   *documented* route is registered, never that any route is exercised. The
   requirement is real and rests on review.
@@ -97,11 +97,14 @@ flowchart TD
   than the loop recreates the defect.
 - **Route order is load-bearing.** Starlette matches in registration order and the
   mount at `/` shadows everything after it, so `/healthz` and `/readyz` must stay
-  declared above it.
-- **Adding a route means editing the C4 doc.** `TestDocumentedRoutesExist` in
+  declared above it. `tests/test_main.py` gets both, so moving one below the mount
+  fails there rather than in production.
+- **Adding a route means editing the C4 doc — by convention; the gate only
+  catches the reverse.** `TestDocumentedRoutesExist` in
   `harness/shared/tests/test_documentation_truth.py` checks every path listed under
   the "API surface" heading of `docs/architecture/c4_architecture.md` against
-  `app.routes`.
+  `app.routes`. That is `documented ⊆ registered`: a documented route that was
+  never registered fails, a registered route nobody documented passes.
 - **`status` is not the outcome.** It is `"success"` whenever the request did not
   raise; `verdict`, `termination_reason` and `verdict_detail` carry what was checked,
   and `verdict_detail` names the command and exit code because one gate is not the
