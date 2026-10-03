@@ -146,6 +146,7 @@
     ".mango/skills/**",
     ".claude/settings.json",
     ".claude/hooks/**",
+    ".claude/agents/**",
     "CLAUDE.md",
     "docs/PROJECT-CHARTER.md",
     "harness/*/docs/PROJECT-CHARTER.md",
@@ -154,6 +155,11 @@
     "harness/shared/governance-policy.json",
     "harness/shared/check_dedup.py",
     "harness/shared/check_py_compat.py",
+    "harness/shared/agents_doc.py",
+    "harness/shared/agents_doc_policy.py",
+    "harness/shared/agents_doc_discovery.py",
+    "harness/shared/agents_doc_checks.py",
+    "harness/shared/agents_doc_mermaid.py",
     "harness/shared/governance/**",
     "harness/shared/remotes.py",
     "harness/shared/pretooluse_guard.py",
@@ -217,6 +223,47 @@
     "dedup_min_scripts": 20,
     "py_compat_min_files": 298,
     "rationale": "Anti-vacuity population floors for harness/shared/check_dedup.py and harness/shared/check_py_compat.py (docs/specs/attested-execution-isolation.md R-AEI-3, AC-4), read through policy_loader.gate_floors. Both gates exited 0 against an empty tree and printed '[PASS] 0 per-stack script(s)' and '[PASS] 0 file(s) compatible' -- a report a reader cannot tell apart from a real pass, which is the same vacuity defect traceability.min_discovered_requirement_ids exists to catch. dedup_min_scripts is the number of per-stack scripts the gate must actually check (20: ten shims in each of harness/node/scripts and harness/jvm/scripts); py_compat_min_files is the number of first-party Python files it must actually scan (298, the committed tree when this floor was measured). Each is a ratchet: raise it as the population grows, never lower it so a shrinking population passes. Deleting a governed script or module is therefore a deliberate, reviewed edit to this block rather than a silent reduction in what the gates cover. This is a new top-level block rather than a key inside dedup/py_compat because DEC-043 makes an absent key inside an adopted block a PolicyError for every adopter policy that predates it (the R-AEI-11 reason); the built-in default for an adopter with no policy file at all is 0, which leaves both gates behaving exactly as they do today."
+  },
+  "agents_doc": {
+    "filename": "AGENTS.md",
+    "companion_filename": "CLAUDE.md",
+    "companion_body": "@AGENTS.md",
+    "subagent_directory": ".claude/agents",
+    "max_lines": 150,
+    "min_scope_names": 3,
+    "max_key_files": 8,
+    "max_diagrams": 2,
+    "max_diagram_nodes": 40,
+    "min_source_files": 3,
+    "min_documented_directories": 20,
+    "min_waiver_reason_chars": 40,
+    "source_extensions": [
+      ".py",
+      ".ts",
+      ".kt",
+      ".sh"
+    ],
+    "additional_directories": [
+      ".claude",
+      ".mango",
+      ".mango/skills",
+      ".mango/workflows",
+      "harness",
+      "harness/api_server/static",
+      "harness/docs",
+      "harness/jvm",
+      "harness/node",
+      "harness/shared/schemas",
+      "scripts"
+    ],
+    "waived_directories": {
+      "harness/jvm/scripts": "Delegating shims over harness/shared; their contract is check_dedup's shim-versus-copy rule, stated once in harness/jvm/AGENTS.md rather than restated per stack.",
+      "harness/node/scripts": "Delegating shims over harness/shared; their contract is check_dedup's shim-versus-copy rule, stated once in harness/node/AGENTS.md rather than restated per stack.",
+      "harness/node/tests/ai/e2e": "One tier of the single Vitest matrix documented in harness/node/AGENTS.md; a per-tier document would restate one contract eight times.",
+      "harness/node/tests/ai/smoke": "One tier of the single Vitest matrix documented in harness/node/AGENTS.md; a per-tier document would restate one contract eight times.",
+      "harness/node/tests/ai/unit": "One tier of the single Vitest matrix documented in harness/node/AGENTS.md; a per-tier document would restate one contract eight times."
+    },
+    "rationale": "Per-directory AGENTS.md documents and the gate that keeps them true (DEC-070), read through harness/shared/agents_doc_policy.load_config. AGENTS.md is the cross-tool instruction-file standard, and Claude Code reads it only where no CLAUDE.md sits at or above it -- this repository has one at the root -- so each document ships beside a one-line CLAUDE.md holding companion_body, which is what makes it load. The required set is derived, never transcribed: every directory with at least min_source_files first-party sources, minus waived_directories, plus additional_directories for boundaries that are document-worthy but source-light (scripts/, .claude/). openspec/ is deliberately absent: DEC-055 folds that tree into docs/specs/ and deletes it (AC-28 requires `ls openspec` to fail), so requiring a document there would create one that must immediately be migrated or deleted, and would make this gate depend on a directory scheduled for removal. A hand-typed list would pass forever while the tree grew around it, which is the defect this block exists to prevent. max_lines is 150 because an instruction file past roughly that length measurably loses adherence, and max_key_files is 8 so a document summarises rather than becoming a second copy of the README layout tree, which has its own gate. min_documented_directories is an anti-vacuity ratchet in the shape of gates.dedup_min_scripts: raise it as the tree grows, never lower it so a shrinking population passes. A waiver must carry at least min_waiver_reason_chars of reason, so an exemption states why rather than simply existing. This is a new top-level block rather than keys inside an adopted one because DEC-043 makes an absent key inside an adopted block a PolicyError for every adopter policy that predates it; an adopter with no agents_doc block at all takes the module's built-in defaults and the gate still runs."
   },
   "synthesis": {
     "max_repair_cycles": 3,
