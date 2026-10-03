@@ -45,6 +45,7 @@ from harness.shared.agents_doc_policy import (
 )
 from harness.shared.tests._agents_doc_helpers import (
     CONFIG,
+    SCOPE_LINE,
     findings_for,
     write_document,
 )
@@ -104,7 +105,7 @@ class TestDiscovery:
 
     def test_a_waived_directory_is_not_required(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg")
-        config = AgentsDocConfig(waived_directories={"pkg": "x" * 50})
+        config = AgentsDocConfig(waived_directories={"pkg": "x" * (CONFIG.min_waiver_reason_chars + 10)})
         assert required_directories(tmp_path, config) == []
 
     def test_an_additional_directory_is_required_without_any_sources(self, tmp_path: Path) -> None:
@@ -189,7 +190,7 @@ class TestWalkPruned:
 
 class TestWaiverFindings:
     def test_a_waiver_for_a_missing_directory_is_reported(self, tmp_path: Path) -> None:
-        config = AgentsDocConfig(waived_directories={"gone": "y" * 50})
+        config = AgentsDocConfig(waived_directories={"gone": "y" * (CONFIG.min_waiver_reason_chars + 10)})
         assert "does not exist" in "".join(waiver_findings(tmp_path, config))
 
     def test_a_waiver_without_a_real_reason_is_reported(self, tmp_path: Path) -> None:
@@ -199,7 +200,8 @@ class TestWaiverFindings:
 
     def test_a_justified_waiver_for_a_real_directory_is_accepted(self, tmp_path: Path) -> None:
         (tmp_path / "pkg").mkdir()
-        assert waiver_findings(tmp_path, AgentsDocConfig(waived_directories={"pkg": "z" * 50})) == []
+        reason = "z" * (CONFIG.min_waiver_reason_chars + 10)
+        assert waiver_findings(tmp_path, AgentsDocConfig(waived_directories={"pkg": reason})) == []
 
 
 # --- Parsing --------------------------------------------------------------------
@@ -245,14 +247,14 @@ class TestDocumentFindings:
         assert findings_for(tmp_path / "pkg") == []
 
     def test_a_scope_line_naming_a_missing_path_is_reported(self, tmp_path: Path) -> None:
-        write_document(tmp_path / "pkg", scope="`a.py`, `b.py`, `deleted.py`")
+        write_document(tmp_path / "pkg", scope=f"{SCOPE_LINE}, `deleted.py`")
         assert "does not exist" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_a_technology_name_on_the_scope_line_is_left_alone(self, tmp_path: Path) -> None:
         """`harness/node` says `vitest` and `pnpm` truthfully. This module cannot
         resolve those; the Node gate does, against `package.json`. Judging them
         here would reject a true sentence."""
-        write_document(tmp_path / "pkg", scope="`a.py`, `vitest`, `pnpm`")
+        write_document(tmp_path / "pkg", scope=f"{SCOPE_LINE}, `vitest`, `pnpm`")
         assert findings_for(tmp_path / "pkg") == []
 
     def test_a_scope_path_escaping_the_directory_is_reported(self, tmp_path: Path) -> None:
@@ -260,13 +262,13 @@ class TestDocumentFindings:
         real file outside the directory the document describes, and existence
         was the whole rule, so the claim was accepted."""
         (tmp_path / "outside.py").write_text("x = 1\n", encoding="utf-8")
-        write_document(tmp_path / "pkg", scope="`a.py`, `b.py`, `../outside.py`")
+        write_document(tmp_path / "pkg", scope=f"{SCOPE_LINE}, `../outside.py`")
         assert "does not exist under" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_an_absolute_scope_path_is_reported(self, tmp_path: Path) -> None:
         """An absolute name discards the base entirely, so any existing file on
         the machine satisfied the check."""
-        write_document(tmp_path / "pkg", scope="`a.py`, `b.py`, `/etc/hosts`")
+        write_document(tmp_path / "pkg", scope=f"{SCOPE_LINE}, `/etc/hosts`")
         assert "`/etc/hosts`" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_a_key_file_escaping_the_directory_is_reported(self, tmp_path: Path) -> None:
@@ -291,7 +293,7 @@ class TestDocumentFindings:
     def test_a_thin_scope_line_is_reported(self, tmp_path: Path) -> None:
         """Two names is a sentence; the floor is what makes it falsifiable."""
         write_document(tmp_path / "pkg", scope="`a.py`, `b.py`")
-        assert "at least 3" in "".join(findings_for(tmp_path / "pkg"))
+        assert f"at least {CONFIG.min_scope_names}" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_a_key_file_that_does_not_exist_is_reported(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg", key_files=("a.py", "moved.py"))
@@ -300,8 +302,9 @@ class TestDocumentFindings:
     def test_an_over_long_key_files_table_is_reported(self, tmp_path: Path) -> None:
         """Past the cap the table stops summarising and becomes a second copy of
         the README layout tree, which has its own gate and its own drift."""
-        write_document(tmp_path / "pkg", key_files=("a.py",) * 9)
-        assert "Key files lists 9 entries" in "".join(findings_for(tmp_path / "pkg"))
+        over = CONFIG.max_key_files + 1
+        write_document(tmp_path / "pkg", key_files=("a.py",) * over)
+        assert f"Key files lists {over} entries" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_a_missing_reviewed_line_is_reported(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg", reviewed=None)
@@ -313,7 +316,7 @@ class TestDocumentFindings:
 
     def test_a_document_over_the_line_budget_is_reported(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg", extra_lines=DEFAULT_MAX_LINES + 5)
-        assert "exceeds the 150-line budget" in "".join(findings_for(tmp_path / "pkg"))
+        assert f"exceeds the {CONFIG.max_lines}-line budget" in "".join(findings_for(tmp_path / "pkg"))
 
     def test_the_budget_comes_from_the_config_not_a_literal(self, tmp_path: Path) -> None:
         write_document(tmp_path / "pkg")
@@ -372,11 +375,13 @@ class TestMermaidFindings:
 
     def test_too_many_diagrams_are_reported(self) -> None:
         good = 'flowchart LR\n  A["one"] --> B["two"]\n'
-        assert "3 diagrams" in "".join(mermaid_findings([good] * 3, CONFIG))
+        over = CONFIG.max_diagrams + 1
+        assert f"{over} diagrams" in "".join(mermaid_findings([good] * over, CONFIG))
 
     def test_a_diagram_past_the_node_cap_is_reported(self) -> None:
-        body = "flowchart LR\n" + "".join(f'  N{n}["node {n}"]\n' for n in range(45))
-        assert "declares 45 nodes" in "".join(mermaid_findings([body], CONFIG))
+        over = CONFIG.max_diagram_nodes + 5
+        body = "flowchart LR\n" + "".join(f'  N{n}["node {n}"]\n' for n in range(over))
+        assert f"declares {over} nodes" in "".join(mermaid_findings([body], CONFIG))
 
     def test_the_node_cap_comes_from_the_config(self) -> None:
         body = "flowchart LR\n" + "".join(f'  N{n}["node {n}"]\n' for n in range(5))
@@ -388,9 +393,10 @@ class TestMermaidFindings:
         size passed -- and the comment on the regex claimed the approximation
         erred by over-counting, which was the reassuring direction and the
         wrong one."""
-        body = "flowchart LR\n" + "\n".join(f"  N{i} --> N{i + 1}" for i in range(60))
-        assert len(declared_nodes(body, CONFIG)) == 61
-        assert "declares 61 nodes" in "".join(mermaid_findings([body], CONFIG))
+        edges = CONFIG.max_diagram_nodes + 20  # a chain of E edges declares E + 1 nodes
+        body = "flowchart LR\n" + "\n".join(f"  N{i} --> N{i + 1}" for i in range(edges))
+        assert len(declared_nodes(body, CONFIG)) == edges + 1
+        assert f"declares {edges + 1} nodes" in "".join(mermaid_findings([body], CONFIG))
 
     def test_syntax_keywords_are_not_counted_as_nodes(self) -> None:
         """The cap must count nodes, not words. `subgraph`, `end` and the
@@ -475,7 +481,8 @@ class TestAudit:
     def test_the_population_floor_catches_a_vacuous_pass(self, tmp_path: Path) -> None:
         """An empty tree satisfies every rule above it. The floor is what makes
         "all documents are true" different from "there are no documents"."""
-        assert "the floor is 20" in "".join(audit(tmp_path, AgentsDocConfig()))
+        config = AgentsDocConfig()
+        assert f"the floor is {config.min_documented_directories}" in "".join(audit(tmp_path, config))
 
     # `test_audit_resolves_its_own_config_when_given_none` lived here and asserted
     # `audit(tmp_path) != []`, which an empty tree satisfies under *any* config --
@@ -547,7 +554,7 @@ class TestANarrowedRun:
     def test_a_narrowed_run_still_reports_the_defect(self, tmp_path: Path) -> None:
         """A flag that answers "clean" for a broken document is worse than no
         flag, so the normalisation must not have made every spelling pass."""
-        write_document(tmp_path / "pkg", scope="`nope.py`, `b.py`, `c.py`")
+        write_document(tmp_path / "pkg", scope=f"`nope.py`, {SCOPE_LINE}")
         findings = audit(tmp_path, AgentsDocConfig(min_documented_directories=1), only="pkg/")
         assert any("nope.py" in finding for finding in findings), findings
 

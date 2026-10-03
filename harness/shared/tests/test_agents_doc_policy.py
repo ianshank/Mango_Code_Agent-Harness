@@ -22,7 +22,7 @@ import pytest
 from harness.shared.agents_doc import subagent_findings
 from harness.shared.agents_doc_policy import DEFAULT_MAX_LINES, load_config
 from harness.shared.policy_loader import PolicyError
-from harness.shared.tests._agents_doc_helpers import NUMERIC_KEYS, policy_block, write_policy
+from harness.shared.tests._agents_doc_helpers import CONFIG, NUMERIC_KEYS, policy_block, write_policy
 from harness.shared.tests._helpers import REPO
 
 pytestmark = pytest.mark.governance
@@ -174,8 +174,9 @@ class TestPolicyPathsStayInTheCheckout:
     def test_an_escaping_waiver_key_is_refused(self, tmp_path: Path) -> None:
         """A waiver naming an outside directory would exempt nothing that exists
         here, so the exemption reads as granted while covering no real path."""
+        reason = "x" * (CONFIG.min_waiver_reason_chars + 10)
         with pytest.raises(PolicyError, match="inside the checkout"):
-            load_config(write_policy(tmp_path, policy_block(waived_directories={"../elsewhere": "x" * 60})))
+            load_config(write_policy(tmp_path, policy_block(waived_directories={"../elsewhere": reason})))
 
     @pytest.mark.parametrize("value", ["/etc/passwd", "../AGENTS.md", "docs/AGENTS.md", ".", ".."])
     def test_a_filename_that_is_not_a_bare_name_is_refused(self, tmp_path: Path, value: str) -> None:

@@ -46,19 +46,28 @@ def write_policy(tmp_path: Path, block: object) -> Path:
     return path
 
 
+#: Exactly enough scope names to clear `min_scope_names`, and the files that
+#: make them true. Derived rather than written as `a.py, b.py, c.py` so that
+#: raising the floor tightens one default here instead of failing every test
+#: that took the fixture as given with a misleading "at least N" finding.
+SCOPE_FILES: tuple[str, ...] = tuple(f"{chr(ord('a') + index)}.py" for index in range(CONFIG.min_scope_names))
+#: The `**Scope:**` line those names make true, for callers that want the default.
+SCOPE_LINE: str = ", ".join(f"`{name}`" for name in SCOPE_FILES)
+
+
 def write_document(
     directory: Path,
     *,
-    scope: str = "`a.py`, `b.py`, `c.py`",
+    scope: str = SCOPE_LINE,
     reviewed: str | None = "2026-09-19",
-    key_files: tuple[str, ...] = ("a.py",),
+    key_files: tuple[str, ...] = SCOPE_FILES[:1],
     diagram: str | None = 'flowchart LR\n  A["one"] --> B["two"]\n',
     extra_lines: int = 0,
     companion: str | None = "@AGENTS.md",
 ) -> Path:
     """A document that passes every rule, minus whatever the caller breaks."""
     directory.mkdir(parents=True, exist_ok=True)
-    for name in ("a.py", "b.py", "c.py"):
+    for name in SCOPE_FILES:
         (directory / name).write_text("x = 1\n", encoding="utf-8")
     body = [f"# AGENTS.md — {directory.name}", "", f"**Scope:** {scope}"]
     if reviewed is not None:
