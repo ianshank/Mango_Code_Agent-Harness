@@ -10,6 +10,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Deferral register: both halves guarded, eleven entries re-measured (2026-10-02)
+
+- `test_deferred_rigor.py` re-measured its nine deferred **ruff** rules live but never its two deferred **mypy** flags, so `--strict` could have been added to `MYPY_FLAGS` with its entry still reading as a considered decision, and both mypy numbers had drifted unnoticed (`--strict` 604→1269, `--disallow-untyped-defs` 533→1025). Both guard tests now cover the mypy half, measured over the Makefile's own `MYPY_TARGETS` rather than a scope the test picks, and the not-secretly-enabled check reads both routes a flag can arrive by: `MYPY_FLAGS` and `[tool.mypy]`.
+- All nine ruff counts re-taken on `main` under ruff 0.16.5; every one had drifted upward, so each deferral is *more* justified than when recorded. Six rationales stated counts that were wrong, one of them (`ARG`: `1 + 39` against a measured 144) wrong when it was written.
+- `T20`'s reason was wrong on substance as well as count: three of its 24 source files are not gate scripts printing a verdict line — `nemotron_bridge.py` prints a model response and latency banner, `show_memory.py` dumps the memory stores, `governance/remotes.py` prints BLOCKED to stderr. All still deliberate stdout; the reason now says so.
+- Each entry records which side of the tree its findings sit on (`leans`), asserted rather than described, because every reason argues from it — a `T20` that went test-heavy or an `ARG` that went source-heavy falsifies the recorded argument while the count stays high.
+- Cost: +11s on the `make test-python` stage (77.7s → 88.8s with `-n auto`), for two cold mypy runs that are 48s of CPU.
+- Re-measured once more on `main` at `af9e02e`, after #145 and #146 landed and before this change did. Nine of the eleven moved — `T20` 54→56, `TRY400` 30→31, `TRY003` 256→265, `S` 5370→5581, `PT` 306→308, `PLW1510` 56→57, `PTH` 36→37, `SIM` 64→67, `--strict` 1269→1272 — and `ARG` and `--disallow-untyped-defs` did not. The rationales that quote counts were brought to the same tree. Every floor and every `leans` held, which is what the guards assert; the numbers themselves are the record, not the gate.
+
 ### MG-E1: SWE-ReX + OpenSandbox additive adapters (2026-09-21)
 
 - Additive `SweRexBackend` and `OpenSandboxBackend` `ExecutionBackend` adapters (optional extras; default remains `ProcessBackend`).
